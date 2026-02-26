@@ -1,0 +1,14 @@
+# Next.js (client)
+client/node_modules/
+client/.next/
+client/out/
+client/.env*.local
+
+# Go (server)
+server/server      # ビルドされた実行ファイル名（任意）
+server/*.exe       # Windows用
+server/*.test      # テストファイル
+
+# OS files
+.DS_Store
+Thumbs.db
