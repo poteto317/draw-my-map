@@ -41,53 +41,57 @@ export function useNodes(): UseNodesReturn {
   };
 
   const addChildNode = useCallback((parentId: number) => {
-    const parent = nodes.find((node) => node.id === parentId);
-    if (!parent) return null;
-
-    const siblings = nodes.filter((node) => node.parentId === parentId);
+    if (!nodes.some((node) => node.id === parentId)) return null;
     const id = Date.now();
-    const y = siblings.length === 0
-      ? parent.y
-      : Math.max(...siblings.map((node) => node.y + node.height))
-        + SIBLING_VERTICAL_GAP;
 
-    setNodes((prev) => [
-      ...prev,
-      {
-        id,
-        parentId,
-        x: parent.x + parent.width + CHILD_HORIZONTAL_GAP,
-        y,
-        width: RECT_WIDTH,
-        height: RECT_HEIGHT,
-        label: "",
-      },
-    ]);
+    setNodes((prev) => {
+      const parent = prev.find((node) => node.id === parentId);
+      if (!parent) return prev;
+      const siblings = prev.filter((node) => node.parentId === parentId);
+      const y = siblings.length === 0
+        ? parent.y
+        : Math.max(...siblings.map((node) => node.y + node.height))
+          + SIBLING_VERTICAL_GAP;
+      return [
+        ...prev,
+        {
+          id,
+          parentId,
+          x: parent.x + parent.width + CHILD_HORIZONTAL_GAP,
+          y,
+          width: RECT_WIDTH,
+          height: RECT_HEIGHT,
+          label: "",
+        },
+      ];
+    });
     setSelectedNodeId(id);
     return id;
   }, [nodes]);
 
   const addSiblingNode = useCallback((nodeId: number) => {
-    const source = nodes.find((node) => node.id === nodeId);
-    if (!source) return null;
-
-    const siblings = nodes.filter((node) => node.parentId === source.parentId);
+    if (!nodes.some((node) => node.id === nodeId)) return null;
     const id = Date.now();
-    const y = Math.max(...siblings.map((node) => node.y + node.height))
-      + SIBLING_VERTICAL_GAP;
 
-    setNodes((prev) => [
-      ...prev,
-      {
-        id,
-        parentId: source.parentId,
-        x: source.x,
-        y,
-        width: RECT_WIDTH,
-        height: RECT_HEIGHT,
-        label: "",
-      },
-    ]);
+    setNodes((prev) => {
+      const source = prev.find((node) => node.id === nodeId);
+      if (!source) return prev;
+      const siblings = prev.filter((node) => node.parentId === source.parentId);
+      const y = Math.max(...siblings.map((node) => node.y + node.height))
+        + SIBLING_VERTICAL_GAP;
+      return [
+        ...prev,
+        {
+          id,
+          parentId: source.parentId,
+          x: source.x,
+          y,
+          width: RECT_WIDTH,
+          height: RECT_HEIGHT,
+          label: "",
+        },
+      ];
+    });
     setSelectedNodeId(id);
     return id;
   }, [nodes]);

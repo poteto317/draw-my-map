@@ -381,4 +381,38 @@ describe("useNodes", () => {
     expect(createdId).toBeNull();
     expect(result.current.nodes).toEqual([]);
   });
+
+  it("同じ act 内の子ノード追加でも兄弟間隔を維持する", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+
+    act(() => result.current.addNode(100, 100));
+    const parentId = result.current.nodes[0].id;
+    act(() => {
+      result.current.addChildNode(parentId);
+      result.current.addChildNode(parentId);
+    });
+
+    expect(result.current.nodes[2].y).toBe(
+      result.current.nodes[1].y + result.current.nodes[1].height + 40,
+    );
+  });
+
+  it("同じ act 内の兄弟ノード追加でも兄弟間隔を維持する", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+
+    act(() => result.current.addNode(100, 100));
+    const rootId = result.current.nodes[0].id;
+    act(() => {
+      result.current.addSiblingNode(rootId);
+      result.current.addSiblingNode(rootId);
+    });
+
+    expect(result.current.nodes[2].y).toBe(
+      result.current.nodes[1].y + result.current.nodes[1].height + 40,
+    );
+  });
 });
