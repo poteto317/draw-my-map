@@ -10,13 +10,15 @@ type MapStageProps = {
   nodes: Node[];
   selectedNodeId: number | null;
   onDoubleClick: (x: number, y: number) => void;
+  onAddChildNode: (parentId: number) => number | null;
+  onAddSiblingNode: (nodeId: number) => number | null;
   onSelectNode: (id: number | null) => void;
   onUpdateLabel: (id: number, label: string) => void;
   onMoveNode: (id: number, x: number, y: number) => void;
   onDeleteNode: (id: number) => void;
 };
 
-export function MapStage({ nodes, selectedNodeId, onDoubleClick, onSelectNode, onUpdateLabel, onMoveNode, onDeleteNode }: MapStageProps) {
+export function MapStage({ nodes, selectedNodeId, onDoubleClick, onAddChildNode, onAddSiblingNode, onSelectNode, onUpdateLabel, onMoveNode, onDeleteNode }: MapStageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
   const GraphicsClassRef = useRef<typeof GraphicsType | null>(null);
@@ -114,19 +116,32 @@ export function MapStage({ nodes, selectedNodeId, onDoubleClick, onSelectNode, o
     };
   }, []);
 
-  // Delete / Backspace キーで選択中のノードを削除
+  // 選択中のノードをキーボードで作成・削除する
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (editingNodeId !== null) return; // テキスト編集中は無視
       if (selectedNodeId === null) return;
-      if (e.key === "Delete" || e.key === "Backspace") {
+
+      let createdNodeId: number | null = null;
+      if (e.key === "Tab") {
+        e.preventDefault();
+        createdNodeId = onAddChildNode(selectedNodeId);
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        createdNodeId = onAddSiblingNode(selectedNodeId);
+      } else if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault();
         onDeleteNode(selectedNodeId);
+      }
+
+      if (createdNodeId !== null) {
+        setEditingNodeId(createdNodeId);
+        setEditingText("");
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedNodeId, editingNodeId, onDeleteNode]);
+  }, [selectedNodeId, editingNodeId, onAddChildNode, onAddSiblingNode, onDeleteNode]);
 
   // nodes の変化を PixiJS に反映
   useEffect(() => {

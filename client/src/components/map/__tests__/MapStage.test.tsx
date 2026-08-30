@@ -1,5 +1,7 @@
 import { render, fireEvent, act } from "@testing-library/react";
+import { useEffect, useRef } from "react";
 import { MapStage } from "@/components/map/MapStage";
+import { useNodes } from "@/hooks/useNodes";
 import type { Node } from "@/types/node";
 
 // ========== モック定義 ==========
@@ -65,6 +67,8 @@ const defaultProps = {
   nodes: [] as Node[],
   selectedNodeId: null as number | null,
   onDoubleClick: jest.fn(),
+  onAddChildNode: jest.fn(() => null),
+  onAddSiblingNode: jest.fn(() => null),
   onSelectNode: jest.fn(),
   onUpdateLabel: jest.fn(),
   onMoveNode: jest.fn(),
@@ -92,11 +96,55 @@ async function renderReady(ui: React.ReactElement) {
   return result;
 }
 
+function KeyboardCreationHarness({ initiallySelected = true }: { initiallySelected?: boolean }) {
+  const {
+    nodes,
+    selectedNodeId,
+    addNode,
+    addChildNode,
+    addSiblingNode,
+    selectNode,
+    updateNodeLabel,
+    moveNode,
+    deleteNode,
+  } = useNodes();
+  const initializedRef = useRef(false);
+
+  useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+    const rootId = addNode(100, 60);
+    if (initiallySelected) selectNode(rootId);
+  }, [addNode, initiallySelected, selectNode]);
+
+  return (
+    <>
+      <MapStage
+        nodes={nodes}
+        selectedNodeId={selectedNodeId}
+        onDoubleClick={addNode}
+        onAddChildNode={addChildNode}
+        onAddSiblingNode={addSiblingNode}
+        onSelectNode={selectNode}
+        onUpdateLabel={updateNodeLabel}
+        onMoveNode={moveNode}
+        onDeleteNode={deleteNode}
+      />
+      <output data-testid="node-state">{JSON.stringify(nodes)}</output>
+      <output data-testid="selected-node-id">{selectedNodeId}</output>
+    </>
+  );
+}
+
 // ========== テスト ==========
 beforeEach(() => {
   jest.clearAllMocks();
   stageChildren = [];
   mockInit.mockResolvedValue(undefined);
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
 });
 
 describe("MapStage", () => {
@@ -380,6 +428,114 @@ describe("MapStage", () => {
       fireEvent.keyDown(window, { key: "Delete" });
 
       expect(onDeleteNode).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("キーボードによるノード作成", () => {
+    // Production break caught: omit Tab handling, call the wrong creation API,
+    // or do not transition the returned child node into editing.
+    it("選択中のTabで子ノードを作成して選択し編集を開始する", async () => {
+      let nextNodeId = 0;
+      jest.spyOn(Date, "now").mockImplementation(() => ++nextNodeId);
+      const { getByTestId } = await renderReady(<KeyboardCreationHarness />);
+      const [parent] = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
+
+      fireEvent.keyDown(window, { key: "Tab" });
+
+      const nodes = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
+      const child = nodes[1];
+      expect(nodes).toHaveLength(2);
+      expect(child).toEqual(expect.objectContaining({ parentId: parent.id, label: "" }));
+      expect(child.id).not.toBe(parent.id);
+      expect(getByTestId("selected-node-id")).toHaveTextContent(String(child.id));
+      expect(getByTestId("node-label-input")).toHaveValue("");
+    });
+
+    // Production break caught: omit Enter handling, create a child instead of a sibling,
+    // or do not transition the returned sibling node into editing.
+    it("選択中のEnterで兄弟ノードを作成して選択し編集を開始する", async () => {
+      let nextNodeId = 0;
+      jest.spyOn(Date, "now").mockImplementation(() => ++nextNodeId);
+      const { getByTestId } = await renderReady(<KeyboardCreationHarness />);
+      const [source] = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
+
+      fireEvent.keyDown(window, { key: "Enter" });
+
+      const nodes = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
+      const sibling = nodes[1];
+      expect(nodes).toHaveLength(2);
+      expect(sibling).toEqual(expect.objectContaining({ parentId: source.parentId, label: "" }));
+      expect(sibling.id).not.toBe(source.id);
+      expect(getByTestId("selected-node-id")).toHaveTextContent(String(sibling.id));
+      expect(getByTestId("node-label-input")).toHaveValue("");
+    });
+
+    it.each(["Tab", "Enter"])("未選択時の%sはノードを作成せず編集を開始しない", async (key) => {
+      const { getByTestId, queryByTestId } = await renderReady(
+        <KeyboardCreationHarness initiallySelected={false} />,
+      );
+
+      fireEvent.keyDown(window, { key });
+
+      const nodes = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
+      expect(nodes).toHaveLength(1);
+      expect(getByTestId("selected-node-id")).toHaveTextContent("");
+      expect(queryByTestId("node-label-input")).not.toBeInTheDocument();
+    });
+
+    async function renderEditingHarness() {
+      const result = await renderReady(<KeyboardCreationHarness />);
+      const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+      jest.spyOn(container, "getBoundingClientRect").mockReturnValue({
+        left: 0, top: 0, right: 800, bottom: 600,
+        width: 800, height: 600, x: 0, y: 0, toJSON: () => ({}),
+      });
+      fireEvent.doubleClick(container, { clientX: 100, clientY: 60 });
+      return result;
+    }
+
+    it("編集中のTabでは子ノードを作成しない", async () => {
+      const { getByTestId } = await renderEditingHarness();
+      const input = getByTestId("node-label-input");
+
+      fireEvent.keyDown(input, { key: "Tab" });
+
+      const nodes = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
+      expect(nodes).toHaveLength(1);
+    });
+
+    it.each(["Delete", "Backspace"])("編集中の%sではノードを削除しない", async (key) => {
+      const { getByTestId } = await renderEditingHarness();
+      const input = getByTestId("node-label-input");
+
+      fireEvent.keyDown(input, { key });
+
+      const nodes = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
+      expect(nodes).toHaveLength(1);
+    });
+
+    it("編集中のEnterでラベルを確定する", async () => {
+      const { getByTestId, queryByTestId } = await renderEditingHarness();
+      const input = getByTestId("node-label-input");
+
+      fireEvent.change(input, { target: { value: "確定ラベル" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+
+      const [node] = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
+      expect(node.label).toBe("確定ラベル");
+      expect(queryByTestId("node-label-input")).not.toBeInTheDocument();
+    });
+
+    it("編集中のEscapeでラベルの変更を破棄する", async () => {
+      const { getByTestId, queryByTestId } = await renderEditingHarness();
+      const input = getByTestId("node-label-input");
+
+      fireEvent.change(input, { target: { value: "破棄ラベル" } });
+      fireEvent.keyDown(input, { key: "Escape" });
+
+      const [node] = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
+      expect(node.label).toBe("");
+      expect(queryByTestId("node-label-input")).not.toBeInTheDocument();
     });
   });
 
