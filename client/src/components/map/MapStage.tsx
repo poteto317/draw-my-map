@@ -1,19 +1,48 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import type { Rect } from "@/types/rect";
-import type { Application, Graphics as GraphicsType } from "pixi.js";
+import { useEffect, useRef, useState, useCallback } from "react";
+import type { Node } from "@/types/node";
+import type { Application, Graphics as GraphicsType, Text as TextType, Container as ContainerType, FederatedPointerEvent } from "pixi.js";
+
+const DRAG_THRESHOLD = 4;
 
 type MapStageProps = {
-  rects: Rect[];
+  nodes: Node[];
+  selectedNodeId: number | null;
   onDoubleClick: (x: number, y: number) => void;
+  onSelectNode: (id: number | null) => void;
+  onUpdateLabel: (id: number, label: string) => void;
+  onMoveNode: (id: number, x: number, y: number) => void;
+  onDeleteNode: (id: number) => void;
 };
 
-export function MapStage({ rects, onDoubleClick }: MapStageProps) {
+export function MapStage({ nodes, selectedNodeId, onDoubleClick, onSelectNode, onUpdateLabel, onMoveNode, onDeleteNode }: MapStageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
   const GraphicsClassRef = useRef<typeof GraphicsType | null>(null);
+  const TextClassRef = useRef<typeof TextType | null>(null);
+  const ContainerClassRef = useRef<typeof ContainerType | null>(null);
   const [appReady, setAppReady] = useState(false);
+  const [editingNodeId, setEditingNodeId] = useState<number | null>(null);
+  const [editingText, setEditingText] = useState("");
+
+  // 最新のコールバックを ref で保持（PixiJS イベント内で参照するため）
+  const onSelectNodeRef = useRef(onSelectNode);
+  onSelectNodeRef.current = onSelectNode;
+  const onMoveNodeRef = useRef(onMoveNode);
+  onMoveNodeRef.current = onMoveNode;
+  const nodesRef = useRef(nodes);
+  nodesRef.current = nodes;
+
+  // ドラッグ状態の管理
+  const dragStateRef = useRef<{
+    nodeId: number;
+    startX: number;
+    startY: number;
+    nodeStartX: number;
+    nodeStartY: number;
+    dragging: boolean;
+  } | null>(null);
 
   // PixiJS アプリの初期化
   useEffect(() => {
@@ -25,6 +54,8 @@ export function MapStage({ rects, onDoubleClick }: MapStageProps) {
       if (cancelled) return;
 
       GraphicsClassRef.current = pixi.Graphics;
+      TextClassRef.current = pixi.Text;
+      ContainerClassRef.current = pixi.Container;
 
       const app = new pixi.Application();
       await app.init({
@@ -39,6 +70,33 @@ export function MapStage({ rects, onDoubleClick }: MapStageProps) {
         app.destroy(true);
         return;
       }
+
+      // stage レベルのイベントを有効化（pointermove / pointerup の受信用）
+      app.stage.eventMode = "static";
+      app.stage.hitArea = app.screen;
+
+      app.stage.on("pointermove", (e: FederatedPointerEvent) => {
+        const state = dragStateRef.current;
+        if (!state) return;
+
+        const dx = e.globalX - state.startX;
+        const dy = e.globalY - state.startY;
+
+        if (!state.dragging) {
+          if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
+          state.dragging = true;
+        }
+
+        onMoveNodeRef.current(state.nodeId, state.nodeStartX + dx, state.nodeStartY + dy);
+      });
+
+      app.stage.on("pointerup", () => {
+        dragStateRef.current = null;
+      });
+
+      app.stage.on("pointerupoutside", () => {
+        dragStateRef.current = null;
+      });
 
       const canvas = app.canvas;
       canvas.style.position = "absolute";
@@ -56,27 +114,137 @@ export function MapStage({ rects, onDoubleClick }: MapStageProps) {
     };
   }, []);
 
-  // rects の変化を PixiJS に反映
+  // Delete / Backspace キーで選択中のノードを削除
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (editingNodeId !== null) return; // テキスト編集中は無視
+      if (selectedNodeId === null) return;
+      if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
+        onDeleteNode(selectedNodeId);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedNodeId, editingNodeId, onDeleteNode]);
+
+  // nodes の変化を PixiJS に反映
   useEffect(() => {
     const app = appRef.current;
     const Graphics = GraphicsClassRef.current;
-    if (!app || !Graphics) return;
+    const TextClass = TextClassRef.current;
+    const ContainerClass = ContainerClassRef.current;
+    if (!app || !Graphics || !TextClass || !ContainerClass) return;
 
     app.stage.removeChildren();
 
-    for (const rect of rects) {
+    for (const node of nodes) {
+      const isEditing = node.id === editingNodeId;
+      const isSelected = node.id === selectedNodeId;
+      const container = new ContainerClass();
+      container.eventMode = "static";
+      container.cursor = "pointer";
+
+      container.on("pointerdown", (e: FederatedPointerEvent) => {
+        onSelectNodeRef.current(node.id);
+        const currentNode = nodesRef.current.find((n) => n.id === node.id);
+        if (!currentNode) return;
+        dragStateRef.current = {
+          nodeId: node.id,
+          startX: e.globalX,
+          startY: e.globalY,
+          nodeStartX: currentNode.x,
+          nodeStartY: currentNode.y,
+          dragging: false,
+        };
+      });
+
       const g = new Graphics();
-      g.rect(rect.x, rect.y, rect.width, rect.height)
-        .fill({ color: 0xffffff })
-        .stroke({ width: 2, color: 0x3b82f6 });
-      app.stage.addChild(g);
+      g.rect(node.x, node.y, node.width, node.height)
+        .fill({ color: isSelected ? 0xeff6ff : 0xffffff })
+        .stroke({ width: isSelected ? 3 : 2, color: isSelected ? 0x2563eb : 0x3b82f6 });
+      container.addChild(g);
+
+      if (!isEditing) {
+        const displayLabel = node.label || "新しいノード";
+        const text = new TextClass({
+          text: displayLabel,
+          style: {
+            fontSize: 14,
+            fill: 0x27272a,
+            wordWrap: true,
+            wordWrapWidth: node.width - 16,
+            align: "center",
+          },
+        });
+        text.anchor.set(0.5);
+        text.x = node.x + node.width / 2;
+        text.y = node.y + node.height / 2;
+        container.addChild(text);
+      }
+
+      app.stage.addChild(container);
     }
-  }, [rects, appReady]);
+  }, [nodes, selectedNodeId, editingNodeId, appReady]);
+
+  const startEditing = useCallback(
+    (nodeId: number) => {
+      const node = nodes.find((n) => n.id === nodeId);
+      if (!node) return;
+      setEditingNodeId(nodeId);
+      setEditingText(node.label);
+    },
+    [nodes],
+  );
+
+  const commitEdit = useCallback(() => {
+    if (editingNodeId !== null) {
+      onUpdateLabel(editingNodeId, editingText);
+      setEditingNodeId(null);
+      setEditingText("");
+    }
+  }, [editingNodeId, editingText, onUpdateLabel]);
+
+  const cancelEdit = useCallback(() => {
+    setEditingNodeId(null);
+    setEditingText("");
+  }, []);
 
   const handleDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const bounds = containerRef.current!.getBoundingClientRect();
-    onDoubleClick(e.clientX - bounds.left, e.clientY - bounds.top);
+    const x = e.clientX - bounds.left;
+    const y = e.clientY - bounds.top;
+
+    const clickedNode = nodes.find(
+      (n) => x >= n.x && x <= n.x + n.width && y >= n.y && y <= n.y + n.height,
+    );
+
+    if (clickedNode) {
+      startEditing(clickedNode.id);
+    } else {
+      onDoubleClick(x, y);
+    }
   };
+
+  const handleClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const target = e.target as HTMLElement;
+      if (target === containerRef.current) {
+        onSelectNode(null);
+      }
+    },
+    [onSelectNode],
+  );
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      commitEdit();
+    } else if (e.key === "Escape") {
+      cancelEdit();
+    }
+  };
+
+  const editingNode = editingNodeId !== null ? nodes.find((n) => n.id === editingNodeId) : null;
 
   return (
     <div
@@ -84,6 +252,27 @@ export function MapStage({ rects, onDoubleClick }: MapStageProps) {
       className="relative w-full cursor-crosshair"
       style={{ minHeight: "calc(100vh - 52px)" }}
       onDoubleClick={handleDoubleClick}
-    />
+      onClick={handleClick}
+    >
+      {editingNode && (
+        <input
+          data-testid="node-label-input"
+          type="text"
+          value={editingText}
+          onChange={(e) => setEditingText(e.target.value)}
+          onKeyDown={handleInputKeyDown}
+          onBlur={commitEdit}
+          autoFocus
+          className="absolute z-10 border-2 border-blue-500 bg-white px-2 text-center text-sm text-zinc-800 outline-none"
+          style={{
+            left: editingNode.x,
+            top: editingNode.y,
+            width: editingNode.width,
+            height: editingNode.height,
+            lineHeight: `${editingNode.height}px`,
+          }}
+        />
+      )}
+    </div>
   );
 }

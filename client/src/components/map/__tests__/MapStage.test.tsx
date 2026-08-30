@@ -1,12 +1,21 @@
 import { render, fireEvent, act } from "@testing-library/react";
 import { MapStage } from "@/components/map/MapStage";
-import type { Rect } from "@/types/rect";
+import type { Node } from "@/types/node";
 
 // ========== モック定義 ==========
-// jest.mock() はホイスティングされるが、'mock' プレフィックスの変数は例外的に参照可能
-const mockStage = { removeChildren: jest.fn(), addChild: jest.fn() };
+const mockStage = {
+  removeChildren: jest.fn(),
+  addChild: jest.fn(),
+  removeChild: jest.fn(),
+  on: jest.fn(),
+  eventMode: "none",
+  hitArea: null as unknown,
+  children: [] as unknown[],
+};
 const mockInit = jest.fn().mockResolvedValue(undefined);
 const mockDestroy = jest.fn();
+
+const mockContainerOn = jest.fn();
 
 jest.mock("pixi.js", () => {
   const canvas = document.createElement("canvas");
@@ -16,40 +25,63 @@ jest.mock("pixi.js", () => {
       destroy: mockDestroy,
       canvas,
       stage: mockStage,
+      screen: { x: 0, y: 0, width: 800, height: 600 },
     })),
     Graphics: jest.fn().mockImplementation(() => ({
       rect: jest.fn().mockReturnThis(),
       fill: jest.fn().mockReturnThis(),
       stroke: jest.fn().mockReturnThis(),
     })),
+    Text: jest.fn().mockImplementation(() => ({
+      anchor: { set: jest.fn() },
+      x: 0,
+      y: 0,
+    })),
+    Container: jest.fn().mockImplementation(() => ({
+      addChild: jest.fn(),
+      on: mockContainerOn,
+      eventMode: "none",
+      cursor: "default",
+    })),
   };
 });
 
+// ========== ヘルパー ==========
+const defaultProps = {
+  nodes: [] as Node[],
+  selectedNodeId: null as number | null,
+  onDoubleClick: jest.fn(),
+  onSelectNode: jest.fn(),
+  onUpdateLabel: jest.fn(),
+  onMoveNode: jest.fn(),
+  onDeleteNode: jest.fn(),
+};
+
 // ========== データ ==========
-const sampleRects: Rect[] = [
-  { id: 1, x: 50, y: 30, width: 100, height: 60 },
-  { id: 2, x: 200, y: 100, width: 100, height: 60 },
+const sampleNodes: Node[] = [
+  { id: 1, x: 50, y: 30, width: 100, height: 60, label: "ノード1" },
+  { id: 2, x: 200, y: 100, width: 100, height: 60, label: "ノード2" },
 ];
 
 // ========== テスト ==========
 beforeEach(() => {
   jest.clearAllMocks();
-  mockInit.mockResolvedValue(undefined); // 各テストで解決済みに戻す
+  mockInit.mockResolvedValue(undefined);
 });
 
 describe("MapStage", () => {
   describe("レンダリング", () => {
     it("コンテナ div がレンダリングされる", () => {
-      render(<MapStage rects={[]} onDoubleClick={jest.fn()} />);
+      render(<MapStage {...defaultProps} />);
       const container = document.querySelector(".cursor-crosshair");
       expect(container).toBeInTheDocument();
     });
   });
 
   describe("ダブルクリック", () => {
-    it("onDoubleClick がコンテナ相対の座標で呼ばれる", () => {
+    it("空白エリアのダブルクリックで onDoubleClick がコンテナ相対の座標で呼ばれる", () => {
       const onDoubleClick = jest.fn();
-      render(<MapStage rects={[]} onDoubleClick={onDoubleClick} />);
+      render(<MapStage {...defaultProps} onDoubleClick={onDoubleClick} />);
 
       const container = document.querySelector(".cursor-crosshair") as HTMLElement;
       jest.spyOn(container, "getBoundingClientRect").mockReturnValue({
@@ -59,14 +91,14 @@ describe("MapStage", () => {
 
       fireEvent.doubleClick(container, { clientX: 300, clientY: 200 });
 
-      // 期待値: clientX - left = 200, clientY - top = 150
       expect(onDoubleClick).toHaveBeenCalledTimes(1);
       expect(onDoubleClick).toHaveBeenCalledWith(200, 150);
     });
 
-    it("複数回ダブルクリックすると onDoubleClick が同回数呼ばれる", () => {
-      const onDoubleClick = jest.fn();
-      render(<MapStage rects={[]} onDoubleClick={onDoubleClick} />);
+    it("ノード上のダブルクリックで編集モードになる", () => {
+      const { getByTestId } = render(
+        <MapStage {...defaultProps} nodes={sampleNodes} />,
+      );
 
       const container = document.querySelector(".cursor-crosshair") as HTMLElement;
       jest.spyOn(container, "getBoundingClientRect").mockReturnValue({
@@ -74,34 +106,76 @@ describe("MapStage", () => {
         width: 800, height: 600, x: 0, y: 0, toJSON: () => ({}),
       });
 
-      fireEvent.doubleClick(container, { clientX: 100, clientY: 100 });
-      fireEvent.doubleClick(container, { clientX: 200, clientY: 200 });
+      // sampleNodes[0] は x:50, y:30, w:100, h:60 → 中心 (100, 60) をクリック
+      fireEvent.doubleClick(container, { clientX: 100, clientY: 60 });
 
-      expect(onDoubleClick).toHaveBeenCalledTimes(2);
+      const input = getByTestId("node-label-input");
+      expect(input).toBeInTheDocument();
+      expect((input as HTMLInputElement).value).toBe("ノード1");
     });
 
     it("マウント直後にはイベントを発火しない", () => {
       const onDoubleClick = jest.fn();
-      render(<MapStage rects={sampleRects} onDoubleClick={onDoubleClick} />);
+      render(<MapStage {...defaultProps} nodes={sampleNodes} onDoubleClick={onDoubleClick} />);
       expect(onDoubleClick).not.toHaveBeenCalled();
     });
   });
 
-  describe("PixiJS 初期化後の rect 描画", () => {
-    it("初期化完了後に rects が stage へ描画される", async () => {
+  describe("テキスト編集", () => {
+    function renderAndStartEditing() {
+      const onUpdateLabel = jest.fn();
+      const result = render(
+        <MapStage {...defaultProps} nodes={sampleNodes} onUpdateLabel={onUpdateLabel} />,
+      );
+
+      const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+      jest.spyOn(container, "getBoundingClientRect").mockReturnValue({
+        left: 0, top: 0, right: 800, bottom: 600,
+        width: 800, height: 600, x: 0, y: 0, toJSON: () => ({}),
+      });
+
+      fireEvent.doubleClick(container, { clientX: 100, clientY: 60 });
+
+      return { ...result, onUpdateLabel };
+    }
+
+    it("Enter キーで編集を確定する", () => {
+      const { getByTestId, onUpdateLabel } = renderAndStartEditing();
+      const input = getByTestId("node-label-input");
+
+      fireEvent.change(input, { target: { value: "更新テキスト" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+
+      expect(onUpdateLabel).toHaveBeenCalledWith(1, "更新テキスト");
+    });
+
+    it("Escape キーで編集をキャンセルする", () => {
+      const { getByTestId, onUpdateLabel, queryByTestId } = renderAndStartEditing();
+      const input = getByTestId("node-label-input");
+
+      fireEvent.change(input, { target: { value: "変更されないテキスト" } });
+      fireEvent.keyDown(input, { key: "Escape" });
+
+      expect(onUpdateLabel).not.toHaveBeenCalled();
+      expect(queryByTestId("node-label-input")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("PixiJS 初期化後の node 描画", () => {
+    it("初期化完了後に nodes が stage へ描画される", async () => {
       await act(async () => {
-        render(<MapStage rects={sampleRects} onDoubleClick={jest.fn()} />);
-        await Promise.resolve(); // dynamic import を解決
-        await Promise.resolve(); // app.init() を解決
+        render(<MapStage {...defaultProps} nodes={sampleNodes} />);
+        await Promise.resolve();
+        await Promise.resolve();
       });
 
       expect(mockStage.removeChildren).toHaveBeenCalled();
-      expect(mockStage.addChild).toHaveBeenCalledTimes(sampleRects.length);
+      expect(mockStage.addChild).toHaveBeenCalledTimes(sampleNodes.length);
     });
 
-    it("rects が空のとき addChild は呼ばれない", async () => {
+    it("nodes が空のとき addChild は呼ばれない", async () => {
       await act(async () => {
-        render(<MapStage rects={[]} onDoubleClick={jest.fn()} />);
+        render(<MapStage {...defaultProps} />);
         await Promise.resolve();
         await Promise.resolve();
       });
@@ -110,11 +184,11 @@ describe("MapStage", () => {
       expect(mockStage.addChild).not.toHaveBeenCalled();
     });
 
-    it("rects が変化すると stage が再描画される", async () => {
+    it("nodes が変化すると stage が再描画される", async () => {
       let rerender!: (ui: React.ReactElement) => void;
 
       await act(async () => {
-        const result = render(<MapStage rects={[]} onDoubleClick={jest.fn()} />);
+        const result = render(<MapStage {...defaultProps} />);
         rerender = result.rerender;
         await Promise.resolve();
         await Promise.resolve();
@@ -124,11 +198,69 @@ describe("MapStage", () => {
       mockStage.addChild.mockClear();
 
       act(() => {
-        rerender(<MapStage rects={sampleRects} onDoubleClick={jest.fn()} />);
+        rerender(<MapStage {...defaultProps} nodes={sampleNodes} />);
       });
 
       expect(mockStage.removeChildren).toHaveBeenCalled();
-      expect(mockStage.addChild).toHaveBeenCalledTimes(sampleRects.length);
+      expect(mockStage.addChild).toHaveBeenCalledTimes(sampleNodes.length);
+    });
+  });
+
+  describe("ノード選択", () => {
+    it("ノードの pointerdown で onSelectNode が呼ばれるようイベントが登録される", async () => {
+      await act(async () => {
+        render(<MapStage {...defaultProps} nodes={sampleNodes} />);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(mockContainerOn).toHaveBeenCalledWith("pointerdown", expect.any(Function));
+      expect(mockContainerOn).toHaveBeenCalledTimes(sampleNodes.length);
+    });
+
+    it("空白クリックで onSelectNode(null) が呼ばれる", () => {
+      const onSelectNode = jest.fn();
+      render(<MapStage {...defaultProps} onSelectNode={onSelectNode} />);
+
+      const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+      fireEvent.click(container);
+
+      expect(onSelectNode).toHaveBeenCalledWith(null);
+    });
+  });
+
+  describe("ノード削除", () => {
+    it("選択中に Delete キーで onDeleteNode が呼ばれる", () => {
+      const onDeleteNode = jest.fn();
+      render(
+        <MapStage {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onDeleteNode={onDeleteNode} />,
+      );
+
+      fireEvent.keyDown(window, { key: "Delete" });
+
+      expect(onDeleteNode).toHaveBeenCalledWith(1);
+    });
+
+    it("選択中に Backspace キーで onDeleteNode が呼ばれる", () => {
+      const onDeleteNode = jest.fn();
+      render(
+        <MapStage {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onDeleteNode={onDeleteNode} />,
+      );
+
+      fireEvent.keyDown(window, { key: "Backspace" });
+
+      expect(onDeleteNode).toHaveBeenCalledWith(1);
+    });
+
+    it("未選択時は Delete キーを押しても onDeleteNode が呼ばれない", () => {
+      const onDeleteNode = jest.fn();
+      render(
+        <MapStage {...defaultProps} nodes={sampleNodes} onDeleteNode={onDeleteNode} />,
+      );
+
+      fireEvent.keyDown(window, { key: "Delete" });
+
+      expect(onDeleteNode).not.toHaveBeenCalled();
     });
   });
 
@@ -137,7 +269,7 @@ describe("MapStage", () => {
       let unmount!: () => void;
 
       await act(async () => {
-        const result = render(<MapStage rects={[]} onDoubleClick={jest.fn()} />);
+        const result = render(<MapStage {...defaultProps} />);
         unmount = result.unmount;
         await Promise.resolve();
         await Promise.resolve();
@@ -151,7 +283,6 @@ describe("MapStage", () => {
     });
 
     it("初期化完了前に unmount されると cancelled ブランチで app が破棄される", async () => {
-      // init を手動で制御できる Promise に差し替える
       let resolveInit!: () => void;
       const pendingInit = new Promise<void>((resolve) => {
         resolveInit = resolve;
@@ -161,18 +292,15 @@ describe("MapStage", () => {
       let unmount!: () => void;
 
       await act(async () => {
-        const result = render(<MapStage rects={[]} onDoubleClick={jest.fn()} />);
+        const result = render(<MapStage {...defaultProps} />);
         unmount = result.unmount;
-        // dynamic import は解決済みにするが、init はまだ pending
         await Promise.resolve();
       });
 
-      // init 完了前にアンマウント → cancelled = true
       act(() => {
         unmount();
       });
 
-      // init を完了させる → cancelled ブランチの app.destroy(true) が実行される
       await act(async () => {
         resolveInit();
         await Promise.resolve();
@@ -187,11 +315,9 @@ describe("MapStage", () => {
       };
       Application.mockClear();
 
-      // render 後すぐ unmount（dynamic import の microtask が走る前）
-      const { unmount } = render(<MapStage rects={[]} onDoubleClick={jest.fn()} />);
+      const { unmount } = render(<MapStage {...defaultProps} />);
       unmount();
 
-      // dynamic import の microtask を解決する（cancelled=true のため if(cancelled) で return）
       await act(async () => {
         await Promise.resolve();
         await Promise.resolve();
@@ -205,12 +331,11 @@ describe("MapStage", () => {
       Object.defineProperty(window, "devicePixelRatio", { value: 0, configurable: true });
 
       await act(async () => {
-        render(<MapStage rects={[]} onDoubleClick={jest.fn()} />);
+        render(<MapStage {...defaultProps} />);
         await Promise.resolve();
         await Promise.resolve();
       });
 
-      // init が呼ばれていれば resolution=1 のフォールバックパスが通っている
       expect(mockInit).toHaveBeenCalledWith(
         expect.objectContaining({ resolution: 1 }),
       );
