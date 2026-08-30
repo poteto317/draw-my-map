@@ -67,8 +67,8 @@ const defaultProps = {
 
 // ========== データ ==========
 const sampleNodes: Node[] = [
-  { id: 1, x: 50, y: 30, width: 100, height: 60, label: "ノード1" },
-  { id: 2, x: 200, y: 100, width: 100, height: 60, label: "ノード2" },
+  { id: 1, parentId: null, x: 50, y: 30, width: 100, height: 60, label: "ノード1" },
+  { id: 2, parentId: null, x: 200, y: 100, width: 100, height: 60, label: "ノード2" },
 ];
 
 async function renderReady(ui: React.ReactElement) {

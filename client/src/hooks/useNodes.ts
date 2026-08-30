@@ -5,7 +5,7 @@ import type { Node } from "@/types/node";
 type UseNodesReturn = {
   nodes: Node[];
   selectedNodeId: number | null;
-  addNode: (x: number, y: number) => void;
+  addNode: (x: number, y: number) => number;
   selectNode: (id: number | null) => void;
   updateNodeLabel: (id: number, label: string) => void;
   moveNode: (id: number, x: number, y: number) => void;
@@ -17,10 +17,12 @@ export function useNodes(): UseNodesReturn {
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
 
   const addNode = (x: number, y: number) => {
+    const id = Date.now();
     setNodes((prev) => [
       ...prev,
       {
-        id: Date.now(),
+        id,
+        parentId: null,
         x: x - RECT_WIDTH / 2,
         y: y - RECT_HEIGHT / 2,
         width: RECT_WIDTH,
@@ -28,6 +30,7 @@ export function useNodes(): UseNodesReturn {
         label: "",
       },
     ]);
+    return id;
   };
 
   const selectNode = (id: number | null) => {

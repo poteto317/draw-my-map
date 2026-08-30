@@ -3,6 +3,24 @@ import { useNodes } from "@/hooks/useNodes";
 import { RECT_WIDTH, RECT_HEIGHT } from "@/config/shapes";
 
 describe("useNodes", () => {
+  // Production break caught: addNode does not return the created ID or set root parentId to null.
+  it("addNode は parentId が null のルートノードを作成し、そのIDを返す", () => {
+    jest.spyOn(Date, "now").mockReturnValue(101);
+    const { result } = renderHook(() => useNodes());
+    let createdId!: number;
+
+    act(() => {
+      createdId = result.current.addNode(200, 150);
+    });
+
+    expect(createdId).toBe(101);
+    expect(result.current.nodes[0]).toMatchObject({
+      id: 101,
+      parentId: null,
+    });
+    jest.restoreAllMocks();
+  });
+
   it("初期状態では nodes が空配列である", () => {
     const { result } = renderHook(() => useNodes());
     expect(result.current.nodes).toEqual([]);
