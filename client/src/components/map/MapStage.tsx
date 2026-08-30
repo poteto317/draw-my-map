@@ -136,7 +136,10 @@ export function MapStage({ nodes, selectedNodeId, onDoubleClick, onSelectNode, o
     const ContainerClass = ContainerClassRef.current;
     if (!app || !Graphics || !TextClass || !ContainerClass) return;
 
-    app.stage.removeChildren();
+    const removedChildren = app.stage.removeChildren();
+    for (const child of removedChildren) {
+      child.destroy({ children: true });
+    }
 
     for (const node of nodes) {
       const isEditing = node.id === editingNodeId;
@@ -229,7 +232,7 @@ export function MapStage({ nodes, selectedNodeId, onDoubleClick, onSelectNode, o
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       const target = e.target as HTMLElement;
-      if (target === containerRef.current) {
+      if (target === containerRef.current || target instanceof HTMLCanvasElement) {
         onSelectNode(null);
       }
     },
