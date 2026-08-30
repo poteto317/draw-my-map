@@ -141,6 +141,31 @@ export function MapStage({ nodes, selectedNodeId, onDoubleClick, onSelectNode, o
       child.destroy({ children: true });
     }
 
+    const edgeGraphics = new Graphics();
+    let hasEdges = false;
+
+    for (const child of nodes) {
+      if (child.parentId === null) continue;
+      const parent = nodes.find((node) => node.id === child.parentId);
+      if (!parent) continue;
+
+      const startX = parent.x + parent.width;
+      const startY = parent.y + parent.height / 2;
+      const endX = child.x;
+      const endY = child.y + child.height / 2;
+      const controlX = (startX + endX) / 2;
+
+      edgeGraphics
+        .moveTo(startX, startY)
+        .bezierCurveTo(controlX, startY, controlX, endY, endX, endY);
+      hasEdges = true;
+    }
+
+    if (hasEdges) {
+      edgeGraphics.stroke({ width: 2, color: 0x64748b });
+      app.stage.addChild(edgeGraphics);
+    }
+
     for (const node of nodes) {
       const isEditing = node.id === editingNodeId;
       const isSelected = node.id === selectedNodeId;

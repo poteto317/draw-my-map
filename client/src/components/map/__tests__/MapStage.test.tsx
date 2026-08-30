@@ -23,6 +23,9 @@ const mockInit = jest.fn().mockResolvedValue(undefined);
 const mockDestroy = jest.fn();
 
 const mockContainerOn = jest.fn();
+const mockMoveTo = jest.fn().mockReturnThis();
+const mockBezierCurveTo = jest.fn().mockReturnThis();
+const mockEdgeStroke = jest.fn().mockReturnThis();
 
 jest.mock("pixi.js", () => {
   const canvas = document.createElement("canvas");
@@ -37,7 +40,10 @@ jest.mock("pixi.js", () => {
     Graphics: jest.fn().mockImplementation(() => ({
       rect: jest.fn().mockReturnThis(),
       fill: jest.fn().mockReturnThis(),
-      stroke: jest.fn().mockReturnThis(),
+      stroke: mockEdgeStroke,
+      moveTo: mockMoveTo,
+      bezierCurveTo: mockBezierCurveTo,
+      destroy: jest.fn(),
     })),
     Text: jest.fn().mockImplementation(() => ({
       anchor: { set: jest.fn() },
@@ -71,6 +77,11 @@ const sampleNodes: Node[] = [
   { id: 2, parentId: null, x: 200, y: 100, width: 100, height: 60, label: "ノード2" },
 ];
 
+const connectedNodes: Node[] = [
+  { id: 1, parentId: null, x: 50, y: 30, width: 100, height: 60, label: "親" },
+  { id: 2, parentId: 1, x: 270, y: 30, width: 100, height: 60, label: "子" },
+];
+
 async function renderReady(ui: React.ReactElement) {
   let result!: ReturnType<typeof render>;
   await act(async () => {
@@ -83,7 +94,7 @@ async function renderReady(ui: React.ReactElement) {
 
 // ========== テスト ==========
 beforeEach(() => {
-    jest.clearAllMocks();
+  jest.clearAllMocks();
   stageChildren = [];
   mockInit.mockResolvedValue(undefined);
 });
@@ -222,6 +233,57 @@ describe("MapStage", () => {
 
       expect(mockStage.removeChildren).toHaveBeenCalled();
       expect(mockStage.addChild).toHaveBeenCalledTimes(sampleNodes.length);
+    });
+  });
+
+  describe("親子ノード間の接続線", () => {
+    // Production break caught: omit edge rendering, use the wrong endpoints/control points,
+    // or place the edge above the node containers.
+    it("親の右中央から子の左中央へベジェ曲線をノードの背後に描画する", async () => {
+      await renderReady(<MapStage {...defaultProps} nodes={connectedNodes} />);
+
+      expect(mockMoveTo).toHaveBeenCalledWith(150, 60);
+      expect(mockBezierCurveTo).toHaveBeenCalledWith(210, 60, 210, 60, 270, 60);
+      expect(mockEdgeStroke).toHaveBeenCalledWith({ width: 2, color: 0x64748b });
+      expect(mockStage.addChild).toHaveBeenCalledTimes(connectedNodes.length + 1);
+
+      const edgeGraphics = mockStage.addChild.mock.calls[0][0] as { addChild?: unknown };
+      expect(edgeGraphics).not.toHaveProperty("addChild");
+      expect(mockMoveTo.mock.contexts).toEqual([edgeGraphics]);
+      expect(mockEdgeStroke.mock.contexts).toContain(edgeGraphics);
+    });
+
+    it("親が存在しない parentId の接続線は描画しない", async () => {
+      const orphan: Node[] = [
+        { id: 2, parentId: 999, x: 270, y: 30, width: 100, height: 60, label: "孤立" },
+      ];
+
+      await renderReady(<MapStage {...defaultProps} nodes={orphan} />);
+
+      expect(mockMoveTo).not.toHaveBeenCalled();
+      expect(mockBezierCurveTo).not.toHaveBeenCalled();
+      expect(mockStage.addChild).toHaveBeenCalledTimes(1);
+    });
+
+    it("nodes の座標変更時は現在の座標で接続線を再描画する", async () => {
+      const result = await renderReady(<MapStage {...defaultProps} nodes={connectedNodes} />);
+      mockMoveTo.mockClear();
+      mockBezierCurveTo.mockClear();
+
+      await act(async () => {
+        result.rerender(
+          <MapStage
+            {...defaultProps}
+            nodes={[
+              connectedNodes[0],
+              { ...connectedNodes[1], x: 330, y: 90 },
+            ]}
+          />,
+        );
+      });
+
+      expect(mockMoveTo).toHaveBeenCalledWith(150, 60);
+      expect(mockBezierCurveTo).toHaveBeenCalledWith(240, 60, 240, 120, 330, 120);
     });
   });
 
