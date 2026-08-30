@@ -1,11 +1,18 @@
 import { useState, useCallback } from "react";
-import { RECT_WIDTH, RECT_HEIGHT } from "@/config/shapes";
+import {
+  RECT_WIDTH,
+  RECT_HEIGHT,
+  CHILD_HORIZONTAL_GAP,
+  SIBLING_VERTICAL_GAP,
+} from "@/config/shapes";
 import type { Node } from "@/types/node";
 
 type UseNodesReturn = {
   nodes: Node[];
   selectedNodeId: number | null;
   addNode: (x: number, y: number) => number;
+  addChildNode: (parentId: number) => number | null;
+  addSiblingNode: (nodeId: number) => number | null;
   selectNode: (id: number | null) => void;
   updateNodeLabel: (id: number, label: string) => void;
   moveNode: (id: number, x: number, y: number) => void;
@@ -33,6 +40,58 @@ export function useNodes(): UseNodesReturn {
     return id;
   };
 
+  const addChildNode = useCallback((parentId: number) => {
+    const parent = nodes.find((node) => node.id === parentId);
+    if (!parent) return null;
+
+    const siblings = nodes.filter((node) => node.parentId === parentId);
+    const id = Date.now();
+    const y = siblings.length === 0
+      ? parent.y
+      : Math.max(...siblings.map((node) => node.y + node.height))
+        + SIBLING_VERTICAL_GAP;
+
+    setNodes((prev) => [
+      ...prev,
+      {
+        id,
+        parentId,
+        x: parent.x + parent.width + CHILD_HORIZONTAL_GAP,
+        y,
+        width: RECT_WIDTH,
+        height: RECT_HEIGHT,
+        label: "",
+      },
+    ]);
+    setSelectedNodeId(id);
+    return id;
+  }, [nodes]);
+
+  const addSiblingNode = useCallback((nodeId: number) => {
+    const source = nodes.find((node) => node.id === nodeId);
+    if (!source) return null;
+
+    const siblings = nodes.filter((node) => node.parentId === source.parentId);
+    const id = Date.now();
+    const y = Math.max(...siblings.map((node) => node.y + node.height))
+      + SIBLING_VERTICAL_GAP;
+
+    setNodes((prev) => [
+      ...prev,
+      {
+        id,
+        parentId: source.parentId,
+        x: source.x,
+        y,
+        width: RECT_WIDTH,
+        height: RECT_HEIGHT,
+        label: "",
+      },
+    ]);
+    setSelectedNodeId(id);
+    return id;
+  }, [nodes]);
+
   const selectNode = (id: number | null) => {
     setSelectedNodeId(id);
   };
@@ -54,5 +113,15 @@ export function useNodes(): UseNodesReturn {
     setSelectedNodeId((prev) => (prev === id ? null : prev));
   }, []);
 
-  return { nodes, selectedNodeId, addNode, selectNode, updateNodeLabel, moveNode, deleteNode };
+  return {
+    nodes,
+    selectedNodeId,
+    addNode,
+    addChildNode,
+    addSiblingNode,
+    selectNode,
+    updateNodeLabel,
+    moveNode,
+    deleteNode,
+  };
 }

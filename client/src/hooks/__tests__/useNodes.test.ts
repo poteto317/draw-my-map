@@ -3,6 +3,10 @@ import { useNodes } from "@/hooks/useNodes";
 import { RECT_WIDTH, RECT_HEIGHT } from "@/config/shapes";
 
 describe("useNodes", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   // Production break caught: addNode does not return the created ID or set root parentId to null.
   it("addNode は parentId が null のルートノードを作成し、そのIDを返す", () => {
     jest.spyOn(Date, "now").mockReturnValue(101);
@@ -282,5 +286,99 @@ describe("useNodes", () => {
     expect(result.current.nodes[0].id).not.toBe(firstId);
 
     jest.restoreAllMocks();
+  });
+
+  it("addChildNode は親の右側に子を作成して選択する", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+
+    act(() => result.current.addNode(100, 100));
+    const parent = result.current.nodes[0];
+    let childId!: number | null;
+    act(() => {
+      childId = result.current.addChildNode(parent.id);
+    });
+
+    expect(childId).toBe(2);
+    expect(result.current.nodes[1]).toMatchObject({
+      id: 2,
+      parentId: parent.id,
+      x: parent.x + parent.width + 120,
+      y: parent.y,
+    });
+    expect(result.current.selectedNodeId).toBe(2);
+  });
+
+  it("2個目の子は既存兄弟の最下部から40px下へ配置する", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+
+    act(() => result.current.addNode(100, 100));
+    const parentId = result.current.nodes[0].id;
+    act(() => result.current.addChildNode(parentId));
+    const firstChild = result.current.nodes[1];
+    act(() => result.current.addChildNode(parentId));
+
+    expect(result.current.nodes[2].y).toBe(firstChild.y + firstChild.height + 40);
+  });
+
+  it("存在しない親には子ノードを作成しない", () => {
+    const { result } = renderHook(() => useNodes());
+    let createdId!: number | null;
+    act(() => {
+      createdId = result.current.addChildNode(999);
+    });
+    expect(createdId).toBeNull();
+    expect(result.current.nodes).toEqual([]);
+  });
+
+  it("addSiblingNode は同じ親を持つ兄弟を最下部へ追加する", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+
+    act(() => result.current.addNode(100, 100));
+    const parentId = result.current.nodes[0].id;
+    act(() => result.current.addChildNode(parentId));
+    const firstChild = result.current.nodes[1];
+    let siblingId!: number | null;
+    act(() => {
+      siblingId = result.current.addSiblingNode(firstChild.id);
+    });
+
+    const sibling = result.current.nodes[2];
+    expect(siblingId).toBe(sibling.id);
+    expect(sibling.parentId).toBe(parentId);
+    expect(sibling.x).toBe(firstChild.x);
+    expect(sibling.y).toBe(firstChild.y + firstChild.height + 40);
+    expect(result.current.selectedNodeId).toBe(sibling.id);
+  });
+
+  it("ルートノードの兄弟は parentId null のルートとして追加する", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+
+    act(() => result.current.addNode(100, 100));
+    const root = result.current.nodes[0];
+    act(() => result.current.addSiblingNode(root.id));
+
+    expect(result.current.nodes[1]).toMatchObject({
+      parentId: null,
+      x: root.x,
+      y: root.y + root.height + 40,
+    });
+  });
+
+  it("存在しないノードには兄弟を作成しない", () => {
+    const { result } = renderHook(() => useNodes());
+    let createdId!: number | null;
+    act(() => {
+      createdId = result.current.addSiblingNode(999);
+    });
+    expect(createdId).toBeNull();
+    expect(result.current.nodes).toEqual([]);
   });
 });
