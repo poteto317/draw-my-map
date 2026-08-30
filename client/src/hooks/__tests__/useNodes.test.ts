@@ -288,6 +288,39 @@ describe("useNodes", () => {
     jest.restoreAllMocks();
   });
 
+  it("deleteNode は対象ノードとすべての子孫を削除する", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+
+    act(() => result.current.addNode(100, 100));
+    const rootId = result.current.nodes[0].id;
+    act(() => result.current.addChildNode(rootId));
+    const childId = result.current.nodes[1].id;
+    act(() => result.current.addChildNode(childId));
+    act(() => result.current.addNode(500, 100));
+    const unrelatedRootId = result.current.nodes[3].id;
+
+    act(() => result.current.deleteNode(rootId));
+
+    expect(result.current.nodes.map((node) => node.id)).toEqual([unrelatedRootId]);
+  });
+
+  it("削除する子孫が選択中なら選択を解除する", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+
+    act(() => result.current.addNode(100, 100));
+    const rootId = result.current.nodes[0].id;
+    act(() => result.current.addChildNode(rootId));
+    const childId = result.current.nodes[1].id;
+    act(() => result.current.selectNode(childId));
+    act(() => result.current.deleteNode(rootId));
+
+    expect(result.current.selectedNodeId).toBeNull();
+  });
+
   it("addChildNode は親の右側に子を作成して選択する", () => {
     let id = 0;
     jest.spyOn(Date, "now").mockImplementation(() => ++id);

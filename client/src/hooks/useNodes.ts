@@ -19,6 +19,27 @@ type UseNodesReturn = {
   deleteNode: (id: number) => void;
 };
 
+function collectSubtreeIds(nodes: Node[], rootId: number): Set<number> {
+  const subtreeIds = new Set<number>([rootId]);
+  let foundNewNode = true;
+
+  while (foundNewNode) {
+    foundNewNode = false;
+    for (const node of nodes) {
+      if (
+        node.parentId !== null
+        && subtreeIds.has(node.parentId)
+        && !subtreeIds.has(node.id)
+      ) {
+        subtreeIds.add(node.id);
+        foundNewNode = true;
+      }
+    }
+  }
+
+  return subtreeIds;
+}
+
 export function useNodes(): UseNodesReturn {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
@@ -113,9 +134,12 @@ export function useNodes(): UseNodesReturn {
   }, []);
 
   const deleteNode = useCallback((id: number) => {
-    setNodes((prev) => prev.filter((node) => node.id !== id));
-    setSelectedNodeId((prev) => (prev === id ? null : prev));
-  }, []);
+    const subtreeIds = collectSubtreeIds(nodes, id);
+    setNodes((prev) => prev.filter((node) => !subtreeIds.has(node.id)));
+    setSelectedNodeId((prev) => (
+      prev !== null && subtreeIds.has(prev) ? null : prev
+    ));
+  }, [nodes]);
 
   return {
     nodes,
