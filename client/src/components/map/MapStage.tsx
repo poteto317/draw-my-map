@@ -69,13 +69,19 @@ export function MapStage({ nodes, selectedNodeId, onDoubleClick, onAddChildNode,
       });
 
       if (cancelled) {
-        app.destroy(true);
+        app.destroy(true, { children: true, context: true });
         return;
       }
 
       // stage レベルのイベントを有効化（pointermove / pointerup の受信用）
       app.stage.eventMode = "static";
       app.stage.hitArea = app.screen;
+
+      app.stage.on("pointerdown", (e: FederatedPointerEvent) => {
+        if (e.target === app.stage) {
+          onSelectNodeRef.current(null);
+        }
+      });
 
       app.stage.on("pointermove", (e: FederatedPointerEvent) => {
         const state = dragStateRef.current;
@@ -110,7 +116,7 @@ export function MapStage({ nodes, selectedNodeId, onDoubleClick, onAddChildNode,
 
     return () => {
       cancelled = true;
-      appRef.current?.destroy(true);
+      appRef.current?.destroy(true, { children: true, context: true });
       appRef.current = null;
       setAppReady(false);
     };
@@ -153,11 +159,10 @@ export function MapStage({ nodes, selectedNodeId, onDoubleClick, onAddChildNode,
 
     const removedChildren = app.stage.removeChildren();
     for (const child of removedChildren) {
-      child.destroy({ children: true });
+      child.destroy({ children: true, context: true });
     }
 
-    const edgeGraphics = new Graphics();
-    let hasEdges = false;
+    let edgeGraphics: GraphicsType | null = null;
 
     for (const child of nodes) {
       if (child.parentId === null) continue;
@@ -170,13 +175,13 @@ export function MapStage({ nodes, selectedNodeId, onDoubleClick, onAddChildNode,
       const endY = child.y + child.height / 2;
       const controlX = (startX + endX) / 2;
 
+      edgeGraphics ??= new Graphics();
       edgeGraphics
         .moveTo(startX, startY)
         .bezierCurveTo(controlX, startY, controlX, endY, endX, endY);
-      hasEdges = true;
     }
 
-    if (hasEdges) {
+    if (edgeGraphics) {
       edgeGraphics.stroke({ width: 2, color: 0x64748b });
       app.stage.addChild(edgeGraphics);
     }
@@ -269,16 +274,6 @@ export function MapStage({ nodes, selectedNodeId, onDoubleClick, onAddChildNode,
     }
   };
 
-  const handleClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      const target = e.target as HTMLElement;
-      if (target === containerRef.current || target instanceof HTMLCanvasElement) {
-        onSelectNode(null);
-      }
-    },
-    [onSelectNode],
-  );
-
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       commitEdit();
@@ -295,7 +290,6 @@ export function MapStage({ nodes, selectedNodeId, onDoubleClick, onAddChildNode,
       className="relative w-full cursor-crosshair"
       style={{ minHeight: "calc(100vh - 52px)" }}
       onDoubleClick={handleDoubleClick}
-      onClick={handleClick}
     >
       {editingNode && (
         <input
@@ -303,6 +297,7 @@ export function MapStage({ nodes, selectedNodeId, onDoubleClick, onAddChildNode,
           type="text"
           value={editingText}
           onChange={(e) => setEditingText(e.target.value)}
+          onDoubleClick={(e) => e.stopPropagation()}
           onKeyDown={handleInputKeyDown}
           onBlur={commitEdit}
           autoFocus
