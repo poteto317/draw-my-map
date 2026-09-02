@@ -213,4 +213,57 @@ describe("useNodes", () => {
     expect(result.current.nodes.map((node) => node.parentId)).toEqual([null, null, null]);
     expect(result.current.selectedNodeId).toBe(3);
   });
+
+  it("ノード更新後もツリー操作コールバックの参照を維持する", () => {
+    jest.spyOn(Date, "now").mockReturnValue(1);
+    const { result } = renderHook(() => useNodes());
+    const initialCallbacks = {
+      addChildNode: result.current.addChildNode,
+      addSiblingNode: result.current.addSiblingNode,
+      deleteNode: result.current.deleteNode,
+    };
+
+    act(() => result.current.addNode(100, 100));
+    act(() => result.current.moveNode(1, 200, 200));
+
+    expect(result.current.addChildNode).toBe(initialCallbacks.addChildNode);
+    expect(result.current.addSiblingNode).toBe(initialCallbacks.addSiblingNode);
+    expect(result.current.deleteNode).toBe(initialCallbacks.deleteNode);
+  });
+
+  it("初回取得した作成コールバックは最新の確定済みノードを参照する", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+    const addChildNode = result.current.addChildNode;
+    const addSiblingNode = result.current.addSiblingNode;
+
+    act(() => result.current.addNode(100, 100));
+    let childId!: number | null;
+    act(() => {
+      childId = addChildNode(1);
+    });
+    let siblingId!: number | null;
+    act(() => {
+      siblingId = addSiblingNode(2);
+    });
+
+    expect(childId).toBe(2);
+    expect(siblingId).toBe(3);
+    expect(result.current.nodes.map((node) => node.parentId)).toEqual([null, 1, 1]);
+  });
+
+  it("初回取得した削除コールバックは最新ツリーの子孫も削除する", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+    const deleteNode = result.current.deleteNode;
+
+    act(() => result.current.addNode(100, 100));
+    act(() => result.current.addChildNode(1));
+    act(() => result.current.addChildNode(2));
+    act(() => deleteNode(1));
+
+    expect(result.current.nodes).toEqual([]);
+  });
 });

@@ -23,6 +23,8 @@ type UseNodesReturn = {
 export function useNodes(): UseNodesReturn {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
+  const nodesRef = useRef<readonly Node[]>(nodes);
+  nodesRef.current = nodes;
   const generateNodeIdRef = useRef<(() => number) | null>(null);
   generateNodeIdRef.current ??= createMonotonicIdGenerator();
   const generateNodeId = generateNodeIdRef.current;
@@ -34,7 +36,7 @@ export function useNodes(): UseNodesReturn {
   };
 
   const addChildNode = useCallback((parentId: number) => {
-    if (!nodes.some((node) => node.id === parentId)) return null;
+    if (!nodesRef.current.some((node) => node.id === parentId)) return null;
     const id = generateNodeId();
 
     setNodes((prev) => {
@@ -43,10 +45,10 @@ export function useNodes(): UseNodesReturn {
     });
     setSelectedNodeId(id);
     return id;
-  }, [generateNodeId, nodes]);
+  }, [generateNodeId]);
 
   const addSiblingNode = useCallback((nodeId: number) => {
-    if (!nodes.some((node) => node.id === nodeId)) return null;
+    if (!nodesRef.current.some((node) => node.id === nodeId)) return null;
     const id = generateNodeId();
 
     setNodes((prev) => {
@@ -55,7 +57,7 @@ export function useNodes(): UseNodesReturn {
     });
     setSelectedNodeId(id);
     return id;
-  }, [generateNodeId, nodes]);
+  }, [generateNodeId]);
 
   const selectNode = (id: number | null) => {
     setSelectedNodeId(id);
@@ -74,12 +76,12 @@ export function useNodes(): UseNodesReturn {
   }, []);
 
   const deleteNode = useCallback((id: number) => {
-    const subtreeIds = collectSubtreeIds(nodes, id);
+    const subtreeIds = collectSubtreeIds(nodesRef.current, id);
     setNodes((prev) => prev.filter((node) => !subtreeIds.has(node.id)));
     setSelectedNodeId((prev) => (
       prev !== null && subtreeIds.has(prev) ? null : prev
     ));
-  }, [nodes]);
+  }, []);
 
   return {
     nodes,
