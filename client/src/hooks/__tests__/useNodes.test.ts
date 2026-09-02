@@ -1,3 +1,5 @@
+import { startTransition } from "react";
+import { flushSync } from "react-dom";
 import { renderHook, act } from "@testing-library/react";
 import { useNodes } from "@/hooks/useNodes";
 
@@ -201,6 +203,26 @@ describe("useNodes", () => {
     expect([rootId, childId, siblingId]).toEqual([1, 2, 3]);
     expect(result.current.nodes.map((node) => node.parentId)).toEqual([null, 1, 1]);
     expect(result.current.selectedNodeId).toBe(3);
+  });
+
+  it("保留中のノード更新を緊急 render が上書きしない", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+    let rootId!: number;
+    let childId!: number | null;
+
+    act(() => {
+      startTransition(() => {
+        rootId = result.current.addNode(100, 100);
+      });
+      flushSync(() => result.current.selectNode(999));
+      childId = result.current.addChildNode(rootId);
+    });
+
+    expect(childId).toBe(2);
+    expect(result.current.nodes.map((node) => node.id)).toEqual([1, 2]);
+    expect(result.current.selectedNodeId).toBe(2);
   });
 
   it("同じ batch で削除した親には子を作成せず成功IDを返さない", () => {

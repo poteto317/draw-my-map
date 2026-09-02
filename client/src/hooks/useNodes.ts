@@ -24,7 +24,6 @@ export function useNodes(): UseNodesReturn {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
   const nodesRef = useRef<readonly Node[]>(nodes);
-  nodesRef.current = nodes;
   const generateNodeIdRef = useRef<(() => number) | null>(null);
   generateNodeIdRef.current ??= createMonotonicIdGenerator();
   const generateNodeId = generateNodeIdRef.current;
