@@ -37,4 +37,31 @@ describe("renderMapEdges", () => {
     expect(harness.Graphics).not.toHaveBeenCalled();
     expect(harness.stage.addChild).not.toHaveBeenCalled();
   });
+
+  it("resolves parents with a linear number of node-array reads", () => {
+    const harness = createPixiTestHarness();
+    const manyNodes: Node[] = Array.from({ length: 100 }, (_, index) => ({
+      ...root,
+      id: index + 1,
+      parentId: index === 0 ? null : index,
+      x: index * 220,
+    }));
+    let indexedReads = 0;
+    const trackedNodes = new Proxy(manyNodes, {
+      get(target, property, receiver) {
+        if (typeof property === "string" && /^\d+$/.test(property)) {
+          indexedReads += 1;
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    renderMapEdges(
+      harness.app.stage as never,
+      harness.constructors as never,
+      trackedNodes,
+    );
+
+    expect(indexedReads).toBeLessThan(manyNodes.length * 4);
+  });
 });

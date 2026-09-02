@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import type { Node } from "@/types/node";
 
 export function useNodeEditing(nodes: Node[], onUpdateLabel: (id: number, label: string) => void) {
   const [editingNodeId, setEditingNodeId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState("");
   const nodesRef = useRef<readonly Node[]>(nodes);
-  useEffect(() => {
+  useLayoutEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
 

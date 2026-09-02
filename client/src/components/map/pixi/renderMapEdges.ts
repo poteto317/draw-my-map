@@ -9,10 +9,14 @@ export function renderMapEdges(
   nodes: readonly Node[],
 ): void {
   let edges: Graphics | null = null;
+  const nodesById = new Map<number, Node>();
+  for (const node of nodes) {
+    if (!nodesById.has(node.id)) nodesById.set(node.id, node);
+  }
 
   for (const child of nodes) {
     if (child.parentId === null) continue;
-    const parent = nodes.find((node) => node.id === child.parentId);
+    const parent = nodesById.get(child.parentId);
     if (!parent) continue;
 
     const curve = getEdgeCurve(parent, child);

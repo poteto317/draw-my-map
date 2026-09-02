@@ -1,10 +1,23 @@
 import { act, renderHook } from "@testing-library/react";
+import { useLayoutEffect } from "react";
 import { useNodeEditing } from "@/components/map/useNodeEditing";
 import type { Node } from "@/types/node";
 
 const nodes: Node[] = [
   { id: 1, parentId: null, x: 50, y: 30, width: 100, height: 60, label: "既存ラベル" },
 ];
+
+function useEditingStartedInLayout(
+  currentNodes: Node[],
+  onUpdateLabel: (id: number, label: string) => void,
+) {
+  const editing = useNodeEditing(currentNodes, onUpdateLabel);
+  const { startEditing } = editing;
+  useLayoutEffect(() => {
+    startEditing(1);
+  }, [currentNodes, startEditing]);
+  return editing;
+}
 
 describe("useNodeEditing", () => {
   it("loads an existing node label when editing starts without a draft", () => {
@@ -87,5 +100,17 @@ describe("useNodeEditing", () => {
     act(() => startEditing(1));
 
     expect(result.current.editingText).toBe("最新ラベル");
+  });
+
+  it("ノード更新直後のlayout effectでも最新ラベルで編集を開始する", () => {
+    const onUpdateLabel = jest.fn();
+    const { result, rerender } = renderHook(
+      ({ currentNodes }) => useEditingStartedInLayout(currentNodes, onUpdateLabel),
+      { initialProps: { currentNodes: nodes } },
+    );
+
+    rerender({ currentNodes: [{ ...nodes[0], label: "layout直後のラベル" }] });
+
+    expect(result.current.editingText).toBe("layout直後のラベル");
   });
 });

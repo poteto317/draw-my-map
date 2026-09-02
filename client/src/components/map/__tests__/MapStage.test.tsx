@@ -1,5 +1,5 @@
 import { act, fireEvent, render } from "@testing-library/react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactElement } from "react";
 import { MapStage } from "@/components/map/MapStage";
 import { useNodes } from "@/hooks/useNodes";
 import type { Node } from "@/types/node";
@@ -58,7 +58,7 @@ const sampleNodes: Node[] = [
   { id: 2, parentId: null, x: 200, y: 100, width: 100, height: 60, label: "ノード2" },
 ];
 
-async function renderReady(ui: React.ReactElement) {
+async function renderReady(ui: ReactElement) {
   let result!: ReturnType<typeof render>;
   await act(async () => {
     result = render(ui);
