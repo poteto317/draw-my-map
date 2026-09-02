@@ -12,3 +12,6 @@ server/*.test      # テストファイル
 # OS files
 .DS_Store
 Thumbs.db
+
+# Local Git worktrees
+.worktrees/

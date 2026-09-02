@@ -1,221 +1,344 @@
-import { render, fireEvent, act } from "@testing-library/react";
+import { act, fireEvent, render } from "@testing-library/react";
+import {
+  Suspense,
+  startTransition,
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+} from "react";
 import { MapStage } from "@/components/map/MapStage";
-import type { Rect } from "@/types/rect";
+import { useNodes } from "@/hooks/useNodes";
+import type { Node } from "@/types/node";
 
-// ========== モック定義 ==========
-// jest.mock() はホイスティングされるが、'mock' プレフィックスの変数は例外的に参照可能
-const mockStage = { removeChildren: jest.fn(), addChild: jest.fn() };
-const mockInit = jest.fn().mockResolvedValue(undefined);
-const mockDestroy = jest.fn();
+type MockPointerEvent = {
+  globalX: number;
+  globalY: number;
+  target?: unknown;
+};
 
-jest.mock("pixi.js", () => {
-  const canvas = document.createElement("canvas");
-  return {
-    Application: jest.fn().mockImplementation(() => ({
-      init: mockInit,
-      destroy: mockDestroy,
-      canvas,
-      stage: mockStage,
-    })),
-    Graphics: jest.fn().mockImplementation(() => ({
-      rect: jest.fn().mockReturnThis(),
-      fill: jest.fn().mockReturnThis(),
-      stroke: jest.fn().mockReturnThis(),
-    })),
-  };
-});
+type MockPointerHandler = (event: MockPointerEvent) => void;
+type StageEvent = "pointerdown" | "pointermove" | "pointerup" | "pointerupoutside";
 
-// ========== データ ==========
-const sampleRects: Rect[] = [
-  { id: 1, x: 50, y: 30, width: 100, height: 60 },
-  { id: 2, x: 200, y: 100, width: 100, height: 60 },
+const mockStageHandlers: Partial<Record<StageEvent, MockPointerHandler>> = {};
+const mockNodePointerHandlers: Array<Partial<Record<"pointerdown", MockPointerHandler>>> = [];
+
+const mockStage = {
+  removeChildren: jest.fn(() => []),
+  addChild: jest.fn(),
+  on: jest.fn((event: StageEvent, handler: MockPointerHandler) => {
+    mockStageHandlers[event] = handler;
+  }),
+  off: jest.fn((event: StageEvent, handler: MockPointerHandler) => {
+    if (mockStageHandlers[event] === handler) delete mockStageHandlers[event];
+  }),
+  eventMode: "none",
+  hitArea: null as unknown,
+};
+
+jest.mock("pixi.js", () => ({
+  Application: jest.fn().mockImplementation(() => ({
+    init: jest.fn().mockResolvedValue(undefined),
+    destroy: jest.fn(),
+    canvas: document.createElement("canvas"),
+    stage: mockStage,
+    screen: { x: 0, y: 0, width: 800, height: 600 },
+  })),
+  Graphics: jest.fn().mockImplementation(() => ({
+    rect: jest.fn().mockReturnThis(),
+    fill: jest.fn().mockReturnThis(),
+    stroke: jest.fn().mockReturnThis(),
+    moveTo: jest.fn().mockReturnThis(),
+    bezierCurveTo: jest.fn().mockReturnThis(),
+  })),
+  Text: jest.fn().mockImplementation(() => ({
+    anchor: { set: jest.fn() },
+    x: 0,
+    y: 0,
+  })),
+  Container: jest.fn().mockImplementation(() => {
+    const handlers: Partial<Record<"pointerdown", MockPointerHandler>> = {};
+    mockNodePointerHandlers.push(handlers);
+    return {
+      addChild: jest.fn(),
+      on: jest.fn((event: "pointerdown", handler: MockPointerHandler) => {
+        handlers[event] = handler;
+      }),
+      eventMode: "none",
+      cursor: "default",
+    };
+  }),
+}));
+
+const defaultProps = {
+  nodes: [] as Node[],
+  selectedNodeId: null as number | null,
+  onDoubleClick: jest.fn(),
+  onAddChildNode: jest.fn(() => null),
+  onAddSiblingNode: jest.fn(() => null),
+  onSelectNode: jest.fn(),
+  onUpdateLabel: jest.fn(),
+  onMoveNode: jest.fn(),
+  onDeleteNode: jest.fn(),
+};
+
+const sampleNodes: Node[] = [
+  { id: 1, parentId: null, x: 50, y: 30, width: 100, height: 60, label: "ノード1" },
+  { id: 2, parentId: null, x: 200, y: 100, width: 100, height: 60, label: "ノード2" },
 ];
 
-// ========== テスト ==========
+async function renderReady(ui: ReactElement) {
+  let result!: ReturnType<typeof render>;
+  await act(async () => {
+    result = render(ui);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  return result;
+}
+
+function mockStageBounds(container: HTMLElement, left = 0, top = 0) {
+  jest.spyOn(container, "getBoundingClientRect").mockReturnValue({
+    left,
+    top,
+    right: left + 800,
+    bottom: top + 600,
+    width: 800,
+    height: 600,
+    x: left,
+    y: top,
+    toJSON: () => ({}),
+  });
+}
+
+function KeyboardCreationHarness({ initiallySelected = true }: { initiallySelected?: boolean }) {
+  const {
+    nodes,
+    selectedNodeId,
+    addNode,
+    addChildNode,
+    addSiblingNode,
+    selectNode,
+    updateNodeLabel,
+    moveNode,
+    deleteNode,
+  } = useNodes();
+  const initializedRef = useRef(false);
+
+  useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+    const rootId = addNode(100, 60);
+    if (initiallySelected) selectNode(rootId);
+  }, [addNode, initiallySelected, selectNode]);
+
+  return (
+    <>
+      <MapStage
+        nodes={nodes}
+        selectedNodeId={selectedNodeId}
+        onDoubleClick={addNode}
+        onAddChildNode={addChildNode}
+        onAddSiblingNode={addSiblingNode}
+        onSelectNode={selectNode}
+        onUpdateLabel={updateNodeLabel}
+        onMoveNode={moveNode}
+        onDeleteNode={deleteNode}
+      />
+      <output data-testid="node-state">{JSON.stringify(nodes)}</output>
+      <output data-testid="selected-node-id">{selectedNodeId}</output>
+    </>
+  );
+}
+
+const pendingRender = new Promise<never>(() => {});
+
+function SuspendPendingRender(): never {
+  throw pendingRender;
+}
+
+type ConcurrentInteractionHarnessProps = {
+  onReady: (startUpdate: () => void) => void;
+  committedNode: Node;
+  pendingNode: Node;
+  committedOnSelectNode: (id: number | null) => void;
+  pendingOnSelectNode: (id: number | null) => void;
+  committedOnMoveNode: (id: number, x: number, y: number) => void;
+  pendingOnMoveNode: (id: number, x: number, y: number) => void;
+};
+
+function ConcurrentInteractionHarness({
+  onReady,
+  committedNode,
+  pendingNode,
+  committedOnSelectNode,
+  pendingOnSelectNode,
+  committedOnMoveNode,
+  pendingOnMoveNode,
+}: ConcurrentInteractionHarnessProps) {
+  const [isPendingRender, setIsPendingRender] = useState(false);
+
+  useEffect(() => {
+    onReady(() => {
+      startTransition(() => setIsPendingRender(true));
+    });
+  }, [onReady]);
+
+  return (
+    <Suspense fallback={null}>
+      <MapStage
+        {...defaultProps}
+        nodes={[isPendingRender ? pendingNode : committedNode]}
+        onSelectNode={isPendingRender ? pendingOnSelectNode : committedOnSelectNode}
+        onMoveNode={isPendingRender ? pendingOnMoveNode : committedOnMoveNode}
+      />
+      {isPendingRender && <SuspendPendingRender />}
+    </Suspense>
+  );
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
-  mockInit.mockResolvedValue(undefined); // 各テストで解決済みに戻す
+  for (const event of Object.keys(mockStageHandlers) as StageEvent[]) {
+    delete mockStageHandlers[event];
+  }
+  mockNodePointerHandlers.length = 0;
 });
 
-describe("MapStage", () => {
-  describe("レンダリング", () => {
-    it("コンテナ div がレンダリングされる", () => {
-      render(<MapStage rects={[]} onDoubleClick={jest.fn()} />);
-      const container = document.querySelector(".cursor-crosshair");
-      expect(container).toBeInTheDocument();
-    });
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+
+describe("MapStage boundary", () => {
+  it("renders the map container", async () => {
+    await renderReady(<MapStage {...defaultProps} />);
+
+    expect(document.querySelector(".cursor-crosshair")).toBeInTheDocument();
   });
 
-  describe("ダブルクリック", () => {
-    it("onDoubleClick がコンテナ相対の座標で呼ばれる", () => {
-      const onDoubleClick = jest.fn();
-      render(<MapStage rects={[]} onDoubleClick={onDoubleClick} />);
+  it("routes a blank double-click with container-relative coordinates", async () => {
+    const onDoubleClick = jest.fn();
+    await renderReady(<MapStage {...defaultProps} onDoubleClick={onDoubleClick} />);
+    const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+    mockStageBounds(container, 100, 50);
 
-      const container = document.querySelector(".cursor-crosshair") as HTMLElement;
-      jest.spyOn(container, "getBoundingClientRect").mockReturnValue({
-        left: 100, top: 50, right: 900, bottom: 650,
-        width: 800, height: 600, x: 100, y: 50, toJSON: () => ({}),
-      });
+    fireEvent.doubleClick(container, { clientX: 300, clientY: 200 });
 
-      fireEvent.doubleClick(container, { clientX: 300, clientY: 200 });
-
-      // 期待値: clientX - left = 200, clientY - top = 150
-      expect(onDoubleClick).toHaveBeenCalledTimes(1);
-      expect(onDoubleClick).toHaveBeenCalledWith(200, 150);
-    });
-
-    it("複数回ダブルクリックすると onDoubleClick が同回数呼ばれる", () => {
-      const onDoubleClick = jest.fn();
-      render(<MapStage rects={[]} onDoubleClick={onDoubleClick} />);
-
-      const container = document.querySelector(".cursor-crosshair") as HTMLElement;
-      jest.spyOn(container, "getBoundingClientRect").mockReturnValue({
-        left: 0, top: 0, right: 800, bottom: 600,
-        width: 800, height: 600, x: 0, y: 0, toJSON: () => ({}),
-      });
-
-      fireEvent.doubleClick(container, { clientX: 100, clientY: 100 });
-      fireEvent.doubleClick(container, { clientX: 200, clientY: 200 });
-
-      expect(onDoubleClick).toHaveBeenCalledTimes(2);
-    });
-
-    it("マウント直後にはイベントを発火しない", () => {
-      const onDoubleClick = jest.fn();
-      render(<MapStage rects={sampleRects} onDoubleClick={onDoubleClick} />);
-      expect(onDoubleClick).not.toHaveBeenCalled();
-    });
+    expect(onDoubleClick).toHaveBeenCalledTimes(1);
+    expect(onDoubleClick).toHaveBeenCalledWith(200, 150);
   });
 
-  describe("PixiJS 初期化後の rect 描画", () => {
-    it("初期化完了後に rects が stage へ描画される", async () => {
-      await act(async () => {
-        render(<MapStage rects={sampleRects} onDoubleClick={jest.fn()} />);
-        await Promise.resolve(); // dynamic import を解決
-        await Promise.resolve(); // app.init() を解決
-      });
+  it("opens the editor for a node double-click", async () => {
+    const { getByTestId } = await renderReady(
+      <MapStage {...defaultProps} nodes={sampleNodes} />,
+    );
+    const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+    mockStageBounds(container);
 
-      expect(mockStage.removeChildren).toHaveBeenCalled();
-      expect(mockStage.addChild).toHaveBeenCalledTimes(sampleRects.length);
-    });
+    fireEvent.doubleClick(container, { clientX: 100, clientY: 60 });
 
-    it("rects が空のとき addChild は呼ばれない", async () => {
-      await act(async () => {
-        render(<MapStage rects={[]} onDoubleClick={jest.fn()} />);
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      expect(mockStage.removeChildren).toHaveBeenCalled();
-      expect(mockStage.addChild).not.toHaveBeenCalled();
-    });
-
-    it("rects が変化すると stage が再描画される", async () => {
-      let rerender!: (ui: React.ReactElement) => void;
-
-      await act(async () => {
-        const result = render(<MapStage rects={[]} onDoubleClick={jest.fn()} />);
-        rerender = result.rerender;
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      mockStage.removeChildren.mockClear();
-      mockStage.addChild.mockClear();
-
-      act(() => {
-        rerender(<MapStage rects={sampleRects} onDoubleClick={jest.fn()} />);
-      });
-
-      expect(mockStage.removeChildren).toHaveBeenCalled();
-      expect(mockStage.addChild).toHaveBeenCalledTimes(sampleRects.length);
-    });
+    expect(getByTestId("node-label-input")).toHaveValue("ノード1");
   });
 
-  describe("PixiJS ライフサイクル", () => {
-    it("unmount 時に PixiJS app が破棄される", async () => {
-      let unmount!: () => void;
+  it("preserves the current draft when the editing input is double-clicked", async () => {
+    const { getByTestId } = await renderReady(
+      <MapStage {...defaultProps} nodes={sampleNodes} />,
+    );
+    const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+    mockStageBounds(container);
+    fireEvent.doubleClick(container, { clientX: 100, clientY: 60 });
+    const input = getByTestId("node-label-input");
 
-      await act(async () => {
-        const result = render(<MapStage rects={[]} onDoubleClick={jest.fn()} />);
-        unmount = result.unmount;
-        await Promise.resolve();
-        await Promise.resolve();
-      });
+    fireEvent.change(input, { target: { value: "編集中の下書き" } });
+    fireEvent.doubleClick(input, { clientX: 100, clientY: 60 });
 
-      act(() => {
-        unmount();
-      });
+    expect(input).toHaveValue("編集中の下書き");
+  });
 
-      expect(mockDestroy).toHaveBeenCalledWith(true);
+  it("破棄された render の操作参照をコミット済みの値へ漏らさない", async () => {
+    const committedOnSelectNode = jest.fn();
+    const pendingOnSelectNode = jest.fn();
+    const committedOnMoveNode = jest.fn();
+    const pendingOnMoveNode = jest.fn();
+    const committedNode = sampleNodes[0];
+    const pendingNode = { ...committedNode, x: 500, y: 400 };
+    let startPendingUpdate!: () => void;
+
+    await renderReady(
+      <ConcurrentInteractionHarness
+        onReady={(startUpdate) => {
+          startPendingUpdate = startUpdate;
+        }}
+        committedNode={committedNode}
+        pendingNode={pendingNode}
+        committedOnSelectNode={committedOnSelectNode}
+        pendingOnSelectNode={pendingOnSelectNode}
+        committedOnMoveNode={committedOnMoveNode}
+        pendingOnMoveNode={pendingOnMoveNode}
+      />,
+    );
+
+    act(() => startPendingUpdate());
+    act(() => {
+      mockNodePointerHandlers[0].pointerdown?.({ globalX: 100, globalY: 60 });
+      mockStageHandlers.pointermove?.({ globalX: 104, globalY: 64 });
     });
 
-    it("初期化完了前に unmount されると cancelled ブランチで app が破棄される", async () => {
-      // init を手動で制御できる Promise に差し替える
-      let resolveInit!: () => void;
-      const pendingInit = new Promise<void>((resolve) => {
-        resolveInit = resolve;
-      });
-      mockInit.mockReturnValueOnce(pendingInit);
+    expect(pendingOnSelectNode).not.toHaveBeenCalled();
+    expect(pendingOnMoveNode).not.toHaveBeenCalled();
+    expect(committedOnSelectNode).toHaveBeenCalledWith(committedNode.id);
+    expect(committedOnMoveNode).toHaveBeenCalledWith(committedNode.id, 54, 34);
+  });
 
-      let unmount!: () => void;
+  it.each([
+    ["Tab", 1],
+    ["Enter", null],
+  ])("uses real useNodes to create and edit a node with %s", async (key, expectedParentId) => {
+    let nextNodeId = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++nextNodeId);
+    const { getByTestId } = await renderReady(<KeyboardCreationHarness />);
+    const [source] = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
 
-      await act(async () => {
-        const result = render(<MapStage rects={[]} onDoubleClick={jest.fn()} />);
-        unmount = result.unmount;
-        // dynamic import は解決済みにするが、init はまだ pending
-        await Promise.resolve();
-      });
+    fireEvent.keyDown(window, { key });
 
-      // init 完了前にアンマウント → cancelled = true
-      act(() => {
-        unmount();
-      });
+    let nodes = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
+    const created = nodes[1];
+    expect(nodes).toHaveLength(2);
+    expect(created.parentId).toBe(expectedParentId === null ? source.parentId : source.id);
+    expect(getByTestId("selected-node-id")).toHaveTextContent(String(created.id));
+    const input = getByTestId("node-label-input");
+    expect(input).toHaveValue("");
 
-      // init を完了させる → cancelled ブランチの app.destroy(true) が実行される
-      await act(async () => {
-        resolveInit();
-        await Promise.resolve();
-      });
+    fireEvent.change(input, { target: { value: "作成したノード" } });
+    fireEvent.keyDown(input, { key: "Enter" });
 
-      expect(mockDestroy).toHaveBeenCalledWith(true);
-    });
+    nodes = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
+    expect(nodes).toHaveLength(2);
+    expect(nodes[1].label).toBe("作成したノード");
+  });
 
-    it("dynamic import 完了前に unmount されると Application が生成されない", async () => {
-      const { Application } = jest.requireMock("pixi.js") as {
-        Application: jest.Mock;
-      };
-      Application.mockClear();
+  it.each(["Tab", "Enter"])("suppresses %s when no node is selected", async (key) => {
+    const { getByTestId, queryByTestId } = await renderReady(
+      <KeyboardCreationHarness initiallySelected={false} />,
+    );
 
-      // render 後すぐ unmount（dynamic import の microtask が走る前）
-      const { unmount } = render(<MapStage rects={[]} onDoubleClick={jest.fn()} />);
-      unmount();
+    fireEvent.keyDown(window, { key });
 
-      // dynamic import の microtask を解決する（cancelled=true のため if(cancelled) で return）
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
+    const nodes = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
+    expect(nodes).toHaveLength(1);
+    expect(getByTestId("selected-node-id")).toHaveTextContent("");
+    expect(queryByTestId("node-label-input")).not.toBeInTheDocument();
+  });
 
-      expect(Application).not.toHaveBeenCalled();
-    });
+  it.each(["Tab", "Delete", "Backspace"])("suppresses %s while editing", async (key) => {
+    const { getByTestId } = await renderReady(<KeyboardCreationHarness />);
+    const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+    mockStageBounds(container);
+    fireEvent.doubleClick(container, { clientX: 100, clientY: 60 });
 
-    it("window.devicePixelRatio が 0 のとき resolution=1 にフォールバックする", async () => {
-      const original = window.devicePixelRatio;
-      Object.defineProperty(window, "devicePixelRatio", { value: 0, configurable: true });
+    fireEvent.keyDown(getByTestId("node-label-input"), { key });
 
-      await act(async () => {
-        render(<MapStage rects={[]} onDoubleClick={jest.fn()} />);
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      // init が呼ばれていれば resolution=1 のフォールバックパスが通っている
-      expect(mockInit).toHaveBeenCalledWith(
-        expect.objectContaining({ resolution: 1 }),
-      );
-
-      Object.defineProperty(window, "devicePixelRatio", { value: original, configurable: true });
-    });
+    const nodes = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
+    expect(nodes).toHaveLength(1);
   });
 });

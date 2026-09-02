@@ -1,81 +1,99 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import type { Rect } from "@/types/rect";
-import type { Application, Graphics as GraphicsType } from "pixi.js";
+import { useEffect, useLayoutEffect, useRef, type MouseEvent } from "react";
+import { NodeLabelEditor } from "@/components/map/NodeLabelEditor";
+import { findNodeAtPoint, toLocalPoint } from "@/components/map/mapGeometry";
+import { renderMapScene } from "@/components/map/pixi/renderMapScene";
+import { createStageInteractions } from "@/components/map/pixi/stageInteractions";
+import { usePixiApplication } from "@/components/map/pixi/usePixiApplication";
+import { useNodeEditing } from "@/components/map/useNodeEditing";
+import { useNodeKeyboardShortcuts } from "@/components/map/useNodeKeyboardShortcuts";
+import type { Node } from "@/types/node";
 
 type MapStageProps = {
-  rects: Rect[];
+  nodes: Node[];
+  selectedNodeId: number | null;
   onDoubleClick: (x: number, y: number) => void;
+  onAddChildNode: (parentId: number) => number | null;
+  onAddSiblingNode: (nodeId: number) => number | null;
+  onSelectNode: (id: number | null) => void;
+  onUpdateLabel: (id: number, label: string) => void;
+  onMoveNode: (id: number, x: number, y: number) => void;
+  onDeleteNode: (id: number) => void;
 };
 
-export function MapStage({ rects, onDoubleClick }: MapStageProps) {
+export function MapStage({
+  nodes,
+  selectedNodeId,
+  onDoubleClick,
+  onAddChildNode,
+  onAddSiblingNode,
+  onSelectNode,
+  onUpdateLabel,
+  onMoveNode,
+  onDeleteNode,
+}: MapStageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const appRef = useRef<Application | null>(null);
-  const GraphicsClassRef = useRef<typeof GraphicsType | null>(null);
-  const [appReady, setAppReady] = useState(false);
+  const runtime = usePixiApplication(containerRef);
+  const editing = useNodeEditing(nodes, onUpdateLabel);
 
-  // PixiJS アプリの初期化
+  const nodesRef = useRef<readonly Node[]>(nodes);
+  const onSelectNodeRef = useRef(onSelectNode);
+  const onMoveNodeRef = useRef(onMoveNode);
+  useLayoutEffect(() => {
+    nodesRef.current = nodes;
+    onSelectNodeRef.current = onSelectNode;
+    onMoveNodeRef.current = onMoveNode;
+  }, [nodes, onSelectNode, onMoveNode]);
+
+  const interactionsRef = useRef<ReturnType<typeof createStageInteractions> | null>(null);
+  interactionsRef.current ??= createStageInteractions({
+    nodesRef,
+    onSelectNodeRef,
+    onMoveNodeRef,
+  });
+  const interactions = interactionsRef.current;
+
   useEffect(() => {
-    if (!containerRef.current) return;
-    let cancelled = false;
+    if (!runtime) return;
 
-    (async () => {
-      const pixi = await import("pixi.js");
-      if (cancelled) return;
+    runtime.app.stage.eventMode = "static";
+    runtime.app.stage.hitArea = runtime.app.screen;
+    return interactions.bind(runtime.app.stage);
+  }, [runtime, interactions]);
 
-      GraphicsClassRef.current = pixi.Graphics;
-
-      const app = new pixi.Application();
-      await app.init({
-        backgroundAlpha: 0,
-        resizeTo: containerRef.current!,
-        antialias: true,
-        resolution: window.devicePixelRatio || 1,
-        autoDensity: true,
-      });
-
-      if (cancelled) {
-        app.destroy(true);
-        return;
-      }
-
-      const canvas = app.canvas;
-      canvas.style.position = "absolute";
-      canvas.style.inset = "0";
-      containerRef.current!.appendChild(canvas);
-      appRef.current = app;
-      setAppReady(true);
-    })();
-
-    return () => {
-      cancelled = true;
-      appRef.current?.destroy(true);
-      appRef.current = null;
-      setAppReady(false);
-    };
-  }, []);
-
-  // rects の変化を PixiJS に反映
   useEffect(() => {
-    const app = appRef.current;
-    const Graphics = GraphicsClassRef.current;
-    if (!app || !Graphics) return;
+    if (!runtime) return;
 
-    app.stage.removeChildren();
+    renderMapScene(runtime.app, runtime.constructors, {
+      nodes,
+      selectedNodeId,
+      editingNodeId: editing.editingNodeId,
+      onNodePointerDown: interactions.handleNodePointerDown,
+    });
+  }, [runtime, nodes, selectedNodeId, editing.editingNodeId, interactions]);
 
-    for (const rect of rects) {
-      const g = new Graphics();
-      g.rect(rect.x, rect.y, rect.width, rect.height)
-        .fill({ color: 0xffffff })
-        .stroke({ width: 2, color: 0x3b82f6 });
-      app.stage.addChild(g);
-    }
-  }, [rects, appReady]);
+  useNodeKeyboardShortcuts({
+    selectedNodeId,
+    isEditing: editing.editingNodeId !== null,
+    onAddChildNode,
+    onAddSiblingNode,
+    onDeleteNode,
+    onStartEditing: editing.startEditing,
+  });
 
-  const handleDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const bounds = containerRef.current!.getBoundingClientRect();
-    onDoubleClick(e.clientX - bounds.left, e.clientY - bounds.top);
+  const handleDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const point = toLocalPoint(
+      event.clientX,
+      event.clientY,
+      container.getBoundingClientRect(),
+    );
+    const clickedNode = findNodeAtPoint(nodes, point);
+    if (clickedNode) editing.startEditing(clickedNode.id);
+    else onDoubleClick(point.x, point.y);
   };
 
   return (
@@ -84,6 +102,16 @@ export function MapStage({ rects, onDoubleClick }: MapStageProps) {
       className="relative w-full cursor-crosshair"
       style={{ minHeight: "calc(100vh - 52px)" }}
       onDoubleClick={handleDoubleClick}
-    />
+    >
+      {editing.editingNode && (
+        <NodeLabelEditor
+          node={editing.editingNode}
+          value={editing.editingText}
+          onChange={editing.setEditingText}
+          onCommit={editing.commitEditing}
+          onCancel={editing.cancelEditing}
+        />
+      )}
+    </div>
   );
 }
