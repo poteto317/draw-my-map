@@ -1,14 +1,37 @@
 import { act, fireEvent, render } from "@testing-library/react";
-import { useEffect, useRef, type ReactElement } from "react";
+import {
+  Suspense,
+  startTransition,
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+} from "react";
 import { MapStage } from "@/components/map/MapStage";
 import { useNodes } from "@/hooks/useNodes";
 import type { Node } from "@/types/node";
 
+type MockPointerEvent = {
+  globalX: number;
+  globalY: number;
+  target?: unknown;
+};
+
+type MockPointerHandler = (event: MockPointerEvent) => void;
+type StageEvent = "pointerdown" | "pointermove" | "pointerup" | "pointerupoutside";
+
+const mockStageHandlers: Partial<Record<StageEvent, MockPointerHandler>> = {};
+const mockNodePointerHandlers: Array<Partial<Record<"pointerdown", MockPointerHandler>>> = [];
+
 const mockStage = {
   removeChildren: jest.fn(() => []),
   addChild: jest.fn(),
-  on: jest.fn(),
-  off: jest.fn(),
+  on: jest.fn((event: StageEvent, handler: MockPointerHandler) => {
+    mockStageHandlers[event] = handler;
+  }),
+  off: jest.fn((event: StageEvent, handler: MockPointerHandler) => {
+    if (mockStageHandlers[event] === handler) delete mockStageHandlers[event];
+  }),
   eventMode: "none",
   hitArea: null as unknown,
 };
@@ -33,12 +56,18 @@ jest.mock("pixi.js", () => ({
     x: 0,
     y: 0,
   })),
-  Container: jest.fn().mockImplementation(() => ({
-    addChild: jest.fn(),
-    on: jest.fn(),
-    eventMode: "none",
-    cursor: "default",
-  })),
+  Container: jest.fn().mockImplementation(() => {
+    const handlers: Partial<Record<"pointerdown", MockPointerHandler>> = {};
+    mockNodePointerHandlers.push(handlers);
+    return {
+      addChild: jest.fn(),
+      on: jest.fn((event: "pointerdown", handler: MockPointerHandler) => {
+        handlers[event] = handler;
+      }),
+      eventMode: "none",
+      cursor: "default",
+    };
+  }),
 }));
 
 const defaultProps = {
@@ -122,8 +151,58 @@ function KeyboardCreationHarness({ initiallySelected = true }: { initiallySelect
   );
 }
 
+const pendingRender = new Promise<never>(() => {});
+
+function SuspendPendingRender(): never {
+  throw pendingRender;
+}
+
+type ConcurrentInteractionHarnessProps = {
+  onReady: (startUpdate: () => void) => void;
+  committedNode: Node;
+  pendingNode: Node;
+  committedOnSelectNode: (id: number | null) => void;
+  pendingOnSelectNode: (id: number | null) => void;
+  committedOnMoveNode: (id: number, x: number, y: number) => void;
+  pendingOnMoveNode: (id: number, x: number, y: number) => void;
+};
+
+function ConcurrentInteractionHarness({
+  onReady,
+  committedNode,
+  pendingNode,
+  committedOnSelectNode,
+  pendingOnSelectNode,
+  committedOnMoveNode,
+  pendingOnMoveNode,
+}: ConcurrentInteractionHarnessProps) {
+  const [isPendingRender, setIsPendingRender] = useState(false);
+
+  useEffect(() => {
+    onReady(() => {
+      startTransition(() => setIsPendingRender(true));
+    });
+  }, [onReady]);
+
+  return (
+    <Suspense fallback={null}>
+      <MapStage
+        {...defaultProps}
+        nodes={[isPendingRender ? pendingNode : committedNode]}
+        onSelectNode={isPendingRender ? pendingOnSelectNode : committedOnSelectNode}
+        onMoveNode={isPendingRender ? pendingOnMoveNode : committedOnMoveNode}
+      />
+      {isPendingRender && <SuspendPendingRender />}
+    </Suspense>
+  );
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
+  for (const event of Object.keys(mockStageHandlers) as StageEvent[]) {
+    delete mockStageHandlers[event];
+  }
+  mockNodePointerHandlers.length = 0;
 });
 
 afterEach(() => {
@@ -174,6 +253,41 @@ describe("MapStage boundary", () => {
     fireEvent.doubleClick(input, { clientX: 100, clientY: 60 });
 
     expect(input).toHaveValue("編集中の下書き");
+  });
+
+  it("破棄された render の操作参照をコミット済みの値へ漏らさない", async () => {
+    const committedOnSelectNode = jest.fn();
+    const pendingOnSelectNode = jest.fn();
+    const committedOnMoveNode = jest.fn();
+    const pendingOnMoveNode = jest.fn();
+    const committedNode = sampleNodes[0];
+    const pendingNode = { ...committedNode, x: 500, y: 400 };
+    let startPendingUpdate!: () => void;
+
+    await renderReady(
+      <ConcurrentInteractionHarness
+        onReady={(startUpdate) => {
+          startPendingUpdate = startUpdate;
+        }}
+        committedNode={committedNode}
+        pendingNode={pendingNode}
+        committedOnSelectNode={committedOnSelectNode}
+        pendingOnSelectNode={pendingOnSelectNode}
+        committedOnMoveNode={committedOnMoveNode}
+        pendingOnMoveNode={pendingOnMoveNode}
+      />,
+    );
+
+    act(() => startPendingUpdate());
+    act(() => {
+      mockNodePointerHandlers[0].pointerdown?.({ globalX: 100, globalY: 60 });
+      mockStageHandlers.pointermove?.({ globalX: 104, globalY: 64 });
+    });
+
+    expect(pendingOnSelectNode).not.toHaveBeenCalled();
+    expect(pendingOnMoveNode).not.toHaveBeenCalled();
+    expect(committedOnSelectNode).toHaveBeenCalledWith(committedNode.id);
+    expect(committedOnMoveNode).toHaveBeenCalledWith(committedNode.id, 54, 34);
   });
 
   it.each([

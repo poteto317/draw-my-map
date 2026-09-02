@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type MouseEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, type MouseEvent } from "react";
 import { NodeLabelEditor } from "@/components/map/NodeLabelEditor";
 import { findNodeAtPoint, toLocalPoint } from "@/components/map/mapGeometry";
 import { renderMapScene } from "@/components/map/pixi/renderMapScene";
@@ -38,11 +38,13 @@ export function MapStage({
   const editing = useNodeEditing(nodes, onUpdateLabel);
 
   const nodesRef = useRef<readonly Node[]>(nodes);
-  nodesRef.current = nodes;
   const onSelectNodeRef = useRef(onSelectNode);
-  onSelectNodeRef.current = onSelectNode;
   const onMoveNodeRef = useRef(onMoveNode);
-  onMoveNodeRef.current = onMoveNode;
+  useLayoutEffect(() => {
+    nodesRef.current = nodes;
+    onSelectNodeRef.current = onSelectNode;
+    onMoveNodeRef.current = onMoveNode;
+  }, [nodes, onSelectNode, onMoveNode]);
 
   const interactionsRef = useRef<ReturnType<typeof createStageInteractions> | null>(null);
   interactionsRef.current ??= createStageInteractions({
