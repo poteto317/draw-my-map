@@ -61,4 +61,31 @@ describe("useNodeEditing", () => {
     expect(result.current.editingNodeId).toBeNull();
     expect(result.current.editingText).toBe("");
   });
+
+  it("ノード更新後もstartEditingの参照を維持する", () => {
+    const onUpdateLabel = jest.fn();
+    const { result, rerender } = renderHook(
+      ({ currentNodes }) => useNodeEditing(currentNodes, onUpdateLabel),
+      { initialProps: { currentNodes: nodes } },
+    );
+    const startEditing = result.current.startEditing;
+
+    rerender({ currentNodes: [{ ...nodes[0], x: 200 }] });
+
+    expect(result.current.startEditing).toBe(startEditing);
+  });
+
+  it("初回取得したstartEditingは最新ノードのラベルを参照する", () => {
+    const onUpdateLabel = jest.fn();
+    const { result, rerender } = renderHook(
+      ({ currentNodes }) => useNodeEditing(currentNodes, onUpdateLabel),
+      { initialProps: { currentNodes: nodes } },
+    );
+    const startEditing = result.current.startEditing;
+
+    rerender({ currentNodes: [{ ...nodes[0], label: "最新ラベル" }] });
+    act(() => startEditing(1));
+
+    expect(result.current.editingText).toBe("最新ラベル");
+  });
 });

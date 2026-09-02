@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type MouseEvent } from "react";
 import { NodeLabelEditor } from "@/components/map/NodeLabelEditor";
 import { findNodeAtPoint, toLocalPoint } from "@/components/map/mapGeometry";
 import { renderMapScene } from "@/components/map/pixi/renderMapScene";
@@ -80,7 +80,7 @@ export function MapStage({
     onStartEditing: editing.startEditing,
   });
 
-  const handleDoubleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+  const handleDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
     const container = containerRef.current;
     if (!container) return;
 

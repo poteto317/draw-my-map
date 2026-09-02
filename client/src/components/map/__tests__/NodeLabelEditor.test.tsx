@@ -57,6 +57,25 @@ describe("NodeLabelEditor", () => {
     expect(onCommit).not.toHaveBeenCalled();
   });
 
+  it("Enter後にblurしても一度だけ確定する", () => {
+    const { input, onCommit } = renderEditor();
+
+    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.blur(input);
+
+    expect(onCommit).toHaveBeenCalledTimes(1);
+  });
+
+  it("Escape後のblurでは確定しない", () => {
+    const { input, onCommit, onCancel } = renderEditor();
+
+    fireEvent.keyDown(input, { key: "Escape" });
+    fireEvent.blur(input);
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
   it("ignores unrelated key presses", () => {
     const { input, onCommit, onCancel } = renderEditor();
 

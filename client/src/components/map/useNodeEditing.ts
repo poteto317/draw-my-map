@@ -1,19 +1,23 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Node } from "@/types/node";
 
 export function useNodeEditing(nodes: Node[], onUpdateLabel: (id: number, label: string) => void) {
   const [editingNodeId, setEditingNodeId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState("");
+  const nodesRef = useRef<readonly Node[]>(nodes);
+  useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
 
   const startEditing = useCallback((nodeId: number, initialText?: string) => {
-    const node = nodes.find((candidate) => candidate.id === nodeId);
+    const node = nodesRef.current.find((candidate) => candidate.id === nodeId);
     if (initialText === undefined && !node) return;
 
     setEditingNodeId(nodeId);
     setEditingText(initialText ?? node!.label);
-  }, [nodes]);
+  }, []);
 
   const commitEditing = useCallback(() => {
     if (editingNodeId !== null) {
