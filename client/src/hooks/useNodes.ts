@@ -29,59 +29,65 @@ export function useNodes(): UseNodesReturn {
   generateNodeIdRef.current ??= createMonotonicIdGenerator();
   const generateNodeId = generateNodeIdRef.current;
 
+  const updateNodes = useCallback((update: (current: readonly Node[]) => Node[]) => {
+    const nextNodes = update(nodesRef.current);
+    nodesRef.current = nextNodes;
+    setNodes(nextNodes);
+  }, []);
+
   const addNode = (x: number, y: number) => {
     const id = generateNodeId();
-    setNodes((prev) => [...prev, createRootNode(id, x, y)]);
+    updateNodes((current) => [...current, createRootNode(id, x, y)]);
     return id;
   };
 
   const addChildNode = useCallback((parentId: number) => {
-    if (!nodesRef.current.some((node) => node.id === parentId)) return null;
+    const currentNodes = nodesRef.current;
+    if (!currentNodes.some((node) => node.id === parentId)) return null;
     const id = generateNodeId();
+    const child = createChildNode(currentNodes, parentId, id);
+    if (!child) return null;
 
-    setNodes((prev) => {
-      const child = createChildNode(prev, parentId, id);
-      return child ? [...prev, child] : prev;
-    });
+    updateNodes((current) => [...current, child]);
     setSelectedNodeId(id);
     return id;
-  }, [generateNodeId]);
+  }, [generateNodeId, updateNodes]);
 
   const addSiblingNode = useCallback((nodeId: number) => {
-    if (!nodesRef.current.some((node) => node.id === nodeId)) return null;
+    const currentNodes = nodesRef.current;
+    if (!currentNodes.some((node) => node.id === nodeId)) return null;
     const id = generateNodeId();
+    const sibling = createSiblingNode(currentNodes, nodeId, id);
+    if (!sibling) return null;
 
-    setNodes((prev) => {
-      const sibling = createSiblingNode(prev, nodeId, id);
-      return sibling ? [...prev, sibling] : prev;
-    });
+    updateNodes((current) => [...current, sibling]);
     setSelectedNodeId(id);
     return id;
-  }, [generateNodeId]);
+  }, [generateNodeId, updateNodes]);
 
   const selectNode = (id: number | null) => {
     setSelectedNodeId(id);
   };
 
   const updateNodeLabel = useCallback((id: number, label: string) => {
-    setNodes((prev) =>
-      prev.map((node) => (node.id === id ? { ...node, label } : node)),
+    updateNodes((current) =>
+      current.map((node) => (node.id === id ? { ...node, label } : node)),
     );
-  }, []);
+  }, [updateNodes]);
 
   const moveNode = useCallback((id: number, x: number, y: number) => {
-    setNodes((prev) =>
-      prev.map((node) => (node.id === id ? { ...node, x, y } : node)),
+    updateNodes((current) =>
+      current.map((node) => (node.id === id ? { ...node, x, y } : node)),
     );
-  }, []);
+  }, [updateNodes]);
 
   const deleteNode = useCallback((id: number) => {
     const subtreeIds = collectSubtreeIds(nodesRef.current, id);
-    setNodes((prev) => prev.filter((node) => !subtreeIds.has(node.id)));
+    updateNodes((current) => current.filter((node) => !subtreeIds.has(node.id)));
     setSelectedNodeId((prev) => (
       prev !== null && subtreeIds.has(prev) ? null : prev
     ));
-  }, []);
+  }, [updateNodes]);
 
   return {
     nodes,

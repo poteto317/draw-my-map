@@ -184,6 +184,59 @@ describe("useNodes", () => {
     expect(result.current.selectedNodeId).toBeNull();
   });
 
+  it("同じ batch のルート作成を後続の子・兄弟作成から参照する", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+    let rootId!: number;
+    let childId!: number | null;
+    let siblingId!: number | null;
+
+    act(() => {
+      rootId = result.current.addNode(100, 100);
+      childId = result.current.addChildNode(rootId);
+      siblingId = result.current.addSiblingNode(childId!);
+    });
+
+    expect([rootId, childId, siblingId]).toEqual([1, 2, 3]);
+    expect(result.current.nodes.map((node) => node.parentId)).toEqual([null, 1, 1]);
+    expect(result.current.selectedNodeId).toBe(3);
+  });
+
+  it("同じ batch で削除した親には子を作成せず成功IDを返さない", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+
+    act(() => result.current.addNode(100, 100));
+    let childId!: number | null;
+    act(() => {
+      result.current.deleteNode(1);
+      childId = result.current.addChildNode(1);
+    });
+
+    expect(childId).toBeNull();
+    expect(result.current.nodes).toEqual([]);
+    expect(result.current.selectedNodeId).toBeNull();
+  });
+
+  it("同じ batch で削除した基点には兄弟を作成せず成功IDを返さない", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+
+    act(() => result.current.addNode(100, 100));
+    let siblingId!: number | null;
+    act(() => {
+      result.current.deleteNode(1);
+      siblingId = result.current.addSiblingNode(1);
+    });
+
+    expect(siblingId).toBeNull();
+    expect(result.current.nodes).toEqual([]);
+    expect(result.current.selectedNodeId).toBeNull();
+  });
+
   it("同じ batch 内で子ノードを追加しても両方を追加する", () => {
     let id = 0;
     jest.spyOn(Date, "now").mockImplementation(() => ++id);
