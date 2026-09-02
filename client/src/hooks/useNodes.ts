@@ -1,10 +1,11 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import {
-  RECT_WIDTH,
-  RECT_HEIGHT,
-  CHILD_HORIZONTAL_GAP,
-  SIBLING_VERTICAL_GAP,
-} from "@/config/shapes";
+  createChildNode,
+  createRootNode,
+  createSiblingNode,
+} from "@/domain/nodes/nodePlacement";
+import { collectSubtreeIds } from "@/domain/nodes/nodeTree";
+import { createMonotonicIdGenerator } from "@/domain/nodes/nodeIdGenerator";
 import type { Node } from "@/types/node";
 
 type UseNodesReturn = {
@@ -19,103 +20,42 @@ type UseNodesReturn = {
   deleteNode: (id: number) => void;
 };
 
-function collectSubtreeIds(nodes: Node[], rootId: number): Set<number> {
-  const subtreeIds = new Set<number>([rootId]);
-  let foundNewNode = true;
-
-  while (foundNewNode) {
-    foundNewNode = false;
-    for (const node of nodes) {
-      if (
-        node.parentId !== null
-        && subtreeIds.has(node.parentId)
-        && !subtreeIds.has(node.id)
-      ) {
-        subtreeIds.add(node.id);
-        foundNewNode = true;
-      }
-    }
-  }
-
-  return subtreeIds;
-}
-
 export function useNodes(): UseNodesReturn {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
+  const generateNodeIdRef = useRef<(() => number) | null>(null);
+  generateNodeIdRef.current ??= createMonotonicIdGenerator();
+  const generateNodeId = generateNodeIdRef.current;
 
   const addNode = (x: number, y: number) => {
-    const id = Date.now();
-    setNodes((prev) => [
-      ...prev,
-      {
-        id,
-        parentId: null,
-        x: x - RECT_WIDTH / 2,
-        y: y - RECT_HEIGHT / 2,
-        width: RECT_WIDTH,
-        height: RECT_HEIGHT,
-        label: "",
-      },
-    ]);
+    const id = generateNodeId();
+    setNodes((prev) => [...prev, createRootNode(id, x, y)]);
     return id;
   };
 
   const addChildNode = useCallback((parentId: number) => {
     if (!nodes.some((node) => node.id === parentId)) return null;
-    const id = Date.now();
+    const id = generateNodeId();
 
     setNodes((prev) => {
-      const parent = prev.find((node) => node.id === parentId);
-      if (!parent) return prev;
-      const siblings = prev.filter((node) => node.parentId === parentId);
-      const y = siblings.length === 0
-        ? parent.y
-        : Math.max(...siblings.map((node) => node.y + node.height))
-          + SIBLING_VERTICAL_GAP;
-      return [
-        ...prev,
-        {
-          id,
-          parentId,
-          x: parent.x + parent.width + CHILD_HORIZONTAL_GAP,
-          y,
-          width: RECT_WIDTH,
-          height: RECT_HEIGHT,
-          label: "",
-        },
-      ];
+      const child = createChildNode(prev, parentId, id);
+      return child ? [...prev, child] : prev;
     });
     setSelectedNodeId(id);
     return id;
-  }, [nodes]);
+  }, [generateNodeId, nodes]);
 
   const addSiblingNode = useCallback((nodeId: number) => {
     if (!nodes.some((node) => node.id === nodeId)) return null;
-    const id = Date.now();
+    const id = generateNodeId();
 
     setNodes((prev) => {
-      const source = prev.find((node) => node.id === nodeId);
-      if (!source) return prev;
-      const siblings = prev.filter((node) => node.parentId === source.parentId);
-      const y = Math.max(...siblings.map((node) => node.y + node.height))
-        + SIBLING_VERTICAL_GAP;
-      return [
-        ...prev,
-        {
-          id,
-          parentId: source.parentId,
-          x: source.x,
-          y,
-          width: RECT_WIDTH,
-          height: RECT_HEIGHT,
-          label: "",
-        },
-      ];
+      const sibling = createSiblingNode(prev, nodeId, id);
+      return sibling ? [...prev, sibling] : prev;
     });
     setSelectedNodeId(id);
     return id;
-  }, [nodes]);
+  }, [generateNodeId, nodes]);
 
   const selectNode = (id: number | null) => {
     setSelectedNodeId(id);

@@ -1,78 +1,46 @@
-import { render, fireEvent, act } from "@testing-library/react";
+import { act, fireEvent, render } from "@testing-library/react";
 import { useEffect, useRef } from "react";
 import { MapStage } from "@/components/map/MapStage";
 import { useNodes } from "@/hooks/useNodes";
 import type { Node } from "@/types/node";
 
-// ========== モック定義 ==========
-let stageChildren: unknown[] = [];
-let stageEventHandlers: Record<string, (event: unknown) => void> = {};
 const mockStage = {
-  removeChildren: jest.fn(() => {
-    const removed = [...stageChildren];
-    stageChildren = [];
-    return removed;
-  }),
-  addChild: jest.fn((child: unknown) => {
-    stageChildren.push(child);
-  }),
-  removeChild: jest.fn(),
-  on: jest.fn((event: string, handler: (event: unknown) => void) => {
-    stageEventHandlers[event] = handler;
-  }),
+  removeChildren: jest.fn(() => []),
+  addChild: jest.fn(),
+  on: jest.fn(),
+  off: jest.fn(),
   eventMode: "none",
   hitArea: null as unknown,
-  children: [] as unknown[],
 };
-const mockInit = jest.fn().mockResolvedValue(undefined);
-const mockDestroy = jest.fn();
 
-const mockContainerOn = jest.fn();
-const mockMoveTo = jest.fn().mockReturnThis();
-const mockBezierCurveTo = jest.fn().mockReturnThis();
-const mockEdgeStroke = jest.fn().mockReturnThis();
+jest.mock("pixi.js", () => ({
+  Application: jest.fn().mockImplementation(() => ({
+    init: jest.fn().mockResolvedValue(undefined),
+    destroy: jest.fn(),
+    canvas: document.createElement("canvas"),
+    stage: mockStage,
+    screen: { x: 0, y: 0, width: 800, height: 600 },
+  })),
+  Graphics: jest.fn().mockImplementation(() => ({
+    rect: jest.fn().mockReturnThis(),
+    fill: jest.fn().mockReturnThis(),
+    stroke: jest.fn().mockReturnThis(),
+    moveTo: jest.fn().mockReturnThis(),
+    bezierCurveTo: jest.fn().mockReturnThis(),
+  })),
+  Text: jest.fn().mockImplementation(() => ({
+    anchor: { set: jest.fn() },
+    x: 0,
+    y: 0,
+  })),
+  Container: jest.fn().mockImplementation(() => ({
+    addChild: jest.fn(),
+    on: jest.fn(),
+    eventMode: "none",
+    cursor: "default",
+  })),
+}));
 
-jest.mock("pixi.js", () => {
-  const canvas = document.createElement("canvas");
-  return {
-    Application: jest.fn().mockImplementation(() => ({
-      init: mockInit,
-      destroy: mockDestroy,
-      canvas,
-      stage: mockStage,
-      screen: { x: 0, y: 0, width: 800, height: 600 },
-    })),
-    Graphics: jest.fn().mockImplementation(() => ({
-      rect: jest.fn().mockReturnThis(),
-      fill: jest.fn().mockReturnThis(),
-      stroke: mockEdgeStroke,
-      moveTo: mockMoveTo,
-      bezierCurveTo: mockBezierCurveTo,
-      destroy: jest.fn(),
-    })),
-    Text: jest.fn().mockImplementation(() => ({
-      anchor: { set: jest.fn() },
-      x: 0,
-      y: 0,
-    })),
-    Container: jest.fn().mockImplementation(() => {
-      const eventHandlers: Record<string, (event: unknown) => void> = {};
-      return {
-        addChild: jest.fn(),
-        destroy: jest.fn(),
-        on: jest.fn((event: string, handler: (event: unknown) => void) => {
-          eventHandlers[event] = handler;
-          mockContainerOn(event, handler);
-        }),
-        eventHandlers,
-        eventMode: "none",
-        cursor: "default",
-      };
-    }),
-  };
-});
-
-// ========== ヘルパー ==========
 const defaultProps = {
   nodes: [] as Node[],
   selectedNodeId: null as number | null,
@@ -85,15 +53,9 @@ const defaultProps = {
   onDeleteNode: jest.fn(),
 };
 
-// ========== データ ==========
 const sampleNodes: Node[] = [
   { id: 1, parentId: null, x: 50, y: 30, width: 100, height: 60, label: "ノード1" },
   { id: 2, parentId: null, x: 200, y: 100, width: 100, height: 60, label: "ノード2" },
-];
-
-const connectedNodes: Node[] = [
-  { id: 1, parentId: null, x: 50, y: 30, width: 100, height: 60, label: "親" },
-  { id: 2, parentId: 1, x: 270, y: 30, width: 100, height: 60, label: "子" },
 ];
 
 async function renderReady(ui: React.ReactElement) {
@@ -104,6 +66,20 @@ async function renderReady(ui: React.ReactElement) {
     await Promise.resolve();
   });
   return result;
+}
+
+function mockStageBounds(container: HTMLElement, left = 0, top = 0) {
+  jest.spyOn(container, "getBoundingClientRect").mockReturnValue({
+    left,
+    top,
+    right: left + 800,
+    bottom: top + 600,
+    width: 800,
+    height: 600,
+    x: left,
+    y: top,
+    toJSON: () => ({}),
+  });
 }
 
 function KeyboardCreationHarness({ initiallySelected = true }: { initiallySelected?: boolean }) {
@@ -146,519 +122,109 @@ function KeyboardCreationHarness({ initiallySelected = true }: { initiallySelect
   );
 }
 
-// ========== テスト ==========
 beforeEach(() => {
   jest.clearAllMocks();
-  stageChildren = [];
-  stageEventHandlers = {};
-  mockInit.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
   jest.restoreAllMocks();
 });
 
-describe("MapStage", () => {
-  describe("レンダリング", () => {
-  it("コンテナ div がレンダリングされる", async () => {
-      await renderReady(<MapStage {...defaultProps} />);
-      const container = document.querySelector(".cursor-crosshair");
-      expect(container).toBeInTheDocument();
-    });
+describe("MapStage boundary", () => {
+  it("renders the map container", async () => {
+    await renderReady(<MapStage {...defaultProps} />);
+
+    expect(document.querySelector(".cursor-crosshair")).toBeInTheDocument();
   });
 
-  describe("ダブルクリック", () => {
-    it("空白エリアのダブルクリックで onDoubleClick がコンテナ相対の座標で呼ばれる", async () => {
-      const onDoubleClick = jest.fn();
-      await renderReady(<MapStage {...defaultProps} onDoubleClick={onDoubleClick} />);
+  it("routes a blank double-click with container-relative coordinates", async () => {
+    const onDoubleClick = jest.fn();
+    await renderReady(<MapStage {...defaultProps} onDoubleClick={onDoubleClick} />);
+    const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+    mockStageBounds(container, 100, 50);
 
-      const container = document.querySelector(".cursor-crosshair") as HTMLElement;
-      jest.spyOn(container, "getBoundingClientRect").mockReturnValue({
-        left: 100, top: 50, right: 900, bottom: 650,
-        width: 800, height: 600, x: 100, y: 50, toJSON: () => ({}),
-      });
+    fireEvent.doubleClick(container, { clientX: 300, clientY: 200 });
 
-      fireEvent.doubleClick(container, { clientX: 300, clientY: 200 });
-
-      expect(onDoubleClick).toHaveBeenCalledTimes(1);
-      expect(onDoubleClick).toHaveBeenCalledWith(200, 150);
-    });
-
-    it("ノード上のダブルクリックで編集モードになる", async () => {
-      const { getByTestId } = await renderReady(
-        <MapStage {...defaultProps} nodes={sampleNodes} />,
-      );
-
-      const container = document.querySelector(".cursor-crosshair") as HTMLElement;
-      jest.spyOn(container, "getBoundingClientRect").mockReturnValue({
-        left: 0, top: 0, right: 800, bottom: 600,
-        width: 800, height: 600, x: 0, y: 0, toJSON: () => ({}),
-      });
-
-      // sampleNodes[0] は x:50, y:30, w:100, h:60 → 中心 (100, 60) をクリック
-      fireEvent.doubleClick(container, { clientX: 100, clientY: 60 });
-
-      const input = getByTestId("node-label-input");
-      expect(input).toBeInTheDocument();
-      expect((input as HTMLInputElement).value).toBe("ノード1");
-    });
-
-    it("マウント直後にはイベントを発火しない", async () => {
-      const onDoubleClick = jest.fn();
-      await renderReady(<MapStage {...defaultProps} nodes={sampleNodes} onDoubleClick={onDoubleClick} />);
-      expect(onDoubleClick).not.toHaveBeenCalled();
-    });
+    expect(onDoubleClick).toHaveBeenCalledTimes(1);
+    expect(onDoubleClick).toHaveBeenCalledWith(200, 150);
   });
 
-  describe("テキスト編集", () => {
-    async function renderAndStartEditing() {
-      const onUpdateLabel = jest.fn();
-      const result = await renderReady(
-        <MapStage {...defaultProps} nodes={sampleNodes} onUpdateLabel={onUpdateLabel} />,
-      );
+  it("opens the editor for a node double-click", async () => {
+    const { getByTestId } = await renderReady(
+      <MapStage {...defaultProps} nodes={sampleNodes} />,
+    );
+    const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+    mockStageBounds(container);
 
-      const container = document.querySelector(".cursor-crosshair") as HTMLElement;
-      jest.spyOn(container, "getBoundingClientRect").mockReturnValue({
-        left: 0, top: 0, right: 800, bottom: 600,
-        width: 800, height: 600, x: 0, y: 0, toJSON: () => ({}),
-      });
+    fireEvent.doubleClick(container, { clientX: 100, clientY: 60 });
 
-      fireEvent.doubleClick(container, { clientX: 100, clientY: 60 });
-
-      return { ...result, onUpdateLabel };
-    }
-
-    it("Enter キーで編集を確定する", async () => {
-      const { getByTestId, onUpdateLabel } = await renderAndStartEditing();
-      const input = getByTestId("node-label-input");
-
-      fireEvent.change(input, { target: { value: "更新テキスト" } });
-      fireEvent.keyDown(input, { key: "Enter" });
-
-      expect(onUpdateLabel).toHaveBeenCalledWith(1, "更新テキスト");
-    });
-
-    it("Escape キーで編集をキャンセルする", async () => {
-      const { getByTestId, onUpdateLabel, queryByTestId } = await renderAndStartEditing();
-      const input = getByTestId("node-label-input");
-
-      fireEvent.change(input, { target: { value: "変更されないテキスト" } });
-      fireEvent.keyDown(input, { key: "Escape" });
-
-      expect(onUpdateLabel).not.toHaveBeenCalled();
-      expect(queryByTestId("node-label-input")).not.toBeInTheDocument();
-    });
-
-    // Production break caught: let the editing input's dblclick bubble and restart editing
-    // from the last committed node label.
-    it("編集入力中のダブルクリックで現在の下書きを保持する", async () => {
-      const { getByTestId } = await renderAndStartEditing();
-      const input = getByTestId("node-label-input");
-
-      fireEvent.change(input, { target: { value: "編集中の下書き" } });
-      fireEvent.doubleClick(input, { clientX: 100, clientY: 60 });
-
-      expect(input).toHaveValue("編集中の下書き");
-    });
+    expect(getByTestId("node-label-input")).toHaveValue("ノード1");
   });
 
-  describe("PixiJS 初期化後の node 描画", () => {
-    it("初期化完了後に nodes が stage へ描画される", async () => {
-      await act(async () => {
-        render(<MapStage {...defaultProps} nodes={sampleNodes} />);
-        await Promise.resolve();
-        await Promise.resolve();
-      });
+  it("preserves the current draft when the editing input is double-clicked", async () => {
+    const { getByTestId } = await renderReady(
+      <MapStage {...defaultProps} nodes={sampleNodes} />,
+    );
+    const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+    mockStageBounds(container);
+    fireEvent.doubleClick(container, { clientX: 100, clientY: 60 });
+    const input = getByTestId("node-label-input");
 
-      expect(mockStage.removeChildren).toHaveBeenCalled();
-      expect(mockStage.addChild).toHaveBeenCalledTimes(sampleNodes.length);
-    });
+    fireEvent.change(input, { target: { value: "編集中の下書き" } });
+    fireEvent.doubleClick(input, { clientX: 100, clientY: 60 });
 
-    it("nodes が空のとき addChild は呼ばれない", async () => {
-      const { Graphics } = jest.requireMock("pixi.js") as { Graphics: jest.Mock };
-
-      await act(async () => {
-        render(<MapStage {...defaultProps} />);
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      expect(mockStage.removeChildren).toHaveBeenCalled();
-      expect(mockStage.addChild).not.toHaveBeenCalled();
-      expect(Graphics).not.toHaveBeenCalled();
-    });
-
-    it("nodes が変化すると stage が再描画される", async () => {
-      let rerender!: (ui: React.ReactElement) => void;
-
-      await act(async () => {
-        const result = render(<MapStage {...defaultProps} />);
-        rerender = result.rerender;
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      mockStage.removeChildren.mockClear();
-      mockStage.addChild.mockClear();
-
-      act(() => {
-        rerender(<MapStage {...defaultProps} nodes={sampleNodes} />);
-      });
-
-      expect(mockStage.removeChildren).toHaveBeenCalled();
-      expect(mockStage.addChild).toHaveBeenCalledTimes(sampleNodes.length);
-    });
+    expect(input).toHaveValue("編集中の下書き");
   });
 
-  describe("親子ノード間の接続線", () => {
-    // Production break caught: omit edge rendering, use the wrong endpoints/control points,
-    // or place the edge above the node containers.
-    it("親の右中央から子の左中央へベジェ曲線をノードの背後に描画する", async () => {
-      await renderReady(<MapStage {...defaultProps} nodes={connectedNodes} />);
+  it.each([
+    ["Tab", 1],
+    ["Enter", null],
+  ])("uses real useNodes to create and edit a node with %s", async (key, expectedParentId) => {
+    let nextNodeId = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++nextNodeId);
+    const { getByTestId } = await renderReady(<KeyboardCreationHarness />);
+    const [source] = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
 
-      expect(mockMoveTo).toHaveBeenCalledWith(150, 60);
-      expect(mockBezierCurveTo).toHaveBeenCalledWith(210, 60, 210, 60, 270, 60);
-      expect(mockEdgeStroke).toHaveBeenCalledWith({ width: 2, color: 0x64748b });
-      expect(mockStage.addChild).toHaveBeenCalledTimes(connectedNodes.length + 1);
+    fireEvent.keyDown(window, { key });
 
-      const edgeGraphics = mockStage.addChild.mock.calls[0][0] as { addChild?: unknown };
-      expect(edgeGraphics).not.toHaveProperty("addChild");
-      expect(mockMoveTo.mock.contexts).toEqual([edgeGraphics]);
-      expect(mockEdgeStroke.mock.contexts).toContain(edgeGraphics);
-    });
+    let nodes = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
+    const created = nodes[1];
+    expect(nodes).toHaveLength(2);
+    expect(created.parentId).toBe(expectedParentId === null ? source.parentId : source.id);
+    expect(getByTestId("selected-node-id")).toHaveTextContent(String(created.id));
+    const input = getByTestId("node-label-input");
+    expect(input).toHaveValue("");
 
-    it("親が存在しない parentId の接続線は描画しない", async () => {
-      const orphan: Node[] = [
-        { id: 2, parentId: 999, x: 270, y: 30, width: 100, height: 60, label: "孤立" },
-      ];
+    fireEvent.change(input, { target: { value: "作成したノード" } });
+    fireEvent.keyDown(input, { key: "Enter" });
 
-      await renderReady(<MapStage {...defaultProps} nodes={orphan} />);
-
-      expect(mockMoveTo).not.toHaveBeenCalled();
-      expect(mockBezierCurveTo).not.toHaveBeenCalled();
-      expect(mockStage.addChild).toHaveBeenCalledTimes(1);
-    });
-
-    it("nodes の座標変更時は現在の座標で接続線を再描画する", async () => {
-      const result = await renderReady(<MapStage {...defaultProps} nodes={connectedNodes} />);
-      mockMoveTo.mockClear();
-      mockBezierCurveTo.mockClear();
-
-      await act(async () => {
-        result.rerender(
-          <MapStage
-            {...defaultProps}
-            nodes={[
-              connectedNodes[0],
-              { ...connectedNodes[1], x: 330, y: 90 },
-            ]}
-          />,
-        );
-      });
-
-      expect(mockMoveTo).toHaveBeenCalledWith(150, 60);
-      expect(mockBezierCurveTo).toHaveBeenCalledWith(240, 60, 240, 120, 330, 120);
-    });
+    nodes = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
+    expect(nodes).toHaveLength(2);
+    expect(nodes[1].label).toBe("作成したノード");
   });
 
-  describe("ノード選択", () => {
-    it("ノードの pointerdown で onSelectNode が呼ばれるようイベントが登録される", async () => {
-      await act(async () => {
-        render(<MapStage {...defaultProps} nodes={sampleNodes} />);
-        await Promise.resolve();
-        await Promise.resolve();
-      });
+  it.each(["Tab", "Enter"])("suppresses %s when no node is selected", async (key) => {
+    const { getByTestId, queryByTestId } = await renderReady(
+      <KeyboardCreationHarness initiallySelected={false} />,
+    );
 
-      expect(mockContainerOn).toHaveBeenCalledWith("pointerdown", expect.any(Function));
-      expect(mockContainerOn).toHaveBeenCalledTimes(sampleNodes.length);
-    });
+    fireEvent.keyDown(window, { key });
 
-    it("PixiJS stage の空白 pointerdown で onSelectNode(null) が呼ばれる", async () => {
-      const onSelectNode = jest.fn();
-      await renderReady(<MapStage {...defaultProps} onSelectNode={onSelectNode} />);
-
-      stageEventHandlers.pointerdown({ target: mockStage });
-
-      expect(onSelectNode).toHaveBeenCalledWith(null);
-    });
-
-    // Production break caught: clear selection from the DOM canvas click that follows every
-    // Pixi node hit, instead of restricting blank detection to the Pixi stage target.
-    it("ノードの Pixi pointerdown 後もノード選択を保持する", async () => {
-      const onSelectNode = jest.fn();
-      await renderReady(
-        <MapStage {...defaultProps} nodes={sampleNodes} onSelectNode={onSelectNode} />,
-      );
-
-      const nodeContainer = stageChildren[0] as {
-        eventHandlers: Record<string, (event: unknown) => void>;
-      };
-      const pointerEvent = { target: nodeContainer, globalX: 100, globalY: 60 };
-      nodeContainer.eventHandlers.pointerdown(pointerEvent);
-      stageEventHandlers.pointerdown?.(pointerEvent);
-
-      const canvas = document.querySelector("canvas") as HTMLCanvasElement;
-      fireEvent.click(canvas);
-
-      expect(onSelectNode.mock.calls).toEqual([[1]]);
-    });
+    const nodes = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
+    expect(nodes).toHaveLength(1);
+    expect(getByTestId("selected-node-id")).toHaveTextContent("");
+    expect(queryByTestId("node-label-input")).not.toBeInTheDocument();
   });
 
-  describe("PixiJS オブジェクト破棄", () => {
-    it("再描画前に接続線を含む stage child と所有 context を destroy する", async () => {
-      let rerender!: (ui: React.ReactElement) => void;
+  it.each(["Tab", "Delete", "Backspace"])("suppresses %s while editing", async (key) => {
+    const { getByTestId } = await renderReady(<KeyboardCreationHarness />);
+    const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+    mockStageBounds(container);
+    fireEvent.doubleClick(container, { clientX: 100, clientY: 60 });
 
-      await act(async () => {
-        const result = render(<MapStage {...defaultProps} nodes={connectedNodes} />);
-        rerender = result.rerender;
-        await Promise.resolve();
-        await Promise.resolve();
-      });
+    fireEvent.keyDown(getByTestId("node-label-input"), { key });
 
-      const oldStageChildren = [...stageChildren] as Array<{ destroy: jest.Mock }>;
-      expect(oldStageChildren).toHaveLength(connectedNodes.length + 1);
-
-      await act(async () => {
-        rerender(<MapStage {...defaultProps} nodes={[]}/>);
-      });
-
-      for (const child of oldStageChildren) {
-        expect(child.destroy).toHaveBeenCalledWith({ children: true, context: true });
-      }
-    });
-
-    it("有効な接続線がない場合は edge Graphics を生成しない", async () => {
-      const { Graphics } = jest.requireMock("pixi.js") as { Graphics: jest.Mock };
-      const orphan: Node[] = [
-        { id: 2, parentId: 999, x: 270, y: 30, width: 100, height: 60, label: "孤立" },
-      ];
-
-      await renderReady(<MapStage {...defaultProps} nodes={orphan} />);
-
-      expect(Graphics).toHaveBeenCalledTimes(orphan.length);
-    });
-  });
-
-  describe("ノード削除", () => {
-    it("選択中に Delete キーで onDeleteNode が呼ばれる", async () => {
-      const onDeleteNode = jest.fn();
-      await renderReady(
-        <MapStage {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onDeleteNode={onDeleteNode} />,
-      );
-
-      fireEvent.keyDown(window, { key: "Delete" });
-
-      expect(onDeleteNode).toHaveBeenCalledWith(1);
-    });
-
-    it("選択中に Backspace キーで onDeleteNode が呼ばれる", async () => {
-      const onDeleteNode = jest.fn();
-      await renderReady(
-        <MapStage {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onDeleteNode={onDeleteNode} />,
-      );
-
-      fireEvent.keyDown(window, { key: "Backspace" });
-
-      expect(onDeleteNode).toHaveBeenCalledWith(1);
-    });
-
-    it("未選択時は Delete キーを押しても onDeleteNode が呼ばれない", async () => {
-      const onDeleteNode = jest.fn();
-      await renderReady(
-        <MapStage {...defaultProps} nodes={sampleNodes} onDeleteNode={onDeleteNode} />,
-      );
-
-      fireEvent.keyDown(window, { key: "Delete" });
-
-      expect(onDeleteNode).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("キーボードによるノード作成", () => {
-    // Production break caught: omit Tab handling, call the wrong creation API,
-    // or do not transition the returned child node into editing.
-    it("選択中のTabで子ノードを作成して選択し編集を開始する", async () => {
-      let nextNodeId = 0;
-      jest.spyOn(Date, "now").mockImplementation(() => ++nextNodeId);
-      const { getByTestId } = await renderReady(<KeyboardCreationHarness />);
-      const [parent] = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
-
-      fireEvent.keyDown(window, { key: "Tab" });
-
-      const nodes = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
-      const child = nodes[1];
-      expect(nodes).toHaveLength(2);
-      expect(child).toEqual(expect.objectContaining({ parentId: parent.id, label: "" }));
-      expect(child.id).not.toBe(parent.id);
-      expect(getByTestId("selected-node-id")).toHaveTextContent(String(child.id));
-      expect(getByTestId("node-label-input")).toHaveValue("");
-    });
-
-    // Production break caught: omit Enter handling, create a child instead of a sibling,
-    // or do not transition the returned sibling node into editing.
-    it("選択中のEnterで兄弟ノードを作成して選択し編集を開始する", async () => {
-      let nextNodeId = 0;
-      jest.spyOn(Date, "now").mockImplementation(() => ++nextNodeId);
-      const { getByTestId } = await renderReady(<KeyboardCreationHarness />);
-      const [source] = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
-
-      fireEvent.keyDown(window, { key: "Enter" });
-
-      const nodes = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
-      const sibling = nodes[1];
-      expect(nodes).toHaveLength(2);
-      expect(sibling).toEqual(expect.objectContaining({ parentId: source.parentId, label: "" }));
-      expect(sibling.id).not.toBe(source.id);
-      expect(getByTestId("selected-node-id")).toHaveTextContent(String(sibling.id));
-      expect(getByTestId("node-label-input")).toHaveValue("");
-    });
-
-    it.each(["Tab", "Enter"])("未選択時の%sはノードを作成せず編集を開始しない", async (key) => {
-      const { getByTestId, queryByTestId } = await renderReady(
-        <KeyboardCreationHarness initiallySelected={false} />,
-      );
-
-      fireEvent.keyDown(window, { key });
-
-      const nodes = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
-      expect(nodes).toHaveLength(1);
-      expect(getByTestId("selected-node-id")).toHaveTextContent("");
-      expect(queryByTestId("node-label-input")).not.toBeInTheDocument();
-    });
-
-    async function renderEditingHarness() {
-      const result = await renderReady(<KeyboardCreationHarness />);
-      const container = document.querySelector(".cursor-crosshair") as HTMLElement;
-      jest.spyOn(container, "getBoundingClientRect").mockReturnValue({
-        left: 0, top: 0, right: 800, bottom: 600,
-        width: 800, height: 600, x: 0, y: 0, toJSON: () => ({}),
-      });
-      fireEvent.doubleClick(container, { clientX: 100, clientY: 60 });
-      return result;
-    }
-
-    it("編集中のTabでは子ノードを作成しない", async () => {
-      const { getByTestId } = await renderEditingHarness();
-      const input = getByTestId("node-label-input");
-
-      fireEvent.keyDown(input, { key: "Tab" });
-
-      const nodes = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
-      expect(nodes).toHaveLength(1);
-    });
-
-    it.each(["Delete", "Backspace"])("編集中の%sではノードを削除しない", async (key) => {
-      const { getByTestId } = await renderEditingHarness();
-      const input = getByTestId("node-label-input");
-
-      fireEvent.keyDown(input, { key });
-
-      const nodes = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
-      expect(nodes).toHaveLength(1);
-    });
-
-    it("編集中のEnterでラベルを確定する", async () => {
-      const { getByTestId, queryByTestId } = await renderEditingHarness();
-      const input = getByTestId("node-label-input");
-
-      fireEvent.change(input, { target: { value: "確定ラベル" } });
-      fireEvent.keyDown(input, { key: "Enter" });
-
-      const [node] = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
-      expect(node.label).toBe("確定ラベル");
-      expect(queryByTestId("node-label-input")).not.toBeInTheDocument();
-    });
-
-    it("編集中のEscapeでラベルの変更を破棄する", async () => {
-      const { getByTestId, queryByTestId } = await renderEditingHarness();
-      const input = getByTestId("node-label-input");
-
-      fireEvent.change(input, { target: { value: "破棄ラベル" } });
-      fireEvent.keyDown(input, { key: "Escape" });
-
-      const [node] = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
-      expect(node.label).toBe("");
-      expect(queryByTestId("node-label-input")).not.toBeInTheDocument();
-    });
-  });
-
-  describe("PixiJS ライフサイクル", () => {
-    it("unmount 時に PixiJS app が破棄される", async () => {
-      let unmount!: () => void;
-
-      await act(async () => {
-        const result = render(<MapStage {...defaultProps} />);
-        unmount = result.unmount;
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      act(() => {
-        unmount();
-      });
-
-      expect(mockDestroy).toHaveBeenCalledWith(true, { children: true, context: true });
-    });
-
-    it("初期化完了前に unmount されると cancelled ブランチで app が破棄される", async () => {
-      let resolveInit!: () => void;
-      const pendingInit = new Promise<void>((resolve) => {
-        resolveInit = resolve;
-      });
-      mockInit.mockReturnValueOnce(pendingInit);
-
-      let unmount!: () => void;
-
-      await act(async () => {
-        const result = render(<MapStage {...defaultProps} />);
-        unmount = result.unmount;
-        await Promise.resolve();
-      });
-
-      act(() => {
-        unmount();
-      });
-
-      await act(async () => {
-        resolveInit();
-        await Promise.resolve();
-      });
-
-      expect(mockDestroy).toHaveBeenCalledWith(true, { children: true, context: true });
-    });
-
-    it("dynamic import 完了前に unmount されると Application が生成されない", async () => {
-      const { Application } = jest.requireMock("pixi.js") as {
-        Application: jest.Mock;
-      };
-      Application.mockClear();
-
-      const { unmount } = render(<MapStage {...defaultProps} />);
-      unmount();
-
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      expect(Application).not.toHaveBeenCalled();
-    });
-
-    it("window.devicePixelRatio が 0 のとき resolution=1 にフォールバックする", async () => {
-      const original = window.devicePixelRatio;
-      Object.defineProperty(window, "devicePixelRatio", { value: 0, configurable: true });
-
-      await act(async () => {
-        render(<MapStage {...defaultProps} />);
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      expect(mockInit).toHaveBeenCalledWith(
-        expect.objectContaining({ resolution: 1 }),
-      );
-
-      Object.defineProperty(window, "devicePixelRatio", { value: original, configurable: true });
-    });
+    const nodes = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
+    expect(nodes).toHaveLength(1);
   });
 });

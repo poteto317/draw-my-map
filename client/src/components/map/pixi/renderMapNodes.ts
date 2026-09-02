@@ -1,0 +1,52 @@
+import type { PixiConstructors } from "@/components/map/pixi/pixiTypes";
+import type { Node } from "@/types/node";
+import type { Container, FederatedPointerEvent } from "pixi.js";
+
+export type RenderMapNodesOptions = {
+  nodes: readonly Node[];
+  selectedNodeId: number | null;
+  editingNodeId: number | null;
+  onNodePointerDown: (nodeId: number, event: FederatedPointerEvent) => void;
+};
+
+export function renderMapNodes(
+  stage: Container,
+  constructors: PixiConstructors,
+  options: RenderMapNodesOptions,
+): void {
+  for (const node of options.nodes) {
+    const isEditing = node.id === options.editingNodeId;
+    const isSelected = node.id === options.selectedNodeId;
+    const container = new constructors.Container();
+    container.eventMode = "static";
+    container.cursor = "pointer";
+    container.on("pointerdown", (event: FederatedPointerEvent) => {
+      options.onNodePointerDown(node.id, event);
+    });
+
+    const graphics = new constructors.Graphics();
+    graphics.rect(node.x, node.y, node.width, node.height)
+      .fill({ color: isSelected ? 0xeff6ff : 0xffffff })
+      .stroke({ width: isSelected ? 3 : 2, color: isSelected ? 0x2563eb : 0x3b82f6 });
+    container.addChild(graphics);
+
+    if (!isEditing) {
+      const text = new constructors.Text({
+        text: node.label || "新しいノード",
+        style: {
+          fontSize: 14,
+          fill: 0x27272a,
+          wordWrap: true,
+          wordWrapWidth: node.width - 16,
+          align: "center",
+        },
+      });
+      text.anchor.set(0.5);
+      text.x = node.x + node.width / 2;
+      text.y = node.y + node.height / 2;
+      container.addChild(text);
+    }
+
+    stage.addChild(container);
+  }
+}
