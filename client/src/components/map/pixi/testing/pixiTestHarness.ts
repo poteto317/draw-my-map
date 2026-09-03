@@ -1,8 +1,19 @@
 type PointerHandler = (event: unknown) => void;
 
+type MockContainer = {
+  addChild: jest.Mock;
+  position: { set: jest.Mock };
+  scale: { set: jest.Mock };
+  on: jest.Mock;
+  eventMode: string;
+  cursor: string;
+  destroy: jest.Mock;
+};
+
 export function createPixiTestHarness() {
   const children: unknown[] = [];
   const containerHandlers: Array<Record<string, PointerHandler>> = [];
+  const containers: MockContainer[] = [];
   const stage = {
     removeChildren: jest.fn(() => children.splice(0)),
     addChild: jest.fn((child: unknown) => children.push(child)),
@@ -24,9 +35,10 @@ export function createPixiTestHarness() {
   }));
   const Container = jest.fn().mockImplementation(() => {
     const handlers: Record<string, PointerHandler> = {};
-    containerHandlers.push(handlers);
-    return {
+    const container: MockContainer = {
       addChild: jest.fn(),
+      position: { set: jest.fn() },
+      scale: { set: jest.fn() },
       on: jest.fn((event: string, handler: PointerHandler) => {
         handlers[event] = handler;
       }),
@@ -34,6 +46,9 @@ export function createPixiTestHarness() {
       cursor: "default",
       destroy: jest.fn(),
     };
+    containers.push(container);
+    containerHandlers.push(handlers);
+    return container;
   });
 
   return {
@@ -45,5 +60,6 @@ export function createPixiTestHarness() {
     constructors: { Graphics, Text, Container },
     app: { stage },
     containerHandlers,
+    containers,
   };
 }

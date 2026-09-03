@@ -1,3 +1,4 @@
+import { INITIAL_VIEWPORT } from "@/components/map/mapViewport";
 import { renderMapScene } from "@/components/map/pixi/renderMapScene";
 import { createPixiTestHarness } from "../testing/pixiTestHarness";
 import type { Node } from "@/types/node";
@@ -14,7 +15,7 @@ const nodes: Node[] = [
 ];
 
 describe("renderMapScene", () => {
-  it("clears the previous projection, then adds edges before nodes", () => {
+  it("前の描画を破棄してworld内へエッジをノードより先に追加する", () => {
     const harness = createPixiTestHarness();
     const previousChild = { destroy: jest.fn() };
     harness.children.push(previousChild);
@@ -25,18 +26,39 @@ describe("renderMapScene", () => {
       editingNodeId: null,
       connectionTargetNodeId: null,
       onNodePointerDown: jest.fn(),
+      viewport: INITIAL_VIEWPORT,
     });
 
+    const world = harness.containers[0];
     expect(previousChild.destroy).toHaveBeenCalledWith({ children: true, context: true });
-    expect(harness.stage.addChild).toHaveBeenCalledTimes(3);
-    expect(harness.stage.addChild.mock.calls[0][0]).toBe(harness.Graphics.mock.results[0].value);
-    expect(harness.stage.addChild.mock.calls.slice(1).map(([child]) => child)).toEqual([
-      harness.Container.mock.results[0].value,
-      harness.Container.mock.results[1].value,
+    expect(harness.stage.addChild).toHaveBeenCalledWith(world);
+    expect(world.addChild.mock.calls.map(([child]: [unknown]) => child)).toEqual([
+      harness.Graphics.mock.results[0].value,
+      harness.containers[1],
+      harness.containers[2],
     ]);
   });
 
-  it("only clears the previous projection when nodes are empty", () => {
+  it("viewportを適用したworld containerへエッジとノードを描画する", () => {
+    const harness = createPixiTestHarness();
+    const viewport = { offsetX: 30, offsetY: -10, scale: 2 };
+
+    renderMapScene(harness.app as never, harness.constructors as never, {
+      nodes,
+      selectedNodeId: null,
+      editingNodeId: null,
+      connectionTargetNodeId: null,
+      onNodePointerDown: jest.fn(),
+      viewport,
+    });
+
+    const world = harness.containers[0];
+    expect(world.position.set).toHaveBeenCalledWith(30, -10);
+    expect(world.scale.set).toHaveBeenCalledWith(2);
+    expect(harness.stage.addChild).toHaveBeenCalledWith(world);
+  });
+
+  it("ノードが空でもworld containerをstageへ追加する", () => {
     const harness = createPixiTestHarness();
 
     renderMapScene(harness.app as never, harness.constructors as never, {
@@ -45,9 +67,11 @@ describe("renderMapScene", () => {
       editingNodeId: null,
       connectionTargetNodeId: null,
       onNodePointerDown: jest.fn(),
+      viewport: INITIAL_VIEWPORT,
     });
 
     expect(harness.stage.removeChildren).toHaveBeenCalledTimes(1);
-    expect(harness.stage.addChild).not.toHaveBeenCalled();
+    expect(harness.stage.addChild).toHaveBeenCalledTimes(1);
+    expect(harness.stage.addChild).toHaveBeenCalledWith(harness.containers[0]);
   });
 });
