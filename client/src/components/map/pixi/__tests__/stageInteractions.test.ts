@@ -64,6 +64,10 @@ const targetNode: Node = {
   x: 200,
 };
 
+beforeEach(() => {
+  boundStageForPointer = null;
+});
+
 function createController(overrides: Partial<{
   nodes: readonly Node[];
   onSelectNode: (id: number | null) => void;
