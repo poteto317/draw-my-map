@@ -9,6 +9,8 @@ describe("AppHeader", () => {
 
   it("操作ヒントが表示される", () => {
     render(<AppHeader />);
-    expect(screen.getByText("ダブルクリックで四角形を追加")).toBeInTheDocument();
+    expect(
+      screen.getByText("ダブルクリックでノードを追加・Shift+ドラッグでノードを接続"),
+    ).toBeInTheDocument();
   });
 });

@@ -6,6 +6,7 @@ export type RenderMapNodesOptions = {
   nodes: readonly Node[];
   selectedNodeId: number | null;
   editingNodeId: number | null;
+  connectionTargetNodeId: number | null;
   onNodePointerDown: (nodeId: number, event: FederatedPointerEvent) => void;
 };
 
@@ -17,6 +18,7 @@ export function renderMapNodes(
   for (const node of options.nodes) {
     const isEditing = node.id === options.editingNodeId;
     const isSelected = node.id === options.selectedNodeId;
+    const isConnectionTarget = node.id === options.connectionTargetNodeId;
     const container = new constructors.Container();
     container.eventMode = "static";
     container.cursor = "pointer";
@@ -26,8 +28,11 @@ export function renderMapNodes(
 
     const graphics = new constructors.Graphics();
     graphics.rect(node.x, node.y, node.width, node.height)
-      .fill({ color: isSelected ? 0xeff6ff : 0xffffff })
-      .stroke({ width: isSelected ? 3 : 2, color: isSelected ? 0x2563eb : 0x3b82f6 });
+      .fill({ color: isConnectionTarget ? 0xecfdf5 : isSelected ? 0xeff6ff : 0xffffff })
+      .stroke({
+        width: isConnectionTarget || isSelected ? 3 : 2,
+        color: isConnectionTarget ? 0x10b981 : isSelected ? 0x2563eb : 0x3b82f6,
+      });
     container.addChild(graphics);
 
     if (!isEditing) {

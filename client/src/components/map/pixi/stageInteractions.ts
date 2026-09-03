@@ -1,24 +1,18 @@
+import { createNodeConnectionGesture } from "@/components/map/pixi/nodeConnectionGesture";
+import { createNodeMoveGesture } from "@/components/map/pixi/nodeMoveGesture";
+import type { LatestValue, PointerGesture } from "@/components/map/pixi/pointerGesture";
 import type { Node } from "@/types/node";
 import type { Container, FederatedPointerEvent } from "pixi.js";
 
-export type LatestValue<T> = {
-  readonly current: T;
-};
+export type { LatestValue } from "@/components/map/pixi/pointerGesture";
 
 type StageInteractionOptions = {
   nodesRef: LatestValue<readonly Node[]>;
   onSelectNodeRef: LatestValue<(id: number | null) => void>;
   onMoveNodeRef: LatestValue<(id: number, x: number, y: number) => void>;
+  onConnectNodesRef: LatestValue<(parentId: number, childId: number) => boolean>;
+  onConnectionTargetChangeRef: LatestValue<(id: number | null) => void>;
   dragThreshold?: number;
-};
-
-type DragState = {
-  nodeId: number;
-  startX: number;
-  startY: number;
-  nodeStartX: number;
-  nodeStartY: number;
-  dragging: boolean;
 };
 
 type InteractiveStage = Pick<Container, "on" | "off">;
@@ -27,63 +21,60 @@ export function createStageInteractions({
   nodesRef,
   onSelectNodeRef,
   onMoveNodeRef,
+  onConnectNodesRef,
+  onConnectionTargetChangeRef,
   dragThreshold = 4,
 }: StageInteractionOptions) {
-  let dragState: DragState | null = null;
+  let activeGesture: PointerGesture | null = null;
 
   const handleNodePointerDown = (nodeId: number, event: FederatedPointerEvent) => {
-    dragState = null;
+    activeGesture?.cancel();
     onSelectNodeRef.current(nodeId);
-
-    const node = nodesRef.current.find((currentNode) => currentNode.id === nodeId);
-    if (!node) return;
-
-    dragState = {
-      nodeId,
-      startX: event.globalX,
-      startY: event.globalY,
-      nodeStartX: node.x,
-      nodeStartY: node.y,
-      dragging: false,
-    };
+    activeGesture = event.shiftKey
+      ? createNodeConnectionGesture({
+        sourceNodeId: nodeId,
+        nodesRef,
+        onConnectNodesRef,
+        onConnectionTargetChangeRef,
+      })
+      : createNodeMoveGesture({
+        nodeId,
+        startEvent: event,
+        nodesRef,
+        onMoveNodeRef,
+        dragThreshold,
+      });
   };
 
   const handlePointerMove = (event: FederatedPointerEvent) => {
-    if (!dragState) return;
-
-    const dx = event.globalX - dragState.startX;
-    const dy = event.globalY - dragState.startY;
-    if (!dragState.dragging) {
-      if (Math.abs(dx) < dragThreshold && Math.abs(dy) < dragThreshold) return;
-      dragState.dragging = true;
-    }
-
-    onMoveNodeRef.current(
-      dragState.nodeId,
-      dragState.nodeStartX + dx,
-      dragState.nodeStartY + dy,
-    );
-  };
-
-  const handlePointerUp = () => {
-    dragState = null;
+    activeGesture?.move(event);
   };
 
   const bind = (stage: InteractiveStage) => {
     const handleStagePointerDown = (event: FederatedPointerEvent) => {
       if (event.target === stage) onSelectNodeRef.current(null);
     };
+    const handlePointerUp = (event: FederatedPointerEvent) => {
+      activeGesture?.end(event);
+      activeGesture = null;
+    };
+    const handlePointerUpOutside = () => {
+      activeGesture?.cancel();
+      activeGesture = null;
+    };
 
     stage.on("pointerdown", handleStagePointerDown);
     stage.on("pointermove", handlePointerMove);
     stage.on("pointerup", handlePointerUp);
-    stage.on("pointerupoutside", handlePointerUp);
+    stage.on("pointerupoutside", handlePointerUpOutside);
 
     return () => {
+      activeGesture?.cancel();
+      activeGesture = null;
       stage.off("pointerdown", handleStagePointerDown);
       stage.off("pointermove", handlePointerMove);
       stage.off("pointerup", handlePointerUp);
-      stage.off("pointerupoutside", handlePointerUp);
+      stage.off("pointerupoutside", handlePointerUpOutside);
     };
   };
 

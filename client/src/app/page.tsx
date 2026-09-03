@@ -14,6 +14,7 @@ export default function Home() {
     selectNode,
     updateNodeLabel,
     moveNode,
+    connectNodes,
     deleteNode,
   } = useNodes();
 
@@ -30,6 +31,7 @@ export default function Home() {
           onSelectNode={selectNode}
           onUpdateLabel={updateNodeLabel}
           onMoveNode={moveNode}
+          onConnectNodes={connectNodes}
           onDeleteNode={deleteNode}
         />
       </main>

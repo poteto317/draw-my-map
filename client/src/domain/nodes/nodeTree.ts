@@ -17,3 +17,28 @@ export function collectSubtreeIds(nodes: readonly Node[], rootId: number): Set<n
 
   return ids;
 }
+
+export function canConnectNodes(
+  nodes: readonly Node[],
+  parentId: number,
+  childId: number,
+): boolean {
+  if (parentId === childId) return false;
+
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  if (!nodeIds.has(parentId) || !nodeIds.has(childId)) return false;
+
+  return !collectSubtreeIds(nodes, childId).has(parentId);
+}
+
+export function connectNodeTree(
+  nodes: readonly Node[],
+  parentId: number,
+  childId: number,
+): Node[] | null {
+  if (!canConnectNodes(nodes, parentId, childId)) return null;
+
+  return nodes.map((node) => (
+    node.id === childId ? { ...node, parentId } : node
+  ));
+}

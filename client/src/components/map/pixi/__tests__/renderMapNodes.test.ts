@@ -10,6 +10,7 @@ const node: Node = {
 function render(overrides: Partial<{
   selectedNodeId: number | null;
   editingNodeId: number | null;
+  connectionTargetNodeId: number | null;
   onNodePointerDown: jest.Mock;
 }> = {}) {
   const harness = createPixiTestHarness();
@@ -18,6 +19,7 @@ function render(overrides: Partial<{
     nodes: [node],
     selectedNodeId: overrides.selectedNodeId ?? null,
     editingNodeId: overrides.editingNodeId ?? null,
+    connectionTargetNodeId: overrides.connectionTargetNodeId ?? null,
     onNodePointerDown,
   });
   return { ...harness, onNodePointerDown };
@@ -50,6 +52,17 @@ describe("renderMapNodes", () => {
     expect(rectangle.fill).toHaveBeenCalledWith({ color: 0xeff6ff });
     expect(rectangle.stroke).toHaveBeenCalledWith({ width: 3, color: 0x2563eb });
     expect(Text).not.toHaveBeenCalled();
+  });
+
+  it("接続先候補を選択状態より優先して強調表示する", () => {
+    const { Graphics } = render({
+      selectedNodeId: 1,
+      connectionTargetNodeId: 1,
+    });
+    const rectangle = Graphics.mock.results[0].value;
+
+    expect(rectangle.fill).toHaveBeenCalledWith({ color: 0xecfdf5 });
+    expect(rectangle.stroke).toHaveBeenCalledWith({ width: 3, color: 0x10b981 });
   });
 
   it("forwards pointer events with the node ID", () => {

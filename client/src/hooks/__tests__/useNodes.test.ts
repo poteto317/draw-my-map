@@ -295,6 +295,7 @@ describe("useNodes", () => {
     const initialCallbacks = {
       addChildNode: result.current.addChildNode,
       addSiblingNode: result.current.addSiblingNode,
+      connectNodes: result.current.connectNodes,
       deleteNode: result.current.deleteNode,
     };
 
@@ -303,6 +304,7 @@ describe("useNodes", () => {
 
     expect(result.current.addChildNode).toBe(initialCallbacks.addChildNode);
     expect(result.current.addSiblingNode).toBe(initialCallbacks.addSiblingNode);
+    expect(result.current.connectNodes).toBe(initialCallbacks.connectNodes);
     expect(result.current.deleteNode).toBe(initialCallbacks.deleteNode);
   });
 
@@ -340,5 +342,95 @@ describe("useNodes", () => {
     act(() => deleteNode(1));
 
     expect(result.current.nodes).toEqual([]);
+  });
+
+  it("connectNodes は既存ノードを親子接続し、子ノードを選択する", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+
+    act(() => {
+      result.current.addNode(100, 100);
+      result.current.addNode(300, 100);
+    });
+    let connected!: boolean;
+    act(() => {
+      connected = result.current.connectNodes(1, 2);
+    });
+
+    expect(connected).toBe(true);
+    expect(result.current.nodes[1].parentId).toBe(1);
+    expect(result.current.selectedNodeId).toBe(2);
+  });
+
+  it("connectNodes は子ノードの既存の親を新しい親へ付け替える", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+
+    act(() => {
+      result.current.addNode(100, 100);
+      result.current.addChildNode(1);
+      result.current.addNode(500, 100);
+    });
+    act(() => result.current.connectNodes(3, 2));
+
+    expect(result.current.nodes.find((node) => node.id === 2)?.parentId).toBe(3);
+  });
+
+  it("connectNodes は循環接続を拒否してノードと選択を維持する", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+
+    act(() => {
+      result.current.addNode(100, 100);
+      result.current.addChildNode(1);
+      result.current.selectNode(1);
+    });
+    const nodesBeforeConnection = result.current.nodes;
+    let connected!: boolean;
+    act(() => {
+      connected = result.current.connectNodes(2, 1);
+    });
+
+    expect(connected).toBe(false);
+    expect(result.current.nodes).toBe(nodesBeforeConnection);
+    expect(result.current.selectedNodeId).toBe(1);
+  });
+
+  it("connectNodes は同じ batch で作成したノードを接続できる", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+    let connected!: boolean;
+
+    act(() => {
+      const parentId = result.current.addNode(100, 100);
+      const childId = result.current.addNode(300, 100);
+      connected = result.current.connectNodes(parentId, childId);
+    });
+
+    expect(connected).toBe(true);
+    expect(result.current.nodes.map((node) => node.parentId)).toEqual([null, 1]);
+  });
+
+  it("初回取得した connectNodes は最新の確定済みノードを接続する", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+    const connectNodes = result.current.connectNodes;
+
+    act(() => {
+      result.current.addNode(100, 100);
+      result.current.addNode(300, 100);
+    });
+    let connected!: boolean;
+    act(() => {
+      connected = connectNodes(1, 2);
+    });
+
+    expect(connected).toBe(true);
+    expect(result.current.nodes[1].parentId).toBe(1);
   });
 });

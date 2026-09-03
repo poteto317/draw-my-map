@@ -15,6 +15,7 @@ type MockPointerEvent = {
   globalX: number;
   globalY: number;
   target?: unknown;
+  shiftKey?: boolean;
 };
 
 type MockPointerHandler = (event: MockPointerEvent) => void;
@@ -79,6 +80,7 @@ const defaultProps = {
   onSelectNode: jest.fn(),
   onUpdateLabel: jest.fn(),
   onMoveNode: jest.fn(),
+  onConnectNodes: jest.fn(() => true),
   onDeleteNode: jest.fn(),
 };
 
@@ -121,6 +123,7 @@ function KeyboardCreationHarness({ initiallySelected = true }: { initiallySelect
     selectNode,
     updateNodeLabel,
     moveNode,
+    connectNodes,
     deleteNode,
   } = useNodes();
   const initializedRef = useRef(false);
@@ -143,6 +146,49 @@ function KeyboardCreationHarness({ initiallySelected = true }: { initiallySelect
         onSelectNode={selectNode}
         onUpdateLabel={updateNodeLabel}
         onMoveNode={moveNode}
+        onConnectNodes={connectNodes}
+        onDeleteNode={deleteNode}
+      />
+      <output data-testid="node-state">{JSON.stringify(nodes)}</output>
+      <output data-testid="selected-node-id">{selectedNodeId}</output>
+    </>
+  );
+}
+
+function MouseConnectionHarness() {
+  const {
+    nodes,
+    selectedNodeId,
+    addNode,
+    addChildNode,
+    addSiblingNode,
+    selectNode,
+    updateNodeLabel,
+    moveNode,
+    connectNodes,
+    deleteNode,
+  } = useNodes();
+  const initializedRef = useRef(false);
+
+  useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+    addNode(50, 30);
+    addNode(200, 100);
+  }, [addNode]);
+
+  return (
+    <>
+      <MapStage
+        nodes={nodes}
+        selectedNodeId={selectedNodeId}
+        onDoubleClick={addNode}
+        onAddChildNode={addChildNode}
+        onAddSiblingNode={addSiblingNode}
+        onSelectNode={selectNode}
+        onUpdateLabel={updateNodeLabel}
+        onMoveNode={moveNode}
+        onConnectNodes={connectNodes}
         onDeleteNode={deleteNode}
       />
       <output data-testid="node-state">{JSON.stringify(nodes)}</output>
@@ -340,5 +386,25 @@ describe("MapStage boundary", () => {
 
     const nodes = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
     expect(nodes).toHaveLength(1);
+  });
+
+  it("Shiftドラッグで実際のノード状態を親子接続する", async () => {
+    let nextNodeId = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++nextNodeId);
+    const { getByTestId } = await renderReady(<MouseConnectionHarness />);
+
+    act(() => {
+      mockNodePointerHandlers[0].pointerdown?.({
+        globalX: 100,
+        globalY: 60,
+        shiftKey: true,
+      });
+      mockStageHandlers.pointermove?.({ globalX: 220, globalY: 120 });
+      mockStageHandlers.pointerup?.({ globalX: 220, globalY: 120 });
+    });
+
+    const nodes = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
+    expect(nodes.find((node) => node.id === 2)?.parentId).toBe(1);
+    expect(getByTestId("selected-node-id")).toHaveTextContent("2");
   });
 });

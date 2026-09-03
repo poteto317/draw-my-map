@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, type MouseEvent } from "react";
+import { useEffect, useRef, type MouseEvent } from "react";
 import { NodeLabelEditor } from "@/components/map/NodeLabelEditor";
 import { findNodeAtPoint, toLocalPoint } from "@/components/map/mapGeometry";
 import { renderMapScene } from "@/components/map/pixi/renderMapScene";
-import { createStageInteractions } from "@/components/map/pixi/stageInteractions";
 import { usePixiApplication } from "@/components/map/pixi/usePixiApplication";
+import { useMapStageInteractions } from "@/components/map/useMapStageInteractions";
 import { useNodeEditing } from "@/components/map/useNodeEditing";
 import { useNodeKeyboardShortcuts } from "@/components/map/useNodeKeyboardShortcuts";
 import type { Node } from "@/types/node";
@@ -19,6 +19,7 @@ type MapStageProps = {
   onSelectNode: (id: number | null) => void;
   onUpdateLabel: (id: number, label: string) => void;
   onMoveNode: (id: number, x: number, y: number) => void;
+  onConnectNodes: (parentId: number, childId: number) => boolean;
   onDeleteNode: (id: number) => void;
 };
 
@@ -31,36 +32,19 @@ export function MapStage({
   onSelectNode,
   onUpdateLabel,
   onMoveNode,
+  onConnectNodes,
   onDeleteNode,
 }: MapStageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const runtime = usePixiApplication(containerRef);
   const editing = useNodeEditing(nodes, onUpdateLabel);
-
-  const nodesRef = useRef<readonly Node[]>(nodes);
-  const onSelectNodeRef = useRef(onSelectNode);
-  const onMoveNodeRef = useRef(onMoveNode);
-  useLayoutEffect(() => {
-    nodesRef.current = nodes;
-    onSelectNodeRef.current = onSelectNode;
-    onMoveNodeRef.current = onMoveNode;
-  }, [nodes, onSelectNode, onMoveNode]);
-
-  const interactionsRef = useRef<ReturnType<typeof createStageInteractions> | null>(null);
-  interactionsRef.current ??= createStageInteractions({
-    nodesRef,
-    onSelectNodeRef,
-    onMoveNodeRef,
+  const { connectionTargetNodeId, onNodePointerDown } = useMapStageInteractions({
+    runtime,
+    nodes,
+    onSelectNode,
+    onMoveNode,
+    onConnectNodes,
   });
-  const interactions = interactionsRef.current;
-
-  useEffect(() => {
-    if (!runtime) return;
-
-    runtime.app.stage.eventMode = "static";
-    runtime.app.stage.hitArea = runtime.app.screen;
-    return interactions.bind(runtime.app.stage);
-  }, [runtime, interactions]);
 
   useEffect(() => {
     if (!runtime) return;
@@ -69,9 +53,17 @@ export function MapStage({
       nodes,
       selectedNodeId,
       editingNodeId: editing.editingNodeId,
-      onNodePointerDown: interactions.handleNodePointerDown,
+      connectionTargetNodeId,
+      onNodePointerDown,
     });
-  }, [runtime, nodes, selectedNodeId, editing.editingNodeId, interactions]);
+  }, [
+    runtime,
+    nodes,
+    selectedNodeId,
+    editing.editingNodeId,
+    connectionTargetNodeId,
+    onNodePointerDown,
+  ]);
 
   useNodeKeyboardShortcuts({
     selectedNodeId,
