@@ -123,13 +123,14 @@ export function focusViewportOnNode(
 type UseMapViewportReturn = {
   viewport: Viewport;
   viewportRef: LatestValue<Viewport>;
+  setViewport: (next: Viewport) => void;
   panBy: (dx: number, dy: number) => void;
   zoomAt: (anchor: Point, requestedScale: number) => void;
   focusNode: (node: Node, screen: ScreenSize) => void;
 };
 ```
 
-更新は`viewportRef.current`を同期的に進めた後にReact stateへ反映する。連続イベント、同一batch、Reactの保留レンダーが直前の更新を上書きしないよう、すべてのcommandは最新Refを基準にする。公開commandの参照は再レンダー後も安定させる。
+`setViewport`は、パンとピンチの開始時viewportから計算した絶対値を反映する内部向けcommandである。無効な値は拒否する。更新は`viewportRef.current`を同期的に進めた後にReact stateへ反映する。連続イベント、同一batch、Reactの保留レンダーが直前の更新を上書きしないよう、増分commandは最新Refを基準にする。公開commandの参照は再レンダー後も安定させる。
 
 `stageInteractions`は次の制御面を返し、wheelとkeyboardの境界から内部状態を直接変更させない。
 
