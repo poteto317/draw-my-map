@@ -23,6 +23,7 @@ describe("renderMapScene", () => {
       nodes,
       selectedNodeId: null,
       editingNodeId: null,
+      connectionTargetNodeId: null,
       onNodePointerDown: jest.fn(),
     });
 
@@ -42,6 +43,7 @@ describe("renderMapScene", () => {
       nodes: [],
       selectedNodeId: null,
       editingNodeId: null,
+      connectionTargetNodeId: null,
       onNodePointerDown: jest.fn(),
     });
 

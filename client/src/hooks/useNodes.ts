@@ -4,7 +4,7 @@ import {
   createRootNode,
   createSiblingNode,
 } from "@/domain/nodes/nodePlacement";
-import { collectSubtreeIds } from "@/domain/nodes/nodeTree";
+import { collectSubtreeIds, connectNodeTree } from "@/domain/nodes/nodeTree";
 import { createMonotonicIdGenerator } from "@/domain/nodes/nodeIdGenerator";
 import type { Node } from "@/types/node";
 
@@ -17,6 +17,7 @@ type UseNodesReturn = {
   selectNode: (id: number | null) => void;
   updateNodeLabel: (id: number, label: string) => void;
   moveNode: (id: number, x: number, y: number) => void;
+  connectNodes: (parentId: number, childId: number) => boolean;
   deleteNode: (id: number) => void;
 };
 
@@ -80,6 +81,15 @@ export function useNodes(): UseNodesReturn {
     );
   }, [updateNodes]);
 
+  const connectNodes = useCallback((parentId: number, childId: number) => {
+    const connectedNodes = connectNodeTree(nodesRef.current, parentId, childId);
+    if (!connectedNodes) return false;
+
+    updateNodes(() => connectedNodes);
+    setSelectedNodeId(childId);
+    return true;
+  }, [updateNodes]);
+
   const deleteNode = useCallback((id: number) => {
     const subtreeIds = collectSubtreeIds(nodesRef.current, id);
     updateNodes((current) => current.filter((node) => !subtreeIds.has(node.id)));
@@ -97,6 +107,7 @@ export function useNodes(): UseNodesReturn {
     selectNode,
     updateNodeLabel,
     moveNode,
+    connectNodes,
     deleteNode,
   };
 }

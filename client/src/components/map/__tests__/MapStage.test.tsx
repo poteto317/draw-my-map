@@ -14,7 +14,10 @@ import type { Node } from "@/types/node";
 type MockPointerEvent = {
   globalX: number;
   globalY: number;
+  pointerId: number;
+  composedPath: () => unknown[];
   target?: unknown;
+  shiftKey?: boolean;
 };
 
 type MockPointerHandler = (event: MockPointerEvent) => void;
@@ -22,6 +25,21 @@ type StageEvent = "pointerdown" | "pointermove" | "pointerup" | "pointerupoutsid
 
 const mockStageHandlers: Partial<Record<StageEvent, MockPointerHandler>> = {};
 const mockNodePointerHandlers: Array<Partial<Record<"pointerdown", MockPointerHandler>>> = [];
+
+function pointer(
+  globalX: number,
+  globalY: number,
+  options: Pick<MockPointerEvent, "shiftKey" | "target"> & { path?: unknown[] } = {},
+): MockPointerEvent {
+  const { path = [mockStage], ...eventOptions } = options;
+  return {
+    globalX,
+    globalY,
+    pointerId: 1,
+    composedPath: () => path,
+    ...eventOptions,
+  };
+}
 
 const mockStage = {
   removeChildren: jest.fn(() => []),
@@ -79,6 +97,7 @@ const defaultProps = {
   onSelectNode: jest.fn(),
   onUpdateLabel: jest.fn(),
   onMoveNode: jest.fn(),
+  onConnectNodes: jest.fn(),
   onDeleteNode: jest.fn(),
 };
 
@@ -121,6 +140,7 @@ function KeyboardCreationHarness({ initiallySelected = true }: { initiallySelect
     selectNode,
     updateNodeLabel,
     moveNode,
+    connectNodes,
     deleteNode,
   } = useNodes();
   const initializedRef = useRef(false);
@@ -143,6 +163,49 @@ function KeyboardCreationHarness({ initiallySelected = true }: { initiallySelect
         onSelectNode={selectNode}
         onUpdateLabel={updateNodeLabel}
         onMoveNode={moveNode}
+        onConnectNodes={connectNodes}
+        onDeleteNode={deleteNode}
+      />
+      <output data-testid="node-state">{JSON.stringify(nodes)}</output>
+      <output data-testid="selected-node-id">{selectedNodeId}</output>
+    </>
+  );
+}
+
+function MouseConnectionHarness() {
+  const {
+    nodes,
+    selectedNodeId,
+    addNode,
+    addChildNode,
+    addSiblingNode,
+    selectNode,
+    updateNodeLabel,
+    moveNode,
+    connectNodes,
+    deleteNode,
+  } = useNodes();
+  const initializedRef = useRef(false);
+
+  useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+    addNode(50, 30);
+    addNode(200, 100);
+  }, [addNode]);
+
+  return (
+    <>
+      <MapStage
+        nodes={nodes}
+        selectedNodeId={selectedNodeId}
+        onDoubleClick={addNode}
+        onAddChildNode={addChildNode}
+        onAddSiblingNode={addSiblingNode}
+        onSelectNode={selectNode}
+        onUpdateLabel={updateNodeLabel}
+        onMoveNode={moveNode}
+        onConnectNodes={connectNodes}
         onDeleteNode={deleteNode}
       />
       <output data-testid="node-state">{JSON.stringify(nodes)}</output>
@@ -280,8 +343,8 @@ describe("MapStage boundary", () => {
 
     act(() => startPendingUpdate());
     act(() => {
-      mockNodePointerHandlers[0].pointerdown?.({ globalX: 100, globalY: 60 });
-      mockStageHandlers.pointermove?.({ globalX: 104, globalY: 64 });
+      mockNodePointerHandlers[0].pointerdown?.(pointer(100, 60));
+      mockStageHandlers.pointermove?.(pointer(104, 64));
     });
 
     expect(pendingOnSelectNode).not.toHaveBeenCalled();
@@ -340,5 +403,21 @@ describe("MapStage boundary", () => {
 
     const nodes = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
     expect(nodes).toHaveLength(1);
+  });
+
+  it("Shiftドラッグで実際のノード状態を親子接続する", async () => {
+    let nextNodeId = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++nextNodeId);
+    const { getByTestId } = await renderReady(<MouseConnectionHarness />);
+
+    act(() => {
+      mockNodePointerHandlers[0].pointerdown?.(pointer(100, 60, { shiftKey: true }));
+      mockStageHandlers.pointermove?.(pointer(220, 120));
+      mockStageHandlers.pointerup?.(pointer(220, 120));
+    });
+
+    const nodes = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
+    expect(nodes.find((node) => node.id === 2)?.parentId).toBe(1);
+    expect(getByTestId("selected-node-id")).toHaveTextContent("2");
   });
 });

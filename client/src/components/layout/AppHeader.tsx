@@ -5,7 +5,7 @@ export function AppHeader() {
         Draw My Map
       </h1>
       <span className="ml-4 text-sm text-zinc-400">
-        ダブルクリックで四角形を追加
+        ダブルクリックでノードを追加・Shift+ドラッグでノードを接続
       </span>
     </header>
   );
