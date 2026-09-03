@@ -112,21 +112,29 @@ describe("useMapStageInteractions", () => {
     expect(result.current.connectionTargetNodeId).toBeNull();
   });
 
-  it("does not bind stage listeners without a runtime", () => {
-    const { stage } = createRuntime();
-
-    const { result } = renderHook(() =>
-      useMapStageInteractions({
-        runtime: null,
-        nodes,
-        onSelectNode: jest.fn(),
-        onMoveNode: jest.fn(),
-        onConnectNodes: jest.fn(),
-      }),
+  it("waits to bind stage listeners until a runtime is available", () => {
+    const { runtime, stage } = createRuntime();
+    const { result, rerender } = renderHook<
+      ReturnType<typeof useMapStageInteractions>,
+      { runtime: Runtime | null }
+    >(
+      ({ runtime: currentRuntime }) =>
+        useMapStageInteractions({
+          runtime: currentRuntime as never,
+          nodes,
+          onSelectNode: jest.fn(),
+          onMoveNode: jest.fn(),
+          onConnectNodes: jest.fn(),
+        }),
+      { initialProps: { runtime: null } },
     );
 
     expect(stage.on).not.toHaveBeenCalled();
     expect(result.current.connectionTargetNodeId).toBeNull();
+
+    rerender({ runtime });
+
+    expect(stage.on).toHaveBeenCalledTimes(4);
   });
 
   it("clears the connection target when the runtime is cleaned up", () => {
