@@ -18,7 +18,7 @@ export function collectSubtreeIds(nodes: readonly Node[], rootId: number): Set<n
   return ids;
 }
 
-function hasAncestor(
+function hasAncestorOrCycle(
   nodesById: ReadonlyMap<number, Node>,
   nodeId: number,
   ancestorId: number,
@@ -26,8 +26,9 @@ function hasAncestor(
   const visitedIds = new Set<number>();
   let currentId: number | null = nodeId;
 
-  while (currentId !== null && !visitedIds.has(currentId)) {
+  while (currentId !== null) {
     if (currentId === ancestorId) return true;
+    if (visitedIds.has(currentId)) return true;
     visitedIds.add(currentId);
     currentId = nodesById.get(currentId)?.parentId ?? null;
   }
@@ -45,7 +46,7 @@ export function canConnectNodes(
   const nodesById = new Map(nodes.map((node) => [node.id, node]));
   if (!nodesById.has(parentId) || !nodesById.has(childId)) return false;
 
-  return !hasAncestor(nodesById, parentId, childId);
+  return !hasAncestorOrCycle(nodesById, parentId, childId);
 }
 
 export function connectNodeTree(

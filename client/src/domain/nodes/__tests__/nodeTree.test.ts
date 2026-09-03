@@ -100,6 +100,16 @@ describe("canConnectNodes", () => {
     expect(canConnectNodes(observedTree, nodeCount, 1)).toBe(false);
     expect(nodeReads).toBeLessThanOrEqual(nodeCount * 2);
   });
+
+  it("rejects connecting beneath a malformed cyclic parent chain", () => {
+    const malformedNodes = [
+      node(1, 2),
+      node(2, 1),
+      node(3, null),
+    ];
+
+    expect(canConnectNodes(malformedNodes, 1, 3)).toBe(false);
+  });
 });
 
 describe("connectNodeTree", () => {
