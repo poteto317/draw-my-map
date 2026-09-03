@@ -724,7 +724,7 @@ export function createStageInteractions({
 - ノードpointerdownは最新の選択コールバックを呼ぶ。
 - Shiftなしのpointerdown・moveが移動を発生させる。
 - Shiftありのpointerdown・pointerupが接続を発生させ、移動を発生させない。
-- 欠損ノードは選択するがジェスチャー副作用を発生させない。
+- 欠損ノードは選択せず、進行中のジェスチャーをキャンセルして後続の移動・接続を発生させない。
 - pointerupとpointerupoutsideの後は追加moveを無視する。
 - 登録した4リスナーを同一参照で解除する。
 
