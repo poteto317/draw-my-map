@@ -1,11 +1,15 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { Viewport } from "@/components/map/mapViewport";
 import { createStageInteractions } from "@/components/map/pixi/stageInteractions";
+import type { LatestValue } from "@/components/map/pixi/pointerGesture";
 import type { PixiRuntime } from "@/components/map/pixi/pixiTypes";
 import type { Node } from "@/types/node";
 
 type UseMapStageInteractionsOptions = {
   runtime: PixiRuntime | null;
   nodes: readonly Node[];
+  viewportRef: LatestValue<Viewport>;
+  onViewportChange: (viewport: Viewport) => void;
   onSelectNode: (id: number | null) => void;
   onMoveNode: (id: number, x: number, y: number) => void;
   onConnectNodes: (parentId: number, childId: number) => void;
@@ -14,6 +18,8 @@ type UseMapStageInteractionsOptions = {
 export function useMapStageInteractions({
   runtime,
   nodes,
+  viewportRef,
+  onViewportChange,
   onSelectNode,
   onMoveNode,
   onConnectNodes,
@@ -24,21 +30,25 @@ export function useMapStageInteractions({
   const onMoveNodeRef = useRef(onMoveNode);
   const onConnectNodesRef = useRef(onConnectNodes);
   const onConnectionTargetChangeRef = useRef(setConnectionTargetNodeId);
+  const onViewportChangeRef = useRef(onViewportChange);
 
   useLayoutEffect(() => {
     nodesRef.current = nodes;
     onSelectNodeRef.current = onSelectNode;
     onMoveNodeRef.current = onMoveNode;
     onConnectNodesRef.current = onConnectNodes;
-  }, [nodes, onSelectNode, onMoveNode, onConnectNodes]);
+    onViewportChangeRef.current = onViewportChange;
+  }, [nodes, onSelectNode, onMoveNode, onConnectNodes, onViewportChange]);
 
   const interactionsRef = useRef<ReturnType<typeof createStageInteractions> | null>(null);
   interactionsRef.current ??= createStageInteractions({
     nodesRef,
+    viewportRef,
     onSelectNodeRef,
     onMoveNodeRef,
     onConnectNodesRef,
     onConnectionTargetChangeRef,
+    onViewportChangeRef,
   });
   const interactions = interactionsRef.current;
 

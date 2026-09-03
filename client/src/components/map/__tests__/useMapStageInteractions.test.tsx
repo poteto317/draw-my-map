@@ -1,12 +1,14 @@
 import { act, renderHook } from "@testing-library/react";
+import { INITIAL_VIEWPORT } from "@/components/map/mapViewport";
 import { useMapStageInteractions } from "@/components/map/useMapStageInteractions";
 import type { Node } from "@/types/node";
 
-type StageEvent = "pointerdown" | "pointermove" | "pointerup" | "pointerupoutside";
+type StageEvent = "pointerdown" | "pointermove" | "pointerup" | "pointerupoutside" | "pointercancel";
 type PointerEvent = {
   globalX: number;
   globalY: number;
   pointerId: number;
+  pointerType: string;
   composedPath: () => unknown[];
   target?: unknown;
   shiftKey?: boolean;
@@ -52,6 +54,7 @@ function pointer(
     globalX,
     globalY,
     pointerId: 1,
+    pointerType: "mouse",
     composedPath: () => path,
     ...eventOptions,
   };
@@ -65,10 +68,13 @@ const nodes: Node[] = [
 describe("useMapStageInteractions", () => {
   it("binds and removes stage listeners with the runtime lifecycle", () => {
     const { runtime, stage } = createRuntime();
+    const viewportRef = { current: INITIAL_VIEWPORT };
     const { unmount } = renderHook(() =>
       useMapStageInteractions({
         runtime: runtime as never,
         nodes,
+        viewportRef,
+        onViewportChange: jest.fn(),
         onSelectNode: jest.fn(),
         onMoveNode: jest.fn(),
         onConnectNodes: jest.fn(),
@@ -77,20 +83,23 @@ describe("useMapStageInteractions", () => {
 
     expect(stage.eventMode).toBe("static");
     expect(stage.hitArea).toBe(runtime.app.screen);
-    expect(stage.on).toHaveBeenCalledTimes(4);
+    expect(stage.on).toHaveBeenCalledTimes(5);
 
     unmount();
 
-    expect(stage.off).toHaveBeenCalledTimes(4);
+    expect(stage.off).toHaveBeenCalledTimes(5);
   });
 
   it("publishes and clears the connection target", () => {
     const { runtime, stage, handlers } = createRuntime();
     const onConnectNodes = jest.fn();
+    const viewportRef = { current: INITIAL_VIEWPORT };
     const { result } = renderHook(() =>
       useMapStageInteractions({
         runtime: runtime as never,
         nodes,
+        viewportRef,
+        onViewportChange: jest.fn(),
         onSelectNode: jest.fn(),
         onMoveNode: jest.fn(),
         onConnectNodes,
@@ -114,6 +123,7 @@ describe("useMapStageInteractions", () => {
 
   it("waits to bind stage listeners until a runtime is available", () => {
     const { runtime, stage } = createRuntime();
+    const viewportRef = { current: INITIAL_VIEWPORT };
     const { result, rerender } = renderHook<
       ReturnType<typeof useMapStageInteractions>,
       { runtime: Runtime | null }
@@ -122,6 +132,8 @@ describe("useMapStageInteractions", () => {
         useMapStageInteractions({
           runtime: currentRuntime as never,
           nodes,
+          viewportRef,
+          onViewportChange: jest.fn(),
           onSelectNode: jest.fn(),
           onMoveNode: jest.fn(),
           onConnectNodes: jest.fn(),
@@ -134,11 +146,12 @@ describe("useMapStageInteractions", () => {
 
     rerender({ runtime });
 
-    expect(stage.on).toHaveBeenCalledTimes(4);
+    expect(stage.on).toHaveBeenCalledTimes(5);
   });
 
   it("clears the connection target when the runtime is cleaned up", () => {
     const initial = createRuntime();
+    const viewportRef = { current: INITIAL_VIEWPORT };
     const { result, rerender } = renderHook<
       ReturnType<typeof useMapStageInteractions>,
       { runtime: Runtime | null }
@@ -147,6 +160,8 @@ describe("useMapStageInteractions", () => {
         useMapStageInteractions({
           runtime: runtime as never,
           nodes,
+          viewportRef,
+          onViewportChange: jest.fn(),
           onSelectNode: jest.fn(),
           onMoveNode: jest.fn(),
           onConnectNodes: jest.fn(),

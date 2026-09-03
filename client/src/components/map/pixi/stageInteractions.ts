@@ -1,6 +1,9 @@
+import { screenToWorld } from "@/components/map/mapViewport";
+import type { Viewport } from "@/components/map/mapViewport";
+import { createCanvasPanGesture } from "@/components/map/pixi/canvasPanGesture";
 import { createNodeConnectionGesture } from "@/components/map/pixi/nodeConnectionGesture";
 import { createNodeMoveGesture } from "@/components/map/pixi/nodeMoveGesture";
-import type { LatestValue, PointerGesture } from "@/components/map/pixi/pointerGesture";
+import type { LatestValue, PointerGesture, PointerSample } from "@/components/map/pixi/pointerGesture";
 import type { Node } from "@/types/node";
 import type { Container, FederatedPointerEvent } from "pixi.js";
 
@@ -8,10 +11,12 @@ export type { LatestValue } from "@/components/map/pixi/pointerGesture";
 
 type StageInteractionOptions = {
   nodesRef: LatestValue<readonly Node[]>;
+  viewportRef: LatestValue<Viewport>;
   onSelectNodeRef: LatestValue<(id: number | null) => void>;
   onMoveNodeRef: LatestValue<(id: number, x: number, y: number) => void>;
   onConnectNodesRef: LatestValue<(parentId: number, childId: number) => void>;
   onConnectionTargetChangeRef: LatestValue<(id: number | null) => void>;
+  onViewportChangeRef: LatestValue<(viewport: Viewport) => void>;
   dragThreshold?: number;
 };
 
@@ -23,20 +28,34 @@ type StageBinding = {
 
 export function createStageInteractions({
   nodesRef,
+  viewportRef,
   onSelectNodeRef,
   onMoveNodeRef,
   onConnectNodesRef,
   onConnectionTargetChangeRef,
+  onViewportChangeRef,
   dragThreshold = 4,
 }: StageInteractionOptions) {
   let activeGesture: { pointerId: number; gesture: PointerGesture } | null = null;
   let activeBinding: StageBinding | null = null;
+
+  const toPointerSample = (event: FederatedPointerEvent): PointerSample => {
+    const screen = { x: event.globalX, y: event.globalY };
+    return {
+      pointerId: event.pointerId,
+      pointerType: event.pointerType || "mouse",
+      screen,
+      world: screenToWorld(screen, viewportRef.current),
+    };
+  };
 
   const cancelActiveGesture = () => {
     const gestureToCancel = activeGesture;
     activeGesture = null;
     gestureToCancel?.gesture.cancel();
   };
+
+  const hasActiveGesture = () => activeGesture !== null;
 
   const handleNodePointerDown = (nodeId: number, event: FederatedPointerEvent) => {
     const bindingAtEntry = activeBinding;
@@ -56,6 +75,7 @@ export function createStageInteractions({
       return;
     }
 
+    const sample = toPointerSample(event);
     const gesture = event.shiftKey
       ? createNodeConnectionGesture({
         sourceNodeId: nodeId,
@@ -65,14 +85,14 @@ export function createStageInteractions({
       })
       : createNodeMoveGesture({
         nodeId,
-        startEvent: event,
+        startSample: sample,
         nodesRef,
         onMoveNodeRef,
         dragThreshold,
       });
     if (!gesture) return;
 
-    const nextGesture = { pointerId: event.pointerId, gesture };
+    const nextGesture = { pointerId: sample.pointerId, gesture };
     activeGesture = nextGesture;
     try {
       onSelectNodeRef.current(nodeId);
@@ -84,7 +104,7 @@ export function createStageInteractions({
 
   const handlePointerMove = (event: FederatedPointerEvent) => {
     if (event.pointerId === activeGesture?.pointerId) {
-      activeGesture.gesture.move(event);
+      activeGesture.gesture.move(toPointerSample(event));
     }
   };
 
@@ -105,11 +125,24 @@ export function createStageInteractions({
         if (
           gestureAtEntry !== null
           && activeGesture === gestureAtEntry
+          && activeBinding === binding
           && event.pointerId === gestureAtEntry.pointerId
         ) {
           cancelActiveGesture();
         }
       }
+      if (activeBinding !== binding || activeGesture !== null) return;
+
+      const sample = toPointerSample(event);
+      activeGesture = {
+        pointerId: sample.pointerId,
+        gesture: createCanvasPanGesture({
+          startSample: sample,
+          startViewport: viewportRef.current,
+          onViewportChangeRef,
+          dragThreshold,
+        }),
+      };
     };
     const handlePointerUp = (event: FederatedPointerEvent) => {
       if (activeBinding !== binding) return;
@@ -117,9 +150,13 @@ export function createStageInteractions({
 
       const gestureToEnd = activeGesture;
       activeGesture = null;
-      gestureToEnd.gesture.end(event);
+      gestureToEnd.gesture.end(toPointerSample(event));
     };
     const handlePointerUpOutside = (event: FederatedPointerEvent) => {
+      if (activeBinding !== binding) return;
+      if (event.pointerId === activeGesture?.pointerId) cancelActiveGesture();
+    };
+    const handlePointerCancel = (event: FederatedPointerEvent) => {
       if (activeBinding !== binding) return;
       if (event.pointerId === activeGesture?.pointerId) cancelActiveGesture();
     };
@@ -131,6 +168,7 @@ export function createStageInteractions({
     stage.on("pointermove", handleStagePointerMove);
     stage.on("pointerup", handlePointerUp);
     stage.on("pointerupoutside", handlePointerUpOutside);
+    stage.on("pointercancel", handlePointerCancel);
 
     let cleanedUp = false;
     return () => {
@@ -143,9 +181,10 @@ export function createStageInteractions({
       stage.off("pointermove", handleStagePointerMove);
       stage.off("pointerup", handlePointerUp);
       stage.off("pointerupoutside", handlePointerUpOutside);
+      stage.off("pointercancel", handlePointerCancel);
       if (ownsBinding) cancelActiveGesture();
     };
   };
 
-  return { bind, handleNodePointerDown };
+  return { bind, handleNodePointerDown, cancelActiveGesture, hasActiveGesture };
 }
