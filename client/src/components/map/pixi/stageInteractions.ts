@@ -10,12 +10,16 @@ type StageInteractionOptions = {
   nodesRef: LatestValue<readonly Node[]>;
   onSelectNodeRef: LatestValue<(id: number | null) => void>;
   onMoveNodeRef: LatestValue<(id: number, x: number, y: number) => void>;
-  onConnectNodesRef: LatestValue<(parentId: number, childId: number) => boolean>;
+  onConnectNodesRef: LatestValue<(parentId: number, childId: number) => void>;
   onConnectionTargetChangeRef: LatestValue<(id: number | null) => void>;
   dragThreshold?: number;
 };
 
 type InteractiveStage = Pick<Container, "on" | "off">;
+
+type StageBinding = {
+  stage: InteractiveStage;
+};
 
 export function createStageInteractions({
   nodesRef,
@@ -25,12 +29,34 @@ export function createStageInteractions({
   onConnectionTargetChangeRef,
   dragThreshold = 4,
 }: StageInteractionOptions) {
-  let activeGesture: PointerGesture | null = null;
+  let activeGesture: { pointerId: number; gesture: PointerGesture } | null = null;
+  let activeBinding: StageBinding | null = null;
+
+  const cancelActiveGesture = () => {
+    const gestureToCancel = activeGesture;
+    activeGesture = null;
+    gestureToCancel?.gesture.cancel();
+  };
 
   const handleNodePointerDown = (nodeId: number, event: FederatedPointerEvent) => {
-    activeGesture?.cancel();
-    onSelectNodeRef.current(nodeId);
-    activeGesture = event.shiftKey
+    const bindingAtEntry = activeBinding;
+    if (
+      bindingAtEntry === null
+      || !event.composedPath().some((target: unknown) => target === bindingAtEntry.stage)
+    ) {
+      return;
+    }
+
+    cancelActiveGesture();
+    if (
+      activeGesture !== null
+      || activeBinding !== bindingAtEntry
+      || !nodesRef.current.some((node) => node.id === nodeId)
+    ) {
+      return;
+    }
+
+    const gesture = event.shiftKey
       ? createNodeConnectionGesture({
         sourceNodeId: nodeId,
         nodesRef,
@@ -44,37 +70,80 @@ export function createStageInteractions({
         onMoveNodeRef,
         dragThreshold,
       });
+    if (!gesture) return;
+
+    const nextGesture = { pointerId: event.pointerId, gesture };
+    activeGesture = nextGesture;
+    try {
+      onSelectNodeRef.current(nodeId);
+    } catch (error) {
+      if (activeGesture === nextGesture) activeGesture = null;
+      throw error;
+    }
   };
 
   const handlePointerMove = (event: FederatedPointerEvent) => {
-    activeGesture?.move(event);
+    if (event.pointerId === activeGesture?.pointerId) {
+      activeGesture.gesture.move(event);
+    }
   };
 
   const bind = (stage: InteractiveStage) => {
+    if (activeBinding !== null) {
+      throw new Error("Stage interactions are already bound");
+    }
+    const binding = { stage };
+    activeBinding = binding;
+
     const handleStagePointerDown = (event: FederatedPointerEvent) => {
-      if (event.target === stage) onSelectNodeRef.current(null);
+      if (activeBinding !== binding || event.target !== stage) return;
+
+      const gestureAtEntry = activeGesture;
+      try {
+        onSelectNodeRef.current(null);
+      } finally {
+        if (
+          gestureAtEntry !== null
+          && activeGesture === gestureAtEntry
+          && event.pointerId === gestureAtEntry.pointerId
+        ) {
+          cancelActiveGesture();
+        }
+      }
     };
     const handlePointerUp = (event: FederatedPointerEvent) => {
-      activeGesture?.end(event);
+      if (activeBinding !== binding) return;
+      if (event.pointerId !== activeGesture?.pointerId) return;
+
+      const gestureToEnd = activeGesture;
       activeGesture = null;
+      gestureToEnd.gesture.end(event);
     };
-    const handlePointerUpOutside = () => {
-      activeGesture?.cancel();
-      activeGesture = null;
+    const handlePointerUpOutside = (event: FederatedPointerEvent) => {
+      if (activeBinding !== binding) return;
+      if (event.pointerId === activeGesture?.pointerId) cancelActiveGesture();
+    };
+    const handleStagePointerMove = (event: FederatedPointerEvent) => {
+      if (activeBinding === binding) handlePointerMove(event);
     };
 
     stage.on("pointerdown", handleStagePointerDown);
-    stage.on("pointermove", handlePointerMove);
+    stage.on("pointermove", handleStagePointerMove);
     stage.on("pointerup", handlePointerUp);
     stage.on("pointerupoutside", handlePointerUpOutside);
 
+    let cleanedUp = false;
     return () => {
-      activeGesture?.cancel();
-      activeGesture = null;
+      if (cleanedUp) return;
+      cleanedUp = true;
+      const ownsBinding = activeBinding === binding;
+      if (ownsBinding) activeBinding = null;
+
       stage.off("pointerdown", handleStagePointerDown);
-      stage.off("pointermove", handlePointerMove);
+      stage.off("pointermove", handleStagePointerMove);
       stage.off("pointerup", handlePointerUp);
       stage.off("pointerupoutside", handlePointerUpOutside);
+      if (ownsBinding) cancelActiveGesture();
     };
   };
 

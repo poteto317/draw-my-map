@@ -14,6 +14,8 @@ import type { Node } from "@/types/node";
 type MockPointerEvent = {
   globalX: number;
   globalY: number;
+  pointerId: number;
+  composedPath: () => unknown[];
   target?: unknown;
   shiftKey?: boolean;
 };
@@ -23,6 +25,21 @@ type StageEvent = "pointerdown" | "pointermove" | "pointerup" | "pointerupoutsid
 
 const mockStageHandlers: Partial<Record<StageEvent, MockPointerHandler>> = {};
 const mockNodePointerHandlers: Array<Partial<Record<"pointerdown", MockPointerHandler>>> = [];
+
+function pointer(
+  globalX: number,
+  globalY: number,
+  options: Pick<MockPointerEvent, "shiftKey" | "target"> & { path?: unknown[] } = {},
+): MockPointerEvent {
+  const { path = [mockStage], ...eventOptions } = options;
+  return {
+    globalX,
+    globalY,
+    pointerId: 1,
+    composedPath: () => path,
+    ...eventOptions,
+  };
+}
 
 const mockStage = {
   removeChildren: jest.fn(() => []),
@@ -80,7 +97,7 @@ const defaultProps = {
   onSelectNode: jest.fn(),
   onUpdateLabel: jest.fn(),
   onMoveNode: jest.fn(),
-  onConnectNodes: jest.fn(() => true),
+  onConnectNodes: jest.fn(),
   onDeleteNode: jest.fn(),
 };
 
@@ -326,8 +343,8 @@ describe("MapStage boundary", () => {
 
     act(() => startPendingUpdate());
     act(() => {
-      mockNodePointerHandlers[0].pointerdown?.({ globalX: 100, globalY: 60 });
-      mockStageHandlers.pointermove?.({ globalX: 104, globalY: 64 });
+      mockNodePointerHandlers[0].pointerdown?.(pointer(100, 60));
+      mockStageHandlers.pointermove?.(pointer(104, 64));
     });
 
     expect(pendingOnSelectNode).not.toHaveBeenCalled();
@@ -394,13 +411,9 @@ describe("MapStage boundary", () => {
     const { getByTestId } = await renderReady(<MouseConnectionHarness />);
 
     act(() => {
-      mockNodePointerHandlers[0].pointerdown?.({
-        globalX: 100,
-        globalY: 60,
-        shiftKey: true,
-      });
-      mockStageHandlers.pointermove?.({ globalX: 220, globalY: 120 });
-      mockStageHandlers.pointerup?.({ globalX: 220, globalY: 120 });
+      mockNodePointerHandlers[0].pointerdown?.(pointer(100, 60, { shiftKey: true }));
+      mockStageHandlers.pointermove?.(pointer(220, 120));
+      mockStageHandlers.pointerup?.(pointer(220, 120));
     });
 
     const nodes = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];

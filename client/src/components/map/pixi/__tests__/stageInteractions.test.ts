@@ -4,6 +4,8 @@ import type { Node } from "@/types/node";
 type PointerEvent = {
   globalX: number;
   globalY: number;
+  pointerId: number;
+  composedPath: () => unknown[];
   target?: unknown;
   shiftKey?: boolean;
 };
@@ -15,19 +17,25 @@ type FakeStage = {
   off: jest.Mock;
 };
 
+let boundStageForPointer: FakeStage | null = null;
+
 function pointer(
   globalX: number,
   globalY: number,
   target?: unknown,
   shiftKey = false,
+  pointerId = 1,
+  path?: unknown[],
 ): PointerEvent {
-  return { globalX, globalY, target, shiftKey };
+  const eventPath = path ?? (boundStageForPointer === null ? [] : [boundStageForPointer]);
+  return { globalX, globalY, pointerId, target, shiftKey, composedPath: () => eventPath };
 }
 
 function createStage() {
   const handlers: Partial<Record<"pointerdown" | "pointermove" | "pointerup" | "pointerupoutside", Handler>> = {};
   const stage: FakeStage = {
     on: jest.fn((event: keyof typeof handlers, handler: Handler): FakeStage => {
+      boundStageForPointer = stage;
       handlers[event] = handler;
       return stage;
     }),
@@ -60,14 +68,16 @@ function createController(overrides: Partial<{
   nodes: readonly Node[];
   onSelectNode: (id: number | null) => void;
   onMoveNode: (id: number, x: number, y: number) => void;
-  onConnectNodes: (parentId: number, childId: number) => boolean;
+  onConnectNodes: (parentId: number, childId: number) => void;
   onConnectionTargetChange: (id: number | null) => void;
   dragThreshold: number;
 }> = {}) {
   const nodesRef = { current: overrides.nodes ?? [node] };
   const onSelectNodeRef = { current: overrides.onSelectNode ?? jest.fn() };
   const onMoveNodeRef = { current: overrides.onMoveNode ?? jest.fn() };
-  const onConnectNodesRef = { current: overrides.onConnectNodes ?? jest.fn(() => true) };
+  const onConnectNodesRef = {
+    current: overrides.onConnectNodes ?? jest.fn<void, [number, number]>(),
+  };
   const onConnectionTargetChangeRef = {
     current: overrides.onConnectionTargetChange ?? jest.fn(),
   };
@@ -106,7 +116,9 @@ describe("createStageInteractions", () => {
   });
 
   it("selects a node using the latest selection callback", () => {
+    const { stage } = createStage();
     const { controller, onSelectNodeRef } = createController();
+    controller.bind(stage as never);
     const latestOnSelectNode = jest.fn();
     onSelectNodeRef.current = latestOnSelectNode;
 
@@ -127,7 +139,7 @@ describe("createStageInteractions", () => {
     expect(onConnectNodesRef.current).not.toHaveBeenCalled();
   });
 
-  it("selects a missing node without retaining gesture side effects", () => {
+  it("cancels the active gesture without selecting a node missing from the latest snapshot", () => {
     const { stage, handlers } = createStage();
     const {
       controller,
@@ -145,7 +157,7 @@ describe("createStageInteractions", () => {
     handlers.pointermove?.(pointer(120, 80));
     handlers.pointerup?.(pointer(120, 80));
 
-    expect(onSelectNodeRef.current).toHaveBeenCalledWith(1);
+    expect((onSelectNodeRef.current as jest.Mock).mock.calls).toEqual([[1]]);
     expect(onMoveNodeRef.current).not.toHaveBeenCalled();
     expect(onConnectNodesRef.current).not.toHaveBeenCalled();
     expect(onConnectionTargetChangeRef.current).not.toHaveBeenCalled();
@@ -203,6 +215,173 @@ describe("createStageInteractions", () => {
     expect(onConnectionTargetChangeRef.current).toHaveBeenLastCalledWith(null);
   });
 
+  it("ignores blank-stage, move, and pointerup events from a different pointer", () => {
+    const { stage, handlers } = createStage();
+    const {
+      controller,
+      onConnectNodesRef,
+      onConnectionTargetChangeRef,
+    } = createController({ nodes: [node, targetNode] });
+    controller.bind(stage as never);
+
+    controller.handleNodePointerDown(1, pointer(50, 50, undefined, true, 1) as never);
+    handlers.pointerdown?.(pointer(0, 0, stage, false, 2));
+    handlers.pointermove?.(pointer(220, 60, undefined, false, 2));
+    handlers.pointerup?.(pointer(220, 60, undefined, false, 2));
+
+    expect(onConnectionTargetChangeRef.current).not.toHaveBeenCalled();
+    expect(onConnectNodesRef.current).not.toHaveBeenCalled();
+
+    handlers.pointermove?.(pointer(220, 60, undefined, false, 1));
+    handlers.pointerup?.(pointer(220, 60, undefined, false, 1));
+
+    expect((onConnectionTargetChangeRef.current as jest.Mock).mock.calls).toEqual([[2], [null]]);
+    expect(onConnectNodesRef.current).toHaveBeenCalledWith(1, 2);
+  });
+
+  it("ignores pointerupoutside from a different pointer", () => {
+    const { stage, handlers } = createStage();
+    const {
+      controller,
+      onConnectNodesRef,
+      onConnectionTargetChangeRef,
+    } = createController({ nodes: [node, targetNode] });
+    controller.bind(stage as never);
+
+    controller.handleNodePointerDown(1, pointer(50, 50, undefined, true, 1) as never);
+    handlers.pointermove?.(pointer(220, 60, undefined, false, 1));
+    handlers.pointerupoutside?.(pointer(220, 60, undefined, false, 2));
+    handlers.pointerup?.(pointer(220, 60, undefined, false, 1));
+
+    expect((onConnectionTargetChangeRef.current as jest.Mock).mock.calls).toEqual([[2], [null]]);
+    expect(onConnectNodesRef.current).toHaveBeenCalledWith(1, 2);
+  });
+
+  it("cancels the active gesture when its pointer starts again on the blank stage", () => {
+    const { stage, handlers } = createStage();
+    const {
+      controller,
+      onSelectNodeRef,
+      onConnectNodesRef,
+      onConnectionTargetChangeRef,
+    } = createController({ nodes: [node, targetNode] });
+    controller.bind(stage as never);
+
+    controller.handleNodePointerDown(1, pointer(50, 50, undefined, true, 1) as never);
+    handlers.pointermove?.(pointer(220, 60, undefined, false, 1));
+    handlers.pointerdown?.(pointer(0, 0, stage, false, 1));
+    handlers.pointerup?.(pointer(220, 60, undefined, false, 1));
+
+    expect((onSelectNodeRef.current as jest.Mock).mock.calls).toEqual([[1], [null]]);
+    expect((onConnectionTargetChangeRef.current as jest.Mock).mock.calls).toEqual([[2], [null]]);
+    expect(onConnectNodesRef.current).not.toHaveBeenCalled();
+  });
+
+  it("preserves a gesture started synchronously from the previous gesture cancel callback", () => {
+    const { stage, handlers } = createStage();
+    const onMoveNode = jest.fn();
+    const { controller, onConnectionTargetChangeRef } = createController({
+      nodes: [node, targetNode],
+      onMoveNode,
+    });
+    onConnectionTargetChangeRef.current = jest.fn((id: number | null) => {
+      if (id === null) {
+        controller.handleNodePointerDown(1, pointer(50, 50, undefined, false, 2) as never);
+      }
+    });
+    controller.bind(stage as never);
+
+    controller.handleNodePointerDown(1, pointer(50, 50, undefined, true, 1) as never);
+    handlers.pointermove?.(pointer(220, 60, undefined, false, 1));
+    handlers.pointerdown?.(pointer(0, 0, stage, false, 1));
+    handlers.pointermove?.(pointer(60, 60, undefined, false, 2));
+
+    expect(onMoveNode).toHaveBeenCalledWith(1, 30, 50);
+  });
+
+  it("preserves a gesture started from cancel while a node pointerdown replaces the old gesture", () => {
+    const { stage, handlers } = createStage();
+    const onMoveNode = jest.fn();
+    let startedNextGesture = false;
+    const { controller, onConnectionTargetChangeRef } = createController({
+      nodes: [node, targetNode],
+      onMoveNode,
+    });
+    onConnectionTargetChangeRef.current = jest.fn((id: number | null) => {
+      if (id === null && !startedNextGesture) {
+        startedNextGesture = true;
+        controller.handleNodePointerDown(1, pointer(50, 50, undefined, false, 2) as never);
+      }
+    });
+    controller.bind(stage as never);
+
+    controller.handleNodePointerDown(1, pointer(50, 50, undefined, true, 1) as never);
+    handlers.pointermove?.(pointer(220, 60, undefined, false, 1));
+    controller.handleNodePointerDown(1, pointer(50, 50, undefined, false, 3) as never);
+    handlers.pointermove?.(pointer(60, 60, undefined, false, 2));
+
+    expect(onMoveNode).toHaveBeenCalledWith(1, 30, 50);
+  });
+
+  it("preserves a gesture started synchronously from the previous gesture end callback", () => {
+    const { stage, handlers } = createStage();
+    const onMoveNode = jest.fn();
+    const { controller, onConnectNodesRef } = createController({
+      nodes: [node, targetNode],
+      onMoveNode,
+    });
+    onConnectNodesRef.current = jest.fn(() => {
+      controller.handleNodePointerDown(1, pointer(50, 50, undefined, false, 2) as never);
+    });
+    controller.bind(stage as never);
+
+    controller.handleNodePointerDown(1, pointer(50, 50, undefined, true, 1) as never);
+    handlers.pointerup?.(pointer(220, 60, undefined, false, 1));
+    handlers.pointermove?.(pointer(60, 60, undefined, false, 2));
+
+    expect(onMoveNode).toHaveBeenCalledWith(1, 30, 50);
+  });
+
+  it("preserves a gesture started synchronously from the node selection callback", () => {
+    const { stage, handlers } = createStage();
+    const onMoveNode = jest.fn();
+    let startedNextGesture = false;
+    const { controller, onSelectNodeRef } = createController({ onMoveNode });
+    onSelectNodeRef.current = jest.fn((id: number | null) => {
+      if (id === 1 && !startedNextGesture) {
+        startedNextGesture = true;
+        controller.handleNodePointerDown(1, pointer(50, 50, undefined, false, 2) as never);
+      }
+    });
+    controller.bind(stage as never);
+
+    controller.handleNodePointerDown(1, pointer(50, 50, undefined, false, 1) as never);
+    handlers.pointermove?.(pointer(60, 60, undefined, false, 2));
+
+    expect(onMoveNode).toHaveBeenCalledWith(1, 30, 50);
+  });
+
+  it("preserves a gesture started synchronously from the blank selection callback", () => {
+    const { stage, handlers } = createStage();
+    const onMoveNode = jest.fn();
+    const { controller, onSelectNodeRef } = createController({
+      nodes: [node, targetNode],
+      onMoveNode,
+    });
+    onSelectNodeRef.current = jest.fn((id: number | null) => {
+      if (id === null) {
+        controller.handleNodePointerDown(1, pointer(50, 50, undefined, false, 1) as never);
+      }
+    });
+    controller.bind(stage as never);
+
+    controller.handleNodePointerDown(1, pointer(50, 50, undefined, true, 1) as never);
+    handlers.pointerdown?.(pointer(0, 0, stage, false, 1));
+    handlers.pointermove?.(pointer(60, 60, undefined, false, 1));
+
+    expect(onMoveNode).toHaveBeenCalledWith(1, 30, 50);
+  });
+
   it("cancels the active connection before replacing it with a new pointerdown", () => {
     const { stage, handlers } = createStage();
     const onConnectionTargetChange = jest.fn();
@@ -231,5 +410,117 @@ describe("createStageInteractions", () => {
     for (const eventName of ["pointerdown", "pointermove", "pointerup", "pointerupoutside"] as const) {
       expect(stage.off).toHaveBeenCalledWith(eventName, registeredHandlers[eventName]);
     }
+  });
+
+  it("removes every listener even when active gesture cancellation throws", () => {
+    const { stage, handlers } = createStage();
+    const onConnectionTargetChange = jest.fn((id: number | null) => {
+      if (id === null) throw new Error("target cleanup failed");
+    });
+    const { controller } = createController({
+      nodes: [node, targetNode],
+      onConnectionTargetChange,
+    });
+    const cleanup = controller.bind(stage as never);
+
+    controller.handleNodePointerDown(1, pointer(50, 50, undefined, true) as never);
+    handlers.pointermove?.(pointer(220, 60));
+
+    expect(cleanup).toThrow("target cleanup failed");
+    expect(stage.off).toHaveBeenCalledTimes(4);
+    expect(handlers).toEqual({});
+  });
+
+  it("does not carry a gesture started from cleanup into the next binding", () => {
+    const first = createStage();
+    const second = createStage();
+    const onMoveNode = jest.fn();
+    const { controller, onConnectionTargetChangeRef } = createController({
+      nodes: [node, targetNode],
+      onMoveNode,
+    });
+    onConnectionTargetChangeRef.current = jest.fn((id: number | null) => {
+      if (id === null) {
+        controller.handleNodePointerDown(1, pointer(50, 50, undefined, false, 2) as never);
+      }
+    });
+    const cleanup = controller.bind(first.stage as never);
+
+    controller.handleNodePointerDown(1, pointer(50, 50, undefined, true, 1) as never);
+    first.handlers.pointermove?.(pointer(220, 60, undefined, false, 1));
+    cleanup();
+    controller.bind(second.stage as never);
+    second.handlers.pointermove?.(pointer(60, 60, undefined, false, 2));
+
+    expect(onMoveNode).not.toHaveBeenCalled();
+
+    controller.handleNodePointerDown(1, pointer(50, 50, undefined, false, 3) as never);
+    second.handlers.pointermove?.(pointer(60, 60, undefined, false, 3));
+
+    expect(onMoveNode).toHaveBeenCalledWith(1, 30, 50);
+  });
+
+  it("rejects a second binding until the current binding is cleaned up", () => {
+    const first = createStage();
+    const second = createStage();
+    const { controller } = createController();
+    const cleanup = controller.bind(first.stage as never);
+
+    expect(() => controller.bind(second.stage as never)).toThrow(
+      "Stage interactions are already bound",
+    );
+
+    cleanup();
+
+    expect(() => controller.bind(second.stage as never)).not.toThrow();
+  });
+
+  it("keeps a rebound gesture when an old cleanup function is called again", () => {
+    const first = createStage();
+    const second = createStage();
+    const onMoveNode = jest.fn();
+    const { controller } = createController({ onMoveNode });
+    const cleanupFirst = controller.bind(first.stage as never);
+    cleanupFirst();
+    controller.bind(second.stage as never);
+
+    controller.handleNodePointerDown(1, pointer(50, 50, undefined, false, 2) as never);
+    cleanupFirst();
+    second.handlers.pointermove?.(pointer(60, 60, undefined, false, 2));
+
+    expect(onMoveNode).toHaveBeenCalledWith(1, 30, 50);
+  });
+
+  it("ignores a delayed node pointerdown from the previous stage binding", () => {
+    const first = createStage();
+    const second = createStage();
+    const onMoveNode = jest.fn();
+    const onSelectNode = jest.fn();
+    const { controller } = createController({ onMoveNode, onSelectNode });
+    const cleanupFirst = controller.bind(first.stage as never);
+    const delayedFirstEvent = pointer(
+      50,
+      50,
+      undefined,
+      false,
+      1,
+      [first.stage],
+    );
+    cleanupFirst();
+    controller.bind(second.stage as never);
+
+    controller.handleNodePointerDown(1, pointer(
+      50,
+      50,
+      undefined,
+      false,
+      2,
+      [second.stage],
+    ) as never);
+    controller.handleNodePointerDown(1, delayedFirstEvent as never);
+    second.handlers.pointermove?.(pointer(60, 60, undefined, false, 2));
+
+    expect(onSelectNode.mock.calls).toEqual([[1]]);
+    expect(onMoveNode).toHaveBeenCalledWith(1, 30, 50);
   });
 });

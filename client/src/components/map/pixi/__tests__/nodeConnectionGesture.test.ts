@@ -11,10 +11,10 @@ const source: Node = {
   label: "Source",
 };
 const target: Node = { ...source, id: 2, x: 200, label: "Target" };
-const pointer = (globalX: number, globalY: number) => ({ globalX, globalY });
+const pointer = (globalX: number, globalY: number) => ({ globalX, globalY, pointerId: 1 });
 
 function createGesture(nodes: readonly Node[] = [source, target]) {
-  const onConnectNodesRef = { current: jest.fn(() => true) };
+  const onConnectNodesRef = { current: jest.fn() };
   const onConnectionTargetChangeRef = { current: jest.fn() };
   const gesture = createNodeConnectionGesture({
     sourceNodeId: 1,
@@ -54,7 +54,7 @@ describe("createNodeConnectionGesture", () => {
   it("rejects a target that would create a cycle", () => {
     const parent = { ...source, parentId: null };
     const child = { ...target, parentId: 1 };
-    const onConnectNodesRef = { current: jest.fn(() => true) };
+    const onConnectNodesRef = { current: jest.fn() };
     const onConnectionTargetChangeRef = { current: jest.fn() };
     const gesture = createNodeConnectionGesture({
       sourceNodeId: 2,
@@ -101,8 +101,8 @@ describe("createNodeConnectionGesture", () => {
   });
 
   it("uses the latest nodes and callbacks", () => {
-    const initialConnect = jest.fn(() => true);
-    const latestConnect = jest.fn(() => true);
+    const initialConnect = jest.fn();
+    const latestConnect = jest.fn();
     const initialTargetChange = jest.fn();
     const latestTargetChange = jest.fn();
     const nodesRef = { current: [source] as readonly Node[] };
@@ -125,5 +125,53 @@ describe("createNodeConnectionGesture", () => {
     expect(initialTargetChange).not.toHaveBeenCalled();
     expect(latestConnect).toHaveBeenCalledWith(1, 2);
     expect(latestTargetChange.mock.calls).toEqual([[2], [null]]);
+  });
+
+  it("finishes before a connect callback publishes the next gesture target", () => {
+    const onConnectionTargetChange = jest.fn();
+    const onConnectionTargetChangeRef = { current: onConnectionTargetChange };
+    const onConnectNodesRef = {
+      current: jest.fn(() => {
+        const nextGesture = createNodeConnectionGesture({
+          sourceNodeId: 1,
+          nodesRef: { current: [source, target] },
+          onConnectNodesRef: { current: jest.fn() },
+          onConnectionTargetChangeRef,
+        });
+        nextGesture?.move(pointer(220, 60) as never);
+      }),
+    };
+    const gesture = createNodeConnectionGesture({
+      sourceNodeId: 1,
+      nodesRef: { current: [source, target] },
+      onConnectNodesRef,
+      onConnectionTargetChangeRef,
+    });
+
+    gesture?.move(pointer(220, 60) as never);
+    gesture?.end(pointer(220, 60) as never);
+
+    expect(onConnectionTargetChange.mock.calls).toEqual([[2], [null], [2]]);
+  });
+
+  it("remains finished when the connect callback throws", () => {
+    const onConnectNodesRef = {
+      current: jest.fn(() => {
+        throw new Error("connect failed");
+      }),
+    };
+    const onConnectionTargetChangeRef = { current: jest.fn() };
+    const gesture = createNodeConnectionGesture({
+      sourceNodeId: 1,
+      nodesRef: { current: [source, target] },
+      onConnectNodesRef,
+      onConnectionTargetChangeRef,
+    });
+    gesture?.move(pointer(220, 60) as never);
+
+    expect(() => gesture?.end(pointer(220, 60) as never)).toThrow("connect failed");
+    expect(() => gesture?.end(pointer(220, 60) as never)).not.toThrow();
+    expect(onConnectNodesRef.current).toHaveBeenCalledTimes(1);
+    expect(onConnectionTargetChangeRef.current.mock.calls).toEqual([[2], [null]]);
   });
 });

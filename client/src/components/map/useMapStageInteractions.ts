@@ -8,7 +8,7 @@ type UseMapStageInteractionsOptions = {
   nodes: readonly Node[];
   onSelectNode: (id: number | null) => void;
   onMoveNode: (id: number, x: number, y: number) => void;
-  onConnectNodes: (parentId: number, childId: number) => boolean;
+  onConnectNodes: (parentId: number, childId: number) => void;
 };
 
 export function useMapStageInteractions({

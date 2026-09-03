@@ -6,7 +6,7 @@ import type { Node } from "@/types/node";
 type NodeConnectionGestureOptions = {
   sourceNodeId: number;
   nodesRef: LatestValue<readonly Node[]>;
-  onConnectNodesRef: LatestValue<(parentId: number, childId: number) => boolean>;
+  onConnectNodesRef: LatestValue<(parentId: number, childId: number) => void>;
   onConnectionTargetChangeRef: LatestValue<(id: number | null) => void>;
 };
 
@@ -50,10 +50,10 @@ export function createNodeConnectionGesture({
     end(event) {
       if (!active) return;
       const droppedNodeId = findTargetId(event);
+      finish();
       if (droppedNodeId !== null) {
         onConnectNodesRef.current(sourceNodeId, droppedNodeId);
       }
-      finish();
     },
     cancel() {
       finish();

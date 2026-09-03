@@ -3,7 +3,15 @@ import { useMapStageInteractions } from "@/components/map/useMapStageInteraction
 import type { Node } from "@/types/node";
 
 type StageEvent = "pointerdown" | "pointermove" | "pointerup" | "pointerupoutside";
-type Handler = (event: { globalX: number; globalY: number; target?: unknown }) => void;
+type PointerEvent = {
+  globalX: number;
+  globalY: number;
+  pointerId: number;
+  composedPath: () => unknown[];
+  target?: unknown;
+  shiftKey?: boolean;
+};
+type Handler = (event: PointerEvent) => void;
 type Stage = {
   eventMode: string;
   hitArea: unknown;
@@ -34,6 +42,21 @@ function createRuntime() {
 
 type Runtime = ReturnType<typeof createRuntime>["runtime"];
 
+function pointer(
+  globalX: number,
+  globalY: number,
+  options: Pick<PointerEvent, "shiftKey" | "target"> & { path?: unknown[] } = {},
+): PointerEvent {
+  const { path = [], ...eventOptions } = options;
+  return {
+    globalX,
+    globalY,
+    pointerId: 1,
+    composedPath: () => path,
+    ...eventOptions,
+  };
+}
+
 const nodes: Node[] = [
   { id: 1, parentId: null, x: 20, y: 40, width: 100, height: 60, label: "親" },
   { id: 2, parentId: null, x: 200, y: 40, width: 100, height: 60, label: "子" },
@@ -48,7 +71,7 @@ describe("useMapStageInteractions", () => {
         nodes,
         onSelectNode: jest.fn(),
         onMoveNode: jest.fn(),
-        onConnectNodes: jest.fn(() => true),
+        onConnectNodes: jest.fn(),
       }),
     );
 
@@ -62,8 +85,8 @@ describe("useMapStageInteractions", () => {
   });
 
   it("publishes and clears the connection target", () => {
-    const { runtime, handlers } = createRuntime();
-    const onConnectNodes = jest.fn(() => true);
+    const { runtime, stage, handlers } = createRuntime();
+    const onConnectNodes = jest.fn();
     const { result } = renderHook(() =>
       useMapStageInteractions({
         runtime: runtime as never,
@@ -75,16 +98,15 @@ describe("useMapStageInteractions", () => {
     );
 
     act(() => {
-      result.current.onNodePointerDown(1, {
-        globalX: 50,
-        globalY: 50,
-        shiftKey: true,
-      } as never);
-      handlers.pointermove?.({ globalX: 220, globalY: 60 });
+      result.current.onNodePointerDown(
+        1,
+        pointer(50, 50, { shiftKey: true, path: [stage] }) as never,
+      );
+      handlers.pointermove?.(pointer(220, 60));
     });
     expect(result.current.connectionTargetNodeId).toBe(2);
 
-    act(() => handlers.pointerup?.({ globalX: 220, globalY: 60 }));
+    act(() => handlers.pointerup?.(pointer(220, 60)));
 
     expect(onConnectNodes).toHaveBeenCalledWith(1, 2);
     expect(result.current.connectionTargetNodeId).toBeNull();
@@ -99,7 +121,7 @@ describe("useMapStageInteractions", () => {
         nodes,
         onSelectNode: jest.fn(),
         onMoveNode: jest.fn(),
-        onConnectNodes: jest.fn(() => true),
+        onConnectNodes: jest.fn(),
       }),
     );
 
@@ -119,18 +141,17 @@ describe("useMapStageInteractions", () => {
           nodes,
           onSelectNode: jest.fn(),
           onMoveNode: jest.fn(),
-          onConnectNodes: jest.fn(() => true),
+          onConnectNodes: jest.fn(),
         }),
       { initialProps: { runtime: initial.runtime } },
     );
 
     act(() => {
-      result.current.onNodePointerDown(1, {
-        globalX: 50,
-        globalY: 50,
-        shiftKey: true,
-      } as never);
-      initial.handlers.pointermove?.({ globalX: 220, globalY: 60 });
+      result.current.onNodePointerDown(
+        1,
+        pointer(50, 50, { shiftKey: true, path: [initial.stage] }) as never,
+      );
+      initial.handlers.pointermove?.(pointer(220, 60));
     });
     expect(result.current.connectionTargetNodeId).toBe(2);
 

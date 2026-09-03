@@ -19,7 +19,7 @@ type MapStageProps = {
   onSelectNode: (id: number | null) => void;
   onUpdateLabel: (id: number, label: string) => void;
   onMoveNode: (id: number, x: number, y: number) => void;
-  onConnectNodes: (parentId: number, childId: number) => boolean;
+  onConnectNodes: (parentId: number, childId: number) => void;
   onDeleteNode: (id: number) => void;
 };
 
