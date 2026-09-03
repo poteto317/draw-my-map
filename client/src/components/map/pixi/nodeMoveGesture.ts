@@ -1,10 +1,9 @@
-import type { LatestValue, PointerGesture } from "@/components/map/pixi/pointerGesture";
+import type { LatestValue, PointerGesture, PointerSample } from "@/components/map/pixi/pointerGesture";
 import type { Node } from "@/types/node";
-import type { FederatedPointerEvent } from "pixi.js";
 
 type NodeMoveGestureOptions = {
   nodeId: number;
-  startEvent: FederatedPointerEvent;
+  startSample: PointerSample;
   nodesRef: LatestValue<readonly Node[]>;
   onMoveNodeRef: LatestValue<(id: number, x: number, y: number) => void>;
   dragThreshold: number;
@@ -12,7 +11,7 @@ type NodeMoveGestureOptions = {
 
 export function createNodeMoveGesture({
   nodeId,
-  startEvent,
+  startSample,
   nodesRef,
   onMoveNodeRef,
   dragThreshold,
@@ -20,8 +19,8 @@ export function createNodeMoveGesture({
   const node = nodesRef.current.find((currentNode) => currentNode.id === nodeId);
   if (!node) return null;
 
-  const startX = startEvent.globalX;
-  const startY = startEvent.globalY;
+  const startScreen = { ...startSample.screen };
+  const startWorld = { ...startSample.world };
   let active = true;
   let dragging = false;
   const finish = () => {
@@ -29,15 +28,19 @@ export function createNodeMoveGesture({
   };
 
   return {
-    move(event) {
+    move(sample) {
       if (!active) return;
-      const dx = event.globalX - startX;
-      const dy = event.globalY - startY;
+      const screenDx = sample.screen.x - startScreen.x;
+      const screenDy = sample.screen.y - startScreen.y;
       if (!dragging) {
-        if (Math.abs(dx) < dragThreshold && Math.abs(dy) < dragThreshold) return;
+        if (Math.abs(screenDx) < dragThreshold && Math.abs(screenDy) < dragThreshold) return;
         dragging = true;
       }
-      onMoveNodeRef.current(nodeId, node.x + dx, node.y + dy);
+      onMoveNodeRef.current(
+        nodeId,
+        node.x + sample.world.x - startWorld.x,
+        node.y + sample.world.y - startWorld.y,
+      );
     },
     end: finish,
     cancel: finish,

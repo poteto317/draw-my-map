@@ -1,5 +1,5 @@
 import { findNodeAtPoint } from "@/components/map/mapGeometry";
-import type { LatestValue, PointerGesture } from "@/components/map/pixi/pointerGesture";
+import type { LatestValue, PointerGesture, PointerSample } from "@/components/map/pixi/pointerGesture";
 import { canConnectNodes } from "@/domain/nodes/nodeTree";
 import type { Node } from "@/types/node";
 
@@ -21,11 +21,8 @@ export function createNodeConnectionGesture({
   let active = true;
   let targetNodeId: number | null = null;
 
-  const findTargetId = (event: { globalX: number; globalY: number }) => {
-    const target = findNodeAtPoint(nodesRef.current, {
-      x: event.globalX,
-      y: event.globalY,
-    });
+  const findTargetId = (sample: PointerSample) => {
+    const target = findNodeAtPoint(nodesRef.current, sample.world);
 
     return target && canConnectNodes(nodesRef.current, sourceNodeId, target.id)
       ? target.id
@@ -40,16 +37,16 @@ export function createNodeConnectionGesture({
   };
 
   return {
-    move(event) {
+    move(sample) {
       if (!active) return;
-      const nextTargetNodeId = findTargetId(event);
+      const nextTargetNodeId = findTargetId(sample);
       if (nextTargetNodeId === targetNodeId) return;
       targetNodeId = nextTargetNodeId;
       onConnectionTargetChangeRef.current(nextTargetNodeId);
     },
-    end(event) {
+    end(sample) {
       if (!active) return;
-      const droppedNodeId = findTargetId(event);
+      const droppedNodeId = findTargetId(sample);
       finish();
       if (droppedNodeId !== null) {
         onConnectNodesRef.current(sourceNodeId, droppedNodeId);

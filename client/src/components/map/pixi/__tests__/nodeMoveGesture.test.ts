@@ -11,13 +11,23 @@ const node: Node = {
   label: "Node",
 };
 
-const pointer = (globalX: number, globalY: number) => ({ globalX, globalY });
+const pointer = (
+  screenX: number,
+  screenY: number,
+  worldX = screenX,
+  worldY = screenY,
+) => ({
+  pointerId: 1,
+  pointerType: "mouse",
+  screen: { x: screenX, y: screenY },
+  world: { x: worldX, y: worldY },
+});
 
 describe("createNodeMoveGesture", () => {
   it("returns null when the source node is missing", () => {
     expect(createNodeMoveGesture({
       nodeId: 1,
-      startEvent: pointer(100, 60) as never,
+      startSample: pointer(100, 60),
       nodesRef: { current: [] },
       onMoveNodeRef: { current: jest.fn() },
       dragThreshold: 4,
@@ -28,13 +38,13 @@ describe("createNodeMoveGesture", () => {
     const onMoveNode = jest.fn();
     const gesture = createNodeMoveGesture({
       nodeId: 1,
-      startEvent: pointer(100, 60) as never,
+      startSample: pointer(100, 60),
       nodesRef: { current: [node] },
       onMoveNodeRef: { current: onMoveNode },
       dragThreshold: 4,
     });
 
-    gesture?.move(pointer(103, 63) as never);
+    gesture?.move(pointer(103, 63));
 
     expect(onMoveNode).not.toHaveBeenCalled();
   });
@@ -43,17 +53,32 @@ describe("createNodeMoveGesture", () => {
     const onMoveNode = jest.fn();
     const gesture = createNodeMoveGesture({
       nodeId: 1,
-      startEvent: pointer(100, 60) as never,
+      startSample: pointer(100, 60),
       nodesRef: { current: [node] },
       onMoveNodeRef: { current: onMoveNode },
       dragThreshold: 4,
     });
 
-    gesture?.move(pointer(104, 61) as never);
-    gesture?.move(pointer(110, 66) as never);
+    gesture?.move(pointer(104, 61));
+    gesture?.move(pointer(110, 66));
 
     expect(onMoveNode).toHaveBeenNthCalledWith(1, 1, 24, 41);
     expect(onMoveNode).toHaveBeenNthCalledWith(2, 1, 30, 46);
+  });
+
+  it("画面ピクセルで閾値を判定しワールド差分で移動する", () => {
+    const onMoveNode = jest.fn();
+    const gesture = createNodeMoveGesture({
+      nodeId: 1,
+      startSample: pointer(100, 60, 50, 30),
+      nodesRef: { current: [node] },
+      onMoveNodeRef: { current: onMoveNode },
+      dragThreshold: 4,
+    });
+
+    gesture?.move(pointer(104, 64, 52, 32));
+
+    expect(onMoveNode).toHaveBeenCalledWith(1, node.x + 2, node.y + 2);
   });
 
   it("preserves the start coordinates when Pixi reuses the pointer event object", () => {
@@ -61,15 +86,17 @@ describe("createNodeMoveGesture", () => {
     const reusedPointer = pointer(100, 60);
     const gesture = createNodeMoveGesture({
       nodeId: 1,
-      startEvent: reusedPointer as never,
+      startSample: reusedPointer,
       nodesRef: { current: [node] },
       onMoveNodeRef: { current: onMoveNode },
       dragThreshold: 4,
     });
 
-    reusedPointer.globalX = 104;
-    reusedPointer.globalY = 61;
-    gesture?.move(reusedPointer as never);
+    reusedPointer.screen.x = 104;
+    reusedPointer.screen.y = 61;
+    reusedPointer.world.x = 104;
+    reusedPointer.world.y = 61;
+    gesture?.move(reusedPointer);
 
     expect(onMoveNode).toHaveBeenCalledWith(1, 24, 41);
   });
@@ -82,20 +109,20 @@ describe("createNodeMoveGesture", () => {
       const onMoveNodeRef = { current: initial };
       const gesture = createNodeMoveGesture({
         nodeId: 1,
-        startEvent: pointer(100, 60) as never,
+        startSample: pointer(100, 60),
         nodesRef: { current: [node] },
         onMoveNodeRef,
         dragThreshold: 4,
       });
       onMoveNodeRef.current = latest;
 
-      gesture?.move(pointer(104, 64) as never);
+      gesture?.move(pointer(104, 64));
       if (finish === "end") {
-        gesture?.end(pointer(104, 64) as never);
+        gesture?.end(pointer(104, 64));
       } else {
         gesture?.cancel();
       }
-      gesture?.move(pointer(110, 70) as never);
+      gesture?.move(pointer(110, 70));
 
       expect(initial).not.toHaveBeenCalled();
       expect(latest).toHaveBeenCalledTimes(1);

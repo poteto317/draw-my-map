@@ -1,4 +1,5 @@
 import { createNodeConnectionGesture } from "@/components/map/pixi/nodeConnectionGesture";
+import type { PointerSample } from "@/components/map/pixi/pointerGesture";
 import type { Node } from "@/types/node";
 
 const source: Node = {
@@ -11,7 +12,18 @@ const source: Node = {
   label: "Source",
 };
 const target: Node = { ...source, id: 2, x: 200, label: "Target" };
-const pointer = (globalX: number, globalY: number) => ({ globalX, globalY, pointerId: 1 });
+
+const pointer = (
+  screenX: number,
+  screenY: number,
+  worldX = screenX,
+  worldY = screenY,
+): PointerSample => ({
+  pointerId: 1,
+  pointerType: "mouse",
+  screen: { x: screenX, y: screenY },
+  world: { x: worldX, y: worldY },
+});
 
 function createGesture(nodes: readonly Node[] = [source, target]) {
   const onConnectNodesRef = { current: jest.fn() };
@@ -35,9 +47,9 @@ describe("createNodeConnectionGesture", () => {
   it("notifies only when the valid target changes", () => {
     const { gesture, onConnectionTargetChangeRef } = createGesture();
 
-    gesture?.move(pointer(220, 60) as never);
-    gesture?.move(pointer(230, 70) as never);
-    gesture?.move(pointer(500, 500) as never);
+    gesture?.move(pointer(220, 60));
+    gesture?.move(pointer(230, 70));
+    gesture?.move(pointer(500, 500));
 
     expect(onConnectionTargetChangeRef.current.mock.calls).toEqual([[2], [null]]);
   });
@@ -45,10 +57,18 @@ describe("createNodeConnectionGesture", () => {
   it("connects from the source to the pointerup target without pointermove", () => {
     const { gesture, onConnectNodesRef, onConnectionTargetChangeRef } = createGesture();
 
-    gesture?.end(pointer(220, 60) as never);
+    gesture?.end(pointer(220, 60));
 
     expect(onConnectNodesRef.current).toHaveBeenCalledWith(1, 2);
     expect(onConnectionTargetChangeRef.current).toHaveBeenLastCalledWith(null);
+  });
+
+  it("非等倍viewportで接続先をワールド座標から判定する", () => {
+    const { gesture, onConnectionTargetChangeRef } = createGesture();
+
+    gesture?.move(pointer(440, 120, 220, 60));
+
+    expect(onConnectionTargetChangeRef.current).toHaveBeenCalledWith(2);
   });
 
   it("rejects a target that would create a cycle", () => {
@@ -63,8 +83,8 @@ describe("createNodeConnectionGesture", () => {
       onConnectionTargetChangeRef,
     });
 
-    gesture?.move(pointer(50, 50) as never);
-    gesture?.end(pointer(50, 50) as never);
+    gesture?.move(pointer(50, 50));
+    gesture?.end(pointer(50, 50));
 
     expect(onConnectionTargetChangeRef.current).not.toHaveBeenCalledWith(1);
     expect(onConnectNodesRef.current).not.toHaveBeenCalled();
@@ -73,7 +93,7 @@ describe("createNodeConnectionGesture", () => {
   it("does not connect when pointerup is on empty space", () => {
     const { gesture, onConnectNodesRef, onConnectionTargetChangeRef } = createGesture();
 
-    gesture?.end(pointer(500, 500) as never);
+    gesture?.end(pointer(500, 500));
 
     expect(onConnectNodesRef.current).not.toHaveBeenCalled();
     expect(onConnectionTargetChangeRef.current).toHaveBeenLastCalledWith(null);
@@ -82,7 +102,7 @@ describe("createNodeConnectionGesture", () => {
   it("cancels without connecting and clears the candidate", () => {
     const { gesture, onConnectNodesRef, onConnectionTargetChangeRef } = createGesture();
 
-    gesture?.move(pointer(220, 60) as never);
+    gesture?.move(pointer(220, 60));
     gesture?.cancel();
 
     expect(onConnectNodesRef.current).not.toHaveBeenCalled();
@@ -93,8 +113,8 @@ describe("createNodeConnectionGesture", () => {
     const { gesture, onConnectNodesRef, onConnectionTargetChangeRef } = createGesture();
 
     gesture?.cancel();
-    gesture?.move(pointer(220, 60) as never);
-    gesture?.end(pointer(220, 60) as never);
+    gesture?.move(pointer(220, 60));
+    gesture?.end(pointer(220, 60));
 
     expect(onConnectNodesRef.current).not.toHaveBeenCalled();
     expect(onConnectionTargetChangeRef.current.mock.calls).toEqual([[null]]);
@@ -118,8 +138,8 @@ describe("createNodeConnectionGesture", () => {
     nodesRef.current = [source, target];
     onConnectNodesRef.current = latestConnect;
     onConnectionTargetChangeRef.current = latestTargetChange;
-    gesture?.move(pointer(220, 60) as never);
-    gesture?.end(pointer(220, 60) as never);
+    gesture?.move(pointer(220, 60));
+    gesture?.end(pointer(220, 60));
 
     expect(initialConnect).not.toHaveBeenCalled();
     expect(initialTargetChange).not.toHaveBeenCalled();
@@ -138,7 +158,7 @@ describe("createNodeConnectionGesture", () => {
           onConnectNodesRef: { current: jest.fn() },
           onConnectionTargetChangeRef,
         });
-        nextGesture?.move(pointer(220, 60) as never);
+        nextGesture?.move(pointer(220, 60));
       }),
     };
     const gesture = createNodeConnectionGesture({
@@ -148,8 +168,8 @@ describe("createNodeConnectionGesture", () => {
       onConnectionTargetChangeRef,
     });
 
-    gesture?.move(pointer(220, 60) as never);
-    gesture?.end(pointer(220, 60) as never);
+    gesture?.move(pointer(220, 60));
+    gesture?.end(pointer(220, 60));
 
     expect(onConnectionTargetChange.mock.calls).toEqual([[2], [null], [2]]);
   });
@@ -167,10 +187,10 @@ describe("createNodeConnectionGesture", () => {
       onConnectNodesRef,
       onConnectionTargetChangeRef,
     });
-    gesture?.move(pointer(220, 60) as never);
+    gesture?.move(pointer(220, 60));
 
-    expect(() => gesture?.end(pointer(220, 60) as never)).toThrow("connect failed");
-    expect(() => gesture?.end(pointer(220, 60) as never)).not.toThrow();
+    expect(() => gesture?.end(pointer(220, 60))).toThrow("connect failed");
+    expect(() => gesture?.end(pointer(220, 60))).not.toThrow();
     expect(onConnectNodesRef.current).toHaveBeenCalledTimes(1);
     expect(onConnectionTargetChangeRef.current.mock.calls).toEqual([[2], [null]]);
   });
