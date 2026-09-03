@@ -82,6 +82,24 @@ describe("canConnectNodes", () => {
   it("rejects making a descendant the parent of its ancestor", () => {
     expect(canConnectNodes(nodes, 3, 1)).toBe(false);
   });
+
+  it("inspects a reverse-ordered deep tree in linear time", () => {
+    const nodeCount = 100;
+    const deepTree = Array.from(
+      { length: nodeCount },
+      (_, index) => node(nodeCount - index, nodeCount - index === 1 ? null : nodeCount - index - 1),
+    );
+    let nodeReads = 0;
+    const observedTree = new Proxy(deepTree, {
+      get(target, property, receiver) {
+        if (typeof property === "string" && /^\d+$/.test(property)) nodeReads += 1;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    expect(canConnectNodes(observedTree, nodeCount, 1)).toBe(false);
+    expect(nodeReads).toBeLessThanOrEqual(nodeCount * 2);
+  });
 });
 
 describe("connectNodeTree", () => {
