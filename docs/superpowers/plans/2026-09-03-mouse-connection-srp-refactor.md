@@ -513,7 +513,7 @@ import type { Node } from "@/types/node";
 type NodeConnectionGestureOptions = {
   sourceNodeId: number;
   nodesRef: LatestValue<readonly Node[]>;
-  onConnectNodesRef: LatestValue<(parentId: number, childId: number) => boolean>;
+  onConnectNodesRef: LatestValue<(parentId: number, childId: number) => void>;
   onConnectionTargetChangeRef: LatestValue<(id: number | null) => void>;
 };
 
@@ -647,7 +647,7 @@ type StageInteractionOptions = {
   nodesRef: LatestValue<readonly Node[]>;
   onSelectNodeRef: LatestValue<(id: number | null) => void>;
   onMoveNodeRef: LatestValue<(id: number, x: number, y: number) => void>;
-  onConnectNodesRef: LatestValue<(parentId: number, childId: number) => boolean>;
+  onConnectNodesRef: LatestValue<(parentId: number, childId: number) => void>;
   onConnectionTargetChangeRef: LatestValue<(id: number | null) => void>;
   dragThreshold?: number;
 };
@@ -890,7 +890,7 @@ type UseMapStageInteractionsOptions = {
   nodes: readonly Node[];
   onSelectNode: (id: number | null) => void;
   onMoveNode: (id: number, x: number, y: number) => void;
-  onConnectNodes: (parentId: number, childId: number) => boolean;
+  onConnectNodes: (parentId: number, childId: number) => void;
 };
 
 export function useMapStageInteractions({
