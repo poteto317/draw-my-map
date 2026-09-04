@@ -52,4 +52,38 @@ describe("useMapViewport", () => {
     expect(result.current.viewport).toEqual({ offsetX: 10, offsetY: 20, scale: 1 });
     expect(result.current.viewportRef.current).toEqual(result.current.viewport);
   });
+
+  it("同一batchの連続ズームを最新viewportへ適用する", () => {
+    const { result } = renderHook(() => useMapViewport());
+
+    act(() => {
+      result.current.zoomAt({ x: 100, y: 100 }, 2);
+      result.current.zoomAt({ x: 100, y: 100 }, 4);
+    });
+
+    expect(result.current.viewport).toEqual({ offsetX: -300, offsetY: -300, scale: 4 });
+  });
+
+  it("選択ノードを中央へ移して倍率を維持する", () => {
+    const { result } = renderHook(() => useMapViewport());
+    const node = { id: 1, parentId: null, x: 100, y: 50, width: 80, height: 40, label: "" };
+
+    act(() => {
+      result.current.zoomAt({ x: 0, y: 0 }, 2);
+      result.current.focusNode(node, { width: 800, height: 600 });
+    });
+
+    expect(result.current.viewport).toEqual({ offsetX: 120, offsetY: 160, scale: 2 });
+  });
+
+  it("更新後もzoomAtとfocusNodeの参照を維持する", () => {
+    const { result } = renderHook(() => useMapViewport());
+    const zoomAt = result.current.zoomAt;
+    const focusNode = result.current.focusNode;
+
+    act(() => result.current.zoomAt({ x: 0, y: 0 }, 2));
+
+    expect(result.current.zoomAt).toBe(zoomAt);
+    expect(result.current.focusNode).toBe(focusNode);
+  });
 });
