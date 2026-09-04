@@ -15,13 +15,14 @@ type MockPointerEvent = {
   globalX: number;
   globalY: number;
   pointerId: number;
+  pointerType: string;
   composedPath: () => unknown[];
   target?: unknown;
   shiftKey?: boolean;
 };
 
 type MockPointerHandler = (event: MockPointerEvent) => void;
-type StageEvent = "pointerdown" | "pointermove" | "pointerup" | "pointerupoutside";
+type StageEvent = "pointerdown" | "pointermove" | "pointerup" | "pointerupoutside" | "pointercancel";
 
 const mockStageHandlers: Partial<Record<StageEvent, MockPointerHandler>> = {};
 const mockNodePointerHandlers: Array<Partial<Record<"pointerdown", MockPointerHandler>>> = [];
@@ -36,6 +37,7 @@ function pointer(
     globalX,
     globalY,
     pointerId: 1,
+    pointerType: "mouse",
     composedPath: () => path,
     ...eventOptions,
   };
@@ -76,15 +78,18 @@ jest.mock("pixi.js", () => ({
   })),
   Container: jest.fn().mockImplementation(() => {
     const handlers: Partial<Record<"pointerdown", MockPointerHandler>> = {};
-    mockNodePointerHandlers.push(handlers);
-    return {
+    const container = {
       addChild: jest.fn(),
+      position: { set: jest.fn() },
+      scale: { set: jest.fn() },
       on: jest.fn((event: "pointerdown", handler: MockPointerHandler) => {
         handlers[event] = handler;
+        mockNodePointerHandlers.push(handlers);
       }),
       eventMode: "none",
       cursor: "default",
     };
+    return container;
   }),
 }));
 

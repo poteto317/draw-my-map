@@ -3,9 +3,11 @@
 import { useEffect, useRef, type MouseEvent } from "react";
 import { NodeLabelEditor } from "@/components/map/NodeLabelEditor";
 import { findNodeAtPoint, toLocalPoint } from "@/components/map/mapGeometry";
+import { screenToWorld } from "@/components/map/mapViewport";
 import { renderMapScene } from "@/components/map/pixi/renderMapScene";
 import { usePixiApplication } from "@/components/map/pixi/usePixiApplication";
 import { useMapStageInteractions } from "@/components/map/useMapStageInteractions";
+import { useMapViewport } from "@/components/map/useMapViewport";
 import { useNodeEditing } from "@/components/map/useNodeEditing";
 import { useNodeKeyboardShortcuts } from "@/components/map/useNodeKeyboardShortcuts";
 import type { Node } from "@/types/node";
@@ -38,9 +40,16 @@ export function MapStage({
   const containerRef = useRef<HTMLDivElement>(null);
   const runtime = usePixiApplication(containerRef);
   const editing = useNodeEditing(nodes, onUpdateLabel);
+  const {
+    viewport,
+    viewportRef,
+    setViewport,
+  } = useMapViewport();
   const { connectionTargetNodeId, onNodePointerDown } = useMapStageInteractions({
     runtime,
     nodes,
+    viewportRef,
+    onViewportChange: setViewport,
     onSelectNode,
     onMoveNode,
     onConnectNodes,
@@ -55,6 +64,7 @@ export function MapStage({
       editingNodeId: editing.editingNodeId,
       connectionTargetNodeId,
       onNodePointerDown,
+      viewport,
     });
   }, [
     runtime,
@@ -63,6 +73,7 @@ export function MapStage({
     editing.editingNodeId,
     connectionTargetNodeId,
     onNodePointerDown,
+    viewport,
   ]);
 
   useNodeKeyboardShortcuts({
@@ -78,14 +89,15 @@ export function MapStage({
     const container = containerRef.current;
     if (!container) return;
 
-    const point = toLocalPoint(
+    const screenPoint = toLocalPoint(
       event.clientX,
       event.clientY,
       container.getBoundingClientRect(),
     );
-    const clickedNode = findNodeAtPoint(nodes, point);
+    const worldPoint = screenToWorld(screenPoint, viewportRef.current);
+    const clickedNode = findNodeAtPoint(nodes, worldPoint);
     if (clickedNode) editing.startEditing(clickedNode.id);
-    else onDoubleClick(point.x, point.y);
+    else onDoubleClick(worldPoint.x, worldPoint.y);
   };
 
   return (
@@ -98,6 +110,7 @@ export function MapStage({
       {editing.editingNode && (
         <NodeLabelEditor
           node={editing.editingNode}
+          viewport={viewport}
           value={editing.editingText}
           onChange={editing.setEditingText}
           onCommit={editing.commitEditing}

@@ -1,17 +1,20 @@
 "use client";
 
 import { useRef } from "react";
+import type { Viewport } from "@/components/map/mapViewport";
+import { worldToScreen } from "@/components/map/mapViewport";
 import type { Node } from "@/types/node";
 
 type NodeLabelEditorProps = {
   node: Node;
+  viewport: Viewport;
   value: string;
   onChange: (value: string) => void;
   onCommit: () => void;
   onCancel: () => void;
 };
 
-export function NodeLabelEditor({ node, value, onChange, onCommit, onCancel }: NodeLabelEditorProps) {
+export function NodeLabelEditor({ node, viewport, value, onChange, onCommit, onCancel }: NodeLabelEditorProps) {
   const actionHandledRef = useRef(false);
 
   const handleBlur = () => {
@@ -19,6 +22,10 @@ export function NodeLabelEditor({ node, value, onChange, onCommit, onCancel }: N
     actionHandledRef.current = true;
     onCommit();
   };
+
+  const position = worldToScreen({ x: node.x, y: node.y }, viewport);
+  const width = node.width * viewport.scale;
+  const height = node.height * viewport.scale;
 
   return (
     <input
@@ -37,13 +44,14 @@ export function NodeLabelEditor({ node, value, onChange, onCommit, onCancel }: N
       }}
       onBlur={handleBlur}
       autoFocus
-      className="absolute z-10 border-2 border-blue-500 bg-white px-2 text-center text-sm text-zinc-800 outline-none"
+      className="absolute z-10 border-2 border-blue-500 bg-white px-2 text-center text-zinc-800 outline-none"
       style={{
-        left: node.x,
-        top: node.y,
-        width: node.width,
-        height: node.height,
-        lineHeight: `${node.height}px`,
+        left: position.x,
+        top: position.y,
+        width,
+        height,
+        lineHeight: `${height}px`,
+        fontSize: 14 * viewport.scale,
       }}
     />
   );

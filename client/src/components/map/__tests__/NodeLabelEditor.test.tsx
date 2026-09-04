@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { INITIAL_VIEWPORT } from "@/components/map/mapViewport";
 import { NodeLabelEditor } from "@/components/map/NodeLabelEditor";
 import type { Node } from "@/types/node";
 
@@ -19,6 +20,7 @@ function renderEditor() {
   const result = render(
     <NodeLabelEditor
       node={node}
+      viewport={INITIAL_VIEWPORT}
       value="下書き"
       onChange={onChange}
       onCommit={onCommit}
@@ -91,6 +93,7 @@ describe("NodeLabelEditor", () => {
       <div onDoubleClick={onParentDoubleClick}>
         <NodeLabelEditor
           node={node}
+          viewport={INITIAL_VIEWPORT}
           value="下書き"
           onChange={jest.fn()}
           onCommit={jest.fn()}
@@ -115,6 +118,28 @@ describe("NodeLabelEditor", () => {
       width: "100px",
       height: "60px",
       lineHeight: "60px",
+    });
+  });
+
+  it("viewportに合わせて編集欄の位置と寸法を変換する", () => {
+    render(
+      <NodeLabelEditor
+        node={node}
+        viewport={{ offsetX: 20, offsetY: -10, scale: 2 }}
+        value="下書き"
+        onChange={jest.fn()}
+        onCommit={jest.fn()}
+        onCancel={jest.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("node-label-input")).toHaveStyle({
+      left: "120px",
+      top: "50px",
+      width: "200px",
+      height: "120px",
+      lineHeight: "120px",
+      fontSize: "28px",
     });
   });
 });
