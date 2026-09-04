@@ -611,4 +611,69 @@ describe("createStageInteractions", () => {
     expect(onSelectNode.mock.calls).toEqual([[1]]);
     expect(onMoveNode).toHaveBeenCalledWith(1, 30, 50);
   });
+
+  it("2本目のtouchでnode gestureをキャンセルしてpinchへ置換する", () => {
+    const { stage, handlers } = createStage();
+    const { controller, onMoveNodeRef, onViewportChangeRef } = createController();
+    controller.bind(stage as never);
+    controller.handleNodePointerDown(1, pointer(100, 100, {
+      pointerId: 1,
+      pointerType: "touch",
+      path: [stage],
+    }) as never);
+
+    handlers.pointerdown?.(pointer(200, 100, {
+      pointerId: 2,
+      pointerType: "touch",
+      target: stage,
+    }));
+    handlers.pointermove?.(pointer(300, 100, {
+      pointerId: 2,
+      pointerType: "touch",
+    }));
+
+    expect(onMoveNodeRef.current).not.toHaveBeenCalled();
+    expect(onViewportChangeRef.current).toHaveBeenCalledWith(expect.objectContaining({ scale: 2 }));
+  });
+
+  it("pinch終了後は残ったtouchのpanを再開しない", () => {
+    const { stage, handlers } = createStage();
+    const { controller, onViewportChangeRef } = createController();
+    controller.bind(stage as never);
+    handlers.pointerdown?.(pointer(0, 0, { pointerId: 1, pointerType: "touch", target: stage }));
+    handlers.pointerdown?.(pointer(100, 0, { pointerId: 2, pointerType: "touch", target: stage }));
+    handlers.pointerup?.(pointer(100, 0, { pointerId: 2, pointerType: "touch" }));
+    onViewportChangeRef.current.mockClear();
+
+    handlers.pointermove?.(pointer(20, 0, { pointerId: 1, pointerType: "touch" }));
+
+    expect(onViewportChangeRef.current).not.toHaveBeenCalled();
+  });
+
+  it("3本目のtouchは固定したpinch pairを置換しない", () => {
+    const { stage, handlers } = createStage();
+    const { controller, onViewportChangeRef } = createController();
+    controller.bind(stage as never);
+    handlers.pointerdown?.(pointer(0, 0, { pointerId: 1, pointerType: "touch", target: stage }));
+    handlers.pointerdown?.(pointer(100, 0, { pointerId: 2, pointerType: "touch", target: stage }));
+    handlers.pointerdown?.(pointer(500, 500, { pointerId: 3, pointerType: "touch", target: stage }));
+    onViewportChangeRef.current.mockClear();
+
+    handlers.pointermove?.(pointer(600, 600, { pointerId: 3, pointerType: "touch" }));
+
+    expect(onViewportChangeRef.current).not.toHaveBeenCalled();
+  });
+
+  it("固定touchのpointercancelでpinchを終了する", () => {
+    const { stage, handlers } = createStage();
+    const { controller, onViewportChangeRef } = createController();
+    controller.bind(stage as never);
+    handlers.pointerdown?.(pointer(0, 0, { pointerId: 1, pointerType: "touch", target: stage }));
+    handlers.pointerdown?.(pointer(100, 0, { pointerId: 2, pointerType: "touch", target: stage }));
+
+    handlers.pointercancel?.(pointer(100, 0, { pointerId: 2, pointerType: "touch" }));
+    handlers.pointermove?.(pointer(200, 0, { pointerId: 1, pointerType: "touch" }));
+
+    expect(onViewportChangeRef.current).not.toHaveBeenCalled();
+  });
 });
