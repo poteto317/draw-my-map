@@ -1,5 +1,6 @@
 import type { LatestValue, PointerGesture, PointerSample } from "@/components/map/pixi/pointerGesture";
 import { createDragActivation } from "@/components/map/pixi/dragActivation";
+import { hasFinitePointerCoordinates } from "@/components/map/pixi/pointerSample";
 import type { Node } from "@/types/node";
 
 type NodeMoveGestureOptions = {
@@ -10,13 +11,6 @@ type NodeMoveGestureOptions = {
   dragThreshold: number;
 };
 
-const hasFiniteCoordinates = (sample: PointerSample): boolean => (
-  Number.isFinite(sample.screen.x)
-  && Number.isFinite(sample.screen.y)
-  && Number.isFinite(sample.world.x)
-  && Number.isFinite(sample.world.y)
-);
-
 export function createNodeMoveGesture({
   nodeId,
   startSample,
@@ -25,7 +19,7 @@ export function createNodeMoveGesture({
   dragThreshold,
 }: NodeMoveGestureOptions): PointerGesture | null {
   const node = nodesRef.current.find((currentNode) => currentNode.id === nodeId);
-  if (!node || !hasFiniteCoordinates(startSample)) return null;
+  if (!node || !hasFinitePointerCoordinates(startSample)) return null;
 
   const dragActivation = createDragActivation(startSample.screen, dragThreshold);
   const startWorld = { ...startSample.world };
@@ -36,7 +30,7 @@ export function createNodeMoveGesture({
 
   return {
     move(sample) {
-      if (!active || !hasFiniteCoordinates(sample)) return;
+      if (!active || !hasFinitePointerCoordinates(sample)) return;
       if (!dragActivation.update(sample.screen)) return;
       const nextX = node.x + sample.world.x - startWorld.x;
       const nextY = node.y + sample.world.y - startWorld.y;

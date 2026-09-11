@@ -4,7 +4,10 @@ import { createNodeConnectionGesture } from "@/components/map/pixi/nodeConnectio
 import { createNodeMoveGesture } from "@/components/map/pixi/nodeMoveGesture";
 import type { LatestValue } from "@/components/map/pixi/pointerGesture";
 import { createPointerGestureSession } from "@/components/map/pixi/pointerGestureSession";
-import { toPointerSample } from "@/components/map/pixi/pointerSample";
+import {
+  hasFinitePointerCoordinates,
+  toPointerSample,
+} from "@/components/map/pixi/pointerSample";
 import { createTouchGestureCoordinator } from "@/components/map/pixi/touchGestureCoordinator";
 import type { Node } from "@/types/node";
 import type { Container, FederatedPointerEvent } from "pixi.js";
@@ -70,6 +73,11 @@ export function createStageInteractions({
     }
 
     const sample = toPointerSample(event, viewportRef.current);
+    if (!hasFinitePointerCoordinates(sample)) return;
+    if (!nodesRef.current.some((node) => node.id === nodeId)) {
+      pointerGestures.cancel();
+      return;
+    }
     if (touchGestures.pointerDown(sample)) return;
 
     pointerGestures.cancel();
@@ -109,6 +117,7 @@ export function createStageInteractions({
 
   const handlePointerMove = (event: FederatedPointerEvent) => {
     const sample = toPointerSample(event, viewportRef.current);
+    if (!hasFinitePointerCoordinates(sample)) return;
     if (touchGestures.pointerMove(sample)) return;
     pointerGestures.move(sample);
   };
@@ -124,6 +133,7 @@ export function createStageInteractions({
       if (activeBinding !== binding || event.target !== stage || event.button !== 0) return;
 
       const sample = toPointerSample(event, viewportRef.current);
+      if (!hasFinitePointerCoordinates(sample)) return;
       if (touchGestures.pointerDown(sample)) return;
 
       const gestureAtEntry = pointerGestures.current();
@@ -142,15 +152,13 @@ export function createStageInteractions({
       }
       if (activeBinding !== binding || pointerGestures.hasActive()) return;
 
-      pointerGestures.start(
-        sample.pointerId,
-        createCanvasPanGesture({
-          startSample: sample,
-          startViewport: viewportRef.current,
-          onViewportChangeRef,
-          dragThreshold,
-        }),
-      );
+      const gesture = createCanvasPanGesture({
+        startSample: sample,
+        startViewport: viewportRef.current,
+        onViewportChangeRef,
+        dragThreshold,
+      });
+      if (gesture) pointerGestures.start(sample.pointerId, gesture);
     };
     const handlePointerUp = (event: FederatedPointerEvent) => {
       if (activeBinding !== binding) return;
@@ -207,7 +215,7 @@ export function createStageInteractions({
       attemptCleanup(() => { stage.off("pointercancel", handlePointerCancel); });
       if (ownsBinding) {
         attemptCleanup(pointerGestures.cancel);
-        attemptCleanup(touchGestures.reset);
+        if (activeBinding === null) attemptCleanup(touchGestures.reset);
       }
       if (hasError) throw firstError;
     };

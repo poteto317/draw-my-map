@@ -3,6 +3,7 @@
 import { useEffect, useRef, type MouseEvent } from "react";
 import { NodeLabelEditor } from "@/components/map/NodeLabelEditor";
 import { resolveMapDoubleClickAction } from "@/components/map/mapDoubleClickAction";
+import { applyViewportTransform } from "@/components/map/pixi/applyViewportTransform";
 import { renderMapScene } from "@/components/map/pixi/renderMapScene";
 import { usePixiApplication } from "@/components/map/pixi/usePixiApplication";
 import { useMapStageInteractions } from "@/components/map/useMapStageInteractions";
@@ -12,6 +13,7 @@ import { useMapWheelZoom } from "@/components/map/useMapWheelZoom";
 import { useNodeEditing } from "@/components/map/useNodeEditing";
 import { useNodeKeyboardShortcuts } from "@/components/map/useNodeKeyboardShortcuts";
 import type { Node } from "@/types/node";
+import type { Container } from "pixi.js";
 
 type MapStageProps = {
   nodes: Node[];
@@ -39,6 +41,7 @@ export function MapStage({
   onDeleteNode,
 }: MapStageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const worldContainerRef = useRef<Container | null>(null);
   const runtime = usePixiApplication(containerRef);
   const editing = useNodeEditing(nodes, onUpdateLabel);
   const {
@@ -82,14 +85,19 @@ export function MapStage({
   useEffect(() => {
     if (!runtime) return;
 
-    renderMapScene(runtime.app, runtime.constructors, {
+    const worldContainer = renderMapScene(runtime.app, runtime.constructors, {
       nodes,
       selectedNodeId,
       editingNodeId: editing.editingNodeId,
       connectionTargetNodeId,
       onNodePointerDown,
-      viewport,
+      viewport: viewportRef.current,
     });
+    worldContainerRef.current = worldContainer;
+
+    return () => {
+      if (worldContainerRef.current === worldContainer) worldContainerRef.current = null;
+    };
   }, [
     runtime,
     nodes,
@@ -97,8 +105,13 @@ export function MapStage({
     editing.editingNodeId,
     connectionTargetNodeId,
     onNodePointerDown,
-    viewport,
+    viewportRef,
   ]);
+
+  useEffect(() => {
+    const worldContainer = worldContainerRef.current;
+    if (worldContainer) applyViewportTransform(worldContainer, viewport);
+  }, [viewport]);
 
   useNodeKeyboardShortcuts({
     selectedNodeId,

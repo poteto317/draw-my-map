@@ -28,8 +28,10 @@ export function createTouchGestureCoordinator({
   let generation = 0;
 
   const cancel = () => {
+    const hadActivePinch = activePinch !== null;
     activePinch?.cancel();
     activePinch = null;
+    if (hadActivePinch && samples.size > 0) suppressUntilAllReleased = true;
   };
 
   return {

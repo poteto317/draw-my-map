@@ -31,11 +31,31 @@ export function isViewportFocusShortcut({
   return key.toLowerCase() === "f" && !ctrlKey && !metaKey && !altKey;
 }
 
+const parseContentEditable = (value: string): boolean | null => {
+  const normalizedValue = value.trim().toLowerCase();
+  if (normalizedValue === "false") return false;
+  if (
+    normalizedValue === ""
+    || normalizedValue === "true"
+    || normalizedValue === "plaintext-only"
+  ) return true;
+  return null;
+};
+
 const isEditableTarget = (target: EventTarget | null): boolean => {
   if (!(target instanceof HTMLElement)) return false;
-  return target.closest(
-    "input, textarea, select, [contenteditable]:not([contenteditable='false'])",
-  ) !== null;
+  if (target.closest("input, textarea, select")) return true;
+
+  let element: HTMLElement | null = target;
+  while (element) {
+    const contentEditable = element.getAttribute("contenteditable");
+    if (contentEditable !== null) {
+      const parsedValue = parseContentEditable(contentEditable);
+      if (parsedValue !== null) return parsedValue;
+    }
+    element = element.parentElement;
+  }
+  return false;
 };
 
 export function resolveViewportFocusRequest({

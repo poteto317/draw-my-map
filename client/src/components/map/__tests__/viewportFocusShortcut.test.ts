@@ -89,4 +89,14 @@ describe("resolveViewportFocusRequest", () => {
 
     expect(resolve({ target: child })).toBeNull();
   });
+
+  it("contenteditable=true配下でもfalseで上書きされた領域では発動する", () => {
+    const editor = document.createElement("div");
+    editor.setAttribute("contenteditable", "true");
+    const disabledArea = editor.appendChild(document.createElement("div"));
+    disabledArea.setAttribute("contenteditable", "false");
+    const child = disabledArea.appendChild(document.createElement("span"));
+
+    expect(resolve({ target: child })).toEqual({ node, screen });
+  });
 });

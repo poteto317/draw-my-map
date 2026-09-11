@@ -346,6 +346,23 @@ describe("MapStage boundary", () => {
     expect(lastWorldContainer()?.scale.set).toHaveBeenCalledWith(Math.exp(0.1));
   });
 
+  it("viewport更新ではworld containerを再生成せずtransformだけ変更する", async () => {
+    await renderReady(<MapStage {...defaultProps} nodes={sampleNodes} />);
+    const worldContainer = lastWorldContainer();
+    const containerCount = mockContainers.length;
+    const sceneAddCount = mockStage.addChild.mock.calls.length;
+
+    act(() => {
+      mockStageHandlers.pointerdown?.(pointer(0, 0, { target: mockStage }));
+      mockStageHandlers.pointermove?.(pointer(20, 10));
+    });
+
+    expect(lastWorldContainer()).toBe(worldContainer);
+    expect(mockContainers).toHaveLength(containerCount);
+    expect(mockStage.addChild).toHaveBeenCalledTimes(sceneAddCount);
+    expect(worldContainer?.position.set).toHaveBeenLastCalledWith(20, 10);
+  });
+
   it("パン後の空白double-clickを変換済みworld座標で追加へ渡す", async () => {
     const onDoubleClick = jest.fn();
     await renderReady(<MapStage {...defaultProps} onDoubleClick={onDoubleClick} />);

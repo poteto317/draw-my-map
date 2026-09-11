@@ -44,14 +44,19 @@ export function calculateWheelZoomRequest(
 
   const delta = normalizeWheelDeltaY(input.deltaY, input.deltaMode, input.pageHeight);
   const requestedScale = currentScale * Math.exp(-delta * WHEEL_ZOOM_SENSITIVITY);
-  if (!Number.isFinite(delta) || !Number.isFinite(requestedScale)) return null;
+  const anchor = toLocalPoint(
+    input.clientX,
+    input.clientY,
+    { left: input.bounds.left, top: input.bounds.top },
+  );
+  if (!Number.isFinite(delta)
+    || !Number.isFinite(requestedScale)
+    || requestedScale <= 0
+    || !Number.isFinite(anchor.x)
+    || !Number.isFinite(anchor.y)) return null;
 
   return {
-    anchor: toLocalPoint(
-      input.clientX,
-      input.clientY,
-      { left: input.bounds.left, top: input.bounds.top },
-    ),
+    anchor,
     requestedScale,
   };
 }

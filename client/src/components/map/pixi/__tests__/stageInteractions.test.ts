@@ -222,6 +222,26 @@ describe("createStageInteractions", () => {
     expect(onConnectionTargetChangeRef.current).not.toHaveBeenCalled();
   });
 
+  it("欠損ノードのtouchを追跡せず次の有効なnode touchを通常gestureへ渡す", () => {
+    const { stage } = createStage();
+    const { controller, onSelectNodeRef } = createController();
+    controller.bind(stage as never);
+
+    controller.handleNodePointerDown(999, pointer(50, 50, {
+      pointerId: 1,
+      pointerType: "touch",
+      path: [stage],
+    }) as never);
+    controller.handleNodePointerDown(1, pointer(50, 50, {
+      pointerId: 2,
+      pointerType: "touch",
+      path: [stage],
+    }) as never);
+
+    expect(onSelectNodeRef.current).toHaveBeenCalledTimes(1);
+    expect(onSelectNodeRef.current).toHaveBeenCalledWith(1);
+  });
+
   it.each(["pointerup", "pointerupoutside"] as const)("stops dragging on %s", (eventName) => {
     const { stage, handlers } = createStage();
     const { controller, onMoveNodeRef } = createController();
@@ -629,6 +649,44 @@ describe("createStageInteractions", () => {
     second.handlers.pointermove?.(pointer(60, 60, { pointerId: 3 }));
 
     expect(onMoveNode).toHaveBeenCalledWith(1, 30, 50);
+  });
+
+  it("古いcleanup中に作られた新bindingのtouch追跡をresetしない", () => {
+    const first = createStage();
+    const second = createStage();
+    let rebound = false;
+    const { controller, onConnectionTargetChangeRef, onViewportChangeRef } = createController({
+      nodes: [node, targetNode],
+    });
+    onConnectionTargetChangeRef.current = jest.fn((id: number | null) => {
+      if (id !== null || rebound) return;
+      rebound = true;
+      controller.bind(second.stage as never);
+      second.handlers.pointerdown?.(pointer(0, 0, {
+        pointerId: 2,
+        pointerType: "touch",
+        target: second.stage,
+      }));
+    });
+    const cleanupFirst = controller.bind(first.stage as never);
+    controller.handleNodePointerDown(1, pointer(50, 50, {
+      shiftKey: true,
+      pointerId: 1,
+      path: [first.stage],
+    }) as never);
+
+    cleanupFirst();
+    second.handlers.pointerdown?.(pointer(100, 0, {
+      pointerId: 3,
+      pointerType: "touch",
+      target: second.stage,
+    }));
+    second.handlers.pointermove?.(pointer(200, 0, {
+      pointerId: 3,
+      pointerType: "touch",
+    }));
+
+    expect(onViewportChangeRef.current).toHaveBeenCalledWith(expect.objectContaining({ scale: 2 }));
   });
 
   it("rejects a second binding until the current binding is cleaned up", () => {

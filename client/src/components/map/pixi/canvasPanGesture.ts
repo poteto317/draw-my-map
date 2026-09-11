@@ -5,6 +5,7 @@ import type {
   PointerGesture,
   PointerSample,
 } from "@/components/map/pixi/pointerGesture";
+import { hasFinitePointerCoordinates } from "@/components/map/pixi/pointerSample";
 
 type CanvasPanGestureOptions = {
   startSample: PointerSample;
@@ -18,14 +19,15 @@ export function createCanvasPanGesture({
   startViewport,
   onViewportChangeRef,
   dragThreshold,
-}: CanvasPanGestureOptions): PointerGesture {
+}: CanvasPanGestureOptions): PointerGesture | null {
+  if (!hasFinitePointerCoordinates(startSample)) return null;
   const dragActivation = createDragActivation(startSample.screen, dragThreshold);
   let active = true;
   const finish = () => { active = false; };
 
   return {
     move(sample) {
-      if (!active) return;
+      if (!active || !hasFinitePointerCoordinates(sample)) return;
       const movement = dragActivation.update(sample.screen);
       if (!movement) return;
       onViewportChangeRef.current(panViewport(startViewport, movement.x, movement.y));

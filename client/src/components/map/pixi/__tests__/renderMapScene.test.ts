@@ -20,7 +20,7 @@ describe("renderMapScene", () => {
     const previousChild = { destroy: jest.fn() };
     harness.children.push(previousChild);
 
-    renderMapScene(harness.app as never, harness.constructors as never, {
+    const returnedWorld = renderMapScene(harness.app as never, harness.constructors as never, {
       nodes,
       selectedNodeId: null,
       editingNodeId: null,
@@ -30,6 +30,7 @@ describe("renderMapScene", () => {
     });
 
     const world = harness.containers[0];
+    expect(returnedWorld).toBe(world);
     expect(previousChild.destroy).toHaveBeenCalledWith({ children: true, context: true });
     expect(harness.stage.addChild).toHaveBeenCalledWith(world);
     expect(world.addChild.mock.calls.map(([child]: [unknown]) => child)).toEqual([

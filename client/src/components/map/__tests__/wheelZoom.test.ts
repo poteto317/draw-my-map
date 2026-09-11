@@ -46,4 +46,26 @@ describe("calculateWheelZoomRequest", () => {
       ...override,
     }, scale)).toBeNull();
   });
+
+  it("倍率計算がゼロへunderflowする入力を拒否する", () => {
+    expect(calculateWheelZoomRequest({
+      clientX: 150,
+      clientY: 90,
+      deltaY: Number.MAX_VALUE,
+      deltaMode: WheelEvent.DOM_DELTA_PIXEL,
+      pageHeight: 600,
+      bounds: { left: 50, top: 40 },
+    }, 1)).toBeNull();
+  });
+
+  it("有限値同士の差がoverflowするanchorを拒否する", () => {
+    expect(calculateWheelZoomRequest({
+      clientX: Number.MAX_VALUE,
+      clientY: 90,
+      deltaY: -100,
+      deltaMode: WheelEvent.DOM_DELTA_PIXEL,
+      pageHeight: 600,
+      bounds: { left: -Number.MAX_VALUE, top: 40 },
+    }, 1)).toBeNull();
+  });
 });

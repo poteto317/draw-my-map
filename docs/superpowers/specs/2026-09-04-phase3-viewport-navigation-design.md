@@ -108,6 +108,11 @@ export function zoomViewportAt(
   anchor: Point,
   requestedScale: number,
 ): Viewport;
+```
+
+`client/src/components/map/nodeViewportFocus.ts`はノード中央表示の計算だけを担当する。
+
+```ts
 export function focusViewportOnNode(
   viewport: Viewport,
   node: Node,
@@ -149,7 +154,7 @@ type StageInteractionController = {
 
 ## 描画構造
 
-Pixiの`app.stage`は画面座標のイベント面として維持する。`renderMapScene`は描画のたびに`worldContainer`を作成し、次の変換を設定する。
+Pixiの`app.stage`は画面座標のイベント面として維持する。`renderMapScene`はノード、選択、編集、接続候補のいずれかが変化したときに`worldContainer`を再作成する。viewportだけが変化した場合は既存の`worldContainer`へ次の変換だけを適用し、ノードとエッジを再生成しない。
 
 ```text
 worldContainer.position = (viewport.offsetX, viewport.offsetY)
@@ -189,7 +194,8 @@ export type PointerSample = {
 - `pointerGesture.ts`: 正規化済み`PointerSample`とgesture契約
 - `canvasPanGesture.ts`: 空白ドラッグの開始座標、閾値、終了・キャンセル
 - `stageInteractions.ts`: Pixiイベントの正規化とgesture調停
-- `renderMapScene.ts`: `worldContainer`の生成と変換
+- `renderMapScene.ts`: `worldContainer`と配下の描画要素の生成
+- `applyViewportTransform.ts`: 既存`worldContainer`へのviewport変換の適用
 - `MapStage.tsx`: ビューポートの配線、ダブルクリック座標変換
 - `NodeLabelEditor.tsx`: DOM編集欄の画面座標表示
 

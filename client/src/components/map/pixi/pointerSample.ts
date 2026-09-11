@@ -7,6 +7,13 @@ type PointerEventCoordinates = Pick<
   "globalX" | "globalY" | "pointerId" | "pointerType"
 >;
 
+export function hasFinitePointerCoordinates(sample: PointerSample): boolean {
+  return Number.isFinite(sample.screen.x)
+    && Number.isFinite(sample.screen.y)
+    && Number.isFinite(sample.world.x)
+    && Number.isFinite(sample.world.y);
+}
+
 export function toPointerSample(
   event: PointerEventCoordinates,
   viewport: Viewport,

@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Historical plan:** この文書は実装時の手順を記録したものである。実装後の単一責任リファクタリングにより、`focusViewportOnNode`は`mapViewport.ts`から`nodeViewportFocus.ts`へ移動した。現行の配置と責務は設計書およびソースコードを正とする。
+
 **Goal:** 安定したビューポート基盤へホイール／ピンチズームと、`F`キーによる選択ノードの中央表示を追加する。
 
 **Architecture:** 純粋なviewport計算が倍率・anchor・中央位置を決め、React Hookは同期Refへ結果を反映する。wheelはPixiのpassive listenerを避けてcanvas DOMへ登録し、pinchは`stageInteractions`がtouch所有権を調停し、keyboard focusは専用Hookが編集状態とgesture状態を判定する。

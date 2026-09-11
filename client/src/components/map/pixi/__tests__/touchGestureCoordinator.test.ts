@@ -84,6 +84,23 @@ describe("createTouchGestureCoordinator", () => {
     expect(onBeforePinch).toHaveBeenCalledTimes(1);
   });
 
+  it("cancel後は全touch解放まで新しいpinch pairを作らない", () => {
+    const { coordinator, onBeforePinch } = createCoordinator();
+    coordinator.pointerDown(touch(1, 0, 0));
+    coordinator.pointerDown(touch(2, 100, 0));
+
+    coordinator.cancel();
+    coordinator.pointerUp(touch(2, 100, 0));
+    expect(coordinator.pointerDown(touch(3, 200, 0))).toBe(true);
+
+    expect(coordinator.hasActivePinch()).toBe(false);
+    expect(onBeforePinch).toHaveBeenCalledTimes(1);
+
+    coordinator.pointerUp(touch(1, 0, 0));
+    coordinator.pointerUp(touch(3, 200, 0));
+    expect(coordinator.pointerDown(touch(4, 0, 0))).toBe(false);
+  });
+
   it("mouse入力は所有しない", () => {
     const { coordinator } = createCoordinator();
     const mouse = { ...touch(1, 0, 0), pointerType: "mouse" };
