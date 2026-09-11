@@ -207,6 +207,8 @@ export type PointerSample = {
 
 `pointerupoutside`、`pointercancel`、runtime切替、unbindでは所有中のgestureを一度だけキャンセルする。cleanup済みbindingから届く遅延イベントは無視する。
 
+mouseの複数ボタン操作では、Pointer Eventsの`pointerup`は全ボタンが解放されてactive buttons stateを抜けた時点で発火し、`button`は最後に解放したボタンを示す。左ボタンで開始したgesture中に右・中ボタンが最後に解放される場合もあるため、終了処理は`button`ではなく開始時に取得した`pointerId`の所有権で判定する。
+
 ## 実装ステップ 2: ズームとフォーカス
 
 ### ホイール
@@ -229,7 +231,7 @@ wheel開始時は進行中のpointer gestureをキャンセルしてからズー
 
 ### ピンチ
 
-`stageInteractions`は有効なtouch pointerの画面位置をpointer IDごとに保持する。2本目のtouchを受け取った時点で進行中のパン、ノード移動、接続をキャンセルし、接続候補もクリアしてピンチを開始する。
+`touchGestureCoordinator`は有効なtouch pointerの画面位置をpointer IDごとに保持する。`stageInteractions`はPixiイベントを`PointerSample`へ正規化してcoordinatorへ委譲する。coordinatorが2本目のtouchを受け取った時点で、`stageInteractions`から渡されたcallbackによって進行中のパン、ノード移動、接続をキャンセルし、接続候補もクリアしてピンチを開始する。
 
 ピンチ開始時に次を固定する。
 

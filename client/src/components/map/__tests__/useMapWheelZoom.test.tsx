@@ -35,6 +35,29 @@ describe("useMapWheelZoom", () => {
     );
   });
 
+  it("縦方向差分がないwheelでは既存gestureとブラウザ動作を維持する", () => {
+    const canvas = document.createElement("canvas");
+    const onBeforeZoom = jest.fn();
+    const onZoomAt = jest.fn();
+    renderHook(() => useMapWheelZoom({
+      runtime: { app: { canvas, screen: { height: 600 } } } as never,
+      viewportRef: { current: { offsetX: 0, offsetY: 0, scale: 1 } },
+      onBeforeZoom,
+      onZoomAt,
+    }));
+
+    const event = new WheelEvent("wheel", {
+      deltaX: 100,
+      deltaY: 0,
+      cancelable: true,
+    });
+    canvas.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(onBeforeZoom).not.toHaveBeenCalled();
+    expect(onZoomAt).not.toHaveBeenCalled();
+  });
+
   it("unmount後はwheelを処理しない", () => {
     const canvas = document.createElement("canvas");
     const onZoomAt = jest.fn();

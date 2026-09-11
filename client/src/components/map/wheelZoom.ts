@@ -52,6 +52,7 @@ export function calculateWheelZoomRequest(
   if (!Number.isFinite(delta)
     || !Number.isFinite(requestedScale)
     || requestedScale <= 0
+    || requestedScale === currentScale
     || !Number.isFinite(anchor.x)
     || !Number.isFinite(anchor.y)) return null;
 

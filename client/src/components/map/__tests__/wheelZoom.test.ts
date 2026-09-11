@@ -28,6 +28,17 @@ describe("calculateWheelZoomRequest", () => {
     });
   });
 
+  it("実効倍率が変わらない入力を拒否する", () => {
+    expect(calculateWheelZoomRequest({
+      clientX: 150,
+      clientY: 90,
+      deltaY: 0,
+      deltaMode: WheelEvent.DOM_DELTA_PIXEL,
+      pageHeight: 600,
+      bounds: { left: 50, top: 40 },
+    }, 2)).toBeNull();
+  });
+
   it.each([
     [{ clientX: Number.NaN }, 1],
     [{ clientY: Number.POSITIVE_INFINITY }, 1],
