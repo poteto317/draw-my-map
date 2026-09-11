@@ -29,6 +29,18 @@ describe("calculateMidpoint", () => {
 });
 
 describe("calculatePinchViewport", () => {
+  it("座標と倍率が変わらない場合は同じviewport参照を返す", () => {
+    const viewport = { offsetX: 10, offsetY: 20, scale: 2 };
+
+    expect(calculatePinchViewport(
+      viewport,
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+    )).toBe(viewport);
+  });
+
   it("距離比で拡大し開始中点のワールド座標を現在中点へ移す", () => {
     expect(calculatePinchViewport(
       INITIAL_VIEWPORT,

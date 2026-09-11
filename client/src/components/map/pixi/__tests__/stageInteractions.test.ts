@@ -672,6 +672,7 @@ describe("createStageInteractions", () => {
     controller.handleNodePointerDown(1, pointer(50, 50, {
       shiftKey: true,
       pointerId: 1,
+      pointerType: "touch",
       path: [first.stage],
     }) as never);
 

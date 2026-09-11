@@ -208,6 +208,7 @@ export function createStageInteractions({
         }
       };
 
+      if (ownsBinding) attemptCleanup(touchGestures.reset);
       attemptCleanup(() => { stage.off("pointerdown", handleStagePointerDown); });
       attemptCleanup(() => { stage.off("pointermove", handleStagePointerMove); });
       attemptCleanup(() => { stage.off("pointerup", handlePointerUp); });
@@ -215,7 +216,6 @@ export function createStageInteractions({
       attemptCleanup(() => { stage.off("pointercancel", handlePointerCancel); });
       if (ownsBinding) {
         attemptCleanup(pointerGestures.cancel);
-        if (activeBinding === null) attemptCleanup(touchGestures.reset);
       }
       if (hasError) throw firstError;
     };

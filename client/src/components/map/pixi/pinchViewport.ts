@@ -64,6 +64,7 @@ export function calculatePinchViewport(
     requestedScale,
   );
   if (requestedScale !== startViewport.scale && zoomed === startViewport) return null;
+  if (deltaX === 0 && deltaY === 0) return zoomed;
   const candidate = panViewport(
     zoomed,
     deltaX,
