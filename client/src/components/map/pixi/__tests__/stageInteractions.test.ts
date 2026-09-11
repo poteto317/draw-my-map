@@ -254,6 +254,21 @@ describe("createStageInteractions", () => {
     expect(onMoveNodeRef.current).not.toHaveBeenCalled();
   });
 
+  it.each(["pointerup", "pointerupoutside"] as const)(
+    "最後に解放されたmouse buttonに関係なく所有pointerの%sでgestureを終了する",
+    (eventName) => {
+      const { stage, handlers } = createStage();
+      const { controller, onMoveNodeRef } = createController();
+      controller.bind(stage as never);
+
+      controller.handleNodePointerDown(1, pointer(100, 60) as never);
+      handlers[eventName]?.(pointer(100, 60, { button: 2 }));
+      handlers.pointermove?.(pointer(110, 70));
+
+      expect(onMoveNodeRef.current).not.toHaveBeenCalled();
+    },
+  );
+
   it("routes a Shift gesture to connection without moving the node", () => {
     const { stage, handlers } = createStage();
     const {

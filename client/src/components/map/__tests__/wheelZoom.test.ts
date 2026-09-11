@@ -40,6 +40,20 @@ describe("calculateWheelZoomRequest", () => {
   });
 
   it.each([
+    [4, -1],
+    [0.25, 1],
+  ])("倍率制限後に現在倍率と同じになる入力を拒否する", (scale, deltaY) => {
+    expect(calculateWheelZoomRequest({
+      clientX: 150,
+      clientY: 90,
+      deltaY,
+      deltaMode: WheelEvent.DOM_DELTA_PIXEL,
+      pageHeight: 600,
+      bounds: { left: 50, top: 40 },
+    }, scale)).toBeNull();
+  });
+
+  it.each([
     [{ clientX: Number.NaN }, 1],
     [{ clientY: Number.POSITIVE_INFINITY }, 1],
     [{ deltaY: Number.NaN }, 1],

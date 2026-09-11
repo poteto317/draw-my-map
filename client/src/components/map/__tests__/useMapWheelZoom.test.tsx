@@ -58,6 +58,28 @@ describe("useMapWheelZoom", () => {
     expect(onZoomAt).not.toHaveBeenCalled();
   });
 
+  it.each([
+    [4, -1],
+    [0.25, 1],
+  ])("倍率制限で変化しないwheelでは副作用を発生させない", (scale, deltaY) => {
+    const canvas = document.createElement("canvas");
+    const onBeforeZoom = jest.fn();
+    const onZoomAt = jest.fn();
+    renderHook(() => useMapWheelZoom({
+      runtime: { app: { canvas, screen: { height: 600 } } } as never,
+      viewportRef: { current: { offsetX: 0, offsetY: 0, scale } },
+      onBeforeZoom,
+      onZoomAt,
+    }));
+
+    const event = new WheelEvent("wheel", { deltaY, cancelable: true });
+    canvas.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(onBeforeZoom).not.toHaveBeenCalled();
+    expect(onZoomAt).not.toHaveBeenCalled();
+  });
+
   it("unmount後はwheelを処理しない", () => {
     const canvas = document.createElement("canvas");
     const onZoomAt = jest.fn();

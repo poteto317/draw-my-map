@@ -1,4 +1,5 @@
 import { toLocalPoint, type Point } from "@/components/map/mapGeometry";
+import { clampViewportScale } from "@/components/map/mapViewport";
 
 const WHEEL_ZOOM_SENSITIVITY = 0.001;
 
@@ -53,6 +54,7 @@ export function calculateWheelZoomRequest(
     || !Number.isFinite(requestedScale)
     || requestedScale <= 0
     || requestedScale === currentScale
+    || clampViewportScale(requestedScale) === currentScale
     || !Number.isFinite(anchor.x)
     || !Number.isFinite(anchor.y)) return null;
 
