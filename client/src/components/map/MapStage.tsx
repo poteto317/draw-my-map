@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, type MouseEvent } from "react";
 import { NodeLabelEditor } from "@/components/map/NodeLabelEditor";
-import { findNodeAtPoint, toLocalPoint } from "@/components/map/mapGeometry";
-import { screenToWorld } from "@/components/map/mapViewport";
+import { resolveMapDoubleClickAction } from "@/components/map/mapDoubleClickAction";
 import { renderMapScene } from "@/components/map/pixi/renderMapScene";
 import { usePixiApplication } from "@/components/map/pixi/usePixiApplication";
 import { useMapStageInteractions } from "@/components/map/useMapStageInteractions";
 import { useMapViewport } from "@/components/map/useMapViewport";
+import { useMapViewportShortcut } from "@/components/map/useMapViewportShortcut";
+import { useMapWheelZoom } from "@/components/map/useMapWheelZoom";
 import { useNodeEditing } from "@/components/map/useNodeEditing";
 import { useNodeKeyboardShortcuts } from "@/components/map/useNodeKeyboardShortcuts";
 import type { Node } from "@/types/node";
@@ -44,8 +45,15 @@ export function MapStage({
     viewport,
     viewportRef,
     setViewport,
+    zoomAt,
+    focusNode,
   } = useMapViewport();
-  const { connectionTargetNodeId, onNodePointerDown } = useMapStageInteractions({
+  const {
+    connectionTargetNodeId,
+    onNodePointerDown,
+    cancelActiveGesture,
+    hasActiveGesture,
+  } = useMapStageInteractions({
     runtime,
     nodes,
     viewportRef,
@@ -53,6 +61,22 @@ export function MapStage({
     onSelectNode,
     onMoveNode,
     onConnectNodes,
+  });
+
+  useMapWheelZoom({
+    runtime,
+    viewportRef,
+    onBeforeZoom: cancelActiveGesture,
+    onZoomAt: zoomAt,
+  });
+
+  useMapViewportShortcut({
+    nodes,
+    selectedNodeId,
+    isEditing: editing.editingNodeId !== null,
+    screen: runtime ? runtime.app.screen : null,
+    hasActiveGesture,
+    onFocusNode: focusNode,
   });
 
   useEffect(() => {
@@ -89,22 +113,20 @@ export function MapStage({
     const container = containerRef.current;
     if (!container) return;
 
-    const screenPoint = toLocalPoint(
-      event.clientX,
-      event.clientY,
-      container.getBoundingClientRect(),
-    );
-    const worldPoint = screenToWorld(screenPoint, viewportRef.current);
-    const clickedNode = findNodeAtPoint(nodes, worldPoint);
-    if (clickedNode) editing.startEditing(clickedNode.id);
-    else onDoubleClick(worldPoint.x, worldPoint.y);
+    const action = resolveMapDoubleClickAction({
+      client: { x: event.clientX, y: event.clientY },
+      bounds: container.getBoundingClientRect(),
+      viewport: viewportRef.current,
+      nodes,
+    });
+    if (action.type === "edit") editing.startEditing(action.nodeId);
+    else onDoubleClick(action.point.x, action.point.y);
   };
 
   return (
     <div
       ref={containerRef}
-      className="relative w-full cursor-crosshair"
-      style={{ minHeight: "calc(100vh - 52px)" }}
+      className="relative h-full w-full cursor-crosshair"
       onDoubleClick={handleDoubleClick}
     >
       {editing.editingNode && (

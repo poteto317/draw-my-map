@@ -2,12 +2,11 @@
 
 import { useEffect } from "react";
 import type { ScreenSize } from "@/components/map/mapViewport";
+import {
+  isViewportFocusShortcut,
+  resolveViewportFocusRequest,
+} from "@/components/map/viewportFocusShortcut";
 import type { Node } from "@/types/node";
-
-const isEditableTarget = (target: EventTarget | null): boolean => {
-  if (!(target instanceof HTMLElement)) return false;
-  return target.closest("input, textarea, select, [contenteditable='true']") !== null;
-};
 
 type Options = {
   nodes: readonly Node[];
@@ -28,17 +27,22 @@ export function useMapViewportShortcut({
 }: Options): void {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() !== "f"
-        || isEditing
-        || isEditableTarget(event.target)
-        || hasActiveGesture()
-        || !screen
-        || selectedNodeId === null) return;
-
-      const selected = nodes.find((node) => node.id === selectedNodeId);
-      if (!selected) return;
+      if (!isViewportFocusShortcut(event)) return;
+      const request = resolveViewportFocusRequest({
+        key: event.key,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        altKey: event.altKey,
+        target: event.target,
+        nodes,
+        selectedNodeId,
+        isEditing,
+        hasActiveGesture: hasActiveGesture(),
+        screen,
+      });
+      if (!request) return;
       event.preventDefault();
-      onFocusNode(selected, screen);
+      onFocusNode(request.node, request.screen);
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);

@@ -63,5 +63,7 @@ export function useMapStageInteractions({
   return {
     connectionTargetNodeId,
     onNodePointerDown: interactions.handleNodePointerDown,
+    cancelActiveGesture: interactions.cancelActiveGesture,
+    hasActiveGesture: interactions.hasActiveGesture,
   };
 }

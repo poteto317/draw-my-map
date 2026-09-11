@@ -12,6 +12,7 @@ type PointerEvent = {
   composedPath: () => unknown[];
   target?: unknown;
   shiftKey?: boolean;
+  button: number;
 };
 type Handler = (event: PointerEvent) => void;
 type Stage = {
@@ -55,6 +56,7 @@ function pointer(
     globalY,
     pointerId: 1,
     pointerType: "mouse",
+    button: 0,
     composedPath: () => path,
     ...eventOptions,
   };

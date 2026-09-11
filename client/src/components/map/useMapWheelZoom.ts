@@ -1,18 +1,11 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef } from "react";
-import { toLocalPoint, type Point } from "@/components/map/mapGeometry";
+import type { Point } from "@/components/map/mapGeometry";
 import type { Viewport } from "@/components/map/mapViewport";
+import { calculateWheelZoomRequest } from "@/components/map/wheelZoom";
 import type { LatestValue } from "@/components/map/pixi/pointerGesture";
 import type { PixiRuntime } from "@/components/map/pixi/pixiTypes";
-
-const WHEEL_ZOOM_SENSITIVITY = 0.001;
-
-export function normalizeWheelDeltaY(deltaY: number, deltaMode: number, pageHeight: number): number {
-  if (deltaMode === WheelEvent.DOM_DELTA_LINE) return deltaY * 16;
-  if (deltaMode === WheelEvent.DOM_DELTA_PAGE) return deltaY * pageHeight;
-  return deltaY;
-}
 
 type Options = {
   runtime: PixiRuntime | null;
@@ -33,23 +26,18 @@ export function useMapWheelZoom({ runtime, viewportRef, onBeforeZoom, onZoomAt }
     if (!runtime) return;
     const canvas = runtime.app.canvas;
     const handleWheel = (event: WheelEvent) => {
-      const delta = normalizeWheelDeltaY(
-        event.deltaY,
-        event.deltaMode,
-        runtime.app.screen.height,
-      );
-      if (!Number.isFinite(delta)) return;
+      const request = calculateWheelZoomRequest({
+        clientX: event.clientX,
+        clientY: event.clientY,
+        deltaY: event.deltaY,
+        deltaMode: event.deltaMode,
+        pageHeight: runtime.app.screen.height,
+        bounds: canvas.getBoundingClientRect(),
+      }, viewportRef.current.scale);
+      if (!request) return;
       event.preventDefault();
       onBeforeZoomRef.current();
-      const anchor = toLocalPoint(
-        event.clientX,
-        event.clientY,
-        canvas.getBoundingClientRect(),
-      );
-      onZoomAtRef.current(
-        anchor,
-        viewportRef.current.scale * Math.exp(-delta * WHEEL_ZOOM_SENSITIVITY),
-      );
+      onZoomAtRef.current(request.anchor, request.requestedScale);
     };
     canvas.addEventListener("wheel", handleWheel, { passive: false });
     return () => canvas.removeEventListener("wheel", handleWheel);

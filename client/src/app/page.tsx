@@ -19,9 +19,9 @@ export default function Home() {
   } = useNodes();
 
   return (
-    <div className="flex min-h-screen flex-col bg-zinc-50 dark:bg-zinc-900">
+    <div className="flex h-dvh flex-col bg-zinc-50 dark:bg-zinc-900">
       <AppHeader />
-      <main className="flex-1">
+      <main className="min-h-0 flex-1 overflow-hidden">
         <MapStage
           nodes={nodes}
           selectedNodeId={selectedNodeId}

@@ -10,7 +10,9 @@ describe("AppHeader", () => {
   it("操作ヒントが表示される", () => {
     render(<AppHeader />);
     expect(
-      screen.getByText("ダブルクリックで追加・空白ドラッグで移動・Shift+ノードドラッグで接続"),
+      screen.getByText(
+        "ダブルクリックで追加・空白ドラッグで移動・ホイール/ピンチで拡大縮小・Fで中央表示・Shift+ノードドラッグで接続",
+      ),
     ).toBeInTheDocument();
   });
 });

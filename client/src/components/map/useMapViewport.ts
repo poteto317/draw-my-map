@@ -2,13 +2,13 @@ import { useCallback, useRef, useState } from "react";
 import type { Point } from "@/components/map/mapGeometry";
 import {
   INITIAL_VIEWPORT,
-  focusViewportOnNode,
   isValidViewport,
   panViewport,
   zoomViewportAt,
   type ScreenSize,
   type Viewport,
 } from "@/components/map/mapViewport";
+import { focusViewportOnNode } from "@/components/map/nodeViewportFocus";
 import type { Node } from "@/types/node";
 
 export function useMapViewport() {

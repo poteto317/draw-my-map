@@ -68,7 +68,7 @@ beforeEach(() => {
 });
 
 describe("usePixiApplication", () => {
-  it("initializes Pixi with the map options, inserts an absolute canvas, and publishes its runtime", async () => {
+  it("initializes Pixi with the map options, inserts a touch-owned absolute canvas, and publishes its runtime", async () => {
     const runtimes: Array<ReturnType<typeof usePixiApplication>> = [];
     const { getByTestId } = render(<PixiApplicationHarness onRuntime={(runtime) => runtimes.push(runtime)} />);
     const container = getByTestId("pixi-container");
@@ -86,6 +86,7 @@ describe("usePixiApplication", () => {
     expect(container).toContainElement(app.canvas);
     expect(app.canvas.style.position).toBe("absolute");
     expect(app.canvas.style.inset).toBe("0px");
+    expect(app.canvas.style.touchAction).toBe("none");
     expect(runtimes.at(-1)).toEqual({
       app,
       constructors: {

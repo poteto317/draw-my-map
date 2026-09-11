@@ -32,6 +32,7 @@
 - 空白のクリックは選択を解除する。
 - 空白のダブルクリックは、その画面位置に対応するワールド座標へノードを追加する。
 - 4px未満の移動はパンとして扱わない。
+- 右・中ボタンの空白／ノードpointer downでは選択やgestureを開始しない。
 
 ### ズーム
 
@@ -48,6 +49,7 @@
 - フォーカス時に倍率は変更しない。
 - input、textarea、select、contenteditable、ラベル編集中では発動しない。
 - 選択ノードが最新のノード一覧に存在しなければ何もしない。
+- Ctrl／Meta／Alt付き`F`はブラウザ側へ委ねる。
 - ノード選択時の自動フォーカスとアニメーションは行わない。
 
 ## 座標モデル
@@ -130,7 +132,7 @@ type UseMapViewportReturn = {
 };
 ```
 
-`setViewport`は、パンとピンチの開始時viewportから計算した絶対値を反映する内部向けcommandである。無効な値は拒否する。更新は`viewportRef.current`を同期的に進めた後にReact stateへ反映する。連続イベント、同一batch、Reactの保留レンダーが直前の更新を上書きしないよう、増分commandは最新Refを基準にする。公開commandの参照は再レンダー後も安定させる。
+`setViewport`は、パンとピンチの開始時viewportから計算した絶対値を反映する内部向けcommandである。非有限値および倍率`0.25`未満・`4`超の値は拒否する。更新は`viewportRef.current`を同期的に進めた後にReact stateへ反映する。連続イベント、同一batch、Reactの保留レンダーが直前の更新を上書きしないよう、増分commandは最新Refを基準にする。公開commandの参照は再レンダー後も安定させる。clamp後の倍率が現在値と同じ場合は同じviewport参照を返し、不要な再描画を避ける。
 
 `stageInteractions`は次の制御面を返し、wheelとkeyboardの境界から内部状態を直接変更させない。
 
@@ -230,13 +232,13 @@ wheel開始時は進行中のpointer gestureをキャンセルしてからズー
 - 開始viewport
 - 開始中点が示すワールド座標
 
-各moveでは開始倍率に距離比を掛けてclampし、開始中点のワールド座標が現在中点へ来るoffsetを計算する。開始距離がゼロの場合は、有限の正距離が得られるまで更新しない。
+各moveでは開始倍率に距離比を掛けてclampし、開始中点のワールド座標が現在中点へ来るoffsetを計算する。現在距離がゼロなら最小倍率へ制限する。開始距離がゼロまたは非有限の場合は、最初の有限な正距離を新しい基準として保存し、その次のmoveから更新する。
 
 ピンチ開始時の2つのpointer IDを終了まで固定し、3本目以降のtouchは倍率計算へ使用しない。固定したtouchのどちらかが`pointerup`、`pointerupoutside`、`pointercancel`になった時点でピンチを終了する。残ったtouchによるパンやノード移動は自動再開せず、すべてのtouchが離れた後の新しいpointer downを必要とする。mouseやpenの複数pointerではピンチを開始しない。
 
 ### フォーカス
 
-`client/src/components/map/useMapViewportShortcut.ts`がwindowのkeydown listenerを所有する。`F`または`f`を受け取り、編集可能要素とラベル編集中を除外したうえで最新の選択ノードを検索する。
+`client/src/components/map/useMapViewportShortcut.ts`がwindowのkeydown listenerを所有する。純粋resolverと共有predicateが、修飾キーなしの`F`または`f`、編集可能要素、ラベル編集中、進行中gesture、最新の選択ノードを判定する。
 
 ノード中心を現在倍率で画面中央へ置くoffsetは次式とする。
 
@@ -245,7 +247,11 @@ offsetX = screen.width / 2 - nodeCenter.x * viewport.scale
 offsetY = screen.height / 2 - nodeCenter.y * viewport.scale
 ```
 
-選択状態と倍率は変更しない。
+選択状態と倍率は変更しない。既に同じoffsetで中央表示済みなら同じviewport参照を返す。
+
+## レイアウト
+
+ページshellは動的viewport高を上限とするflex columnとし、headerの実寸高を除いた残領域をMapへ割り当てる。overflowの抑止はMap領域だけに適用し、可変高headerやページ全体をclipしない。Map側は親領域の高さを使用し、固定header高の差し引きには依存しない。
 
 ## 操作競合規則
 
@@ -264,6 +270,7 @@ offsetY = screen.height / 2 - nodeCenter.y * viewport.scale
 
 - 欠損ノードは選択、移動、接続、フォーカスの対象にしない。
 - `NaN`、`Infinity`、非正の倍率は状態へ保存しない。
+- 有限な入力同士の演算でも、パン・ズーム・フォーカス・ノード移動の算出結果が非有限になれば状態更新を行わない。
 - 同じstageへ二重bindしない。二重bind要求は既存契約どおり例外にする。
 - cleanupは冪等とし、二度呼ばれてもコールバックを重複発火しない。
 - gesture終了状態をコールバック呼び出し前に確定し、コールバックの例外や再入で古い操作が復活しないようにする。

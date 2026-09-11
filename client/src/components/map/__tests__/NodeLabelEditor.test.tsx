@@ -108,17 +108,10 @@ describe("NodeLabelEditor", () => {
     expect(onParentDoubleClick).not.toHaveBeenCalled();
   });
 
-  it("autofocuses at the node's exact overlay geometry", () => {
+  it("autofocuses the editor", () => {
     const { input } = renderEditor();
 
     expect(input).toHaveFocus();
-    expect(input).toHaveStyle({
-      left: "50px",
-      top: "30px",
-      width: "100px",
-      height: "60px",
-      lineHeight: "60px",
-    });
   });
 
   it("viewportに合わせて編集欄の位置と寸法を変換する", () => {

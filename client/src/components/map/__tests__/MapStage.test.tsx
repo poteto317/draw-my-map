@@ -19,6 +19,7 @@ type MockPointerEvent = {
   composedPath: () => unknown[];
   target?: unknown;
   shiftKey?: boolean;
+  button: number;
 };
 
 type MockPointerHandler = (event: MockPointerEvent) => void;
@@ -26,6 +27,11 @@ type StageEvent = "pointerdown" | "pointermove" | "pointerup" | "pointerupoutsid
 
 const mockStageHandlers: Partial<Record<StageEvent, MockPointerHandler>> = {};
 const mockNodePointerHandlers: Array<Partial<Record<"pointerdown", MockPointerHandler>>> = [];
+const mockContainers: Array<{
+  addChild: jest.Mock;
+  position: { set: jest.Mock };
+  scale: { set: jest.Mock };
+}> = [];
 
 function pointer(
   globalX: number,
@@ -38,6 +44,7 @@ function pointer(
     globalY,
     pointerId: 1,
     pointerType: "mouse",
+    button: 0,
     composedPath: () => path,
     ...eventOptions,
   };
@@ -89,6 +96,7 @@ jest.mock("pixi.js", () => ({
       eventMode: "none",
       cursor: "default",
     };
+    mockContainers.push(container);
     return container;
   }),
 }));
@@ -133,6 +141,10 @@ function mockStageBounds(container: HTMLElement, left = 0, top = 0) {
     y: top,
     toJSON: () => ({}),
   });
+}
+
+function lastWorldContainer() {
+  return mockContainers.findLast((container) => container.scale.set.mock.calls.length > 0);
 }
 
 function KeyboardCreationHarness({ initiallySelected = true }: { initiallySelected?: boolean }) {
@@ -271,6 +283,7 @@ beforeEach(() => {
     delete mockStageHandlers[event];
   }
   mockNodePointerHandlers.length = 0;
+  mockContainers.length = 0;
 });
 
 afterEach(() => {
@@ -282,6 +295,14 @@ describe("MapStage boundary", () => {
     await renderReady(<MapStage {...defaultProps} />);
 
     expect(document.querySelector(".cursor-crosshair")).toBeInTheDocument();
+  });
+
+  it("親要素の実寸高を使い固定header高へ依存しない", async () => {
+    await renderReady(<MapStage {...defaultProps} />);
+    const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+
+    expect(container).toHaveClass("h-full");
+    expect(container.style.minHeight).toBe("");
   });
 
   it("routes a blank double-click with container-relative coordinates", async () => {
@@ -306,6 +327,189 @@ describe("MapStage boundary", () => {
     fireEvent.doubleClick(container, { clientX: 100, clientY: 60 });
 
     expect(getByTestId("node-label-input")).toHaveValue("ノード1");
+  });
+
+  it("wheelでpointer位置をanchorにworld containerを拡大する", async () => {
+    await renderReady(<MapStage {...defaultProps} nodes={sampleNodes} selectedNodeId={1} />);
+    const canvas = document.querySelector("canvas")!;
+    mockStageBounds(canvas);
+
+    await act(async () => {
+      canvas.dispatchEvent(new WheelEvent("wheel", {
+        clientX: 100,
+        clientY: 100,
+        deltaY: -100,
+        cancelable: true,
+      }));
+    });
+
+    expect(lastWorldContainer()?.scale.set).toHaveBeenCalledWith(Math.exp(0.1));
+  });
+
+  it("パン後の空白double-clickを変換済みworld座標で追加へ渡す", async () => {
+    const onDoubleClick = jest.fn();
+    await renderReady(<MapStage {...defaultProps} onDoubleClick={onDoubleClick} />);
+    const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+    mockStageBounds(container);
+
+    act(() => {
+      mockStageHandlers.pointerdown?.(pointer(0, 0, { target: mockStage }));
+      mockStageHandlers.pointermove?.(pointer(20, 10));
+      mockStageHandlers.pointerup?.(pointer(20, 10));
+    });
+    fireEvent.doubleClick(container, { clientX: 220, clientY: 110 });
+
+    expect(onDoubleClick).toHaveBeenCalledWith(200, 100);
+  });
+
+  it("ズーム後の変換済みnode位置でdouble-click編集を開始する", async () => {
+    const { getByTestId } = await renderReady(
+      <MapStage {...defaultProps} nodes={sampleNodes} />,
+    );
+    const canvas = document.querySelector("canvas")!;
+    const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+    mockStageBounds(canvas);
+    mockStageBounds(container);
+
+    await act(async () => {
+      canvas.dispatchEvent(new WheelEvent("wheel", {
+        clientX: 0,
+        clientY: 0,
+        deltaY: -10000,
+        cancelable: true,
+      }));
+    });
+    fireEvent.doubleClick(container, { clientX: 400, clientY: 240 });
+
+    expect(getByTestId("node-label-input")).toHaveValue("ノード1");
+  });
+
+  it("ズーム後の画面差分をworld差分へ変換してノードを移動する", async () => {
+    const onMoveNode = jest.fn();
+    await renderReady(
+      <MapStage {...defaultProps} nodes={sampleNodes} onMoveNode={onMoveNode} />,
+    );
+    const canvas = document.querySelector("canvas")!;
+    mockStageBounds(canvas);
+
+    await act(async () => {
+      canvas.dispatchEvent(new WheelEvent("wheel", {
+        clientX: 0,
+        clientY: 0,
+        deltaY: -10000,
+        cancelable: true,
+      }));
+    });
+    act(() => {
+      mockNodePointerHandlers.at(-2)?.pointerdown?.(pointer(400, 240));
+      mockStageHandlers.pointermove?.(pointer(440, 280));
+    });
+
+    expect(onMoveNode).toHaveBeenCalledWith(1, 60, 40);
+  });
+
+  it("ズーム後の画面座標から接続先ノードを判定する", async () => {
+    const onConnectNodes = jest.fn();
+    await renderReady(
+      <MapStage {...defaultProps} nodes={sampleNodes} onConnectNodes={onConnectNodes} />,
+    );
+    const canvas = document.querySelector("canvas")!;
+    mockStageBounds(canvas);
+
+    await act(async () => {
+      canvas.dispatchEvent(new WheelEvent("wheel", {
+        clientX: 0,
+        clientY: 0,
+        deltaY: -10000,
+        cancelable: true,
+      }));
+    });
+    act(() => {
+      mockNodePointerHandlers.at(-2)?.pointerdown?.(pointer(400, 240, { shiftKey: true }));
+      mockStageHandlers.pointermove?.(pointer(1000, 520));
+      mockStageHandlers.pointerup?.(pointer(1000, 520));
+    });
+
+    expect(onConnectNodes).toHaveBeenCalledWith(1, 2);
+  });
+
+  it("wheelズーム前に進行中のノード移動をキャンセルする", async () => {
+    const onMoveNode = jest.fn();
+    await renderReady(
+      <MapStage {...defaultProps} nodes={sampleNodes} onMoveNode={onMoveNode} />,
+    );
+    const canvas = document.querySelector("canvas")!;
+    mockStageBounds(canvas);
+
+    act(() => {
+      mockNodePointerHandlers.at(-2)?.pointerdown?.(pointer(100, 60));
+    });
+    await act(async () => {
+      canvas.dispatchEvent(new WheelEvent("wheel", {
+        clientX: 0,
+        clientY: 0,
+        deltaY: -100,
+        cancelable: true,
+      }));
+    });
+    act(() => {
+      mockStageHandlers.pointermove?.(pointer(120, 80));
+      mockStageHandlers.pointerup?.(pointer(120, 80));
+    });
+
+    expect(onMoveNode).not.toHaveBeenCalled();
+  });
+
+  it("wheelズーム前に進行中のノード接続をキャンセルする", async () => {
+    const onConnectNodes = jest.fn();
+    await renderReady(
+      <MapStage {...defaultProps} nodes={sampleNodes} onConnectNodes={onConnectNodes} />,
+    );
+    const canvas = document.querySelector("canvas")!;
+    mockStageBounds(canvas);
+
+    act(() => {
+      mockNodePointerHandlers.at(-2)?.pointerdown?.(pointer(100, 60, { shiftKey: true }));
+    });
+    await act(async () => {
+      canvas.dispatchEvent(new WheelEvent("wheel", {
+        clientX: 0,
+        clientY: 0,
+        deltaY: -100,
+        cancelable: true,
+      }));
+    });
+    act(() => {
+      mockStageHandlers.pointermove?.(pointer(250, 130));
+      mockStageHandlers.pointerup?.(pointer(250, 130));
+    });
+
+    expect(onConnectNodes).not.toHaveBeenCalled();
+  });
+
+  it("Fキーで倍率を保ち選択ノードを中央へ移す", async () => {
+    await renderReady(<MapStage {...defaultProps} nodes={sampleNodes} selectedNodeId={1} />);
+
+    fireEvent.keyDown(window, { key: "f" });
+
+    expect(lastWorldContainer()?.position.set).toHaveBeenCalledWith(300, 240);
+    expect(lastWorldContainer()?.scale.set).toHaveBeenCalledWith(1);
+  });
+
+  it("gesture中のFキーではviewportを変更しない", async () => {
+    await renderReady(<MapStage {...defaultProps} nodes={sampleNodes} selectedNodeId={1} />);
+    const worldContainerBeforeKeyDown = lastWorldContainer();
+    const event = new KeyboardEvent("keydown", { key: "f", cancelable: true });
+
+    act(() => {
+      mockNodePointerHandlers.at(-2)?.pointerdown?.(pointer(100, 60));
+      window.dispatchEvent(event);
+    });
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(lastWorldContainer()).toBe(worldContainerBeforeKeyDown);
+    expect(worldContainerBeforeKeyDown?.position.set).toHaveBeenCalledTimes(1);
+    expect(worldContainerBeforeKeyDown?.position.set).toHaveBeenLastCalledWith(0, 0);
   });
 
   it("preserves the current draft when the editing input is double-clicked", async () => {

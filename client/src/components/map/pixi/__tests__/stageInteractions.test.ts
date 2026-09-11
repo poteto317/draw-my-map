@@ -11,6 +11,7 @@ type PointerEvent = {
   composedPath: () => unknown[];
   target?: unknown;
   shiftKey?: boolean;
+  button: number;
 };
 
 type Handler = (event: PointerEvent) => void;
@@ -29,6 +30,7 @@ type PointerOptions = {
   shiftKey?: boolean;
   pointerId?: number;
   pointerType?: string;
+  button?: number;
   path?: unknown[];
 };
 
@@ -46,6 +48,7 @@ function pointer(
     pointerType: options.pointerType ?? "mouse",
     target: options.target,
     shiftKey: options.shiftKey ?? false,
+    button: options.button ?? 0,
     composedPath: () => eventPath,
   };
 }
@@ -145,6 +148,30 @@ describe("createStageInteractions", () => {
 
     expect(latestOnSelectNode).toHaveBeenCalledTimes(1);
     expect(latestOnSelectNode).toHaveBeenCalledWith(null);
+  });
+
+  it.each([1, 2])("button %sでは空白選択解除やパンを開始しない", (button) => {
+    const { stage, handlers } = createStage();
+    const { controller, onSelectNodeRef, onViewportChangeRef } = createController();
+    controller.bind(stage as never);
+
+    handlers.pointerdown?.(pointer(0, 0, { target: stage, button }));
+    handlers.pointermove?.(pointer(20, 20, { button }));
+
+    expect(onSelectNodeRef.current).not.toHaveBeenCalled();
+    expect(onViewportChangeRef.current).not.toHaveBeenCalled();
+  });
+
+  it.each([1, 2])("button %sではノード選択や移動を開始しない", (button) => {
+    const { stage, handlers } = createStage();
+    const { controller, onSelectNodeRef, onMoveNodeRef } = createController();
+    controller.bind(stage as never);
+
+    controller.handleNodePointerDown(1, pointer(50, 50, { button }) as never);
+    handlers.pointermove?.(pointer(70, 70, { button }));
+
+    expect(onSelectNodeRef.current).not.toHaveBeenCalled();
+    expect(onMoveNodeRef.current).not.toHaveBeenCalled();
   });
 
   it("selects a node using the latest selection callback", () => {
@@ -251,6 +278,7 @@ describe("createStageInteractions", () => {
     const { stage, handlers } = createStage();
     const {
       controller,
+      onSelectNodeRef,
       onConnectNodesRef,
       onConnectionTargetChangeRef,
     } = createController({ nodes: [node, targetNode] });
@@ -261,6 +289,7 @@ describe("createStageInteractions", () => {
     handlers.pointermove?.(pointer(220, 60, { pointerId: 2 }));
     handlers.pointerup?.(pointer(220, 60, { pointerId: 2 }));
 
+    expect((onSelectNodeRef.current as jest.Mock).mock.calls).toEqual([[1]]);
     expect(onConnectionTargetChangeRef.current).not.toHaveBeenCalled();
     expect(onConnectNodesRef.current).not.toHaveBeenCalled();
 
@@ -508,21 +537,69 @@ describe("createStageInteractions", () => {
 
   it("removes every listener even when active gesture cancellation throws", () => {
     const { stage, handlers } = createStage();
+    const second = createStage();
     const onConnectionTargetChange = jest.fn((id: number | null) => {
       if (id === null) throw new Error("target cleanup failed");
     });
-    const { controller } = createController({
+    const { controller, onConnectionTargetChangeRef, onSelectNodeRef } = createController({
       nodes: [node, targetNode],
       onConnectionTargetChange,
     });
     const cleanup = controller.bind(stage as never);
 
-    controller.handleNodePointerDown(1, pointer(50, 50, { shiftKey: true }) as never);
-    handlers.pointermove?.(pointer(220, 60));
+    controller.handleNodePointerDown(1, pointer(50, 50, {
+      shiftKey: true,
+      pointerId: 1,
+      pointerType: "touch",
+    }) as never);
+    handlers.pointermove?.(pointer(220, 60, { pointerId: 1, pointerType: "touch" }));
 
     expect(cleanup).toThrow("target cleanup failed");
     expect(stage.off).toHaveBeenCalledTimes(5);
     expect(handlers).toEqual({});
+
+    const reboundOnSelectNode = jest.fn();
+    onConnectionTargetChangeRef.current = jest.fn();
+    onSelectNodeRef.current = reboundOnSelectNode;
+    controller.bind(second.stage as never);
+    second.handlers.pointerdown?.(pointer(0, 0, {
+      pointerId: 2,
+      pointerType: "touch",
+      target: second.stage,
+    }));
+
+    expect(reboundOnSelectNode).toHaveBeenCalledWith(null);
+  });
+
+  it("continues cleanup and resets touch state when a listener removal throws", () => {
+    const first = createStage();
+    const second = createStage();
+    const { controller, onSelectNodeRef } = createController();
+    const cleanup = controller.bind(first.stage as never);
+    first.handlers.pointerdown?.(pointer(0, 0, {
+      pointerId: 1,
+      pointerType: "touch",
+      target: first.stage,
+    }));
+    const originalOff = first.stage.off.getMockImplementation()!;
+    first.stage.off.mockImplementation((event: StageEvent, handler: Handler) => {
+      if (event === "pointermove") throw new Error("listener cleanup failed");
+      return originalOff(event, handler);
+    });
+
+    expect(cleanup).toThrow("listener cleanup failed");
+    expect(first.stage.off).toHaveBeenCalledTimes(5);
+
+    const reboundOnSelectNode = jest.fn();
+    onSelectNodeRef.current = reboundOnSelectNode;
+    controller.bind(second.stage as never);
+    second.handlers.pointerdown?.(pointer(0, 0, {
+      pointerId: 2,
+      pointerType: "touch",
+      target: second.stage,
+    }));
+
+    expect(reboundOnSelectNode).toHaveBeenCalledWith(null);
   });
 
   it("does not carry a gesture started from cleanup into the next binding", () => {
@@ -636,44 +713,75 @@ describe("createStageInteractions", () => {
     expect(onViewportChangeRef.current).toHaveBeenCalledWith(expect.objectContaining({ scale: 2 }));
   });
 
-  it("pinch終了後は残ったtouchのpanを再開しない", () => {
+  it("pinch開始時のgesture cancel callbackからcleanupされても例外にしない", () => {
     const { stage, handlers } = createStage();
-    const { controller, onViewportChangeRef } = createController();
-    controller.bind(stage as never);
-    handlers.pointerdown?.(pointer(0, 0, { pointerId: 1, pointerType: "touch", target: stage }));
-    handlers.pointerdown?.(pointer(100, 0, { pointerId: 2, pointerType: "touch", target: stage }));
-    handlers.pointerup?.(pointer(100, 0, { pointerId: 2, pointerType: "touch" }));
-    onViewportChangeRef.current.mockClear();
+    let cleanup = () => {};
+    const onConnectionTargetChange = jest.fn((id: number | null) => {
+      if (id === null) cleanup();
+    });
+    const { controller } = createController({
+      nodes: [node, targetNode],
+      onConnectionTargetChange,
+    });
+    cleanup = controller.bind(stage as never);
+    controller.handleNodePointerDown(1, pointer(50, 50, {
+      shiftKey: true,
+      pointerId: 1,
+      pointerType: "touch",
+      path: [stage],
+    }) as never);
 
-    handlers.pointermove?.(pointer(20, 0, { pointerId: 1, pointerType: "touch" }));
-
-    expect(onViewportChangeRef.current).not.toHaveBeenCalled();
+    expect(() => handlers.pointerdown?.(pointer(200, 100, {
+      pointerId: 2,
+      pointerType: "touch",
+      target: stage,
+    }))).not.toThrow();
+    expect(controller.hasActiveGesture()).toBe(false);
+    expect(handlers).toEqual({});
   });
 
-  it("3本目のtouchは固定したpinch pairを置換しない", () => {
+  it("pinch開始時のcancel callbackから開始された新gestureを保持する", () => {
     const { stage, handlers } = createStage();
-    const { controller, onViewportChangeRef } = createController();
+    const onMoveNode = jest.fn();
+    let startedNextGesture = false;
+    const { controller, onConnectionTargetChangeRef, onViewportChangeRef } = createController({
+      nodes: [node, targetNode],
+      onMoveNode,
+    });
+    onConnectionTargetChangeRef.current = jest.fn((id: number | null) => {
+      if (id === null && !startedNextGesture) {
+        startedNextGesture = true;
+        controller.handleNodePointerDown(1, pointer(50, 50, {
+          pointerId: 3,
+          pointerType: "mouse",
+          path: [stage],
+        }) as never);
+      }
+    });
     controller.bind(stage as never);
-    handlers.pointerdown?.(pointer(0, 0, { pointerId: 1, pointerType: "touch", target: stage }));
-    handlers.pointerdown?.(pointer(100, 0, { pointerId: 2, pointerType: "touch", target: stage }));
-    handlers.pointerdown?.(pointer(500, 500, { pointerId: 3, pointerType: "touch", target: stage }));
-    onViewportChangeRef.current.mockClear();
+    controller.handleNodePointerDown(1, pointer(50, 50, {
+      shiftKey: true,
+      pointerId: 1,
+      pointerType: "touch",
+      path: [stage],
+    }) as never);
 
-    handlers.pointermove?.(pointer(600, 600, { pointerId: 3, pointerType: "touch" }));
+    handlers.pointerdown?.(pointer(200, 100, {
+      pointerId: 2,
+      pointerType: "touch",
+      target: stage,
+    }));
+    handlers.pointermove?.(pointer(300, 100, {
+      pointerId: 2,
+      pointerType: "touch",
+    }));
+    handlers.pointermove?.(pointer(60, 60, {
+      pointerId: 3,
+      pointerType: "mouse",
+    }));
 
     expect(onViewportChangeRef.current).not.toHaveBeenCalled();
+    expect(onMoveNode).toHaveBeenCalledWith(1, 30, 50);
   });
 
-  it("固定touchのpointercancelでpinchを終了する", () => {
-    const { stage, handlers } = createStage();
-    const { controller, onViewportChangeRef } = createController();
-    controller.bind(stage as never);
-    handlers.pointerdown?.(pointer(0, 0, { pointerId: 1, pointerType: "touch", target: stage }));
-    handlers.pointerdown?.(pointer(100, 0, { pointerId: 2, pointerType: "touch", target: stage }));
-
-    handlers.pointercancel?.(pointer(100, 0, { pointerId: 2, pointerType: "touch" }));
-    handlers.pointermove?.(pointer(200, 0, { pointerId: 1, pointerType: "touch" }));
-
-    expect(onViewportChangeRef.current).not.toHaveBeenCalled();
-  });
 });

@@ -23,9 +23,12 @@ describe("useMapViewport", () => {
     act(() => {
       result.current.setViewport(next);
       result.current.setViewport({ offsetX: Number.NaN, offsetY: 0, scale: 1 });
+      result.current.setViewport({ offsetX: 0, offsetY: 0, scale: 0.1 });
+      result.current.setViewport({ offsetX: 0, offsetY: 0, scale: 100 });
     });
 
     expect(result.current.viewport).toEqual(next);
+    expect(result.current.viewportRef.current).toEqual(next);
   });
 
   it("更新後もcommand参照を維持する", () => {

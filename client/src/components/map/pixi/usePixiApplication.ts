@@ -48,6 +48,7 @@ export function usePixiApplication(
 
       createdApp.canvas.style.position = "absolute";
       createdApp.canvas.style.inset = "0px";
+      createdApp.canvas.style.touchAction = "none";
       container.appendChild(createdApp.canvas);
       setRuntime({
         app: createdApp,

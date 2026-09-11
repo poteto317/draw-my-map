@@ -1,5 +1,4 @@
 import type { Point } from "@/components/map/mapGeometry";
-import type { Node } from "@/types/node";
 
 export type Viewport = {
   offsetX: number;
@@ -17,7 +16,8 @@ export function isValidViewport(viewport: Viewport): boolean {
   return Number.isFinite(viewport.offsetX)
     && Number.isFinite(viewport.offsetY)
     && Number.isFinite(viewport.scale)
-    && viewport.scale > 0;
+    && viewport.scale >= MIN_VIEWPORT_SCALE
+    && viewport.scale <= MAX_VIEWPORT_SCALE;
 }
 
 export function worldToScreen(point: Point, viewport: Viewport): Point {
@@ -38,7 +38,12 @@ export function panViewport(viewport: Viewport, dx: number, dy: number): Viewpor
   if (!Number.isFinite(dx) || !Number.isFinite(dy) || !isValidViewport(viewport)) {
     return viewport;
   }
-  return { ...viewport, offsetX: viewport.offsetX + dx, offsetY: viewport.offsetY + dy };
+  const candidate = {
+    ...viewport,
+    offsetX: viewport.offsetX + dx,
+    offsetY: viewport.offsetY + dy,
+  };
+  return isValidViewport(candidate) ? candidate : viewport;
 }
 
 export function clampViewportScale(scale: number): number {
@@ -58,29 +63,12 @@ export function zoomViewportAt(
     return viewport;
   }
   const scale = clampViewportScale(requestedScale);
-  const worldAnchor = screenToWorld(anchor, viewport);
-  return {
-    offsetX: anchor.x - worldAnchor.x * scale,
-    offsetY: anchor.y - worldAnchor.y * scale,
+  if (scale === viewport.scale) return viewport;
+  const scaleRatio = scale / viewport.scale;
+  const candidate = {
+    offsetX: anchor.x * (1 - scaleRatio) + viewport.offsetX * scaleRatio,
+    offsetY: anchor.y * (1 - scaleRatio) + viewport.offsetY * scaleRatio,
     scale,
   };
-}
-
-export function focusViewportOnNode(
-  viewport: Viewport,
-  node: Node,
-  screen: ScreenSize,
-): Viewport {
-  if (!isValidViewport(viewport)
-    || !Number.isFinite(screen.width)
-    || !Number.isFinite(screen.height)) {
-    return viewport;
-  }
-  const center = { x: node.x + node.width / 2, y: node.y + node.height / 2 };
-  if (!Number.isFinite(center.x) || !Number.isFinite(center.y)) return viewport;
-  return {
-    offsetX: screen.width / 2 - center.x * viewport.scale,
-    offsetY: screen.height / 2 - center.y * viewport.scale,
-    scale: viewport.scale,
-  };
+  return isValidViewport(candidate) ? candidate : viewport;
 }

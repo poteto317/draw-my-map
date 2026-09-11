@@ -1,18 +1,5 @@
 import { renderHook } from "@testing-library/react";
-import {
-  normalizeWheelDeltaY,
-  useMapWheelZoom,
-} from "@/components/map/useMapWheelZoom";
-
-describe("normalizeWheelDeltaY", () => {
-  it.each([
-    [2, WheelEvent.DOM_DELTA_PIXEL, 600, 2],
-    [2, WheelEvent.DOM_DELTA_LINE, 600, 32],
-    [2, WheelEvent.DOM_DELTA_PAGE, 600, 1200],
-  ])("wheel deltaをpixelへ正規化する (%s, mode=%s)", (deltaY, mode, height, expected) => {
-    expect(normalizeWheelDeltaY(deltaY, mode, height)).toBe(expected);
-  });
-});
+import { useMapWheelZoom } from "@/components/map/useMapWheelZoom";
 
 describe("useMapWheelZoom", () => {
   it("canvas上のwheelを抑止してcanvas相対anchorでズームする", () => {

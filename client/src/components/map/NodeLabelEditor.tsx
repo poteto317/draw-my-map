@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import type { Viewport } from "@/components/map/mapViewport";
-import { worldToScreen } from "@/components/map/mapViewport";
+import { getNodeLabelEditorLayout } from "@/components/map/nodeLabelEditorLayout";
 import type { Node } from "@/types/node";
 
 type NodeLabelEditorProps = {
@@ -23,9 +23,7 @@ export function NodeLabelEditor({ node, viewport, value, onChange, onCommit, onC
     onCommit();
   };
 
-  const position = worldToScreen({ x: node.x, y: node.y }, viewport);
-  const width = node.width * viewport.scale;
-  const height = node.height * viewport.scale;
+  const layout = getNodeLabelEditorLayout(node, viewport);
 
   return (
     <input
@@ -45,14 +43,7 @@ export function NodeLabelEditor({ node, viewport, value, onChange, onCommit, onC
       onBlur={handleBlur}
       autoFocus
       className="absolute z-10 border-2 border-blue-500 bg-white px-2 text-center text-zinc-800 outline-none"
-      style={{
-        left: position.x,
-        top: position.y,
-        width,
-        height,
-        lineHeight: `${height}px`,
-        fontSize: 14 * viewport.scale,
-      }}
+      style={layout}
     />
   );
 }

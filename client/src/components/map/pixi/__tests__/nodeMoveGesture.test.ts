@@ -101,6 +101,52 @@ describe("createNodeMoveGesture", () => {
     expect(onMoveNode).toHaveBeenCalledWith(1, 24, 41);
   });
 
+  it.each([
+    pointer(Number.NaN, 60),
+    pointer(100, 60, Number.POSITIVE_INFINITY, 60),
+  ])("非有限の開始座標ではgestureを作らない", (startSample) => {
+    expect(createNodeMoveGesture({
+      nodeId: 1,
+      startSample,
+      nodesRef: { current: [node] },
+      onMoveNodeRef: { current: jest.fn() },
+      dragThreshold: 4,
+    })).toBeNull();
+  });
+
+  it.each([
+    pointer(Number.NaN, 64),
+    pointer(104, 64, Number.POSITIVE_INFINITY, 64),
+  ])("非有限の現在座標を移動callbackへ渡さない", (currentSample) => {
+    const onMoveNode = jest.fn();
+    const gesture = createNodeMoveGesture({
+      nodeId: 1,
+      startSample: pointer(100, 60),
+      nodesRef: { current: [node] },
+      onMoveNodeRef: { current: onMoveNode },
+      dragThreshold: 4,
+    });
+
+    gesture?.move(currentSample);
+
+    expect(onMoveNode).not.toHaveBeenCalled();
+  });
+
+  it("有限値同士の演算がoverflowする移動をcallbackへ渡さない", () => {
+    const onMoveNode = jest.fn();
+    const gesture = createNodeMoveGesture({
+      nodeId: 1,
+      startSample: pointer(0, 0),
+      nodesRef: { current: [{ ...node, x: Number.MAX_VALUE }] },
+      onMoveNodeRef: { current: onMoveNode },
+      dragThreshold: 4,
+    });
+
+    gesture?.move(pointer(4, 0, Number.MAX_VALUE, 0));
+
+    expect(onMoveNode).not.toHaveBeenCalled();
+  });
+
   it.each(["end", "cancel"] as const)(
     "uses the latest callback and stops after %s",
     (finish) => {

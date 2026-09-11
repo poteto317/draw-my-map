@@ -10,6 +10,51 @@ function pressF(target: EventTarget = window) {
 }
 
 describe("useMapViewportShortcut", () => {
+  it("F以外のキーではgesture状態を照会しない", () => {
+    const hasActiveGesture = jest.fn(() => false);
+    renderHook(() => useMapViewportShortcut({
+      nodes: [node],
+      selectedNodeId: 1,
+      isEditing: false,
+      screen: { width: 800, height: 600 },
+      hasActiveGesture,
+      onFocusNode: jest.fn(),
+    }));
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+
+    expect(hasActiveGesture).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { ctrlKey: true },
+    { metaKey: true },
+    { altKey: true },
+  ])("修飾キー付きFではブラウザ既定動作を妨げない", (modifier) => {
+    const hasActiveGesture = jest.fn(() => false);
+    const onFocusNode = jest.fn();
+    renderHook(() => useMapViewportShortcut({
+      nodes: [node],
+      selectedNodeId: 1,
+      isEditing: false,
+      screen: { width: 800, height: 600 },
+      hasActiveGesture,
+      onFocusNode,
+    }));
+    const event = new KeyboardEvent("keydown", {
+      key: "f",
+      bubbles: true,
+      cancelable: true,
+      ...modifier,
+    });
+
+    window.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(hasActiveGesture).not.toHaveBeenCalled();
+    expect(onFocusNode).not.toHaveBeenCalled();
+  });
+
   it("選択ノードとscreenをフォーカスcommandへ渡す", () => {
     const onFocusNode = jest.fn();
     renderHook(() => useMapViewportShortcut({
@@ -27,67 +72,15 @@ describe("useMapViewportShortcut", () => {
     expect(onFocusNode).toHaveBeenCalledWith(node, { width: 800, height: 600 });
   });
 
-  it("ラベル編集中はFキーを無視する", () => {
-    const onFocusNode = jest.fn();
-    renderHook(() => useMapViewportShortcut({
-      nodes: [node], selectedNodeId: 1, isEditing: true,
-      screen: { width: 800, height: 600 },
-      hasActiveGesture: () => false, onFocusNode,
-    }));
-
-    pressF();
-    expect(onFocusNode).not.toHaveBeenCalled();
-  });
-
-  it("pointer gesture中はFキーを無視する", () => {
-    const onFocusNode = jest.fn();
-    renderHook(() => useMapViewportShortcut({
-      nodes: [node], selectedNodeId: 1, isEditing: false,
-      screen: { width: 800, height: 600 },
-      hasActiveGesture: () => true, onFocusNode,
-    }));
-
-    pressF();
-    expect(onFocusNode).not.toHaveBeenCalled();
-  });
-
-  it.each(["input", "textarea", "select"])("%sからのFキーを無視する", (tagName) => {
-    const target = document.body.appendChild(document.createElement(tagName));
-    const onFocusNode = jest.fn();
-    renderHook(() => useMapViewportShortcut({
-      nodes: [node], selectedNodeId: 1, isEditing: false,
-      screen: { width: 800, height: 600 }, hasActiveGesture: () => false, onFocusNode,
-    }));
-
-    pressF(target);
-    expect(onFocusNode).not.toHaveBeenCalled();
-    target.remove();
-  });
-
-  it("contenteditable内の子要素からのFキーを無視する", () => {
-    const editor = document.body.appendChild(document.createElement("div"));
-    editor.setAttribute("contenteditable", "true");
-    const target = editor.appendChild(document.createElement("span"));
-    const onFocusNode = jest.fn();
-    renderHook(() => useMapViewportShortcut({
-      nodes: [node], selectedNodeId: 1, isEditing: false,
-      screen: { width: 800, height: 600 }, hasActiveGesture: () => false, onFocusNode,
-    }));
-
-    pressF(target);
-    expect(onFocusNode).not.toHaveBeenCalled();
-    editor.remove();
-  });
-
-  it("欠損選択とunmount後は何もしない", () => {
+  it("unmount後はkeydownを処理しない", () => {
     const onFocusNode = jest.fn();
     const { unmount } = renderHook(() => useMapViewportShortcut({
-      nodes: [], selectedNodeId: 1, isEditing: false,
+      nodes: [node], selectedNodeId: 1, isEditing: false,
       screen: { width: 800, height: 600 }, hasActiveGesture: () => false, onFocusNode,
     }));
-    pressF();
     unmount();
     pressF();
+
     expect(onFocusNode).not.toHaveBeenCalled();
   });
 });

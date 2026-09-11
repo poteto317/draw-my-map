@@ -1,4 +1,5 @@
 import type { LatestValue, PointerGesture, PointerSample } from "@/components/map/pixi/pointerGesture";
+import { createDragActivation } from "@/components/map/pixi/dragActivation";
 import type { Node } from "@/types/node";
 
 type NodeMoveGestureOptions = {
@@ -9,6 +10,13 @@ type NodeMoveGestureOptions = {
   dragThreshold: number;
 };
 
+const hasFiniteCoordinates = (sample: PointerSample): boolean => (
+  Number.isFinite(sample.screen.x)
+  && Number.isFinite(sample.screen.y)
+  && Number.isFinite(sample.world.x)
+  && Number.isFinite(sample.world.y)
+);
+
 export function createNodeMoveGesture({
   nodeId,
   startSample,
@@ -17,29 +25,26 @@ export function createNodeMoveGesture({
   dragThreshold,
 }: NodeMoveGestureOptions): PointerGesture | null {
   const node = nodesRef.current.find((currentNode) => currentNode.id === nodeId);
-  if (!node) return null;
+  if (!node || !hasFiniteCoordinates(startSample)) return null;
 
-  const startScreen = { ...startSample.screen };
+  const dragActivation = createDragActivation(startSample.screen, dragThreshold);
   const startWorld = { ...startSample.world };
   let active = true;
-  let dragging = false;
   const finish = () => {
     active = false;
   };
 
   return {
     move(sample) {
-      if (!active) return;
-      const screenDx = sample.screen.x - startScreen.x;
-      const screenDy = sample.screen.y - startScreen.y;
-      if (!dragging) {
-        if (Math.abs(screenDx) < dragThreshold && Math.abs(screenDy) < dragThreshold) return;
-        dragging = true;
-      }
+      if (!active || !hasFiniteCoordinates(sample)) return;
+      if (!dragActivation.update(sample.screen)) return;
+      const nextX = node.x + sample.world.x - startWorld.x;
+      const nextY = node.y + sample.world.y - startWorld.y;
+      if (!Number.isFinite(nextX) || !Number.isFinite(nextY)) return;
       onMoveNodeRef.current(
         nodeId,
-        node.x + sample.world.x - startWorld.x,
-        node.y + sample.world.y - startWorld.y,
+        nextX,
+        nextY,
       );
     },
     end: finish,

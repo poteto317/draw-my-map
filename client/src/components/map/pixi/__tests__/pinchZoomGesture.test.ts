@@ -70,4 +70,47 @@ describe("createPinchZoomGesture", () => {
 
     expect(onViewportChangeRef.current).not.toHaveBeenCalled();
   });
+
+  it("開始距離がゼロでも最初の正距離を基準に次のmoveからズームする", () => {
+    const onViewportChangeRef = { current: jest.fn() };
+    const gesture = createPinchZoomGesture({
+      first: touch(1, 100, 100),
+      second: touch(2, 100, 100),
+      startViewport: { offsetX: 0, offsetY: 0, scale: 1 },
+      onViewportChangeRef,
+    });
+
+    gesture.move(touch(2, 200, 100));
+    expect(onViewportChangeRef.current).not.toHaveBeenCalled();
+
+    gesture.move(touch(2, 300, 100));
+
+    expect(onViewportChangeRef.current).toHaveBeenCalledWith({
+      offsetX: -100,
+      offsetY: -100,
+      scale: 2,
+    });
+  });
+
+  it("非有限moveを無視して最初の有限な正距離から復旧する", () => {
+    const onViewportChangeRef = { current: jest.fn() };
+    const gesture = createPinchZoomGesture({
+      first: touch(1, 100, 100),
+      second: touch(2, 100, 100),
+      startViewport: { offsetX: 0, offsetY: 0, scale: 1 },
+      onViewportChangeRef,
+    });
+
+    gesture.move(touch(2, Number.NaN, 100));
+    gesture.move(touch(2, 200, 100));
+    expect(onViewportChangeRef.current).not.toHaveBeenCalled();
+
+    gesture.move(touch(2, 300, 100));
+
+    expect(onViewportChangeRef.current).toHaveBeenCalledWith({
+      offsetX: -100,
+      offsetY: -100,
+      scale: 2,
+    });
+  });
 });

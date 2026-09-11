@@ -7,7 +7,6 @@ import {
   screenToWorld,
   worldToScreen,
   zoomViewportAt,
-  focusViewportOnNode,
 } from "@/components/map/mapViewport";
 
 describe("map viewport", () => {
@@ -37,12 +36,20 @@ describe("map viewport", () => {
     [{ offsetX: Number.NaN, offsetY: 0, scale: 1 }],
     [{ offsetX: 0, offsetY: Number.POSITIVE_INFINITY, scale: 1 }],
     [{ offsetX: 0, offsetY: 0, scale: 0 }],
+    [{ offsetX: 0, offsetY: 0, scale: MIN_VIEWPORT_SCALE - 0.01 }],
+    [{ offsetX: 0, offsetY: 0, scale: MAX_VIEWPORT_SCALE + 0.01 }],
   ])("無効なviewportを拒否する", (viewport) => {
     expect(isValidViewport(viewport)).toBe(false);
   });
 
   it("無効なパン差分では元のviewportを返す", () => {
     expect(panViewport(INITIAL_VIEWPORT, Number.NaN, 1)).toBe(INITIAL_VIEWPORT);
+  });
+
+  it("有限値同士の加算がoverflowするパンでは元のviewportを返す", () => {
+    const nearLimit = { ...INITIAL_VIEWPORT, offsetX: Number.MAX_VALUE };
+
+    expect(panViewport(nearLimit, Number.MAX_VALUE, 0)).toBe(nearLimit);
   });
 });
 
@@ -65,38 +72,33 @@ describe("zoomViewportAt", () => {
     expect(screenToWorld(anchor, next)).toEqual(worldBefore);
   });
 
+  it("大きな有限anchorでも途中計算をoverflowさせない", () => {
+    expect(zoomViewportAt(
+      INITIAL_VIEWPORT,
+      { x: 1.05e308, y: 0 },
+      2,
+    )).toEqual({ offsetX: -1.05e308, offsetY: 0, scale: 2 });
+  });
+
+  it("有限値同士の演算結果が非有限になるzoomでは元のviewportを返す", () => {
+    expect(zoomViewportAt(
+      INITIAL_VIEWPORT,
+      { x: -Number.MAX_VALUE, y: 0 },
+      4,
+    )).toBe(INITIAL_VIEWPORT);
+  });
+
   it("非有限の倍率・anchorでは元のviewportを返す", () => {
     expect(zoomViewportAt(INITIAL_VIEWPORT, { x: Number.NaN, y: 0 }, 2))
       .toBe(INITIAL_VIEWPORT);
     expect(zoomViewportAt(INITIAL_VIEWPORT, { x: 0, y: 0 }, Number.NaN))
       .toBe(INITIAL_VIEWPORT);
   });
-});
 
-describe("focusViewportOnNode", () => {
-  it("現在倍率を保ってノード中心を画面中央へ移す", () => {
-    const node = {
-      id: 1,
-      parentId: null,
-      x: 100,
-      y: 50,
-      width: 80,
-      height: 40,
-      label: "node",
-    };
-
-    expect(focusViewportOnNode(
-      { offsetX: 0, offsetY: 0, scale: 2 },
-      node,
-      { width: 800, height: 600 },
-    )).toEqual({ offsetX: 120, offsetY: 160, scale: 2 });
-  });
-
-  it("非有限の画面サイズでは元のviewportを返す", () => {
-    expect(focusViewportOnNode(
-      INITIAL_VIEWPORT,
-      { id: 1, parentId: null, x: 0, y: 0, width: 1, height: 1, label: "" },
-      { width: Number.POSITIVE_INFINITY, height: 600 },
-    )).toBe(INITIAL_VIEWPORT);
+  it.each([
+    [{ offsetX: 10, offsetY: 20, scale: MIN_VIEWPORT_SCALE }, 0.01],
+    [{ offsetX: 10, offsetY: 20, scale: MAX_VIEWPORT_SCALE }, 10],
+  ])("倍率限界を越える要求では同じviewportを返す", (viewport, requestedScale) => {
+    expect(zoomViewportAt(viewport, { x: 100, y: 80 }, requestedScale)).toBe(viewport);
   });
 });

@@ -1,10 +1,11 @@
-import { screenToWorld } from "@/components/map/mapViewport";
 import type { Viewport } from "@/components/map/mapViewport";
 import { createCanvasPanGesture } from "@/components/map/pixi/canvasPanGesture";
 import { createNodeConnectionGesture } from "@/components/map/pixi/nodeConnectionGesture";
 import { createNodeMoveGesture } from "@/components/map/pixi/nodeMoveGesture";
-import { createPinchZoomGesture, type PinchZoomGesture } from "@/components/map/pixi/pinchZoomGesture";
-import type { LatestValue, PointerGesture, PointerSample } from "@/components/map/pixi/pointerGesture";
+import type { LatestValue } from "@/components/map/pixi/pointerGesture";
+import { createPointerGestureSession } from "@/components/map/pixi/pointerGestureSession";
+import { toPointerSample } from "@/components/map/pixi/pointerSample";
+import { createTouchGestureCoordinator } from "@/components/map/pixi/touchGestureCoordinator";
 import type { Node } from "@/types/node";
 import type { Container, FederatedPointerEvent } from "pixi.js";
 
@@ -37,69 +38,29 @@ export function createStageInteractions({
   onViewportChangeRef,
   dragThreshold = 4,
 }: StageInteractionOptions) {
-  let activeGesture: { pointerId: number; gesture: PointerGesture } | null = null;
   let activeBinding: StageBinding | null = null;
-  let activePinch: PinchZoomGesture | null = null;
-  const touchSamples = new Map<number, PointerSample>();
-  let suppressTouchUntilAllReleased = false;
+  const pointerGestures = createPointerGestureSession();
 
-  const toPointerSample = (event: FederatedPointerEvent): PointerSample => {
-    const screen = { x: event.globalX, y: event.globalY };
-    return {
-      pointerId: event.pointerId,
-      pointerType: event.pointerType || "mouse",
-      screen,
-      world: screenToWorld(screen, viewportRef.current),
-    };
-  };
-
-  const cancelActiveGesture = () => {
-    const gestureToCancel = activeGesture;
-    activeGesture = null;
-    gestureToCancel?.gesture.cancel();
-  };
+  const touchGestures = createTouchGestureCoordinator({
+    viewportRef,
+    onViewportChangeRef,
+    onBeforePinch: () => {
+      const bindingBeforeCancel = activeBinding;
+      if (bindingBeforeCancel === null) return false;
+      pointerGestures.cancel();
+      return activeBinding === bindingBeforeCancel && !pointerGestures.hasActive();
+    },
+  });
 
   const cancelAllInteractions = () => {
-    cancelActiveGesture();
-    if (activePinch) {
-      activePinch.cancel();
-      activePinch = null;
-    }
+    pointerGestures.cancel();
+    touchGestures.cancel();
   };
 
-  const hasActiveGesture = () => activeGesture !== null || activePinch !== null;
-
-  const handleTouchDown = (sample: PointerSample): boolean => {
-    if (sample.pointerType !== "touch") return false;
-    if (!touchSamples.has(sample.pointerId)) touchSamples.set(sample.pointerId, sample);
-    if (suppressTouchUntilAllReleased || activePinch || touchSamples.size > 2) return true;
-    if (touchSamples.size < 2) return false;
-
-    cancelActiveGesture();
-    const [first, second] = [...touchSamples.values()];
-    activePinch = createPinchZoomGesture({
-      first,
-      second,
-      startViewport: viewportRef.current,
-      onViewportChangeRef,
-    });
-    return true;
-  };
-
-  const handleTouchUp = (pointerId: number, pointerType: string) => {
-    if (pointerType !== "touch") return;
-    touchSamples.delete(pointerId);
-    if (activePinch?.owns(pointerId)) {
-      activePinch.end(pointerId);
-      activePinch = null;
-      suppressTouchUntilAllReleased = true;
-    }
-    if (touchSamples.size === 0) {
-      suppressTouchUntilAllReleased = false;
-    }
-  };
+  const hasActiveGesture = () => pointerGestures.hasActive() || touchGestures.hasActivePinch();
 
   const handleNodePointerDown = (nodeId: number, event: FederatedPointerEvent) => {
+    if (event.button !== 0) return;
     const bindingAtEntry = activeBinding;
     if (
       bindingAtEntry === null
@@ -108,12 +69,12 @@ export function createStageInteractions({
       return;
     }
 
-    const sample = toPointerSample(event);
-    if (handleTouchDown(sample)) return;
+    const sample = toPointerSample(event, viewportRef.current);
+    if (touchGestures.pointerDown(sample)) return;
 
-    cancelActiveGesture();
+    pointerGestures.cancel();
     if (
-      activeGesture !== null
+      pointerGestures.hasActive()
       || activeBinding !== bindingAtEntry
       || !nodesRef.current.some((node) => node.id === nodeId)
     ) {
@@ -136,28 +97,20 @@ export function createStageInteractions({
       });
     if (!gesture) return;
 
-    const nextGesture = { pointerId: sample.pointerId, gesture };
-    activeGesture = nextGesture;
+    const nextGesture = pointerGestures.start(sample.pointerId, gesture);
+    if (!nextGesture) return;
     try {
       onSelectNodeRef.current(nodeId);
     } catch (error) {
-      if (activeGesture === nextGesture) activeGesture = null;
+      pointerGestures.clear(nextGesture);
       throw error;
     }
   };
 
   const handlePointerMove = (event: FederatedPointerEvent) => {
-    const sample = toPointerSample(event);
-    if (sample.pointerType === "touch") {
-      touchSamples.set(sample.pointerId, sample);
-    }
-    if (activePinch) {
-      activePinch.move(sample);
-      return;
-    }
-    if (event.pointerId === activeGesture?.pointerId) {
-      activeGesture.gesture.move(sample);
-    }
+    const sample = toPointerSample(event, viewportRef.current);
+    if (touchGestures.pointerMove(sample)) return;
+    pointerGestures.move(sample);
   };
 
   const bind = (stage: InteractiveStage) => {
@@ -168,57 +121,54 @@ export function createStageInteractions({
     activeBinding = binding;
 
     const handleStagePointerDown = (event: FederatedPointerEvent) => {
-      if (activeBinding !== binding || event.target !== stage) return;
+      if (activeBinding !== binding || event.target !== stage || event.button !== 0) return;
 
-      const sample = toPointerSample(event);
-      if (handleTouchDown(sample)) return;
+      const sample = toPointerSample(event, viewportRef.current);
+      if (touchGestures.pointerDown(sample)) return;
 
-      const gestureAtEntry = activeGesture;
+      const gestureAtEntry = pointerGestures.current();
+      if (gestureAtEntry !== null && event.pointerId !== gestureAtEntry.pointerId) return;
       try {
         onSelectNodeRef.current(null);
       } finally {
         if (
           gestureAtEntry !== null
-          && activeGesture === gestureAtEntry
+          && pointerGestures.current() === gestureAtEntry
           && activeBinding === binding
           && event.pointerId === gestureAtEntry.pointerId
         ) {
-          cancelActiveGesture();
+          pointerGestures.cancel();
         }
       }
-      if (activeBinding !== binding || activeGesture !== null) return;
+      if (activeBinding !== binding || pointerGestures.hasActive()) return;
 
-      activeGesture = {
-        pointerId: sample.pointerId,
-        gesture: createCanvasPanGesture({
+      pointerGestures.start(
+        sample.pointerId,
+        createCanvasPanGesture({
           startSample: sample,
           startViewport: viewportRef.current,
           onViewportChangeRef,
           dragThreshold,
         }),
-      };
+      );
     };
     const handlePointerUp = (event: FederatedPointerEvent) => {
       if (activeBinding !== binding) return;
-      const sample = toPointerSample(event);
-      handleTouchUp(sample.pointerId, sample.pointerType);
-      if (event.pointerId !== activeGesture?.pointerId) return;
-
-      const gestureToEnd = activeGesture;
-      activeGesture = null;
-      gestureToEnd.gesture.end(sample);
+      const sample = toPointerSample(event, viewportRef.current);
+      touchGestures.pointerUp(sample);
+      pointerGestures.end(sample);
     };
     const handlePointerUpOutside = (event: FederatedPointerEvent) => {
       if (activeBinding !== binding) return;
-      const sample = toPointerSample(event);
-      handleTouchUp(sample.pointerId, sample.pointerType);
-      if (event.pointerId === activeGesture?.pointerId) cancelActiveGesture();
+      const sample = toPointerSample(event, viewportRef.current);
+      touchGestures.pointerUp(sample);
+      if (pointerGestures.owns(event.pointerId)) pointerGestures.cancel();
     };
     const handlePointerCancel = (event: FederatedPointerEvent) => {
       if (activeBinding !== binding) return;
-      const sample = toPointerSample(event);
-      handleTouchUp(sample.pointerId, sample.pointerType);
-      if (event.pointerId === activeGesture?.pointerId) cancelActiveGesture();
+      const sample = toPointerSample(event, viewportRef.current);
+      touchGestures.pointerUp(sample);
+      if (pointerGestures.owns(event.pointerId)) pointerGestures.cancel();
     };
     const handleStagePointerMove = (event: FederatedPointerEvent) => {
       if (activeBinding === binding) handlePointerMove(event);
@@ -237,16 +187,29 @@ export function createStageInteractions({
       const ownsBinding = activeBinding === binding;
       if (ownsBinding) activeBinding = null;
 
-      stage.off("pointerdown", handleStagePointerDown);
-      stage.off("pointermove", handleStagePointerMove);
-      stage.off("pointerup", handlePointerUp);
-      stage.off("pointerupoutside", handlePointerUpOutside);
-      stage.off("pointercancel", handlePointerCancel);
+      let firstError: unknown;
+      let hasError = false;
+      const attemptCleanup = (cleanup: () => void) => {
+        try {
+          cleanup();
+        } catch (error) {
+          if (!hasError) {
+            firstError = error;
+            hasError = true;
+          }
+        }
+      };
+
+      attemptCleanup(() => { stage.off("pointerdown", handleStagePointerDown); });
+      attemptCleanup(() => { stage.off("pointermove", handleStagePointerMove); });
+      attemptCleanup(() => { stage.off("pointerup", handlePointerUp); });
+      attemptCleanup(() => { stage.off("pointerupoutside", handlePointerUpOutside); });
+      attemptCleanup(() => { stage.off("pointercancel", handlePointerCancel); });
       if (ownsBinding) {
-        cancelAllInteractions();
-        touchSamples.clear();
-        suppressTouchUntilAllReleased = false;
+        attemptCleanup(pointerGestures.cancel);
+        attemptCleanup(touchGestures.reset);
       }
+      if (hasError) throw firstError;
     };
   };
 

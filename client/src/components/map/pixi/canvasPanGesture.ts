@@ -1,4 +1,5 @@
 import { panViewport, type Viewport } from "@/components/map/mapViewport";
+import { createDragActivation } from "@/components/map/pixi/dragActivation";
 import type {
   LatestValue,
   PointerGesture,
@@ -18,21 +19,16 @@ export function createCanvasPanGesture({
   onViewportChangeRef,
   dragThreshold,
 }: CanvasPanGestureOptions): PointerGesture {
-  const startScreen = { ...startSample.screen };
+  const dragActivation = createDragActivation(startSample.screen, dragThreshold);
   let active = true;
-  let dragging = false;
   const finish = () => { active = false; };
 
   return {
     move(sample) {
       if (!active) return;
-      const dx = sample.screen.x - startScreen.x;
-      const dy = sample.screen.y - startScreen.y;
-      if (!dragging) {
-        if (Math.abs(dx) < dragThreshold && Math.abs(dy) < dragThreshold) return;
-        dragging = true;
-      }
-      onViewportChangeRef.current(panViewport(startViewport, dx, dy));
+      const movement = dragActivation.update(sample.screen);
+      if (!movement) return;
+      onViewportChangeRef.current(panViewport(startViewport, movement.x, movement.y));
     },
     end: finish,
     cancel: finish,
