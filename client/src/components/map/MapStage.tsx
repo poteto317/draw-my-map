@@ -53,7 +53,7 @@ export function MapStage({
   } = useMapViewport();
   const {
     connectionTargetNodeId,
-    onNodePointerDown,
+    createNodePointerDownHandler,
     cancelActiveGesture,
     hasActiveGesture,
   } = useMapStageInteractions({
@@ -85,6 +85,7 @@ export function MapStage({
   useEffect(() => {
     if (!runtime) return;
 
+    const onNodePointerDown = createNodePointerDownHandler();
     const worldContainer = renderMapScene(runtime.app, runtime.constructors, {
       nodes,
       selectedNodeId,
@@ -104,7 +105,7 @@ export function MapStage({
     selectedNodeId,
     editing.editingNodeId,
     connectionTargetNodeId,
-    onNodePointerDown,
+    createNodePointerDownHandler,
     viewportRef,
   ]);
 

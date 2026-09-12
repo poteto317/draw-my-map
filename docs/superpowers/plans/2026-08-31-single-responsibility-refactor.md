@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Historical note (2026-09-13):** This plan records the Phase 2 API at the time it was executed. Its `handleNodePointerDown` examples are not the current controller contract and must not be reused. For the current binding-lease API, use `docs/superpowers/specs/2026-09-04-phase3-viewport-navigation-design.md` and `docs/superpowers/plans/2026-09-04-phase3-zoom-focus.md`.
+
 **Goal:** Refactor every responsibility-mixed area changed from `main` into focused, independently tested units without changing public APIs or user-visible behavior.
 
 **Architecture:** `MapStage` becomes a composition boundary over focused editing, keyboard, geometry, PixiJS lifecycle, rendering, and pointer-interaction units. `useNodes` remains the public React state hook while delegating placement and subtree discovery to pure domain functions.

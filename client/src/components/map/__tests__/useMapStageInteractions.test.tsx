@@ -109,7 +109,7 @@ describe("useMapStageInteractions", () => {
     );
 
     act(() => {
-      result.current.onNodePointerDown(
+      result.current.createNodePointerDownHandler()(
         1,
         pointer(50, 50, { shiftKey: true, path: [stage] }) as never,
       );
@@ -172,7 +172,7 @@ describe("useMapStageInteractions", () => {
     );
 
     act(() => {
-      result.current.onNodePointerDown(
+      result.current.createNodePointerDownHandler()(
         1,
         pointer(50, 50, { shiftKey: true, path: [initial.stage] }) as never,
       );

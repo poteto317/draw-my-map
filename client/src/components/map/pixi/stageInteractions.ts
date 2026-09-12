@@ -62,11 +62,14 @@ export function createStageInteractions({
 
   const hasActiveGesture = () => pointerGestures.hasActive() || touchGestures.hasActivePinch();
 
-  const handleNodePointerDown = (nodeId: number, event: FederatedPointerEvent) => {
+  const handleNodePointerDown = (
+    bindingAtEntry: StageBinding,
+    nodeId: number,
+    event: FederatedPointerEvent,
+  ) => {
     if (event.button !== 0) return;
-    const bindingAtEntry = activeBinding;
     if (
-      bindingAtEntry === null
+      activeBinding !== bindingAtEntry
       || !event.composedPath().some((target: unknown) => target === bindingAtEntry.stage)
     ) {
       return;
@@ -113,6 +116,15 @@ export function createStageInteractions({
       pointerGestures.clear(nextGesture);
       throw error;
     }
+  };
+
+  const createNodePointerDownHandler = () => {
+    const binding = activeBinding;
+
+    return (nodeId: number, event: FederatedPointerEvent) => {
+      if (binding === null || activeBinding !== binding) return;
+      handleNodePointerDown(binding, nodeId, event);
+    };
   };
 
   const handlePointerMove = (event: FederatedPointerEvent) => {
@@ -221,5 +233,10 @@ export function createStageInteractions({
     };
   };
 
-  return { bind, handleNodePointerDown, cancelActiveGesture: cancelAllInteractions, hasActiveGesture };
+  return {
+    bind,
+    createNodePointerDownHandler,
+    cancelActiveGesture: cancelAllInteractions,
+    hasActiveGesture,
+  };
 }

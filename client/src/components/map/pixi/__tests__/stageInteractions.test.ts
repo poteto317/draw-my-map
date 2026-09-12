@@ -135,6 +135,14 @@ function createController(overrides: Partial<{
   };
 }
 
+function nodePointerDown(
+  controller: ReturnType<typeof createStageInteractions>,
+  nodeId: number,
+  event: PointerEvent,
+) {
+  controller.createNodePointerDownHandler()(nodeId, event as never);
+}
+
 describe("createStageInteractions", () => {
   it("clears selection only for a pointerdown targeted directly at the stage", () => {
     const { stage, handlers } = createStage();
@@ -167,7 +175,7 @@ describe("createStageInteractions", () => {
     const { controller, onSelectNodeRef, onMoveNodeRef } = createController();
     controller.bind(stage as never);
 
-    controller.handleNodePointerDown(1, pointer(50, 50, { button }) as never);
+    nodePointerDown(controller, 1, pointer(50, 50, { button }) as never);
     handlers.pointermove?.(pointer(70, 70, { button }));
 
     expect(onSelectNodeRef.current).not.toHaveBeenCalled();
@@ -181,7 +189,7 @@ describe("createStageInteractions", () => {
     const latestOnSelectNode = jest.fn();
     onSelectNodeRef.current = latestOnSelectNode;
 
-    controller.handleNodePointerDown(1, pointer(100, 60) as never);
+    nodePointerDown(controller, 1, pointer(100, 60) as never);
 
     expect(latestOnSelectNode).toHaveBeenCalledWith(1);
   });
@@ -191,7 +199,7 @@ describe("createStageInteractions", () => {
     const { controller, onMoveNodeRef, onConnectNodesRef } = createController();
     controller.bind(stage as never);
 
-    controller.handleNodePointerDown(1, pointer(100, 60) as never);
+    nodePointerDown(controller, 1, pointer(100, 60) as never);
     handlers.pointermove?.(pointer(108, 66));
 
     expect(onMoveNodeRef.current).toHaveBeenCalledWith(1, 28, 46);
@@ -210,9 +218,9 @@ describe("createStageInteractions", () => {
     } = createController();
     controller.bind(stage as never);
 
-    controller.handleNodePointerDown(1, pointer(100, 60) as never);
+    nodePointerDown(controller, 1, pointer(100, 60) as never);
     nodesRef.current = [];
-    controller.handleNodePointerDown(1, pointer(100, 60) as never);
+    nodePointerDown(controller, 1, pointer(100, 60) as never);
     handlers.pointermove?.(pointer(120, 80));
     handlers.pointerup?.(pointer(120, 80));
 
@@ -227,12 +235,12 @@ describe("createStageInteractions", () => {
     const { controller, onSelectNodeRef } = createController();
     controller.bind(stage as never);
 
-    controller.handleNodePointerDown(999, pointer(50, 50, {
+    nodePointerDown(controller, 999, pointer(50, 50, {
       pointerId: 1,
       pointerType: "touch",
       path: [stage],
     }) as never);
-    controller.handleNodePointerDown(1, pointer(50, 50, {
+    nodePointerDown(controller, 1, pointer(50, 50, {
       pointerId: 2,
       pointerType: "touch",
       path: [stage],
@@ -247,7 +255,7 @@ describe("createStageInteractions", () => {
     const { controller, onMoveNodeRef } = createController();
     controller.bind(stage as never);
 
-    controller.handleNodePointerDown(1, pointer(100, 60) as never);
+    nodePointerDown(controller, 1, pointer(100, 60) as never);
     handlers[eventName]?.(pointer(100, 60));
     handlers.pointermove?.(pointer(110, 70));
 
@@ -261,7 +269,7 @@ describe("createStageInteractions", () => {
       const { controller, onMoveNodeRef } = createController();
       controller.bind(stage as never);
 
-      controller.handleNodePointerDown(1, pointer(100, 60) as never);
+      nodePointerDown(controller, 1, pointer(100, 60) as never);
       handlers[eventName]?.(pointer(100, 60, { button: 2 }));
       handlers.pointermove?.(pointer(110, 70));
 
@@ -279,7 +287,7 @@ describe("createStageInteractions", () => {
     } = createController({ nodes: [node, targetNode] });
     controller.bind(stage as never);
 
-    controller.handleNodePointerDown(1, pointer(50, 50, { shiftKey: true }) as never);
+    nodePointerDown(controller, 1, pointer(50, 50, { shiftKey: true }) as never);
     handlers.pointermove?.(pointer(220, 60));
     handlers.pointerup?.(pointer(220, 60));
 
@@ -298,7 +306,7 @@ describe("createStageInteractions", () => {
     } = createController({ nodes: [node, targetNode] });
     controller.bind(stage as never);
 
-    controller.handleNodePointerDown(1, pointer(50, 50, { shiftKey: true }) as never);
+    nodePointerDown(controller, 1, pointer(50, 50, { shiftKey: true }) as never);
     handlers.pointermove?.(pointer(220, 60));
     handlers.pointerupoutside?.(pointer(220, 60));
     handlers.pointermove?.(pointer(220, 60));
@@ -319,7 +327,7 @@ describe("createStageInteractions", () => {
     } = createController({ nodes: [node, targetNode] });
     controller.bind(stage as never);
 
-    controller.handleNodePointerDown(1, pointer(50, 50, { shiftKey: true, pointerId: 1 }) as never);
+    nodePointerDown(controller, 1, pointer(50, 50, { shiftKey: true, pointerId: 1 }) as never);
     handlers.pointerdown?.(pointer(0, 0, { target: stage, pointerId: 2 }));
     handlers.pointermove?.(pointer(220, 60, { pointerId: 2 }));
     handlers.pointerup?.(pointer(220, 60, { pointerId: 2 }));
@@ -344,7 +352,7 @@ describe("createStageInteractions", () => {
     } = createController({ nodes: [node, targetNode] });
     controller.bind(stage as never);
 
-    controller.handleNodePointerDown(1, pointer(50, 50, { shiftKey: true, pointerId: 1 }) as never);
+    nodePointerDown(controller, 1, pointer(50, 50, { shiftKey: true, pointerId: 1 }) as never);
     handlers.pointermove?.(pointer(220, 60, { pointerId: 1 }));
     handlers.pointerupoutside?.(pointer(220, 60, { pointerId: 2 }));
     handlers.pointerup?.(pointer(220, 60, { pointerId: 1 }));
@@ -363,7 +371,7 @@ describe("createStageInteractions", () => {
     } = createController({ nodes: [node, targetNode] });
     controller.bind(stage as never);
 
-    controller.handleNodePointerDown(1, pointer(50, 50, { shiftKey: true, pointerId: 1 }) as never);
+    nodePointerDown(controller, 1, pointer(50, 50, { shiftKey: true, pointerId: 1 }) as never);
     handlers.pointermove?.(pointer(220, 60, { pointerId: 1 }));
     handlers.pointerdown?.(pointer(0, 0, { target: stage, pointerId: 1 }));
     handlers.pointerup?.(pointer(220, 60, { pointerId: 1 }));
@@ -382,12 +390,12 @@ describe("createStageInteractions", () => {
     });
     onConnectionTargetChangeRef.current = jest.fn((id: number | null) => {
       if (id === null) {
-        controller.handleNodePointerDown(1, pointer(50, 50, { pointerId: 2 }) as never);
+        nodePointerDown(controller, 1, pointer(50, 50, { pointerId: 2 }) as never);
       }
     });
     controller.bind(stage as never);
 
-    controller.handleNodePointerDown(1, pointer(50, 50, { shiftKey: true, pointerId: 1 }) as never);
+    nodePointerDown(controller, 1, pointer(50, 50, { shiftKey: true, pointerId: 1 }) as never);
     handlers.pointermove?.(pointer(220, 60, { pointerId: 1 }));
     handlers.pointerdown?.(pointer(0, 0, { target: stage, pointerId: 1 }));
     handlers.pointermove?.(pointer(60, 60, { pointerId: 2 }));
@@ -406,14 +414,14 @@ describe("createStageInteractions", () => {
     onConnectionTargetChangeRef.current = jest.fn((id: number | null) => {
       if (id === null && !startedNextGesture) {
         startedNextGesture = true;
-        controller.handleNodePointerDown(1, pointer(50, 50, { pointerId: 2 }) as never);
+        nodePointerDown(controller, 1, pointer(50, 50, { pointerId: 2 }) as never);
       }
     });
     controller.bind(stage as never);
 
-    controller.handleNodePointerDown(1, pointer(50, 50, { shiftKey: true, pointerId: 1 }) as never);
+    nodePointerDown(controller, 1, pointer(50, 50, { shiftKey: true, pointerId: 1 }) as never);
     handlers.pointermove?.(pointer(220, 60, { pointerId: 1 }));
-    controller.handleNodePointerDown(1, pointer(50, 50, { pointerId: 3 }) as never);
+    nodePointerDown(controller, 1, pointer(50, 50, { pointerId: 3 }) as never);
     handlers.pointermove?.(pointer(60, 60, { pointerId: 2 }));
 
     expect(onMoveNode).toHaveBeenCalledWith(1, 30, 50);
@@ -427,11 +435,11 @@ describe("createStageInteractions", () => {
       onMoveNode,
     });
     onConnectNodesRef.current = jest.fn(() => {
-      controller.handleNodePointerDown(1, pointer(50, 50, { pointerId: 2 }) as never);
+      nodePointerDown(controller, 1, pointer(50, 50, { pointerId: 2 }) as never);
     });
     controller.bind(stage as never);
 
-    controller.handleNodePointerDown(1, pointer(50, 50, { shiftKey: true, pointerId: 1 }) as never);
+    nodePointerDown(controller, 1, pointer(50, 50, { shiftKey: true, pointerId: 1 }) as never);
     handlers.pointerup?.(pointer(220, 60, { pointerId: 1 }));
     handlers.pointermove?.(pointer(60, 60, { pointerId: 2 }));
 
@@ -446,12 +454,12 @@ describe("createStageInteractions", () => {
     onSelectNodeRef.current = jest.fn((id: number | null) => {
       if (id === 1 && !startedNextGesture) {
         startedNextGesture = true;
-        controller.handleNodePointerDown(1, pointer(50, 50, { pointerId: 2 }) as never);
+        nodePointerDown(controller, 1, pointer(50, 50, { pointerId: 2 }) as never);
       }
     });
     controller.bind(stage as never);
 
-    controller.handleNodePointerDown(1, pointer(50, 50, { pointerId: 1 }) as never);
+    nodePointerDown(controller, 1, pointer(50, 50, { pointerId: 1 }) as never);
     handlers.pointermove?.(pointer(60, 60, { pointerId: 2 }));
 
     expect(onMoveNode).toHaveBeenCalledWith(1, 30, 50);
@@ -466,12 +474,12 @@ describe("createStageInteractions", () => {
     });
     onSelectNodeRef.current = jest.fn((id: number | null) => {
       if (id === null) {
-        controller.handleNodePointerDown(1, pointer(50, 50, { pointerId: 1 }) as never);
+        nodePointerDown(controller, 1, pointer(50, 50, { pointerId: 1 }) as never);
       }
     });
     controller.bind(stage as never);
 
-    controller.handleNodePointerDown(1, pointer(50, 50, { shiftKey: true, pointerId: 1 }) as never);
+    nodePointerDown(controller, 1, pointer(50, 50, { shiftKey: true, pointerId: 1 }) as never);
     handlers.pointerdown?.(pointer(0, 0, { target: stage, pointerId: 1 }));
     handlers.pointermove?.(pointer(60, 60, { pointerId: 1 }));
 
@@ -487,9 +495,9 @@ describe("createStageInteractions", () => {
     });
     controller.bind(stage as never);
 
-    controller.handleNodePointerDown(1, pointer(50, 50, { shiftKey: true }) as never);
+    nodePointerDown(controller, 1, pointer(50, 50, { shiftKey: true }) as never);
     handlers.pointermove?.(pointer(220, 60));
-    controller.handleNodePointerDown(1, pointer(50, 50) as never);
+    nodePointerDown(controller, 1, pointer(50, 50) as never);
 
     expect(onConnectionTargetChange.mock.calls).toEqual([[2], [null]]);
   });
@@ -519,7 +527,7 @@ describe("createStageInteractions", () => {
     });
     controller.bind(stage as never);
 
-    controller.handleNodePointerDown(1, pointer(80, 60, { path: [stage] }) as never);
+    nodePointerDown(controller, 1, pointer(80, 60, { path: [stage] }) as never);
     handlers.pointermove?.(pointer(100, 80));
 
     expect(onMoveNodeRef.current).toHaveBeenCalledWith(1, 30, 50);
@@ -533,7 +541,7 @@ describe("createStageInteractions", () => {
     });
     controller.bind(stage as never);
 
-    controller.handleNodePointerDown(1, pointer(80, 100, {
+    nodePointerDown(controller, 1, pointer(80, 100, {
       shiftKey: true,
       path: [stage],
     }) as never);
@@ -582,7 +590,7 @@ describe("createStageInteractions", () => {
     });
     const cleanup = controller.bind(stage as never);
 
-    controller.handleNodePointerDown(1, pointer(50, 50, {
+    nodePointerDown(controller, 1, pointer(50, 50, {
       shiftKey: true,
       pointerId: 1,
       pointerType: "touch",
@@ -647,12 +655,12 @@ describe("createStageInteractions", () => {
     });
     onConnectionTargetChangeRef.current = jest.fn((id: number | null) => {
       if (id === null) {
-        controller.handleNodePointerDown(1, pointer(50, 50, { pointerId: 2 }) as never);
+        nodePointerDown(controller, 1, pointer(50, 50, { pointerId: 2 }) as never);
       }
     });
     const cleanup = controller.bind(first.stage as never);
 
-    controller.handleNodePointerDown(1, pointer(50, 50, { shiftKey: true, pointerId: 1 }) as never);
+    nodePointerDown(controller, 1, pointer(50, 50, { shiftKey: true, pointerId: 1 }) as never);
     first.handlers.pointermove?.(pointer(220, 60, { pointerId: 1 }));
     cleanup();
     controller.bind(second.stage as never);
@@ -660,7 +668,7 @@ describe("createStageInteractions", () => {
 
     expect(onMoveNode).not.toHaveBeenCalled();
 
-    controller.handleNodePointerDown(1, pointer(50, 50, { pointerId: 3 }) as never);
+    nodePointerDown(controller, 1, pointer(50, 50, { pointerId: 3 }) as never);
     second.handlers.pointermove?.(pointer(60, 60, { pointerId: 3 }));
 
     expect(onMoveNode).toHaveBeenCalledWith(1, 30, 50);
@@ -684,7 +692,7 @@ describe("createStageInteractions", () => {
       }));
     });
     const cleanupFirst = controller.bind(first.stage as never);
-    controller.handleNodePointerDown(1, pointer(50, 50, {
+    nodePointerDown(controller, 1, pointer(50, 50, {
       shiftKey: true,
       pointerId: 1,
       pointerType: "touch",
@@ -729,7 +737,7 @@ describe("createStageInteractions", () => {
     cleanupFirst();
     controller.bind(second.stage as never);
 
-    controller.handleNodePointerDown(1, pointer(50, 50, { pointerId: 2 }) as never);
+    nodePointerDown(controller, 1, pointer(50, 50, { pointerId: 2 }) as never);
     cleanupFirst();
     second.handlers.pointermove?.(pointer(60, 60, { pointerId: 2 }));
 
@@ -751,13 +759,32 @@ describe("createStageInteractions", () => {
     cleanupFirst();
     controller.bind(second.stage as never);
 
-    controller.handleNodePointerDown(1, pointer(
+    nodePointerDown(controller, 1, pointer(
       50,
       50,
       { pointerId: 2, path: [second.stage] },
     ) as never);
-    controller.handleNodePointerDown(1, delayedFirstEvent as never);
+    nodePointerDown(controller, 1, delayedFirstEvent as never);
     second.handlers.pointermove?.(pointer(60, 60, { pointerId: 2 }));
+
+    expect(onSelectNode.mock.calls).toEqual([[1]]);
+    expect(onMoveNode).toHaveBeenCalledWith(1, 30, 50);
+  });
+
+  it("同一stageの再bind後は旧bindingのnode handlerを無視する", () => {
+    const { stage, handlers } = createStage();
+    const onMoveNode = jest.fn();
+    const onSelectNode = jest.fn();
+    const { controller } = createController({ onMoveNode, onSelectNode });
+    const cleanupFirst = controller.bind(stage as never);
+    const staleNodePointerDown = controller.createNodePointerDownHandler();
+    cleanupFirst();
+    controller.bind(stage as never);
+    const currentNodePointerDown = controller.createNodePointerDownHandler();
+
+    currentNodePointerDown(1, pointer(50, 50, { pointerId: 2, path: [stage] }) as never);
+    staleNodePointerDown(1, pointer(50, 50, { pointerId: 1, path: [stage] }) as never);
+    handlers.pointermove?.(pointer(60, 60, { pointerId: 2 }));
 
     expect(onSelectNode.mock.calls).toEqual([[1]]);
     expect(onMoveNode).toHaveBeenCalledWith(1, 30, 50);
@@ -767,7 +794,7 @@ describe("createStageInteractions", () => {
     const { stage, handlers } = createStage();
     const { controller, onMoveNodeRef, onViewportChangeRef } = createController();
     controller.bind(stage as never);
-    controller.handleNodePointerDown(1, pointer(100, 100, {
+    nodePointerDown(controller, 1, pointer(100, 100, {
       pointerId: 1,
       pointerType: "touch",
       path: [stage],
@@ -798,7 +825,7 @@ describe("createStageInteractions", () => {
       onConnectionTargetChange,
     });
     cleanup = controller.bind(stage as never);
-    controller.handleNodePointerDown(1, pointer(50, 50, {
+    nodePointerDown(controller, 1, pointer(50, 50, {
       shiftKey: true,
       pointerId: 1,
       pointerType: "touch",
@@ -825,7 +852,7 @@ describe("createStageInteractions", () => {
     onConnectionTargetChangeRef.current = jest.fn((id: number | null) => {
       if (id === null && !startedNextGesture) {
         startedNextGesture = true;
-        controller.handleNodePointerDown(1, pointer(50, 50, {
+        nodePointerDown(controller, 1, pointer(50, 50, {
           pointerId: 3,
           pointerType: "mouse",
           path: [stage],
@@ -833,7 +860,7 @@ describe("createStageInteractions", () => {
       }
     });
     controller.bind(stage as never);
-    controller.handleNodePointerDown(1, pointer(50, 50, {
+    nodePointerDown(controller, 1, pointer(50, 50, {
       shiftKey: true,
       pointerId: 1,
       pointerType: "touch",

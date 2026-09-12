@@ -658,7 +658,7 @@ it("2本目のtouchでnode gestureをキャンセルしてpinchへ置換する",
   const { stage, handlers } = createStage();
   const { controller, onMoveNodeRef, onViewportChangeRef } = createController();
   controller.bind(stage as never);
-  controller.handleNodePointerDown(1, pointer(100, 100, {
+  controller.createNodePointerDownHandler()(1, pointer(100, 100, {
     pointerId: 1,
     pointerType: "touch",
     path: [stage],
@@ -762,13 +762,13 @@ const hasActiveGesture = () => pointerGestures.hasActive() || touchGestures.hasA
 
 return {
   bind,
-  handleNodePointerDown,
+  createNodePointerDownHandler,
   cancelActiveGesture: cancelAllInteractions,
   hasActiveGesture,
 };
 ```
 
-unbindでは`cancelAllInteractions()`と`touchGestures.reset()`を実行する。Hookの戻り値から2つのcontroller methodをそのまま公開する。
+unbindは、対象bindingの所有を解除した後、`touchGestures.reset()`、stage listener解除、`pointerGestures.cancel()`の順で実行する。touch resetは再入可能なpointer gestureのcancelより先に行い、cancel callbackから作られた新bindingのtouchと旧pointerを混在させない。各cleanupは一つが例外を投げても残りを試行し、最初の例外を再送出する。Hookはcontroller methodをそのまま公開する。
 
 - [ ] **Step 5: touch調停テストをGREENにする**
 
@@ -788,20 +788,39 @@ git commit -m "feat(map): ピンチのtouch所有権を統合"
 ### Task 6: `F`キーのフォーカスHook
 
 **Files:**
+- Create: `client/src/components/map/viewportFocusShortcut.ts`
+- Create: `client/src/components/map/__tests__/viewportFocusShortcut.test.ts`
 - Create: `client/src/components/map/useMapViewportShortcut.ts`
 - Create: `client/src/components/map/__tests__/useMapViewportShortcut.test.tsx`
 
 **Interfaces:**
 - Consumes: nodes、selectedNodeId、editing状態、screen、`hasActiveGesture`、`onFocusNode`
-- Produces: lifecycle管理された`F` keydown listener
+- `viewportFocusShortcut.ts` Produces: shortcut判定、実効contenteditable判定、focus request解決
+- `useMapViewportShortcut.ts` Produces: 最新入力をRefから読む安定した`F` keydown listener
 
 - [ ] **Step 1: 成功・無効化・cleanupの失敗テストを書く**
 
 ```tsx
 import { renderHook } from "@testing-library/react";
 import { useMapViewportShortcut } from "@/components/map/useMapViewportShortcut";
+import { resolveViewportFocusRequest } from "@/components/map/viewportFocusShortcut";
 
 const node = { id: 1, parentId: null, x: 100, y: 50, width: 80, height: 40, label: "" };
+
+function resolveFocusRequest(target: EventTarget) {
+  return resolveViewportFocusRequest({
+    key: "f",
+    ctrlKey: false,
+    metaKey: false,
+    altKey: false,
+    target,
+    nodes: [node],
+    selectedNodeId: 1,
+    isEditing: false,
+    hasActiveGesture: false,
+    screen: { width: 800, height: 600 },
+  });
+}
 
 function pressF(target: EventTarget = window) {
   const event = new KeyboardEvent("keydown", { key: "f", bubbles: true, cancelable: true });
@@ -878,6 +897,25 @@ it("contenteditable内の子要素からのFキーを無視する", () => {
   editor.remove();
 });
 
+it.each(["", "plaintext-only"])("contenteditable=%s配下のFキーを無視する", (value) => {
+  const editor = document.createElement("div");
+  editor.setAttribute("contenteditable", value);
+  const target = editor.appendChild(document.createElement("span"));
+
+  expect(resolveFocusRequest(target)).toBeNull();
+});
+
+it("contenteditable=true配下でもfalseで上書きされた領域では発動する", () => {
+  const editor = document.createElement("div");
+  editor.setAttribute("contenteditable", "true");
+  const disabledArea = editor.appendChild(document.createElement("div"));
+  disabledArea.setAttribute("contenteditable", "false");
+  const target = disabledArea.appendChild(document.createElement("span"));
+
+  expect(resolveFocusRequest(target))
+    .toEqual({ node, screen: { width: 800, height: 600 } });
+});
+
 it("欠損選択とunmount後は何もしない", () => {
   const onFocusNode = jest.fn();
   const { unmount } = renderHook(() => useMapViewportShortcut({
@@ -893,59 +931,88 @@ it("欠損選択とunmount後は何もしない", () => {
 
 - [ ] **Step 2: shortcutテストがREDになることを確認する**
 
-Run: `cd client && npm test -- --runInBand src/components/map/__tests__/useMapViewportShortcut.test.tsx`
+Run: `cd client && npm test -- --runInBand src/components/map/__tests__/viewportFocusShortcut.test.ts src/components/map/__tests__/useMapViewportShortcut.test.tsx`
 
 Expected: FAIL with `Cannot find module '@/components/map/useMapViewportShortcut'`.
 
-- [ ] **Step 3: 編集可能要素判定とkeydown lifecycleを実装する**
+- [ ] **Step 3: 編集可能要素判定とkeydown lifecycleを分離して実装する**
 
 ```ts
-"use client";
-
-import { useEffect } from "react";
-import type { ScreenSize } from "@/components/map/mapViewport";
-import type { Node } from "@/types/node";
+// viewportFocusShortcut.ts
+const parseContentEditable = (value: string): boolean | null => {
+  const normalizedValue = value.trim().toLowerCase();
+  if (normalizedValue === "false") return false;
+  if (
+    normalizedValue === ""
+    || normalizedValue === "true"
+    || normalizedValue === "plaintext-only"
+  ) return true;
+  return null;
+};
 
 const isEditableTarget = (target: EventTarget | null): boolean => {
   if (!(target instanceof HTMLElement)) return false;
-  return target.closest("input, textarea, select, [contenteditable='true']") !== null;
-};
+  if (target.closest("input, textarea, select")) return true;
 
-type Options = {
-  nodes: readonly Node[];
-  selectedNodeId: number | null;
-  isEditing: boolean;
-  screen: ScreenSize | null;
-  hasActiveGesture: () => boolean;
-  onFocusNode: (node: Node, screen: ScreenSize) => void;
+  let element: HTMLElement | null = target;
+  while (element) {
+    const contentEditable = element.getAttribute("contenteditable");
+    if (contentEditable !== null) {
+      const parsedValue = parseContentEditable(contentEditable);
+      if (parsedValue !== null) return parsedValue;
+    }
+    element = element.parentElement;
+  }
+  return false;
 };
+```
 
-export function useMapViewportShortcut({
+`resolveViewportFocusRequest`はshortcut、編集中、上記の実効的な編集可否、gesture、screen、選択ノードを検証する。Hookは可変な入力をRefへ同期し、listenerを再登録せずresolver結果だけを配送する。
+
+```ts
+// useMapViewportShortcut.ts
+const latestOptionsRef = useRef({
   nodes,
   selectedNodeId,
   isEditing,
   screen,
   hasActiveGesture,
   onFocusNode,
-}: Options): void {
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() !== "f"
-        || isEditing
-        || isEditableTarget(event.target)
-        || hasActiveGesture()
-        || !screen
-        || selectedNodeId === null) return;
+});
+useLayoutEffect(() => {
+  latestOptionsRef.current = {
+    nodes,
+    selectedNodeId,
+    isEditing,
+    screen,
+    hasActiveGesture,
+    onFocusNode,
+  };
+}, [nodes, selectedNodeId, isEditing, screen, hasActiveGesture, onFocusNode]);
 
-      const selected = nodes.find((node) => node.id === selectedNodeId);
-      if (!selected) return;
-      event.preventDefault();
-      onFocusNode(selected, screen);
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [nodes, selectedNodeId, isEditing, screen, hasActiveGesture, onFocusNode]);
-}
+useEffect(() => {
+  const handleKeyDown = (event: KeyboardEvent) => {
+    if (!isViewportFocusShortcut(event)) return;
+    const latest = latestOptionsRef.current;
+    const request = resolveViewportFocusRequest({
+      key: event.key,
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
+      altKey: event.altKey,
+      target: event.target,
+      nodes: latest.nodes,
+      selectedNodeId: latest.selectedNodeId,
+      isEditing: latest.isEditing,
+      hasActiveGesture: latest.hasActiveGesture(),
+      screen: latest.screen,
+    });
+    if (!request) return;
+    event.preventDefault();
+    latest.onFocusNode(request.node, request.screen);
+  };
+  window.addEventListener("keydown", handleKeyDown);
+  return () => window.removeEventListener("keydown", handleKeyDown);
+}, []);
 ```
 
 - [ ] **Step 4: shortcutテストをGREENにする**
@@ -957,7 +1024,7 @@ Expected: PASS.
 - [ ] **Step 5: shortcut Hookをコミットする**
 
 ```bash
-git add client/src/components/map/useMapViewportShortcut.ts client/src/components/map/__tests__/useMapViewportShortcut.test.tsx
+git add client/src/components/map/viewportFocusShortcut.ts client/src/components/map/__tests__/viewportFocusShortcut.test.ts client/src/components/map/useMapViewportShortcut.ts client/src/components/map/__tests__/useMapViewportShortcut.test.tsx
 git commit -m "feat(map): 選択ノードの中央表示を追加"
 ```
 
@@ -1029,7 +1096,7 @@ const {
 
 const {
   connectionTargetNodeId,
-  onNodePointerDown,
+  createNodePointerDownHandler,
   cancelActiveGesture,
   hasActiveGesture,
 } = useMapStageInteractions({
@@ -1056,6 +1123,16 @@ useMapViewportShortcut({
   screen: runtime ? runtime.app.screen : null,
   hasActiveGesture,
   onFocusNode: focusNode,
+});
+```
+
+scene描画effect内で`createNodePointerDownHandler()`を呼び、その時点のbinding lease付きhandlerを`renderMapScene`へ渡す。
+
+```tsx
+const onNodePointerDown = createNodePointerDownHandler();
+renderMapScene(runtime.app, runtime.constructors, {
+  // ...scene options
+  onNodePointerDown,
 });
 ```
 

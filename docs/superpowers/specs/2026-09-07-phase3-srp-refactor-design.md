@@ -256,12 +256,12 @@ export function resolveMapDoubleClickAction(input: {
   bounds: Pick<DOMRect, "left" | "top">;
   viewport: Viewport;
   nodes: readonly Node[];
-}): MapDoubleClickAction;
+}): MapDoubleClickAction | null;
 ```
 
 ### `MapStage.tsx`
 
-feature単位のHook、scene描画、DOM editorを組み合わせるcomposition boundaryだけを所有する。double-clickの座標変換・hit判定・action選択は`resolveMapDoubleClickAction`へ委譲し、返されたactionをcallbackへ配送する。
+feature単位のHook、scene描画、DOM editorを組み合わせるcomposition boundaryだけを所有する。double-clickの座標変換・hit判定・action選択は`resolveMapDoubleClickAction`へ委譲し、`null`は操作なしとして無視し、返されたactionだけをcallbackへ配送する。
 
 Map領域の高さは固定header高を差し引かず、viewport高のflex shellが割り当てた残領域を`height: 100%`で使用する。操作説明の折り返しでheader高が変わってもページ全体をviewport内へ収める。
 
@@ -273,7 +273,7 @@ Map領域の高さは固定header高を差し引かず、viewport高のflex shel
 4. mouse wheelは`useMapWheelZoom`が受け、`calculateWheelZoomRequest`の結果をviewport commandへ渡す。
 5. keyboard入力は`useMapViewportShortcut`が受け、`resolveViewportFocusRequest`の結果をviewport commandへ渡す。
 6. `useMapViewport`は汎用viewport計算を利用し、`focusViewportOnNode`を内部で呼ぶ`focusNode` commandを公開する。
-7. `MapStage`はdouble-clickを`resolveMapDoubleClickAction`へ渡し、編集または追加callbackへ配送する。
+7. `MapStage`はdouble-clickを`resolveMapDoubleClickAction`へ渡し、`null`を無視して有効な編集または追加actionだけをcallbackへ配送する。
 8. `NodeLabelEditor`は`getNodeLabelEditorLayout`の投影値をinputへ適用する。
 
 ## エラー処理と互換性
@@ -284,7 +284,7 @@ Map領域の高さは固定header高を差し引かず、viewport高のflex shel
 - 異なるpointer IDのmove／upは所有中gestureを変更しない。
 - 進行中gestureのcallbackから再入しても、新しいgestureやbindingを古いcleanupで破棄しない。
 - stage listener解除またはgesture cancelが例外を投げても、残りのlistener解除とtouch resetをすべて試行し、最初の例外を再送出する。
-- `MapStageProps`と`useMapViewport`の戻り値は変更しない。`createStageInteractions`の既存controller項目`bind`／`handleNodePointerDown`を維持し、wheel／keyboard境界から使う`cancelActiveGesture`／`hasActiveGesture`を追加する。
+- `MapStageProps`と`useMapViewport`の戻り値は変更しない。`createStageInteractions`は`bind`と、現行bindingのleaseを捕捉する`createNodePointerDownHandler`を公開し、wheel／keyboard境界から使う`cancelActiveGesture`／`hasActiveGesture`も保持する。旧bindingに属するsceneから遅延したnode入力は拒否する。
 - 新しいruntime依存は追加しない。
 
 ## テスト構成
@@ -299,7 +299,7 @@ Map領域の高さは固定header高を差し引かず、viewport高のflex shel
 - `viewportFocusShortcut.test.ts`: 共有shortcut predicate、発動条件、修飾キー、各contenteditable、gesture、選択解決
 - `nodeViewportFocus.test.ts`: 中央表示、倍率維持、無効node／screen、算出offsetのoverflow
 - `nodeLabelEditorLayout.test.ts`: offsetと倍率を含む位置・寸法・文字サイズ
-- `mapDoubleClickAction.test.ts`: container相対座標、viewport逆変換、node hit、追加action
+- `mapDoubleClickAction.test.ts`: container相対座標、viewport逆変換、node hit、追加action、非有限な変換結果の拒否
 
 ### coordinator単体テスト
 

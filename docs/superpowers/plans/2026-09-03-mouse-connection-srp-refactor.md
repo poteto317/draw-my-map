@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **履歴注記（2026-09-13）:** 本書はマウス接続機能を実装した時点のAPIを記録した完了済み計画であり、`handleNodePointerDown`／`onNodePointerDown`の例は現行controller契約ではない。現在のbinding lease付き`createNodePointerDownHandler`は`docs/superpowers/specs/2026-09-04-phase3-viewport-navigation-design.md`と`docs/superpowers/plans/2026-09-04-phase3-zoom-focus.md`を参照すること。
+
 **Goal:** Shift+ドラッグによる既存ノード接続の外部動作を維持しながら、ドメイン更新、移動ジェスチャー、接続ジェスチャー、PixiJSイベントルーティング、React統合を単一責任の単位へ分離する。
 
 **Architecture:** `nodeTree` が接続検証と親付け替えを純粋処理として提供し、`useNodes` は結果をReact状態へ反映する。PixiJS側は移動・接続を独立した `PointerGesture` として実装し、`stageInteractions` はイベントの振り分けだけ、`useMapStageInteractions` はReactとPixiJSのライフサイクル接続だけを担当する。

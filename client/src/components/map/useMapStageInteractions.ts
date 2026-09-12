@@ -62,7 +62,7 @@ export function useMapStageInteractions({
 
   return {
     connectionTargetNodeId,
-    onNodePointerDown: interactions.handleNodePointerDown,
+    createNodePointerDownHandler: interactions.createNodePointerDownHandler,
     cancelActiveGesture: interactions.cancelActiveGesture,
     hasActiveGesture: interactions.hasActiveGesture,
   };

@@ -620,7 +620,7 @@ it.each([1, 2])("button %sではノード選択や移動を開始しない", (bu
   const { controller, onSelectNodeRef, onMoveNodeRef } = createController();
   controller.bind(stage as never);
 
-  controller.handleNodePointerDown(1, pointer(50, 50, { button }) as never);
+  controller.createNodePointerDownHandler()(1, pointer(50, 50, { button }) as never);
   handlers.pointermove?.(pointer(70, 70, { button }));
   expect(onSelectNodeRef.current).not.toHaveBeenCalled();
   expect(onMoveNodeRef.current).not.toHaveBeenCalled();
@@ -633,7 +633,7 @@ it.each(["pointerup", "pointerupoutside"] as const)(
     const { controller, onMoveNodeRef } = createController();
     controller.bind(stage as never);
 
-    controller.handleNodePointerDown(1, pointer(100, 60) as never);
+    controller.createNodePointerDownHandler()(1, pointer(100, 60) as never);
     handlers[eventName]?.(pointer(100, 60, { button: 2 }));
     handlers.pointermove?.(pointer(110, 70));
     expect(onMoveNodeRef.current).not.toHaveBeenCalled();
@@ -708,7 +708,7 @@ it("非等倍viewportでノードをワールド差分だけ移動する", () =>
   });
   controller.bind(stage as never);
 
-  controller.handleNodePointerDown(1, pointer(80, 60, { path: [stage] }) as never);
+  controller.createNodePointerDownHandler()(1, pointer(80, 60, { path: [stage] }) as never);
   handlers.pointermove?.(pointer(100, 80));
 
   expect(onMoveNodeRef.current).toHaveBeenCalledWith(1, 30, 50);
@@ -722,7 +722,7 @@ it("非等倍viewportで接続先をワールド座標から判定する", () =>
   });
   controller.bind(stage as never);
 
-  controller.handleNodePointerDown(1, pointer(80, 100, {
+  controller.createNodePointerDownHandler()(1, pointer(80, 100, {
     shiftKey: true,
     path: [stage],
   }) as never);
@@ -1053,7 +1053,7 @@ const {
   setViewport,
 } = useMapViewport();
 
-const { connectionTargetNodeId, onNodePointerDown } = useMapStageInteractions({
+const { connectionTargetNodeId, createNodePointerDownHandler } = useMapStageInteractions({
   runtime,
   nodes,
   viewportRef,
@@ -1064,7 +1064,7 @@ const { connectionTargetNodeId, onNodePointerDown } = useMapStageInteractions({
 });
 ```
 
-`renderMapScene` optionsへ`viewport`を渡す。ダブルクリックではコンテナ相対のscreen座標を求め、その時点の`viewportRef.current`でworldへ戻してから`findNodeAtPoint`と`onDoubleClick`へ使う。
+scene描画effectで`createNodePointerDownHandler()`を呼び、その時点のbinding leaseを捕捉したhandlerを`renderMapScene` optionsへ渡す。あわせて`viewport`を渡す。ダブルクリックではコンテナ相対のscreen座標を求め、その時点の`viewportRef.current`でworldへ戻してから`findNodeAtPoint`と`onDoubleClick`へ使う。
 
 ```ts
 const screenPoint = toLocalPoint(

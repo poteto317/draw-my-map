@@ -108,11 +108,11 @@ Expected: PASS。
 
 **Interfaces:**
 - Produces: `resolveViewportFocusRequest(input): { node: Node; screen: ScreenSize } | null`
-- Produces: `resolveMapDoubleClickAction(input): { type: "edit"; nodeId: number } | { type: "add"; point: Point }`
+- Produces: `resolveMapDoubleClickAction(input): { type: "edit"; nodeId: number } | { type: "add"; point: Point } | null`
 
 - [x] **Step 1: 失敗テストを書く**
 
-フォーカスresolverでは成功、`F`以外、編集中、input／textarea／select／contenteditable配下、gesture中、screen欠損、選択欠損を検証する。double-click resolverではcontainer offsetとviewport変換後のnode hitがedit action、空白が変換済みworld座標を含むadd actionになることを検証する。
+フォーカスresolverでは成功、`F`以外、編集中、input／textarea／select／contenteditable配下、gesture中、screen欠損、選択欠損を検証する。double-click resolverではcontainer offsetとviewport変換後のnode hitがedit action、空白が変換済みworld座標を含むadd actionになること、変換結果が非有限な場合は`null`となることを検証する。
 
 - [x] **Step 2: REDを確認する**
 
@@ -122,7 +122,7 @@ Expected: 新規モジュールが存在しないためFAIL。
 
 - [x] **Step 3: 最小実装を行う**
 
-Hookはresolverが返したrequestにだけ`preventDefault()`とfocus commandを実行する。`MapStage`はdouble-click actionに応じて編集開始または追加callbackだけを呼ぶ。
+Hookはresolverが返したrequestにだけ`preventDefault()`とfocus commandを実行する。`MapStage`はdouble-click actionが`null`なら何も行わず、それ以外はactionに応じて編集開始または追加callbackだけを呼ぶ。
 
 - [x] **Step 4: GREENを確認する**
 
