@@ -130,7 +130,7 @@ export function calculatePinchViewport(
 
 ### `pixi/pinchZoomGesture.ts`
 
-固定した2つのpointer ID、現在の画面座標、active状態だけを所有する。viewport計算は`calculatePinchViewport`へ委譲し、結果が`null`ならcallbackを呼ばない。開始距離がゼロまたは非有限の場合は、最初に得た有限な正距離を基準点として保存し、その次のmoveから計算する。
+固定した2つのpointer ID、現在の画面座標、active状態、直前に通知した実効viewportだけを所有する。viewport計算は`calculatePinchViewport`へ委譲し、結果が`null`または直前の実効viewportと同値ならcallbackを呼ばない。開始距離がゼロまたは非有限の場合は、最初に得た有限な正距離を基準点として保存し、その次のmoveから計算する。
 
 ### `wheelZoom.ts`
 
@@ -194,7 +194,7 @@ export function resolveViewportFocusRequest(input: {
 
 ### `useMapViewportShortcut.ts`
 
-windowのkeydown listenerライフサイクルと、有効なrequestの`preventDefault`・command呼び出しだけを所有する。発動条件と対象検索は`resolveViewportFocusRequest`へ委譲する。
+windowのkeydown listenerライフサイクルと、有効なrequestの`preventDefault`・command呼び出しだけを所有する。nodesや選択・編集状態、screen、callbackはRefへ同期し、listenerは再登録せず最新値を参照する。発動条件と対象検索は`resolveViewportFocusRequest`へ委譲する。
 
 ### `nodeViewportFocus.ts`
 
@@ -284,7 +284,7 @@ Map領域の高さは固定header高を差し引かず、viewport高のflex shel
 - 異なるpointer IDのmove／upは所有中gestureを変更しない。
 - 進行中gestureのcallbackから再入しても、新しいgestureやbindingを古いcleanupで破棄しない。
 - stage listener解除またはgesture cancelが例外を投げても、残りのlistener解除とtouch resetをすべて試行し、最初の例外を再送出する。
-- `MapStageProps`、`useMapViewport`の戻り値、`createStageInteractions`の公開controllerは変更しない。
+- `MapStageProps`と`useMapViewport`の戻り値は変更しない。`createStageInteractions`の既存controller項目`bind`／`handleNodePointerDown`を維持し、wheel／keyboard境界から使う`cancelActiveGesture`／`hasActiveGesture`を追加する。
 - 新しいruntime依存は追加しない。
 
 ## テスト構成
@@ -340,7 +340,7 @@ Map領域の高さは固定header高を差し引かず、viewport高のflex shel
 
 - 子孫ノードの一括移動
 - 自動レイアウトと重なり回避
-- UI文言や操作方法の変更
+- ビューポート操作に必要な案内文を除く、UI文言や操作方法の変更
 - reducerや外部状態管理ライブラリの導入
 - 新しいruntime依存の追加
 - PR作成、push、コミット

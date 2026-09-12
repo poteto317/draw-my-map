@@ -47,7 +47,7 @@
 
 - 選択中ノードがある状態で`F`キーを押すと、ノード中心をキャンバス中央へ即時移動する。
 - フォーカス時に倍率は変更しない。
-- input、textarea、select、contenteditable、ラベル編集中では発動しない。
+- input、textarea、select、実効的に編集可能なcontenteditable、ラベル編集中では発動しない。祖先が編集可能でも`contenteditable="false"`で上書きされた領域では発動する。
 - 選択ノードが最新のノード一覧に存在しなければ何もしない。
 - Ctrl／Meta／Alt付き`F`はブラウザ側へ委ねる。
 - ノード選択時の自動フォーカスとアニメーションは行わない。

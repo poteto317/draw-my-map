@@ -72,6 +72,35 @@ describe("useMapViewportShortcut", () => {
     expect(onFocusNode).toHaveBeenCalledWith(node, { width: 800, height: 600 });
   });
 
+  it("nodes更新時もlistenerを再登録せず最新ノードを使用する", () => {
+    const addEventListener = jest.spyOn(window, "addEventListener");
+    const removeEventListener = jest.spyOn(window, "removeEventListener");
+    const onFocusNode = jest.fn();
+    const screen = { width: 800, height: 600 };
+    const movedNode = { ...node, x: 240 };
+    const { rerender, unmount } = renderHook(
+      ({ nodes }) => useMapViewportShortcut({
+        nodes,
+        selectedNodeId: 1,
+        isEditing: false,
+        screen,
+        hasActiveGesture: () => false,
+        onFocusNode,
+      }),
+      { initialProps: { nodes: [node] } },
+    );
+
+    rerender({ nodes: [movedNode] });
+    pressF();
+
+    expect(onFocusNode).toHaveBeenCalledWith(movedNode, screen);
+    expect(addEventListener.mock.calls.filter(([type]) => type === "keydown")).toHaveLength(1);
+    expect(removeEventListener.mock.calls.filter(([type]) => type === "keydown")).toHaveLength(0);
+
+    unmount();
+    expect(removeEventListener.mock.calls.filter(([type]) => type === "keydown")).toHaveLength(1);
+  });
+
   it("unmount後はkeydownを処理しない", () => {
     const onFocusNode = jest.fn();
     const { unmount } = renderHook(() => useMapViewportShortcut({

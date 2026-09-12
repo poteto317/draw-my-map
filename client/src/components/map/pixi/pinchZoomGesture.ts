@@ -23,6 +23,12 @@ type Options = {
   onViewportChangeRef: LatestValue<(viewport: Viewport) => void>;
 };
 
+const isSameViewport = (first: Viewport, second: Viewport): boolean => (
+  first.offsetX === second.offsetX
+  && first.offsetY === second.offsetY
+  && first.scale === second.scale
+);
+
 export function createPinchZoomGesture(options: Options): PinchZoomGesture {
   const ids = [options.first.pointerId, options.second.pointerId] as const;
   const points = new Map<number, Point>([
@@ -32,6 +38,7 @@ export function createPinchZoomGesture(options: Options): PinchZoomGesture {
   let startFirst = { ...options.first.screen };
   let startSecond = { ...options.second.screen };
   let waitingForBaseline = !hasFinitePositiveDistance(startFirst, startSecond);
+  let lastViewport = options.startViewport;
   let active = true;
 
   const owns = (pointerId: number) => pointerId === ids[0] || pointerId === ids[1];
@@ -56,7 +63,9 @@ export function createPinchZoomGesture(options: Options): PinchZoomGesture {
         first,
         second,
       );
-      if (viewport) options.onViewportChangeRef.current(viewport);
+      if (!viewport || isSameViewport(viewport, lastViewport)) return;
+      lastViewport = viewport;
+      options.onViewportChangeRef.current(viewport);
     },
     end(pointerId) {
       if (!active || !owns(pointerId)) return false;

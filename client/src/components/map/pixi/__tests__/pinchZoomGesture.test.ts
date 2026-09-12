@@ -27,6 +27,23 @@ describe("createPinchZoomGesture", () => {
     });
   });
 
+  it("倍率制限後に実効viewportが変わらないmoveを重複通知しない", () => {
+    const onViewportChangeRef = { current: jest.fn() };
+    const gesture = createPinchZoomGesture({
+      first: touch(1, 0, 0),
+      second: touch(2, 100, 0),
+      startViewport: { offsetX: 0, offsetY: 0, scale: 1 },
+      onViewportChangeRef,
+    });
+
+    gesture.move(touch(2, 500, 0));
+    expect(onViewportChangeRef.current).toHaveBeenCalledTimes(1);
+
+    gesture.move(touch(2, 500, 0));
+
+    expect(onViewportChangeRef.current).toHaveBeenCalledTimes(1);
+  });
+
   it("3本目のtouchを所有せず計算へ使わない", () => {
     const onViewportChangeRef = { current: jest.fn() };
     const gesture = createPinchZoomGesture({

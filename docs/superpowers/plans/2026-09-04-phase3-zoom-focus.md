@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Historical plan:** この文書は実装時の手順を記録したものである。実装後の単一責任リファクタリングにより、`focusViewportOnNode`は`mapViewport.ts`から`nodeViewportFocus.ts`へ移動した。現行の配置と責務は設計書およびソースコードを正とする。
+> **Historical plan:** この文書は実装時の手順を記録したものである。実装後の単一責任リファクタリングにより、`focusViewportOnNode`は`mapViewport.ts`から`nodeViewportFocus.ts`へ移動し、wheel入力の正規化・request計算は`useMapWheelZoom.ts`から`wheelZoom.ts`へ移動した。以下の手順は移動後の責務に合わせて更新している。
 
 **Goal:** 安定したビューポート基盤へホイール／ピンチズームと、`F`キーによる選択ノードの中央表示を追加する。
 
-**Architecture:** 純粋なviewport計算が倍率・anchor・中央位置を決め、React Hookは同期Refへ結果を反映する。wheelはPixiのpassive listenerを避けてcanvas DOMへ登録し、pinchは`stageInteractions`がtouch所有権を調停し、keyboard focusは専用Hookが編集状態とgesture状態を判定する。
+**Architecture:** 純粋なviewport計算が倍率・anchor・中央位置を決め、React Hookは同期Refへ結果を反映する。wheelはPixiのpassive listenerを避けてcanvas DOMへ登録し、pinchは`touchGestureCoordinator`がtouch所有権を調停して`stageInteractions`がイベントを委譲し、keyboard focusは専用Hookが編集状態とgesture状態を判定する。
 
 **Tech Stack:** TypeScript、React 19、Next.js 16、PixiJS 8、Jest、Testing Library
 
@@ -261,21 +261,24 @@ git commit -m "feat(map): ズームとフォーカス状態更新を追加"
 ### Task 3: 非passiveホイールズーム
 
 **Files:**
+- Create: `client/src/components/map/wheelZoom.ts`
 - Create: `client/src/components/map/useMapWheelZoom.ts`
+- Create: `client/src/components/map/__tests__/wheelZoom.test.ts`
 - Create: `client/src/components/map/__tests__/useMapWheelZoom.test.tsx`
 
 **Interfaces:**
-- Consumes: `runtime`, `viewportRef`, `onZoomAt`, `onBeforeZoom`
-- Produces: canvas内だけでdefault scrollを止めるwheel lifecycle
+- `wheelZoom.ts`: wheel入力値と現在倍率を受け、検証済みのanchorと要求倍率を返す純粋計算
+- `useMapWheelZoom.ts`: `runtime`、`viewportRef`、`onZoomAt`、`onBeforeZoom`を受け、canvas内だけでdefault scrollを止めるlistener lifecycle
 
-- [ ] **Step 1: wheel正規化、anchor、cleanupの失敗テストを書く**
+- [ ] **Step 1: wheel計算とlistener lifecycleの失敗テストを書く**
 
 ```tsx
 import { renderHook } from "@testing-library/react";
+import { useMapWheelZoom } from "@/components/map/useMapWheelZoom";
 import {
+  calculateWheelZoomRequest,
   normalizeWheelDeltaY,
-  useMapWheelZoom,
-} from "@/components/map/useMapWheelZoom";
+} from "@/components/map/wheelZoom";
 
 it.each([
   [2, WheelEvent.DOM_DELTA_PIXEL, 600, 2],
@@ -283,6 +286,20 @@ it.each([
   [2, WheelEvent.DOM_DELTA_PAGE, 600, 1200],
 ])("wheel deltaをpixelへ正規化する", (deltaY, mode, height, expected) => {
   expect(normalizeWheelDeltaY(deltaY, mode, height)).toBe(expected);
+});
+
+it("canvas相対anchorと要求倍率を返す", () => {
+  expect(calculateWheelZoomRequest({
+    clientX: 300,
+    clientY: 200,
+    deltaY: -100,
+    deltaMode: WheelEvent.DOM_DELTA_PIXEL,
+    pageHeight: 600,
+    bounds: { left: 100, top: 50 },
+  }, 1)).toEqual({
+    anchor: { x: 200, y: 150 },
+    requestedScale: Math.exp(0.1),
+  });
 });
 
 it("canvas上のwheelを抑止してcanvas相対anchorでズームする", () => {
@@ -335,30 +352,38 @@ it("unmount後はwheelを処理しない", () => {
 });
 ```
 
-- [ ] **Step 2: wheel HookテストがREDになることを確認する**
+- [ ] **Step 2: wheelテストがREDになることを確認する**
 
-Run: `cd client && npm test -- --runInBand src/components/map/__tests__/useMapWheelZoom.test.tsx`
+Run: `cd client && npm test -- --runInBand src/components/map/__tests__/wheelZoom.test.ts src/components/map/__tests__/useMapWheelZoom.test.tsx`
 
-Expected: FAIL with `Cannot find module '@/components/map/useMapWheelZoom'`.
+Expected: FAIL with wheel計算またはHookが未実装であることを示すエラー。
 
-- [ ] **Step 3: wheel listenerと正規化を実装する**
+- [ ] **Step 3: wheel純粋計算とlistenerを実装する**
 
 ```ts
-"use client";
-
-import { useEffect, useLayoutEffect, useRef } from "react";
-import { toLocalPoint, type Point } from "@/components/map/mapGeometry";
-import type { Viewport } from "@/components/map/mapViewport";
-import type { LatestValue } from "@/components/map/pixi/pointerGesture";
-import type { PixiRuntime } from "@/components/map/pixi/pixiTypes";
-
-const WHEEL_ZOOM_SENSITIVITY = 0.001;
-
+// wheelZoom.ts
 export function normalizeWheelDeltaY(deltaY: number, deltaMode: number, pageHeight: number): number {
   if (deltaMode === WheelEvent.DOM_DELTA_LINE) return deltaY * 16;
   if (deltaMode === WheelEvent.DOM_DELTA_PAGE) return deltaY * pageHeight;
   return deltaY;
 }
+
+export function calculateWheelZoomRequest(
+  input: WheelZoomInput,
+  currentScale: number,
+): WheelZoomRequest | null {
+  // 入力・anchor・要求倍率を検証し、実効倍率が変わらない入力はnullにする。
+}
+
+// useMapWheelZoom.ts（ここから別ファイル）
+"use client";
+
+import { useEffect, useLayoutEffect, useRef } from "react";
+import type { Point } from "@/components/map/mapGeometry";
+import type { Viewport } from "@/components/map/mapViewport";
+import { calculateWheelZoomRequest } from "@/components/map/wheelZoom";
+import type { LatestValue } from "@/components/map/pixi/pointerGesture";
+import type { PixiRuntime } from "@/components/map/pixi/pixiTypes";
 
 type Options = {
   runtime: PixiRuntime | null;
@@ -379,23 +404,18 @@ export function useMapWheelZoom({ runtime, viewportRef, onBeforeZoom, onZoomAt }
     if (!runtime) return;
     const canvas = runtime.app.canvas;
     const handleWheel = (event: WheelEvent) => {
-      const delta = normalizeWheelDeltaY(
-        event.deltaY,
-        event.deltaMode,
-        runtime.app.screen.height,
-      );
-      if (!Number.isFinite(delta)) return;
+      const request = calculateWheelZoomRequest({
+        clientX: event.clientX,
+        clientY: event.clientY,
+        deltaY: event.deltaY,
+        deltaMode: event.deltaMode,
+        pageHeight: runtime.app.screen.height,
+        bounds: canvas.getBoundingClientRect(),
+      }, viewportRef.current.scale);
+      if (!request) return;
       event.preventDefault();
       onBeforeZoomRef.current();
-      const anchor = toLocalPoint(
-        event.clientX,
-        event.clientY,
-        canvas.getBoundingClientRect(),
-      );
-      onZoomAtRef.current(
-        anchor,
-        viewportRef.current.scale * Math.exp(-delta * WHEEL_ZOOM_SENSITIVITY),
-      );
+      onZoomAtRef.current(request.anchor, request.requestedScale);
     };
     canvas.addEventListener("wheel", handleWheel, { passive: false });
     return () => canvas.removeEventListener("wheel", handleWheel);
@@ -403,16 +423,16 @@ export function useMapWheelZoom({ runtime, viewportRef, onBeforeZoom, onZoomAt }
 }
 ```
 
-- [ ] **Step 4: wheel HookテストをGREENにする**
+- [ ] **Step 4: wheelテストをGREENにする**
 
-Run: `cd client && npm test -- --runInBand src/components/map/__tests__/useMapWheelZoom.test.tsx`
+Run: `cd client && npm test -- --runInBand src/components/map/__tests__/wheelZoom.test.ts src/components/map/__tests__/useMapWheelZoom.test.tsx`
 
 Expected: PASS.
 
 - [ ] **Step 5: wheelズームをコミットする**
 
 ```bash
-git add client/src/components/map/useMapWheelZoom.ts client/src/components/map/__tests__/useMapWheelZoom.test.tsx
+git add client/src/components/map/wheelZoom.ts client/src/components/map/useMapWheelZoom.ts client/src/components/map/__tests__/wheelZoom.test.ts client/src/components/map/__tests__/useMapWheelZoom.test.tsx
 git commit -m "feat(map): canvasのホイールズームを追加"
 ```
 
