@@ -85,6 +85,12 @@ describe("map viewport", () => {
   it("無効なパン差分では元のviewportを返す", () => {
     expect(panViewport(INITIAL_VIEWPORT, Number.NaN, 1)).toBe(INITIAL_VIEWPORT);
   });
+
+  it("有限値同士の加算がoverflowするパンでは元のviewportを返す", () => {
+    const nearLimit = { ...INITIAL_VIEWPORT, offsetX: Number.MAX_VALUE };
+
+    expect(panViewport(nearLimit, Number.MAX_VALUE, 0)).toBe(nearLimit);
+  });
 });
 ```
 
@@ -135,7 +141,12 @@ export function panViewport(viewport: Viewport, dx: number, dy: number): Viewpor
   if (!Number.isFinite(dx) || !Number.isFinite(dy) || !isValidViewport(viewport)) {
     return viewport;
   }
-  return { ...viewport, offsetX: viewport.offsetX + dx, offsetY: viewport.offsetY + dy };
+  const candidate = {
+    ...viewport,
+    offsetX: viewport.offsetX + dx,
+    offsetY: viewport.offsetY + dy,
+  };
+  return isValidViewport(candidate) ? candidate : viewport;
 }
 ```
 
@@ -969,9 +980,10 @@ git commit -m "refactor(map): 描画をワールドコンテナへ分離"
 - Modify: `client/src/components/map/NodeLabelEditor.tsx`
 - Modify: `client/src/components/map/__tests__/MapStage.test.tsx`
 - Modify: `client/src/components/map/__tests__/NodeLabelEditor.test.tsx`
+- Consume: `client/src/components/map/mapDoubleClickAction.ts`
 
 **Interfaces:**
-- Consumes: `useMapViewport`, `screenToWorld`, `worldToScreen`
+- Consumes: `useMapViewport`, `resolveMapDoubleClickAction`
 - Produces: viewport対応の追加・編集・描画・gesture配線
 
 - [ ] **Step 1: パン後の追加・編集欄位置の失敗テストを書く**
@@ -1064,18 +1076,19 @@ const { connectionTargetNodeId, createNodePointerDownHandler } = useMapStageInte
 });
 ```
 
-scene描画effectで`createNodePointerDownHandler()`を呼び、その時点のbinding leaseを捕捉したhandlerを`renderMapScene` optionsへ渡す。あわせて`viewport`を渡す。ダブルクリックではコンテナ相対のscreen座標を求め、その時点の`viewportRef.current`でworldへ戻してから`findNodeAtPoint`と`onDoubleClick`へ使う。
+scene描画effectで`createNodePointerDownHandler()`を呼び、その時点のbinding leaseを捕捉したhandlerを`renderMapScene` optionsへ渡す。あわせて`viewport`を渡す。ダブルクリックは座標変換・hit判定・action選択を`resolveMapDoubleClickAction`へ委譲し、非有限な変換結果の`null`を無視する。
 
 ```ts
-const screenPoint = toLocalPoint(
-  event.clientX,
-  event.clientY,
-  container.getBoundingClientRect(),
-);
-const worldPoint = screenToWorld(screenPoint, viewportRef.current);
-const clickedNode = findNodeAtPoint(nodes, worldPoint);
-if (clickedNode) editing.startEditing(clickedNode.id);
-else onDoubleClick(worldPoint.x, worldPoint.y);
+const action = resolveMapDoubleClickAction({
+  client: { x: event.clientX, y: event.clientY },
+  bounds: container.getBoundingClientRect(),
+  viewport: viewportRef.current,
+  nodes,
+});
+if (action === null) return;
+
+if (action.type === "edit") editing.startEditing(action.nodeId);
+else onDoubleClick(action.point.x, action.point.y);
 ```
 
 - [ ] **Step 4: NodeLabelEditorをviewportへ追従させる**

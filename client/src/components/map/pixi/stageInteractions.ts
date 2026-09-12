@@ -56,8 +56,8 @@ export function createStageInteractions({
   });
 
   const cancelAllInteractions = () => {
-    pointerGestures.cancel();
     touchGestures.cancel();
+    pointerGestures.cancel();
   };
 
   const hasActiveGesture = () => pointerGestures.hasActive() || touchGestures.hasActivePinch();

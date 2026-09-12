@@ -153,7 +153,7 @@ type StageInteractionController = {
 };
 ```
 
-`createNodePointerDownHandler`はscene生成時のbinding leaseを捕捉し、旧bindingに属するsceneから遅延したnode入力を拒否する。`cancelActiveGesture`は所有中のgestureを一度だけ終了し、接続gestureなら候補表示も消去する。`hasActiveGesture`は`F`キーを無視すべきかを同期的に判定するために使う。
+`createNodePointerDownHandler`はscene生成時のbinding leaseを捕捉し、旧bindingに属するsceneから遅延したnode入力を拒否する。`cancelActiveGesture`は開始時のpinchを先に終了してから、その時点のpointer gestureを一度だけ終了し、接続gestureなら候補表示も消去する。終了callbackから再入して作られた新しいpointer gestureやpinchは同じcancel処理の対象にしない。`hasActiveGesture`は`F`キーを無視すべきかを同期的に判定するために使う。
 
 ## 描画構造
 

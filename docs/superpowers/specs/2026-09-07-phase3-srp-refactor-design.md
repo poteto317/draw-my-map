@@ -308,7 +308,7 @@ Map領域の高さは固定header高を差し引かず、viewport高のflex shel
 ### 既存テストの整理
 
 - `stageInteractions.test.ts`はstage binding、通常pointer gesture、touch coordinatorとの接続だけを検証する。
-- pinch切替時のcancel callbackからcleanupまたは新gesture開始が再入する統合境界は`stageInteractions.test.ts`で検証する。
+- pinch切替時や外部cancel時のcallbackからcleanup、新pointer gesture、または新pinch開始が再入する統合境界は`stageInteractions.test.ts`で検証する。
 - touch状態機械の詳細ケースは`touchGestureCoordinator.test.ts`へ移す。
 - `pinchZoomGesture.test.ts`はpointer所有権とcallback lifecycleだけを検証する。
 - `useMapWheelZoom.test.tsx`はlistener、preventDefault、callback、cleanupだけを検証する。

@@ -72,6 +72,22 @@ it("ズーム前後でanchor直下のワールド座標を維持する", () => {
   expect(screenToWorld(anchor, next)).toEqual(worldBefore);
 });
 
+it("大きな有限anchorでも途中計算をoverflowさせない", () => {
+  expect(zoomViewportAt(
+    INITIAL_VIEWPORT,
+    { x: 1.05e308, y: 0 },
+    2,
+  )).toEqual({ offsetX: -1.05e308, offsetY: 0, scale: 2 });
+});
+
+it("有限値同士の演算結果が非有限になるzoomでは元のviewportを返す", () => {
+  expect(zoomViewportAt(
+    INITIAL_VIEWPORT,
+    { x: -Number.MAX_VALUE, y: 0 },
+    4,
+  )).toBe(INITIAL_VIEWPORT);
+});
+
 it("現在倍率を保ってノード中心を画面中央へ移す", () => {
   const node = {
     id: 1,
@@ -132,12 +148,14 @@ export function zoomViewportAt(
     return viewport;
   }
   const scale = clampViewportScale(requestedScale);
-  const worldAnchor = screenToWorld(anchor, viewport);
-  return {
-    offsetX: anchor.x - worldAnchor.x * scale,
-    offsetY: anchor.y - worldAnchor.y * scale,
+  if (scale === viewport.scale) return viewport;
+  const scaleRatio = scale / viewport.scale;
+  const candidate = {
+    offsetX: anchor.x * (1 - scaleRatio) + viewport.offsetX * scaleRatio,
+    offsetY: anchor.y * (1 - scaleRatio) + viewport.offsetY * scaleRatio,
     scale,
   };
+  return isValidViewport(candidate) ? candidate : viewport;
 }
 
 // nodeViewportFocus.ts（ここから別ファイル）
@@ -721,6 +739,7 @@ it("固定touchのpointercancelでpinchを終了する", () => {
 ```
 
 `cancelActiveGesture`と`hasActiveGesture`はbind前、単一gesture中、pinch中、cleanup後を検証する。
+単一gestureのcancel callbackから新しいpinchが同期的に開始された場合は、その新pinchを同じcancel処理で破棄しないことも検証する。
 
 - [ ] **Step 2: touch調停テストがREDになることを確認する**
 
@@ -754,8 +773,8 @@ move/up/upoutside/pointercancelもそれぞれ`pointerMove`/`pointerUp`へ委譲
 
 ```ts
 const cancelAllInteractions = () => {
-  pointerGestures.cancel();
   touchGestures.cancel();
+  pointerGestures.cancel();
 };
 
 const hasActiveGesture = () => pointerGestures.hasActive() || touchGestures.hasActivePinch();
@@ -768,7 +787,7 @@ return {
 };
 ```
 
-unbindは、対象bindingの所有を解除した後、`touchGestures.reset()`、stage listener解除、`pointerGestures.cancel()`の順で実行する。touch resetは再入可能なpointer gestureのcancelより先に行い、cancel callbackから作られた新bindingのtouchと旧pointerを混在させない。各cleanupは一つが例外を投げても残りを試行し、最初の例外を再送出する。Hookはcontroller methodをそのまま公開する。
+外部キャンセルは開始時点のpinchをpointer gestureより先に終了する。これによりpointer gestureのcancel callbackが再入して新しいpinchを作っても、同じcancel処理で破棄しない。unbindは、対象bindingの所有を解除した後、`touchGestures.reset()`、stage listener解除、`pointerGestures.cancel()`の順で実行する。touch resetは再入可能なpointer gestureのcancelより先に行い、cancel callbackから作られた新bindingのtouchと旧pointerを混在させない。各cleanupは一つが例外を投げても残りを試行し、最初の例外を再送出する。Hookはcontroller methodをそのまま公開する。
 
 - [ ] **Step 5: touch調停テストをGREENにする**
 
