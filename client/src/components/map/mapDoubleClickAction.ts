@@ -17,14 +17,20 @@ type MapDoubleClickInput = {
   nodes: readonly Node[];
 };
 
+function hasFiniteCoordinates(point: Point): boolean {
+  return Number.isFinite(point.x) && Number.isFinite(point.y);
+}
+
 export function resolveMapDoubleClickAction({
   client,
   bounds,
   viewport,
   nodes,
-}: MapDoubleClickInput): MapDoubleClickAction {
+}: MapDoubleClickInput): MapDoubleClickAction | null {
   const screen = toLocalPoint(client.x, client.y, bounds);
   const point = screenToWorld(screen, viewport);
+  if (!hasFiniteCoordinates(point)) return null;
+
   const node = findNodeAtPoint(nodes, point);
   return node ? { type: "edit", nodeId: node.id } : { type: "add", point };
 }

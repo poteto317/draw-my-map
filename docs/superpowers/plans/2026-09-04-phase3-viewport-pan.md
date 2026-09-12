@@ -2,9 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Historical plan:** この文書は実装時の手順記録である。実装後の単一責任リファクタリングにより、pointerの正規化は`pointerSample.ts`、単一pointer gestureの所有権は`pointerGestureSession.ts`、touch調停は`touchGestureCoordinator.ts`へ分離された。Task 5の責任記述は現行構成に合わせて更新している。
+
 **Goal:** マップ座標と画面座標を分離し、既存のノード操作を維持したまま空白ドラッグでキャンバスをパンできるようにする。
 
-**Architecture:** Reactの`useMapViewport`が表示専用のviewportと同期Refを所有し、Pixi境界の`stageInteractions`がイベントを画面座標とワールド座標へ正規化する。Pixi stageは画面上のイベント面として固定し、変換を適用した`worldContainer`配下へエッジとノードを描画する。
+**Architecture:** Reactの`useMapViewport`が表示専用のviewportと同期Refを所有し、`pointerSample`がPixiイベントを画面座標とワールド座標へ正規化する。`stageInteractions`はgesture専用オブジェクトへ入力を委譲する。Pixi stageは画面上のイベント面として固定し、変換を適用した`worldContainer`配下へエッジとノードを描画する。
 
 **Tech Stack:** TypeScript、React 19、Next.js 16、PixiJS 8、Jest、Testing Library
 
@@ -32,13 +34,15 @@
 
 **Interfaces:**
 - Consumes: `Point` from `client/src/components/map/mapGeometry.ts`
-- Produces: `Viewport`, `INITIAL_VIEWPORT`, `isValidViewport`, `worldToScreen`, `screenToWorld`, `panViewport`
+- Produces: `Viewport`, `INITIAL_VIEWPORT`, `MIN_VIEWPORT_SCALE`, `MAX_VIEWPORT_SCALE`, `isValidViewport`, `worldToScreen`, `screenToWorld`, `panViewport`
 
 - [ ] **Step 1: 座標変換とパン計算の失敗テストを書く**
 
 ```ts
 import {
   INITIAL_VIEWPORT,
+  MAX_VIEWPORT_SCALE,
+  MIN_VIEWPORT_SCALE,
   isValidViewport,
   panViewport,
   screenToWorld,
@@ -72,6 +76,8 @@ describe("map viewport", () => {
     [{ offsetX: Number.NaN, offsetY: 0, scale: 1 }],
     [{ offsetX: 0, offsetY: Number.POSITIVE_INFINITY, scale: 1 }],
     [{ offsetX: 0, offsetY: 0, scale: 0 }],
+    [{ offsetX: 0, offsetY: 0, scale: MIN_VIEWPORT_SCALE - 0.01 }],
+    [{ offsetX: 0, offsetY: 0, scale: MAX_VIEWPORT_SCALE + 0.01 }],
   ])("無効なviewportを拒否する", (viewport) => {
     expect(isValidViewport(viewport)).toBe(false);
   });
@@ -100,12 +106,15 @@ export type Viewport = {
 };
 
 export const INITIAL_VIEWPORT: Viewport = { offsetX: 0, offsetY: 0, scale: 1 };
+export const MIN_VIEWPORT_SCALE = 0.25;
+export const MAX_VIEWPORT_SCALE = 4;
 
 export function isValidViewport(viewport: Viewport): boolean {
   return Number.isFinite(viewport.offsetX)
     && Number.isFinite(viewport.offsetY)
     && Number.isFinite(viewport.scale)
-    && viewport.scale > 0;
+    && viewport.scale >= MIN_VIEWPORT_SCALE
+    && viewport.scale <= MAX_VIEWPORT_SCALE;
 }
 
 export function worldToScreen(point: Point, viewport: Viewport): Point {
@@ -535,6 +544,8 @@ git commit -m "feat(map): 空白ドラッグのパン操作を追加"
 
 ### Task 5: stageイベントへのパン統合
 
+> **現行責務の参照:** Step 3以降の`pointerGestureSession`への委譲は、後続の`2026-09-08-phase3-srp-refactor.md`で導入された現行構成を示す。このTaskの当初の実装順で新規作成するファイルではない。
+
 **Files:**
 - Modify: `client/src/components/map/pixi/stageInteractions.ts`
 - Modify: `client/src/components/map/useMapStageInteractions.ts`
@@ -558,6 +569,7 @@ type PointerEvent = {
   composedPath: () => unknown[];
   target?: unknown;
   shiftKey?: boolean;
+  button: number;
 };
 
 type PointerOptions = {
@@ -566,6 +578,7 @@ type PointerOptions = {
   pointerId?: number;
   pointerType?: string;
   path?: unknown[];
+  button?: number;
 };
 
 function pointer(
@@ -582,9 +595,50 @@ function pointer(
     pointerType: options.pointerType ?? "mouse",
     target: options.target,
     shiftKey: options.shiftKey ?? false,
+    button: options.button ?? 0,
     composedPath: () => eventPath,
   };
 }
+```
+
+pointerdownは空白とノードのどちらもprimary button（`button === 0`）だけが開始できることを固定する。一方、開始済みgestureの`pointerup`／`pointerupoutside`は所有pointer IDで判定し、解放時の`button`値に依存せず終了する。
+
+```ts
+it.each([1, 2])("button %sでは空白選択解除やパンを開始しない", (button) => {
+  const { stage, handlers } = createStage();
+  const { controller, onSelectNodeRef, onViewportChangeRef } = createController();
+  controller.bind(stage as never);
+
+  handlers.pointerdown?.(pointer(0, 0, { target: stage, button }));
+  handlers.pointermove?.(pointer(20, 20, { button }));
+  expect(onSelectNodeRef.current).not.toHaveBeenCalled();
+  expect(onViewportChangeRef.current).not.toHaveBeenCalled();
+});
+
+it.each([1, 2])("button %sではノード選択や移動を開始しない", (button) => {
+  const { stage, handlers } = createStage();
+  const { controller, onSelectNodeRef, onMoveNodeRef } = createController();
+  controller.bind(stage as never);
+
+  controller.handleNodePointerDown(1, pointer(50, 50, { button }) as never);
+  handlers.pointermove?.(pointer(70, 70, { button }));
+  expect(onSelectNodeRef.current).not.toHaveBeenCalled();
+  expect(onMoveNodeRef.current).not.toHaveBeenCalled();
+});
+
+it.each(["pointerup", "pointerupoutside"] as const)(
+  "解放buttonに関係なく所有pointerの%sでgestureを終了する",
+  (eventName) => {
+    const { stage, handlers } = createStage();
+    const { controller, onMoveNodeRef } = createController();
+    controller.bind(stage as never);
+
+    controller.handleNodePointerDown(1, pointer(100, 60) as never);
+    handlers[eventName]?.(pointer(100, 60, { button: 2 }));
+    handlers.pointermove?.(pointer(110, 70));
+    expect(onMoveNodeRef.current).not.toHaveBeenCalled();
+  },
+);
 ```
 
 `createStage`のhandler mapへ`pointercancel`を追加する。
@@ -700,7 +754,7 @@ Run: `cd client && npm test -- --runInBand src/components/map/pixi/__tests__/sta
 
 Expected: FAIL because viewport options, blank pan, and `pointercancel` are not wired.
 
-- [ ] **Step 3: Pixiイベントを`PointerSample`へ正規化する**
+- [ ] **Step 3: Pixiイベントを正規化し、gesture所有権をsessionへ委譲する**
 
 `StageInteractionOptions`へ次を追加する。
 
@@ -709,53 +763,47 @@ viewportRef: LatestValue<Viewport>;
 onViewportChangeRef: LatestValue<(viewport: Viewport) => void>;
 ```
 
-変換helperを`createStageInteractions`内へ置く。
+座標変換と有限値検証は`pointerSample.ts`に集約し、`stageInteractions`は有効なsampleだけを調停する。
 
 ```ts
-const toPointerSample = (event: FederatedPointerEvent): PointerSample => {
-  const screen = { x: event.globalX, y: event.globalY };
-  return {
-    pointerId: event.pointerId,
-    pointerType: event.pointerType || "mouse",
-    screen,
-    world: screenToWorld(screen, viewportRef.current),
-  };
-};
+const sample = toPointerSample(event, viewportRef.current);
+if (!hasFinitePointerCoordinates(sample)) return;
 ```
 
-node gestureには`startEvent`ではなく`startSample`を渡し、move/upでは受信時点のsampleを渡す。
+node gestureには`startEvent`ではなく`startSample`を渡し、move/upでは受信時点のsampleを渡す。単一pointer gestureの開始・所有判定・終了・キャンセルは`createPointerGestureSession()`が担う。
 
 - [ ] **Step 4: 空白pointer downからパンgestureを開始する**
 
-再入で作られた新gestureを古いblank処理が壊さないよう、開始時のbindingとgesture identityを比較する。
+再入で作られた新gestureを古いblank処理が壊さないよう、開始時のbindingとsessionのlease identityを比較する。
 
 ```ts
 const handleStagePointerDown = (event: FederatedPointerEvent) => {
-  if (activeBinding !== binding || event.target !== stage) return;
-  const gestureAtEntry = activeGesture;
+  if (activeBinding !== binding || event.target !== stage || event.button !== 0) return;
+  const sample = toPointerSample(event, viewportRef.current);
+  if (!hasFinitePointerCoordinates(sample)) return;
+
+  const gestureAtEntry = pointerGestures.current();
+  if (gestureAtEntry !== null && event.pointerId !== gestureAtEntry.pointerId) return;
   try {
     onSelectNodeRef.current(null);
   } finally {
-    if (activeBinding === binding && activeGesture === gestureAtEntry) {
-      cancelActiveGesture();
+    if (activeBinding === binding && pointerGestures.current() === gestureAtEntry) {
+      pointerGestures.cancel();
     }
   }
-  if (activeBinding !== binding || activeGesture !== null) return;
+  if (activeBinding !== binding || pointerGestures.hasActive()) return;
 
-  const sample = toPointerSample(event);
-  activeGesture = {
-    pointerId: sample.pointerId,
-    gesture: createCanvasPanGesture({
-      startSample: sample,
-      startViewport: viewportRef.current,
-      onViewportChangeRef,
-      dragThreshold,
-    }),
-  };
+  const gesture = createCanvasPanGesture({
+    startSample: sample,
+    startViewport: viewportRef.current,
+    onViewportChangeRef,
+    dragThreshold,
+  });
+  if (gesture) pointerGestures.start(sample.pointerId, gesture);
 };
 ```
 
-`pointercancel`は所有pointerの場合だけ`cancelActiveGesture()`を呼ぶ。bindとcleanupへ`on`/`off`を対称に追加する。
+`pointercancel`は所有pointerの場合だけ`pointerGestures.cancel()`を呼ぶ。bindとcleanupへ`on`/`off`を対称に追加する。
 
 - [ ] **Step 5: Hookから最新viewport callbackを配線する**
 

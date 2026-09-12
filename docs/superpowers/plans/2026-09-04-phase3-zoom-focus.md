@@ -38,7 +38,8 @@
 
 **Interfaces:**
 - Consumes: PR 1の`Viewport`, `worldToScreen`, `screenToWorld`, `panViewport`
-- `mapViewport.ts` Produces: `ScreenSize`, scale constants, `clampViewportScale`, `zoomViewportAt`
+- `mapViewport.ts` Consumes: PR 1で定義済みのscale constants
+- `mapViewport.ts` Produces: `ScreenSize`, `clampViewportScale`, `zoomViewportAt`
 - `nodeViewportFocus.ts` Produces: `focusViewportOnNode`
 
 - [ ] **Step 1: 倍率制限、anchor不変性、中央表示の失敗テストを書く**
@@ -113,8 +114,6 @@ Expected: FAIL because zoom functions and the node focus module do not exist.
 ```ts
 // mapViewport.ts
 export type ScreenSize = { width: number; height: number };
-export const MIN_VIEWPORT_SCALE = 0.25;
-export const MAX_VIEWPORT_SCALE = 4;
 
 export function clampViewportScale(scale: number): number {
   return Math.min(MAX_VIEWPORT_SCALE, Math.max(MIN_VIEWPORT_SCALE, scale));
@@ -634,15 +633,21 @@ git commit -m "feat(map): 2本指ピンチ計算を追加"
 
 ### Task 5: touch所有権と外部キャンセルAPI
 
+> **現行責務の参照:** `pointerGestureSession.ts`と`touchGestureCoordinator.ts`は後続の`2026-09-08-phase3-srp-refactor.md`で作成された。以下はTask当時の作成順ではなく、後続リファクタリング後の現行責務を示す。
+
 **Files:**
 - Modify: `client/src/components/map/pixi/stageInteractions.ts`
+- Reference: `client/src/components/map/pixi/pointerGestureSession.ts`
+- Reference: `client/src/components/map/pixi/touchGestureCoordinator.ts`
 - Modify: `client/src/components/map/useMapStageInteractions.ts`
 - Modify: `client/src/components/map/pixi/__tests__/stageInteractions.test.ts`
+- Reference: `client/src/components/map/pixi/__tests__/pointerGestureSession.test.ts`
+- Reference: `client/src/components/map/pixi/__tests__/touchGestureCoordinator.test.ts`
 - Modify: `client/src/components/map/__tests__/useMapStageInteractions.test.tsx`
 
 **Interfaces:**
-- Consumes: `createPinchZoomGesture`, `onViewportChangeRef`
-- Produces: `cancelActiveGesture()`, `hasActiveGesture()`, 2本touch調停
+- Consumes: `createPinchZoomGesture`, `createPointerGestureSession`, `createTouchGestureCoordinator`, `onViewportChangeRef`
+- Produces: `cancelActiveGesture()`, `hasActiveGesture()`、session/coordinatorへ委譲するstage調停
 
 - [ ] **Step 1: pinch開始・終了・3本目・gesture置換の失敗テストを書く**
 
@@ -723,49 +728,37 @@ Run: `cd client && npm test -- --runInBand src/components/map/pixi/__tests__/sta
 
 Expected: FAIL because pinch state and controller methods do not exist.
 
-- [ ] **Step 3: touch pointerとpinch pairを管理する**
+- [ ] **Step 3: touch pointerとpinch pairを専用coordinatorで管理する**
 
-`stageInteractions`へ次の状態を追加する。
-
-```ts
-let activePinch: PinchZoomGesture | null = null;
-const touchSamples = new Map<number, PointerSample>();
-let suppressTouchUntilAllReleased = false;
-```
-
-nodeとblankのpointer down冒頭で共通の`handleTouchDown(sample)`を呼ぶ。同じpointer IDのstage bubbleは再登録せず、2本目で単一gestureをキャンセルしてpinchを作る。3本目以降は記録だけ行い、通常gestureを開始しない。
+touch sample、固定pinch pair、pinch終了後の抑止状態は`createTouchGestureCoordinator`に閉じ込める。`stageInteractions`はpointerイベントを正規化して委譲する。
 
 ```ts
-const handleTouchDown = (sample: PointerSample): boolean => {
-  if (sample.pointerType !== "touch") return false;
-  if (!touchSamples.has(sample.pointerId)) touchSamples.set(sample.pointerId, sample);
-  if (suppressTouchUntilAllReleased || activePinch || touchSamples.size > 2) return true;
-  if (touchSamples.size < 2) return false;
-
-  cancelActiveGesture();
-  const [first, second] = [...touchSamples.values()];
-  activePinch = createPinchZoomGesture({
-    first,
-    second,
-    startViewport: viewportRef.current,
-    onViewportChangeRef,
-  });
-  return true;
-};
+const pointerGestures = createPointerGestureSession();
+const touchGestures = createTouchGestureCoordinator({
+  viewportRef,
+  onViewportChangeRef,
+  onBeforePinch: () => {
+    const bindingBeforeCancel = activeBinding;
+    if (bindingBeforeCancel === null) return false;
+    pointerGestures.cancel();
+    return activeBinding === bindingBeforeCancel && !pointerGestures.hasActive();
+  },
+});
 ```
 
-moveではtouch位置を更新し、`activePinch`が所有するpointerだけを渡す。up、upoutside、pointercancelで固定pairの片方が終わった場合はpinchを終了し、`suppressTouchUntilAllReleased = true`にする。touch mapが空になった時だけ抑止を解除する。
+nodeとblankのpointer downで`touchGestures.pointerDown(sample)`を呼ぶ。同じpointer IDのstage bubbleはcoordinator内で再登録せず、2本目で`onBeforePinch`を通じて単一gestureをキャンセルし、pinchを作る。3本目以降は通常gestureを開始しない。
+
+move/up/upoutside/pointercancelもそれぞれ`pointerMove`/`pointerUp`へ委譲する。固定pairの片方が終わった後のpinch抑止と、全touch解除後の復帰はcoordinatorが担う。
 
 - [ ] **Step 4: controllerのキャンセルと照会を公開する**
 
 ```ts
 const cancelAllInteractions = () => {
-  cancelActiveGesture();
-  activePinch?.cancel();
-  activePinch = null;
+  pointerGestures.cancel();
+  touchGestures.cancel();
 };
 
-const hasActiveGesture = () => activeGesture !== null || activePinch !== null;
+const hasActiveGesture = () => pointerGestures.hasActive() || touchGestures.hasActivePinch();
 
 return {
   bind,
@@ -775,7 +768,7 @@ return {
 };
 ```
 
-unbindでは`cancelAllInteractions()`、`touchSamples.clear()`、`suppressTouchUntilAllReleased = false`を実行する。Hookの戻り値から2つのcontroller methodをそのまま公開する。
+unbindでは`cancelAllInteractions()`と`touchGestures.reset()`を実行する。Hookの戻り値から2つのcontroller methodをそのまま公開する。
 
 - [ ] **Step 5: touch調停テストをGREENにする**
 

@@ -132,6 +132,8 @@ export function MapStage({
       viewport: viewportRef.current,
       nodes,
     });
+    if (action === null) return;
+
     if (action.type === "edit") editing.startEditing(action.nodeId);
     else onDoubleClick(action.point.x, action.point.y);
   };

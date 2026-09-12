@@ -317,6 +317,20 @@ describe("MapStage boundary", () => {
     expect(onDoubleClick).toHaveBeenCalledWith(200, 150);
   });
 
+  it("変換後座標が非有限のdouble-clickでは追加も編集もしない", async () => {
+    const onDoubleClick = jest.fn();
+    const { queryByTestId } = await renderReady(
+      <MapStage {...defaultProps} nodes={sampleNodes} onDoubleClick={onDoubleClick} />,
+    );
+    const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+    mockStageBounds(container, -Number.MAX_VALUE, 0);
+
+    fireEvent.doubleClick(container, { clientX: Number.MAX_VALUE, clientY: 0 });
+
+    expect(onDoubleClick).not.toHaveBeenCalled();
+    expect(queryByTestId("node-label-input")).not.toBeInTheDocument();
+  });
+
   it("opens the editor for a node double-click", async () => {
     const { getByTestId } = await renderReady(
       <MapStage {...defaultProps} nodes={sampleNodes} />,

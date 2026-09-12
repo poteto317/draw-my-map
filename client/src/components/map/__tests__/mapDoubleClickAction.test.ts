@@ -31,4 +31,33 @@ describe("resolveMapDoubleClickAction", () => {
       point: { x: 75, y: 50 },
     });
   });
+
+  it.each([
+    {
+      client: { x: Number.MAX_VALUE, y: 0 },
+      viewport: { offsetX: -Number.MAX_VALUE, offsetY: 0, scale: 1 },
+    },
+    {
+      client: { x: -Number.MAX_VALUE, y: 0 },
+      viewport: { offsetX: Number.MAX_VALUE, offsetY: 0, scale: 1 },
+    },
+    {
+      client: { x: 0, y: Number.MAX_VALUE },
+      viewport: { offsetX: 0, offsetY: -Number.MAX_VALUE, scale: 1 },
+    },
+    {
+      client: { x: Number.NaN, y: 0 },
+      viewport: { offsetX: 0, offsetY: 0, scale: 1 },
+    },
+  ])("変換後のワールド座標が非有限ならactionを返さない", ({
+    client,
+    viewport,
+  }) => {
+    expect(resolveMapDoubleClickAction({
+      client,
+      bounds: { left: 0, top: 0 },
+      viewport,
+      nodes: [node],
+    })).toBeNull();
+  });
 });
