@@ -33,21 +33,25 @@
 **Files:**
 - Modify: `client/src/components/map/mapViewport.ts`
 - Modify: `client/src/components/map/__tests__/mapViewport.test.ts`
+- Create: `client/src/components/map/nodeViewportFocus.ts`
+- Create: `client/src/components/map/__tests__/nodeViewportFocus.test.ts`
 
 **Interfaces:**
 - Consumes: PR 1の`Viewport`, `worldToScreen`, `screenToWorld`, `panViewport`
-- Produces: `ScreenSize`, scale constants, `clampViewportScale`, `zoomViewportAt`, `focusViewportOnNode`
+- `mapViewport.ts` Produces: `ScreenSize`, scale constants, `clampViewportScale`, `zoomViewportAt`
+- `nodeViewportFocus.ts` Produces: `focusViewportOnNode`
 
 - [ ] **Step 1: 倍率制限、anchor不変性、中央表示の失敗テストを書く**
 
 ```ts
 import {
+  INITIAL_VIEWPORT,
   MAX_VIEWPORT_SCALE,
   MIN_VIEWPORT_SCALE,
-  focusViewportOnNode,
   screenToWorld,
   zoomViewportAt,
 } from "@/components/map/mapViewport";
+import { focusViewportOnNode } from "@/components/map/nodeViewportFocus";
 
 it.each([
   [0.01, MIN_VIEWPORT_SCALE],
@@ -100,15 +104,14 @@ it("非有限の倍率・anchor・画面サイズでは元のviewportを返す",
 
 - [ ] **Step 2: 純粋関数テストがREDになることを確認する**
 
-Run: `cd client && npm test -- --runInBand src/components/map/__tests__/mapViewport.test.ts`
+Run: `cd client && npm test -- --runInBand src/components/map/__tests__/mapViewport.test.ts src/components/map/__tests__/nodeViewportFocus.test.ts`
 
-Expected: FAIL because zoom and focus exports do not exist.
+Expected: FAIL because zoom functions and the node focus module do not exist.
 
-- [ ] **Step 3: 倍率とanchor計算を実装する**
+- [ ] **Step 3: 倍率・anchor計算とNode固有フォーカス計算を分離して実装する**
 
 ```ts
-import type { Node } from "@/types/node";
-
+// mapViewport.ts
 export type ScreenSize = { width: number; height: number };
 export const MIN_VIEWPORT_SCALE = 0.25;
 export const MAX_VIEWPORT_SCALE = 4;
@@ -138,6 +141,14 @@ export function zoomViewportAt(
   };
 }
 
+// nodeViewportFocus.ts（ここから別ファイル）
+import {
+  isValidViewport,
+  type ScreenSize,
+  type Viewport,
+} from "@/components/map/mapViewport";
+import type { Node } from "@/types/node";
+
 export function focusViewportOnNode(
   viewport: Viewport,
   node: Node,
@@ -150,24 +161,28 @@ export function focusViewportOnNode(
   }
   const center = { x: node.x + node.width / 2, y: node.y + node.height / 2 };
   if (!Number.isFinite(center.x) || !Number.isFinite(center.y)) return viewport;
-  return {
-    offsetX: screen.width / 2 - center.x * viewport.scale,
-    offsetY: screen.height / 2 - center.y * viewport.scale,
+  const offsetX = screen.width / 2 - center.x * viewport.scale;
+  const offsetY = screen.height / 2 - center.y * viewport.scale;
+  if (offsetX === viewport.offsetX && offsetY === viewport.offsetY) return viewport;
+  const candidate = {
+    offsetX,
+    offsetY,
     scale: viewport.scale,
   };
+  return isValidViewport(candidate) ? candidate : viewport;
 }
 ```
 
 - [ ] **Step 4: 純粋関数テストをGREENにする**
 
-Run: `cd client && npm test -- --runInBand src/components/map/__tests__/mapViewport.test.ts`
+Run: `cd client && npm test -- --runInBand src/components/map/__tests__/mapViewport.test.ts src/components/map/__tests__/nodeViewportFocus.test.ts`
 
 Expected: PASS.
 
 - [ ] **Step 5: viewport計算をコミットする**
 
 ```bash
-git add client/src/components/map/mapViewport.ts client/src/components/map/__tests__/mapViewport.test.ts
+git add client/src/components/map/mapViewport.ts client/src/components/map/__tests__/mapViewport.test.ts client/src/components/map/nodeViewportFocus.ts client/src/components/map/__tests__/nodeViewportFocus.test.ts
 git commit -m "feat(map): ズームと中央表示の計算を追加"
 ```
 

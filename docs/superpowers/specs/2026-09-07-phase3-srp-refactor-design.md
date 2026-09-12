@@ -272,7 +272,7 @@ Map領域の高さは固定header高を差し引かず、viewport高のflex shel
 3. pinchの座標更新は`pinchZoomGesture`から`calculatePinchViewport`へ委譲される。
 4. mouse wheelは`useMapWheelZoom`が受け、`calculateWheelZoomRequest`の結果をviewport commandへ渡す。
 5. keyboard入力は`useMapViewportShortcut`が受け、`resolveViewportFocusRequest`の結果をviewport commandへ渡す。
-6. `useMapViewport`は汎用viewport計算と`focusViewportOnNode`をcommandとして公開する。
+6. `useMapViewport`は汎用viewport計算を利用し、`focusViewportOnNode`を内部で呼ぶ`focusNode` commandを公開する。
 7. `MapStage`はdouble-clickを`resolveMapDoubleClickAction`へ渡し、編集または追加callbackへ配送する。
 8. `NodeLabelEditor`は`getNodeLabelEditorLayout`の投影値をinputへ適用する。
 

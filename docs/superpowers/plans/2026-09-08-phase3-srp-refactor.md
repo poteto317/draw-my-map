@@ -38,21 +38,21 @@
 - Produces: `focusViewportOnNode(viewport, node, screen): Viewport`
 - Produces: `getNodeLabelEditorLayout(node, viewport): NodeLabelEditorLayout`
 
-- [ ] **Step 1: 失敗テストを書く**
+- [x] **Step 1: 失敗テストを書く**
 
 `nodeViewportFocus.test.ts`で中心`(100, 60)`を画面中心`(400, 300)`へ合わせた`{ offsetX: 200, offsetY: 180, scale: 2 }`、倍率維持、非有限node／screenで入力参照を返すことを検証する。`nodeLabelEditorLayout.test.ts`でnode`{ x: 10, y: 20, width: 100, height: 60 }`とviewport`{ offsetX: 5, offsetY: -5, scale: 2 }`から`{ left: 25, top: 35, width: 200, height: 120, lineHeight: "120px", fontSize: 28 }`を期待する。
 
-- [ ] **Step 2: REDを確認する**
+- [x] **Step 2: REDを確認する**
 
 Run: `cd client && npm test -- --runInBand src/components/map/__tests__/nodeViewportFocus.test.ts src/components/map/__tests__/nodeLabelEditorLayout.test.ts`
 
 Expected: 新規モジュールが存在しないためFAIL。
 
-- [ ] **Step 3: 最小実装を行う**
+- [x] **Step 3: 最小実装を行う**
 
 Node固有計算を`nodeViewportFocus.ts`へ移し、`mapViewport.ts`からNode依存を除く。ラベル位置、寸法、line-height、font-sizeの計算を`nodeLabelEditorLayout.ts`へ移し、`NodeLabelEditor.tsx`は戻り値をstyleへ設定する。既存テストのNode固有assertionを新規テストへ移す。
 
-- [ ] **Step 4: GREENを確認する**
+- [x] **Step 4: GREENを確認する**
 
 Run: `cd client && npm test -- --runInBand src/components/map/__tests__/nodeViewportFocus.test.ts src/components/map/__tests__/nodeLabelEditorLayout.test.ts src/components/map/__tests__/mapViewport.test.ts src/components/map/__tests__/NodeLabelEditor.test.tsx src/components/map/__tests__/useMapViewport.test.tsx`
 
@@ -72,21 +72,21 @@ Expected: PASS。
 - Produces: `normalizeWheelDeltaY(deltaY, deltaMode, pageHeight): number`
 - Produces: `calculateWheelZoomRequest(input, currentScale): WheelZoomRequest | null`
 
-- [ ] **Step 1: 失敗テストを書く**
+- [x] **Step 1: 失敗テストを書く**
 
 pixel、line、pageの正規化結果`5`、`80`、`3000`を検証する。client`(150, 90)`、bounds`(50, 40)`、deltaY`-100`、scale`2`からanchor`(100, 50)`と`2 * Math.exp(0.1)`を期待する。delta、座標、pageHeight、scaleの非有限値と非正scaleでは`null`を期待する。
 
-- [ ] **Step 2: REDを確認する**
+- [x] **Step 2: REDを確認する**
 
 Run: `cd client && npm test -- --runInBand src/components/map/__tests__/wheelZoom.test.ts`
 
 Expected: 新規モジュールが存在しないためFAIL。
 
-- [ ] **Step 3: 最小実装を行う**
+- [x] **Step 3: 最小実装を行う**
 
 感度`0.001`、delta正規化、anchor、指数倍率を`wheelZoom.ts`へ移す。Hookは有効なrequestだけ`preventDefault`、`onBeforeZoom`、`onZoomAt`へ配送する。
 
-- [ ] **Step 4: GREENを確認する**
+- [x] **Step 4: GREENを確認する**
 
 Run: `cd client && npm test -- --runInBand src/components/map/__tests__/wheelZoom.test.ts src/components/map/__tests__/useMapWheelZoom.test.tsx src/components/map/__tests__/MapStage.test.tsx`
 
@@ -110,21 +110,21 @@ Expected: PASS。
 - Produces: `resolveViewportFocusRequest(input): { node: Node; screen: ScreenSize } | null`
 - Produces: `resolveMapDoubleClickAction(input): { type: "edit"; nodeId: number } | { type: "add"; point: Point }`
 
-- [ ] **Step 1: 失敗テストを書く**
+- [x] **Step 1: 失敗テストを書く**
 
 フォーカスresolverでは成功、`F`以外、編集中、input／textarea／select／contenteditable配下、gesture中、screen欠損、選択欠損を検証する。double-click resolverではcontainer offsetとviewport変換後のnode hitがedit action、空白が変換済みworld座標を含むadd actionになることを検証する。
 
-- [ ] **Step 2: REDを確認する**
+- [x] **Step 2: REDを確認する**
 
 Run: `cd client && npm test -- --runInBand src/components/map/__tests__/viewportFocusShortcut.test.ts src/components/map/__tests__/mapDoubleClickAction.test.ts`
 
 Expected: 新規モジュールが存在しないためFAIL。
 
-- [ ] **Step 3: 最小実装を行う**
+- [x] **Step 3: 最小実装を行う**
 
 Hookはresolverが返したrequestにだけ`preventDefault()`とfocus commandを実行する。`MapStage`はdouble-click actionに応じて編集開始または追加callbackだけを呼ぶ。
 
-- [ ] **Step 4: GREENを確認する**
+- [x] **Step 4: GREENを確認する**
 
 Run: `cd client && npm test -- --runInBand src/components/map/__tests__/viewportFocusShortcut.test.ts src/components/map/__tests__/mapDoubleClickAction.test.ts src/components/map/__tests__/useMapViewportShortcut.test.tsx src/components/map/__tests__/MapStage.test.tsx`
 
@@ -147,21 +147,21 @@ Expected: PASS。
 - Produces: `toPointerSample(event, viewport): PointerSample`
 - Produces: `calculatePinchViewport(startViewport, startFirst, startSecond, currentFirst, currentSecond): Viewport | null`
 
-- [ ] **Step 1: 失敗テストを書く**
+- [x] **Step 1: 失敗テストを書く**
 
 pointer変換ではglobal`(120, 90)`、viewport`{ offsetX: 20, offsetY: 10, scale: 2 }`からscreen`(120, 90)`、world`(50, 40)`を期待し、空pointerTypeを`mouse`へ変換する。pinch計算では距離比、中点移動、倍率上下限、開始距離ゼロ、非有限点を検証する。
 
-- [ ] **Step 2: REDを確認する**
+- [x] **Step 2: REDを確認する**
 
 Run: `cd client && npm test -- --runInBand src/components/map/pixi/__tests__/pointerSample.test.ts src/components/map/pixi/__tests__/pinchViewport.test.ts`
 
 Expected: 新規モジュールが存在しないためFAIL。
 
-- [ ] **Step 3: 最小実装を行う**
+- [x] **Step 3: 最小実装を行う**
 
 `toPointerSample`は`screenToWorld`へ委譲する。`calculatePinchViewport`は中点と距離を計算し、`zoomViewportAt`後に`panViewport`を適用する。gestureはpointer座標とactive状態だけを保持し、非nullの計算結果だけを通知する。
 
-- [ ] **Step 4: GREENを確認する**
+- [x] **Step 4: GREENを確認する**
 
 Run: `cd client && npm test -- --runInBand src/components/map/pixi/__tests__/pointerSample.test.ts src/components/map/pixi/__tests__/pinchViewport.test.ts src/components/map/pixi/__tests__/pinchZoomGesture.test.ts src/components/map/pixi/__tests__/stageInteractions.test.ts`
 
@@ -181,25 +181,25 @@ Expected: PASS。
 - Produces: `createTouchGestureCoordinator(options): TouchGestureCoordinator`
 - Consumes: `createPinchZoomGesture`、`viewportRef`、`onViewportChangeRef`、`onBeforePinch`
 
-- [ ] **Step 1: 失敗テストを書く**
+- [x] **Step 1: 失敗テストを書く**
 
 最初のtouchを通常gestureへ委ねること、2本目で通常gestureを一度キャンセルしてpinchを始めること、固定pair、3本目の無視、pair終了後の抑止、全touch終了後の解除、`cancel`、`reset`を独立して検証する。
 
-- [ ] **Step 2: REDを確認する**
+- [x] **Step 2: REDを確認する**
 
 Run: `cd client && npm test -- --runInBand src/components/map/pixi/__tests__/touchGestureCoordinator.test.ts`
 
 Expected: 新規モジュールが存在しないためFAIL。
 
-- [ ] **Step 3: 最小実装を行う**
+- [x] **Step 3: 最小実装を行う**
 
 `stageInteractions.ts`からpinch、touch Map、抑止flagを削除する。down／move／upをcoordinatorへ委譲し、公開cancelは通常gestureとpinchを終了、binding cleanupはcoordinatorをresetする。
 
-- [ ] **Step 4: テスト責務を移動する**
+- [x] **Step 4: テスト責務を移動する**
 
 3本目、終了後抑止、pair cancelの詳細をcoordinator testへ移し、stage testには2本目touchが通常gestureをキャンセルしてviewport更新へ到達する統合ケースを残す。
 
-- [ ] **Step 5: GREENを確認する**
+- [x] **Step 5: GREENを確認する**
 
 Run: `cd client && npm test -- --runInBand src/components/map/pixi/__tests__/touchGestureCoordinator.test.ts src/components/map/pixi/__tests__/stageInteractions.test.ts src/components/map/__tests__/useMapStageInteractions.test.tsx src/components/map/__tests__/MapStage.test.tsx`
 
@@ -279,23 +279,23 @@ Expected: PASS。
 - 2本目touchで単一gestureをcancelした後にgeneration、touch pair、stage binding、単一pointer所有権を再検証し、cleanupまたは新gesture開始で失効したpinchを作らない。
 - cancel callbackからの同期cleanupと新gesture開始をstage統合テストで再現する。
 
-- [ ] **Step 1: semantic cohesionを監査する**
+- [x] **Step 1: semantic cohesionを監査する**
 
 各本番ファイルの変更理由を一文で記述し、異なるactor、policy、lifecycleが同居していないことを確認する。
 
-- [ ] **Step 2: state ownershipとlifecycleを監査する**
+- [x] **Step 2: state ownershipとlifecycleを監査する**
 
 各mutable state、Ref、Map、listener、Pixi resourceの所有者が一つで、生成・更新・cleanupが同じ境界に閉じていることを確認する。
 
-- [ ] **Step 3: dependency directionを監査する**
+- [x] **Step 3: dependency directionを監査する**
 
 純粋計算がReact、DOM listener、Pixi runtimeへ依存せず、compositionからpolicy、policyから計算へ一方向に依存することを確認する。
 
-- [ ] **Step 4: test responsibilityを監査する**
+- [x] **Step 4: test responsibilityを監査する**
 
 純粋計算を直接テストし、Hookと統合テストがその詳細を重複検証せず、状態機械の詳細がstage testへ集中していないことを確認する。
 
-- [ ] **Step 5: 指摘があればTDDで修正してStep 1へ戻る**
+- [x] **Step 5: 指摘があればTDDで修正してStep 1へ戻る**
 
 新しい責務混在ごとに、壊れうる契約の失敗テストでREDを確認し、最小抽出でGREENにする。新しい指摘がなくなるまでStep 1〜4を繰り返す。
 
@@ -303,19 +303,19 @@ Expected: PASS。
 
 ### Task 7: 完全検証
 
-- [ ] **Step 1: client全体を検証する**
+- [x] **Step 1: client全体を検証する**
 
 Run: `cd client && npm run verify`
 
 Expected: Tailwind scan、ESLint、TypeScript、全Jest suite、Next.js production buildが成功する。
 
-- [ ] **Step 2: 差分を検証する**
+- [x] **Step 2: 差分を検証する**
 
 Run: `git diff --check origin/main...HEAD`および`git diff --check`
 
 Expected: 出力なし、exit code 0。
 
-- [ ] **Step 3: 未コミットを確認する**
+- [x] **Step 3: 未コミットを確認する**
 
 Run: `git status --short --branch`および`git log -1 --oneline`
 
