@@ -3,6 +3,7 @@
 import { useEffect, useRef, type MouseEvent } from "react";
 import { NodeLabelEditor } from "@/components/map/NodeLabelEditor";
 import { resolveMapDoubleClickAction } from "@/components/map/mapDoubleClickAction";
+import type { Viewport } from "@/components/map/mapViewport";
 import { applyViewportTransform } from "@/components/map/pixi/applyViewportTransform";
 import { renderMapScene } from "@/components/map/pixi/renderMapScene";
 import { usePixiApplication } from "@/components/map/pixi/usePixiApplication";
@@ -42,6 +43,7 @@ export function MapStage({
 }: MapStageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const worldContainerRef = useRef<Container | null>(null);
+  const appliedViewportRef = useRef<Viewport | null>(null);
   const runtime = usePixiApplication(containerRef);
   const editing = useNodeEditing(nodes, onUpdateLabel);
   const {
@@ -86,18 +88,23 @@ export function MapStage({
     if (!runtime) return;
 
     const onNodePointerDown = createNodePointerDownHandler();
+    const renderedViewport = viewportRef.current;
     const worldContainer = renderMapScene(runtime.app, runtime.constructors, {
       nodes,
       selectedNodeId,
       editingNodeId: editing.editingNodeId,
       connectionTargetNodeId,
       onNodePointerDown,
-      viewport: viewportRef.current,
+      viewport: renderedViewport,
     });
     worldContainerRef.current = worldContainer;
+    appliedViewportRef.current = renderedViewport;
 
     return () => {
-      if (worldContainerRef.current === worldContainer) worldContainerRef.current = null;
+      if (worldContainerRef.current === worldContainer) {
+        worldContainerRef.current = null;
+        appliedViewportRef.current = null;
+      }
     };
   }, [
     runtime,
@@ -111,7 +118,9 @@ export function MapStage({
 
   useEffect(() => {
     const worldContainer = worldContainerRef.current;
-    if (worldContainer) applyViewportTransform(worldContainer, viewport);
+    if (!worldContainer || appliedViewportRef.current === viewport) return;
+    applyViewportTransform(worldContainer, viewport);
+    appliedViewportRef.current = viewport;
   }, [viewport]);
 
   useNodeKeyboardShortcuts({

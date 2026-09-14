@@ -74,7 +74,7 @@ Expected: PASS。
 
 - [x] **Step 1: 失敗テストを書く**
 
-pixel、line、pageの正規化結果`5`、`80`、`3000`を検証する。client`(150, 90)`、bounds`(50, 40)`、deltaY`-100`、scale`2`からanchor`(100, 50)`と`2 * Math.exp(0.1)`を期待する。delta、座標、pageHeight、scaleの非有限値と非正scaleでは`null`を期待する。
+pixel、line、pageの正規化結果`5`、`80`、`3000`を検証する。合わせてDOMグローバルがない実行環境でもlineとpageを正規化できることを検証する。client`(150, 90)`、bounds`(50, 40)`、deltaY`-100`、scale`2`からanchor`(100, 50)`と`2 * Math.exp(0.1)`を期待する。delta、座標、pageHeight、scaleの非有限値と非正scaleでは`null`を期待する。
 
 - [x] **Step 2: REDを確認する**
 
@@ -84,7 +84,7 @@ Expected: 新規モジュールが存在しないためFAIL。
 
 - [x] **Step 3: 最小実装を行う**
 
-感度`0.001`、delta正規化、anchor、指数倍率を`wheelZoom.ts`へ移す。Hookは有効なrequestだけ`preventDefault`、`onBeforeZoom`、`onZoomAt`へ配送する。
+感度`0.001`、DOMグローバルに依存しない`deltaMode`の規格値、delta正規化、anchor、指数倍率を`wheelZoom.ts`へ移す。Hookは有効なrequestだけ`preventDefault`、`onBeforeZoom`、`onZoomAt`へ配送する。
 
 - [x] **Step 4: GREENを確認する**
 

@@ -377,6 +377,36 @@ describe("MapStage boundary", () => {
     expect(worldContainer?.position.set).toHaveBeenLastCalledWith(20, 10);
   });
 
+  it("scene再生成とviewport更新が同じcommitでもtransformを1回だけ適用する", async () => {
+    const { rerender } = await renderReady(
+      <MapStage {...defaultProps} nodes={sampleNodes} />,
+    );
+
+    act(() => {
+      mockStageHandlers.pointerdown?.(pointer(0, 0, { target: mockStage }));
+      mockStageHandlers.pointermove?.(pointer(20, 10));
+      rerender(
+        <MapStage
+          {...defaultProps}
+          nodes={[...sampleNodes, {
+            id: 3,
+            parentId: null,
+            x: 300,
+            y: 200,
+            width: 100,
+            height: 60,
+            label: "追加ノード",
+          }]}
+        />,
+      );
+    });
+
+    const updatedWorldContainer = lastWorldContainer();
+    expect(updatedWorldContainer?.position.set).toHaveBeenCalledTimes(1);
+    expect(updatedWorldContainer?.position.set).toHaveBeenCalledWith(20, 10);
+    expect(updatedWorldContainer?.scale.set).toHaveBeenCalledTimes(1);
+  });
+
   it("パン後の空白double-clickを変換済みworld座標で追加へ渡す", async () => {
     const onDoubleClick = jest.fn();
     await renderReady(<MapStage {...defaultProps} onDoubleClick={onDoubleClick} />);

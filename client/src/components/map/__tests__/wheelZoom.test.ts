@@ -11,6 +11,24 @@ describe("normalizeWheelDeltaY", () => {
   ])("delta mode %sをpixel相当へ正規化する", (deltaY, mode, pageHeight, expected) => {
     expect(normalizeWheelDeltaY(deltaY, mode, pageHeight)).toBe(expected);
   });
+
+  it("DOMグローバルがない実行環境でも正規化する", () => {
+    const wheelEvent = globalThis.WheelEvent;
+    Object.defineProperty(globalThis, "WheelEvent", {
+      configurable: true,
+      value: undefined,
+    });
+
+    try {
+      expect(normalizeWheelDeltaY(5, 1, 600)).toBe(80);
+      expect(normalizeWheelDeltaY(5, 2, 600)).toBe(3000);
+    } finally {
+      Object.defineProperty(globalThis, "WheelEvent", {
+        configurable: true,
+        value: wheelEvent,
+      });
+    }
+  });
 });
 
 describe("calculateWheelZoomRequest", () => {

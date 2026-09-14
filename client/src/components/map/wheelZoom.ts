@@ -2,6 +2,8 @@ import { toLocalPoint, type Point } from "@/components/map/mapGeometry";
 import { clampViewportScale } from "@/components/map/mapViewport";
 
 const WHEEL_ZOOM_SENSITIVITY = 0.001;
+const WHEEL_DELTA_MODE_LINE = 1;
+const WHEEL_DELTA_MODE_PAGE = 2;
 
 export type WheelZoomRequest = {
   anchor: Point;
@@ -22,8 +24,8 @@ export function normalizeWheelDeltaY(
   deltaMode: number,
   pageHeight: number,
 ): number {
-  if (deltaMode === WheelEvent.DOM_DELTA_LINE) return deltaY * 16;
-  if (deltaMode === WheelEvent.DOM_DELTA_PAGE) return deltaY * pageHeight;
+  if (deltaMode === WHEEL_DELTA_MODE_LINE) return deltaY * 16;
+  if (deltaMode === WHEEL_DELTA_MODE_PAGE) return deltaY * pageHeight;
   return deltaY;
 }
 

@@ -202,6 +202,10 @@ export type PointerSample = {
 - `MapStage.tsx`: ビューポートの配線、ダブルクリック座標変換
 - `NodeLabelEditor.tsx`: DOM編集欄の画面座標表示
 
+### viewport transform同期
+
+`renderMapScene`で新しい`worldContainer`へ適用したviewportは`MapStage`が記録する。scene再生成とviewport更新が同じcommitに含まれる場合、viewport専用effectは同じtransformを再適用しない。
+
 ### パンgesture
 
 パンgestureは開始時の画面座標と開始時のviewportを固定し、各moveで開始点からの総差分を計算する。前回moveからの増分を累積しないため、イベント欠落や再利用で誤差を増やさない。
@@ -223,6 +227,8 @@ Pixi 8.16のwheel listenerは`passive: true`で登録されるため、ページ
 - `DOM_DELTA_PIXEL`: `deltaY`
 - `DOM_DELTA_LINE`: `deltaY * 16`
 - `DOM_DELTA_PAGE`: `deltaY * app.screen.height`
+
+純粋計算モジュールは`WheelEvent`グローバルを実行時に参照せず、規格値`0`、`1`、`2`をローカル定数として扱う。DOMのないSSRやNode環境でもwheel正規化を利用できる境界を保つ。
 
 倍率は次式で計算する。
 
@@ -305,6 +311,7 @@ offsetY = screen.height / 2 - nodeCenter.y * viewport.scale
 - 保留レンダーで最新確定値を上書きしない
 - command参照の安定性
 - wheel listenerの登録、`preventDefault`、解除
+- DOMグローバルがない環境でのwheel delta正規化
 - `F`キー、編集可能要素、編集中、欠損選択の分岐
 
 ### gestureとPixi境界
@@ -325,6 +332,7 @@ offsetY = screen.height / 2 - nodeCenter.y * viewport.scale
 - PixiノードとDOM編集欄の位置・サイズが一致する
 - パン・ズーム後も通常移動とShift接続が成立する
 - フォーカス後に選択ノードが画面中央へ描画される
+- scene再生成とviewport更新が同じcommitでもtransformを1回だけ適用する
 
 各実装ステップの対象テストに加え、統合PRでは`client`ディレクトリから`npm run verify`を実行する。
 

@@ -320,6 +320,18 @@ it.each([
   expect(normalizeWheelDeltaY(deltaY, mode, height)).toBe(expected);
 });
 
+it("DOMグローバルがない実行環境でもwheel deltaを正規化する", () => {
+  const wheelEvent = globalThis.WheelEvent;
+  Object.defineProperty(globalThis, "WheelEvent", { configurable: true, value: undefined });
+
+  try {
+    expect(normalizeWheelDeltaY(5, 1, 600)).toBe(80);
+    expect(normalizeWheelDeltaY(5, 2, 600)).toBe(3000);
+  } finally {
+    Object.defineProperty(globalThis, "WheelEvent", { configurable: true, value: wheelEvent });
+  }
+});
+
 it("canvas相対anchorと要求倍率を返す", () => {
   expect(calculateWheelZoomRequest({
     clientX: 300,
@@ -394,9 +406,12 @@ Expected: FAIL with wheel計算またはHookが未実装であることを示す
 
 ```ts
 // wheelZoom.ts
+const WHEEL_DELTA_MODE_LINE = 1;
+const WHEEL_DELTA_MODE_PAGE = 2;
+
 export function normalizeWheelDeltaY(deltaY: number, deltaMode: number, pageHeight: number): number {
-  if (deltaMode === WheelEvent.DOM_DELTA_LINE) return deltaY * 16;
-  if (deltaMode === WheelEvent.DOM_DELTA_PAGE) return deltaY * pageHeight;
+  if (deltaMode === WHEEL_DELTA_MODE_LINE) return deltaY * 16;
+  if (deltaMode === WHEEL_DELTA_MODE_PAGE) return deltaY * pageHeight;
   return deltaY;
 }
 
@@ -1064,7 +1079,7 @@ git commit -m "feat(map): 選択ノードの中央表示を追加"
 
 - [ ] **Step 1: MapStage境界のwheel・focusテストを書く**
 
-実際の`useMapViewport`を通してwheel後のworld container倍率と`F`後のoffsetを確認する。
+実際の`useMapViewport`を通してwheel後のworld container倍率と`F`後のoffsetを確認する。scene再生成とviewport更新を同じcommitで発生させ、新しいworld containerのtransform setterが各1回だけ呼ばれることも確認する。
 
 ```tsx
 it("wheelでpointer位置をanchorにworld containerを拡大する", async () => {
@@ -1154,6 +1169,8 @@ renderMapScene(runtime.app, runtime.constructors, {
   onNodePointerDown,
 });
 ```
+
+`renderMapScene`が新しいworld containerへ適用したviewportをRefに記録する。viewport専用effectは記録済みと同じviewportを再適用せず、scene再生成とviewport更新が同じcommitに含まれてもtransform setterを重複させない。
 
 `usePixiApplication`で作成したcanvasへ`style.touchAction = "none"`を設定する。
 
