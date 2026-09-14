@@ -18,7 +18,7 @@
 - 対象ノードと全子孫へ同じ`dx`と`dy`を適用する。
 - 無関係なノードの値とオブジェクト参照を維持する。
 - 入力配列と入力ノードを変更しない。
-- 欠損ノード、非有限座標、不正な循環で状態を破損しない。
+- 欠損ノード、非有限入力、座標演算のoverflow、不正な循環で状態を破損しない。
 - 1回の移動は`O(全ノード数 + 到達した子孫数)`とする。
 - Pixi gestureへツリー探索責務を追加しない。
 - ロードマップはこの実装PRへ含めず、マージ後処理で更新する。
@@ -94,7 +94,7 @@ describe("moveNodeSubtree", () => {
 });
 ```
 
-- [ ] **Step 2: 欠損、無効値、ゼロ差分、循環の失敗テストを書く**
+- [ ] **Step 2: 欠損、無効値、演算overflow、ゼロ差分、循環の失敗テストを書く**
 
 ```ts
 it("欠損ノードと非有限座標を拒否する", () => {
@@ -102,6 +102,32 @@ it("欠損ノードと非有限座標を拒否する", () => {
   expect(moveNodeSubtree(nodes, 99, 1, 1)).toBeNull();
   expect(moveNodeSubtree(nodes, 1, Number.NaN, 1)).toBeNull();
   expect(moveNodeSubtree(nodes, 1, 1, Number.POSITIVE_INFINITY)).toBeNull();
+});
+
+it("有限な移動先でも差分が非有限になる場合は拒否する", () => {
+  expect(moveNodeSubtree(
+    [node(1, null, -Number.MAX_VALUE, 0)],
+    1,
+    Number.MAX_VALUE,
+    0,
+  )).toBeNull();
+  expect(moveNodeSubtree(
+    [node(1, null, 0, -Number.MAX_VALUE)],
+    1,
+    0,
+    Number.MAX_VALUE,
+  )).toBeNull();
+});
+
+it("子孫の算出座標が非有限になる場合は部分木全体を拒否する", () => {
+  expect(moveNodeSubtree([
+    node(1, null, 0, 0),
+    node(2, 1, Number.MAX_VALUE, 0),
+  ], 1, Number.MAX_VALUE, 0)).toBeNull();
+  expect(moveNodeSubtree([
+    node(1, null, 0, 0),
+    node(2, 1, 0, Number.MAX_VALUE),
+  ], 1, 0, Number.MAX_VALUE)).toBeNull();
 });
 
 it("ゼロ差分では新しい配列と既存node参照を返す", () => {
@@ -191,6 +217,7 @@ export function moveNodeSubtree(
 
   const dx = x - root.x;
   const dy = y - root.y;
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) return null;
   const subtreeIds = new Set<number>();
   const queue = [rootId];
   for (let index = 0; index < queue.length; index += 1) {
@@ -200,10 +227,18 @@ export function moveNodeSubtree(
     for (const childId of childrenByParent.get(id) ?? []) queue.push(childId);
   }
 
-  return nodes.map((current) => {
-    if (!subtreeIds.has(current.id) || (dx === 0 && dy === 0)) return current;
-    return { ...current, x: current.x + dx, y: current.y + dy };
-  });
+  const movedNodes: Node[] = [];
+  for (const current of nodes) {
+    if (!subtreeIds.has(current.id) || (dx === 0 && dy === 0)) {
+      movedNodes.push(current);
+      continue;
+    }
+    const nextX = current.x + dx;
+    const nextY = current.y + dy;
+    if (!Number.isFinite(nextX) || !Number.isFinite(nextY)) return null;
+    movedNodes.push({ ...current, x: nextX, y: nextY });
+  }
+  return movedNodes;
 }
 ```
 
@@ -477,7 +512,7 @@ Expected: 出力なし、exit code 0。
 
 - [ ] ルートと中間ノードのドラッグで、その部分木だけが同じ差分を保って移動する。
 - [ ] 葉ノードの操作感と`moveNode`公開APIを維持する。
-- [ ] 欠損、非有限座標、不正な循環でstateを変更または破損しない。
+- [ ] 欠損、非有限入力、座標演算のoverflow、不正な循環でstateを変更または破損しない。
 - [ ] 逆順の深いツリーでも処理が線形回数に収まる。
 - [ ] 任意のviewport倍率でgestureがワールド座標の移動先を通知する。
 - [ ] `npm run verify`と`git diff --check main...HEAD`が成功する。
