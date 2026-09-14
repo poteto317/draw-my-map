@@ -11,7 +11,7 @@ describe("AppHeader", () => {
     render(<AppHeader />);
     expect(
       screen.getByText(
-        "ダブルクリックで追加・空白ドラッグで移動・ホイール/ピンチで拡大縮小・Fで中央表示・Shift+ノードドラッグで接続",
+        "空白ダブルクリックで追加・ノードダブルクリックで編集・空白ドラッグで移動・ホイール/ピンチで拡大縮小・Fで中央表示・Shift+ノードドラッグで接続",
       ),
     ).toBeInTheDocument();
   });

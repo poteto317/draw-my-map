@@ -104,6 +104,8 @@ touch一覧、中点・距離計算、画面からワールドへの変換式は
 
 pointer down時の画面座標とdrag閾値を固定し、閾値到達後に開始点からの総画面差分を返す。パンやノード座標、callback、gesture終了状態を知らない。`canvasPanGesture`と`nodeMoveGesture`はこの共通状態を利用し、それぞれviewport更新とノード移動先通知だけを担当する。
 
+`canvasPanGesture`は非ゼロ差分で`panViewport`が開始viewport参照を返した場合を演算失敗として通知せず、直前の有効な結果を開始位置へ巻き戻さない。開始後に開始点へ戻るゼロ差分では開始viewportを通知する。
+
 ### `pixi/pinchViewport.ts`
 
 pinch開始時と現在の2点から次のviewportを計算する。
@@ -294,6 +296,7 @@ Map領域の高さは固定header高を差し引かず、viewport高のflex shel
 - `pointerSample.test.ts`: screen／world変換、最新viewport、pointerType既定値
 - `pointerGestureSession.test.ts`: 所有pointer、終了、キャンセル、再入時のlease保護
 - `dragActivation.test.ts`: 閾値未満、各軸の閾値到達、開始後の総差分、開始座標の固定
+- `canvasPanGesture.test.ts`: viewport演算overflow時の通知抑止と、開始点へ戻るゼロ差分の通知
 - `pinchViewport.test.ts`: 距離比、中点移動、倍率制限、現在距離ゼロ、開始距離ゼロ、非有限値、有限値演算のoverflow
 - `wheelZoom.test.ts`: pixel／line／page正規化、canvas相対anchor、要求倍率、無効値
 - `viewportFocusShortcut.test.ts`: 共有shortcut predicate、発動条件、修飾キー、各contenteditable、gesture、選択解決

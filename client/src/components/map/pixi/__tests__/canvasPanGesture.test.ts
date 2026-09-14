@@ -40,6 +40,41 @@ describe("createCanvasPanGesture", () => {
     ]);
   });
 
+  it("加算がoverflowするmoveでは開始viewportへ巻き戻さない", () => {
+    const onViewportChange = jest.fn();
+    const gesture = createCanvasPanGesture({
+      startSample: sample(0, 0),
+      startViewport: { offsetX: Number.MAX_VALUE, offsetY: 20, scale: 1 },
+      onViewportChangeRef: { current: onViewportChange },
+      dragThreshold: 4,
+    });
+
+    gesture?.move(sample(-Number.MAX_VALUE, 0));
+    gesture?.move(sample(Number.MAX_VALUE, 0));
+
+    expect(onViewportChange).toHaveBeenCalledTimes(1);
+    expect(onViewportChange).toHaveBeenCalledWith({ offsetX: 0, offsetY: 20, scale: 1 });
+  });
+
+  it("開始後に開始点へ戻ったときは開始viewportを通知する", () => {
+    const onViewportChange = jest.fn();
+    const startViewport = { offsetX: 10, offsetY: 20, scale: 1 };
+    const gesture = createCanvasPanGesture({
+      startSample: sample(0, 0),
+      startViewport,
+      onViewportChangeRef: { current: onViewportChange },
+      dragThreshold: 4,
+    });
+
+    gesture?.move(sample(4, 0));
+    gesture?.move(sample(0, 0));
+
+    expect(onViewportChange.mock.calls).toEqual([
+      [{ offsetX: 14, offsetY: 20, scale: 1 }],
+      [startViewport],
+    ]);
+  });
+
   it.each(["end", "cancel"] as const)("%s後のmoveを無視する", (finish) => {
     const onViewportChangeRef = { current: jest.fn() };
     const gesture = createCanvasPanGesture({

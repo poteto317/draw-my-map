@@ -5,7 +5,7 @@ export function AppHeader() {
         Draw My Map
       </h1>
       <span className="ml-4 text-sm text-zinc-400">
-        ダブルクリックで追加・空白ドラッグで移動・ホイール/ピンチで拡大縮小・Fで中央表示・Shift+ノードドラッグで接続
+        空白ダブルクリックで追加・ノードダブルクリックで編集・空白ドラッグで移動・ホイール/ピンチで拡大縮小・Fで中央表示・Shift+ノードドラッグで接続
       </span>
     </header>
   );

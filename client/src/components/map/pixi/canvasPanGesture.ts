@@ -30,7 +30,9 @@ export function createCanvasPanGesture({
       if (!active || !hasFinitePointerCoordinates(sample)) return;
       const movement = dragActivation.update(sample.screen);
       if (!movement) return;
-      onViewportChangeRef.current(panViewport(startViewport, movement.x, movement.y));
+      const viewport = panViewport(startViewport, movement.x, movement.y);
+      if ((movement.x !== 0 || movement.y !== 0) && viewport === startViewport) return;
+      onViewportChangeRef.current(viewport);
     },
     end: finish,
     cancel: finish,

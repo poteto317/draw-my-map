@@ -210,6 +210,8 @@ export type PointerSample = {
 
 パンgestureは開始時の画面座標と開始時のviewportを固定し、各moveで開始点からの総差分を計算する。前回moveからの増分を累積しないため、イベント欠落や再利用で誤差を増やさない。
 
+非ゼロ差分で`panViewport`が開始viewportと同じ参照を返した場合は有限値演算の失敗としてcallbackを呼ばず、直前の有効なパン結果を開始位置へ巻き戻さない。一方、開始後にpointerが開始点へ戻るゼロ差分は正当な操作として開始viewportを通知する。
+
 空白pointer downでは選択解除を先に通知し、その処理が完了した時点でbindingとpointer所有権が有効な場合だけパン候補を開始する。ノード上のpointer downは従来どおりノード移動または接続を開始し、空白パンは開始しない。
 
 `pointerupoutside`、`pointercancel`、runtime切替、unbindでは所有中のgestureを一度だけキャンセルする。cleanup済みbindingから届く遅延イベントは無視する。
@@ -317,6 +319,7 @@ offsetY = screen.height / 2 - nodeCenter.y * viewport.scale
 ### gestureとPixi境界
 
 - 4px未満のパン抑止
+- パン座標のoverflow時に開始viewportへ巻き戻さず、開始点へ戻るゼロ差分は通知する
 - 非等倍でのノード移動と接続候補判定
 - node、blank、Shift、別pointerの競合
 - wheelによるgestureキャンセル
@@ -333,6 +336,7 @@ offsetY = screen.height / 2 - nodeCenter.y * viewport.scale
 - パン・ズーム後も通常移動とShift接続が成立する
 - フォーカス後に選択ノードが画面中央へ描画される
 - scene再生成とviewport更新が同じcommitでもtransformを1回だけ適用する
+- 操作案内が空白ダブルクリックの追加とノードダブルクリックの編集を区別する
 
 各実装ステップの対象テストに加え、統合PRでは`client`ディレクトリから`npm run verify`を実行する。
 

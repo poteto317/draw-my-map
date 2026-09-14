@@ -225,6 +225,7 @@ Expected: PASS。
 - `client/src/components/map/pixi/dragActivation.ts`が画面上のdrag開始閾値と開始後の総差分を所有する。
 - `client/src/components/map/pixi/__tests__/dragActivation.test.ts`が閾値境界と開始後の状態を検証する。
 - `canvasPanGesture.ts`と`nodeMoveGesture.ts`は共通のdrag activationへ委譲する。
+- `canvasPanGesture.ts`は非ゼロ差分のviewport演算失敗時にcallbackを抑止し、直前の有効なパン結果を開始位置へ巻き戻さない。開始点へ戻るゼロ差分は通知する。
 
 **監査第3巡で修正した境界:**
 
@@ -250,6 +251,7 @@ Expected: PASS。
 - `F`と修飾キーの判定を共有predicateへ集約し、Hookの早期除外とresolverの条件判定を一致させる。
 - 異なるpointerによるblank downでは、進行中gestureと選択状態の双方を変更しない。
 - 倍率制限後に現在倍率と同じ場合、`zoomViewportAt`は同じviewport参照を返して再描画を抑止する。
+- パン座標のoverflowはcallbackを呼ばず、開始点へ戻る操作だけは開始viewportを通知する。
 
 **コードレビュー第3巡で追加した境界条件:**
 

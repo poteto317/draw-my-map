@@ -530,7 +530,9 @@ export function createCanvasPanGesture({
         if (Math.abs(dx) < dragThreshold && Math.abs(dy) < dragThreshold) return;
         dragging = true;
       }
-      onViewportChangeRef.current(panViewport(startViewport, dx, dy));
+      const viewport = panViewport(startViewport, dx, dy);
+      if ((dx !== 0 || dy !== 0) && viewport === startViewport) return;
+      onViewportChangeRef.current(viewport);
     },
     end: finish,
     cancel: finish,
@@ -543,6 +545,8 @@ export function createCanvasPanGesture({
 Run: `cd client && npm test -- --runInBand src/components/map/pixi/__tests__/canvasPanGesture.test.ts`
 
 Expected: PASS.
+
+加算がoverflowして`panViewport`が開始viewport参照を返した場合はcallbackを呼ばず、直前の有効なパン結果を開始位置へ巻き戻さない。開始後にpointerが開始点へ戻ったゼロ差分では開始viewportを通知し、正当な復帰操作を反映する。
 
 - [ ] **Step 5: パンgestureをコミットする**
 
@@ -1142,7 +1146,7 @@ git commit -m "feat(map): パン後の追加と編集位置を同期"
 ```tsx
 expect(
   screen.getByText(
-    "ダブルクリックで追加・空白ドラッグで移動・Shift+ノードドラッグで接続",
+    "空白ダブルクリックで追加・ノードダブルクリックで編集・空白ドラッグで移動・Shift+ノードドラッグで接続",
   ),
 ).toBeInTheDocument();
 ```
@@ -1157,7 +1161,7 @@ Expected: FAIL because the old operation hint is rendered.
 
 ```tsx
 <span className="ml-4 text-sm text-zinc-400">
-  ダブルクリックで追加・空白ドラッグで移動・Shift+ノードドラッグで接続
+  空白ダブルクリックで追加・ノードダブルクリックで編集・空白ドラッグで移動・Shift+ノードドラッグで接続
 </span>
 ```
 
