@@ -851,12 +851,16 @@ describe("createStageInteractions", () => {
     expect(onViewportChangeRef.current).toHaveBeenCalledWith(expect.objectContaining({ scale: 2 }));
   });
 
-  it("pinch中のpenによるノード操作を開始しない", () => {
+  it.each([
+    { operation: "移動", shiftKey: false },
+    { operation: "接続", shiftKey: true },
+  ])("pinch中のpenによるノード$operationを開始しない", ({ shiftKey }) => {
     const { stage, handlers } = createStage();
     const {
       controller,
       onSelectNodeRef,
       onMoveNodeRef,
+      onConnectNodesRef,
       onConnectionTargetChangeRef,
       onViewportChangeRef,
     } = createController({ nodes: [node, targetNode] });
@@ -878,14 +882,20 @@ describe("createStageInteractions", () => {
       pointerId: 3,
       pointerType: "pen",
       path: [stage],
+      shiftKey,
     }) as never);
-    handlers.pointermove?.(pointer(80, 80, {
+    handlers.pointermove?.(pointer(220, 60, {
+      pointerId: 3,
+      pointerType: "pen",
+    }));
+    handlers.pointerup?.(pointer(220, 60, {
       pointerId: 3,
       pointerType: "pen",
     }));
 
     expect(onSelectNodeRef.current).not.toHaveBeenCalled();
     expect(onMoveNodeRef.current).not.toHaveBeenCalled();
+    expect(onConnectNodesRef.current).not.toHaveBeenCalled();
     expect(onConnectionTargetChangeRef.current).not.toHaveBeenCalled();
     expect(onViewportChangeRef.current).not.toHaveBeenCalled();
 
