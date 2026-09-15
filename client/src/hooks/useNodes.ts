@@ -4,7 +4,11 @@ import {
   createRootNode,
   createSiblingNode,
 } from "@/domain/nodes/nodePlacement";
-import { collectSubtreeIds, connectNodeTree } from "@/domain/nodes/nodeTree";
+import {
+  collectSubtreeIds,
+  connectNodeTree,
+  moveNodeSubtree,
+} from "@/domain/nodes/nodeTree";
 import { createMonotonicIdGenerator } from "@/domain/nodes/nodeIdGenerator";
 import type { Node } from "@/types/node";
 
@@ -76,9 +80,9 @@ export function useNodes(): UseNodesReturn {
   }, [updateNodes]);
 
   const moveNode = useCallback((id: number, x: number, y: number) => {
-    updateNodes((current) =>
-      current.map((node) => (node.id === id ? { ...node, x, y } : node)),
-    );
+    const movedNodes = moveNodeSubtree(nodesRef.current, id, x, y);
+    if (!movedNodes) return;
+    updateNodes(() => movedNodes);
   }, [updateNodes]);
 
   const connectNodes = useCallback((parentId: number, childId: number) => {

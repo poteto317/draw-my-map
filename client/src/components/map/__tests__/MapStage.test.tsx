@@ -231,6 +231,48 @@ function MouseConnectionHarness() {
   );
 }
 
+function SubtreeMoveHarness() {
+  const {
+    nodes,
+    selectedNodeId,
+    addNode,
+    addChildNode,
+    addSiblingNode,
+    selectNode,
+    updateNodeLabel,
+    moveNode,
+    connectNodes,
+    deleteNode,
+  } = useNodes();
+  const initializedRef = useRef(false);
+  useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+    const rootId = addNode(100, 100);
+    const childId = addChildNode(rootId)!;
+    addChildNode(childId);
+    addNode(600, 100);
+  }, [addNode, addChildNode]);
+
+  return (
+    <>
+      <MapStage
+        nodes={nodes}
+        selectedNodeId={selectedNodeId}
+        onDoubleClick={addNode}
+        onAddChildNode={addChildNode}
+        onAddSiblingNode={addSiblingNode}
+        onSelectNode={selectNode}
+        onUpdateLabel={updateNodeLabel}
+        onMoveNode={moveNode}
+        onConnectNodes={connectNodes}
+        onDeleteNode={deleteNode}
+      />
+      <output data-testid="node-state">{JSON.stringify(nodes)}</output>
+    </>
+  );
+}
+
 const pendingRender = new Promise<never>(() => {});
 
 function SuspendPendingRender(): never {
@@ -689,5 +731,27 @@ describe("MapStage boundary", () => {
     const nodes = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
     expect(nodes.find((node) => node.id === 2)?.parentId).toBe(1);
     expect(getByTestId("selected-node-id")).toHaveTextContent("2");
+  });
+
+  it("親ノードのpointer dragで子孫だけを同じ差分だけ移動する", async () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { getByTestId } = await renderReady(<SubtreeMoveHarness />);
+    const before = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
+    const root = before[0];
+
+    act(() => {
+      mockNodePointerHandlers[0].pointerdown?.(pointer(root.x + 10, root.y + 10));
+      mockStageHandlers.pointermove?.(pointer(root.x + 30, root.y + 25));
+      mockStageHandlers.pointerup?.(pointer(root.x + 30, root.y + 25));
+    });
+
+    const after = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
+    for (const nodeId of [1, 2, 3]) {
+      const oldNode = before.find((node) => node.id === nodeId)!;
+      const movedNode = after.find((node) => node.id === nodeId)!;
+      expect(movedNode).toMatchObject({ x: oldNode.x + 20, y: oldNode.y + 15 });
+    }
+    expect(after.find((node) => node.id === 4)).toEqual(before.find((node) => node.id === 4));
   });
 });

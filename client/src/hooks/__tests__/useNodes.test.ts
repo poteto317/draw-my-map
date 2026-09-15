@@ -100,7 +100,7 @@ describe("useNodes", () => {
     expect(result.current.nodes.map((node) => node.label)).toEqual(["更新ラベル", ""]);
   });
 
-  it("moveNode は指定ノードだけを移動する", () => {
+  it("葉または子孫のないノードだけを移動する", () => {
     let id = 0;
     jest.spyOn(Date, "now").mockImplementation(() => ++id);
     const { result } = renderHook(() => useNodes());
@@ -119,6 +119,107 @@ describe("useNodes", () => {
       x: untouchedNode.x,
       y: untouchedNode.y,
     });
+  });
+
+  it("moveNodeは親と全子孫へ同じ差分を適用する", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+    act(() => {
+      result.current.addNode(100, 100);
+      result.current.addChildNode(1);
+      result.current.addChildNode(2);
+      result.current.addNode(600, 100);
+    });
+    const before = result.current.nodes.map((node) => ({ ...node }));
+    const root = before.find((node) => node.id === 1)!;
+
+    act(() => result.current.moveNode(1, root.x + 25, root.y - 10));
+
+    for (const nodeId of [1, 2, 3]) {
+      const oldNode = before.find((node) => node.id === nodeId)!;
+      const movedNode = result.current.nodes.find((node) => node.id === nodeId)!;
+      expect(movedNode).toMatchObject({ x: oldNode.x + 25, y: oldNode.y - 10 });
+    }
+    expect(result.current.nodes.find((node) => node.id === 4)).toEqual(before[3]);
+  });
+
+  it("中間ノードから配下だけを移動する", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+    act(() => {
+      result.current.addNode(100, 100);
+      result.current.addChildNode(1);
+      result.current.addChildNode(2);
+    });
+    const before = result.current.nodes.map((node) => ({ ...node }));
+    const middle = before[1];
+
+    act(() => result.current.moveNode(2, middle.x + 10, middle.y + 15));
+
+    expect(result.current.nodes[0]).toEqual(before[0]);
+    expect(result.current.nodes[1]).toMatchObject({ x: middle.x + 10, y: middle.y + 15 });
+    expect(result.current.nodes[2]).toMatchObject({
+      x: before[2].x + 10,
+      y: before[2].y + 15,
+    });
+  });
+
+  it("同一batchの絶対移動先を子孫へ重複加算しない", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+    act(() => {
+      result.current.addNode(100, 100);
+      result.current.addChildNode(1);
+    });
+    const root = { ...result.current.nodes[0] };
+    const child = { ...result.current.nodes[1] };
+
+    act(() => {
+      result.current.moveNode(1, root.x + 10, root.y + 5);
+      result.current.moveNode(1, root.x + 20, root.y + 15);
+    });
+
+    expect(result.current.nodes[0]).toMatchObject({ x: root.x + 20, y: root.y + 15 });
+    expect(result.current.nodes[1]).toMatchObject({ x: child.x + 20, y: child.y + 15 });
+  });
+
+  it("初回取得したmoveNodeは最新ツリーの子孫を移動する", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+    const moveNode = result.current.moveNode;
+    act(() => {
+      result.current.addNode(100, 100);
+      result.current.addChildNode(1);
+    });
+    const root = { ...result.current.nodes[0] };
+    const child = { ...result.current.nodes[1] };
+
+    act(() => moveNode(1, root.x + 30, root.y + 40));
+
+    expect(result.current.nodes[1]).toMatchObject({
+      x: child.x + 30,
+      y: child.y + 40,
+    });
+    expect(result.current.moveNode).toBe(moveNode);
+  });
+
+  it("欠損ノードと非有限座標ではstateを変更しない", () => {
+    const { result } = renderHook(() => useNodes());
+    let nodeId!: number;
+    act(() => {
+      nodeId = result.current.addNode(100, 100);
+    });
+    const before = result.current.nodes;
+
+    act(() => result.current.moveNode(nodeId + 1, 1, 1));
+    expect(result.current.nodes).toBe(before);
+
+    act(() => result.current.moveNode(nodeId, Number.NaN, 1));
+    expect(result.current.nodes).toBe(before);
   });
 
   it("deleteNode は対象と子孫を削除し、選択中の子孫を解除する", () => {
