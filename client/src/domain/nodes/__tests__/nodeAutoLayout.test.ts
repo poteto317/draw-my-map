@@ -105,6 +105,32 @@ it("異なる寸法・深さ・複数ルートの全組み合わせが重なら�
   }
 });
 
+it("小数寸法の境界丸めで有効な配置を拒否せず、全ノードが重ならない", () => {
+  const root = node(1, null, 0, 164.3);
+  const result = layoutNodeForest([
+    root,
+    node(2, 1, 0, 0, 100, 48.6),
+    node(3, 1),
+    node(4, 2, 0, 0, 100, 118.8),
+    node(6, 3, 0, 0, 100, 116.4),
+    node(9, 4, 0, 0, 100, 56.7),
+    node(10, 4, 0, 0, 100, 187.7),
+    node(12, 6, 0, 0, 100, 135.2),
+  ]);
+
+  expect(result).not.toBeNull();
+  expect(result).toHaveLength(8);
+  expect(result![0]).toBe(root);
+  const previous = result!.find(({ id }) => id === 10)!;
+  const next = result!.find(({ id }) => id === 12)!;
+  expect(next.y - (previous.y + previous.height)).toBeCloseTo(40, 10);
+  for (let left = 0; left < result!.length; left += 1) {
+    for (let right = left + 1; right < result!.length; right += 1) {
+      expect(overlaps(result![left], result![right])).toBe(false);
+    }
+  }
+});
+
 it.each<[string, Node[], Node[] | null]>([
   ["空配列", [], []],
   ["ID重複", [node(1, null), node(1, null)], null],

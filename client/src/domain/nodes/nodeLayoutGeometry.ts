@@ -131,7 +131,14 @@ export function calculateNodePositions(
       const point = positions.get(current.id)!;
       if (previousBottom !== null) {
         const minimumTop = checkedAdd(previousBottom, SIBLING_VERTICAL_GAP);
-        if (minimumTop === null || point.y < minimumTop) return null;
+        if (minimumTop === null || point.y < previousBottom) return null;
+        // Independently rounded subtree boundaries can differ by a few ULPs.
+        // Cap the allowance so large coordinates cannot hide a meaningful gap loss.
+        const roundingTolerance = Math.min(
+          SIBLING_VERTICAL_GAP * 1e-9,
+          Number.EPSILON * Math.max(1, Math.abs(point.y), Math.abs(minimumTop)) * 4,
+        );
+        if (minimumTop - point.y > roundingTolerance) return null;
       }
       previousBottom = checkedAdd(point.y, current.height);
       if (previousBottom === null) return null;
