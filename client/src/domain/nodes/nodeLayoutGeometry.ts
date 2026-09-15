@@ -95,7 +95,10 @@ export function calculateNodePositions(
       if (yOffset === null) return null;
       const y = checkedAdd(frame.top, yOffset);
       if (y === null) return null;
-      positions.set(frame.node.id, { x: columnX[depth], y });
+      positions.set(frame.node.id, {
+        x: columnX[depth],
+        y: rootIndex === 0 && frame.node === root ? root.y : y,
+      });
 
       const children = forest.childrenByParent.get(frame.node.id) ?? [];
       const childFrames: Array<{ node: (typeof children)[number]; top: number }> = [];

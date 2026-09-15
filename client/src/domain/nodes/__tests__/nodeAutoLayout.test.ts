@@ -84,6 +84,14 @@ it("有効入力では新配列を返し、未移動参照と座標以外を維�
   expect(input).toEqual(snapshot);
 });
 
+it("非整数Yの最初のルートを再計算せず同じ参照で固定する", () => {
+  const root = node(1, null, 80, 0.1);
+  const result = layoutNodeForest([root, node(2, 1), node(3, 1)])!;
+
+  expect(result[0]).toBe(root);
+  expect(result[0].y).toBe(0.1);
+});
+
 it("異なる寸法・深さ・複数ルートの全組み合わせが重ならない", () => {
   const result = layoutNodeForest([
     node(1, null, 20, 50, 130, 90), node(2, 1, 0, 0, 70, 40),
