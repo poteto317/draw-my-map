@@ -212,7 +212,7 @@ export type PointerSample = {
 
 非ゼロ差分で`panViewport`が開始viewportと同じ参照を返した場合は有限値演算の失敗としてcallbackを呼ばず、直前の有効なパン結果を開始位置へ巻き戻さない。一方、開始後にpointerが開始点へ戻るゼロ差分は正当な操作として開始viewportを通知する。
 
-空白pointer downでは選択解除を先に通知し、その処理が完了した時点でbindingとpointer所有権が有効な場合だけパン候補を開始する。ノード上のpointer downは従来どおりノード移動または接続を開始し、空白パンは開始しない。
+空白pointer downでは選択解除を先に通知し、その処理が完了した時点でbinding、単一pointer、pinchの所有権が有効な場合だけパン候補を開始する。ノード上のpointer downは従来どおりノード移動または接続を開始し、空白パンは開始しない。ノード操作のcancel callback後もpinch所有権を再検証し、再入でpinchが開始済みなら外側のノード操作を追加しない。
 
 `pointerupoutside`、`pointercancel`、runtime切替、unbindでは所有中のgestureを一度だけキャンセルする。cleanup済みbindingから届く遅延イベントは無視する。
 
@@ -290,6 +290,7 @@ offsetY = screen.height / 2 - nodeCenter.y * viewport.scale
 ## エラー処理と安全性
 
 - 欠損ノードは選択、移動、接続、フォーカスの対象にしない。
+- 欠損ノード入力は同じpointerが所有するgestureだけをキャンセルし、別pointerが所有する正当な操作を維持する。
 - `NaN`、`Infinity`、非正の倍率は状態へ保存しない。
 - 有限な入力同士の演算でも、パン・ズーム・フォーカス・ノード移動の算出結果が非有限になれば状態更新を行わない。
 - 同じstageへ二重bindしない。二重bind要求は既存契約どおり例外にする。
@@ -324,12 +325,14 @@ offsetY = screen.height / 2 - nodeCenter.y * viewport.scale
 - パン座標のoverflow時に開始viewportへ巻き戻さず、開始点へ戻るゼロ差分は通知する
 - 非等倍でのノード移動と接続候補判定
 - node、blank、Shift、別pointerの競合
+- 欠損ノードの別pointer入力による所有gestureの誤キャンセルを防止
 - wheelによるgestureキャンセル
 - 2本指の倍率・中点移動
 - pinch中のmouse／penによるblank・node gesture開始を抑止
 - 3本目のtouchを無視
 - pinch終了後に単一gestureを再開しない
 - runtime再bind、cleanup、遅延イベント、再入コールバックによるpinch上書き防止
+- blank選択／node cancel callbackから再入したpinchと通常gestureを並行開始しない
 
 ### 統合
 
@@ -340,6 +343,7 @@ offsetY = screen.height / 2 - nodeCenter.y * viewport.scale
 - フォーカス後に選択ノードが画面中央へ描画される
 - scene再生成とviewport更新が同じcommitでもtransformを1回だけ適用する
 - 操作案内が空白ダブルクリックの追加とノードダブルクリックの編集を区別する
+- 操作案内がライト／ダークテーマで判読できる配色を使用する
 
 各実装ステップの対象テストに加え、統合PRでは`client`ディレクトリから`npm run verify`を実行する。
 

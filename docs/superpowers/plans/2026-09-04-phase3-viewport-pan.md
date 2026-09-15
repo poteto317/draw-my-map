@@ -1160,7 +1160,7 @@ Expected: FAIL because the old operation hint is rendered.
 - [ ] **Step 3: AppHeaderの案内を更新する**
 
 ```tsx
-<span className="ml-4 text-sm text-zinc-400">
+<span className="ml-4 text-sm text-zinc-600 dark:text-zinc-400">
   空白ダブルクリックで追加・ノードダブルクリックで編集・空白ドラッグで移動・Shift+ノードドラッグで接続
 </span>
 ```

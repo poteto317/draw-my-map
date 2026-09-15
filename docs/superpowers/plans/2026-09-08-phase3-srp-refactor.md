@@ -287,6 +287,13 @@ Expected: PASS。
 - `onBeforePinch`から同じtouch IDを解放・再登録して新しいpinchが再入開始された場合、外側の開始処理は`activePinch`を再検証して上書きしない。
 - coordinator単体テストでmouse／pen抑止と再入pinchのbaseline保持を、stage統合テストでblank／node両経路の抑止を検証する。
 
+**コードレビュー第9巡で追加したcallback後の所有権境界:**
+
+- blank選択callbackまたはnode gestureのcancel callbackからpinchが再入開始された場合、外側の通常gestureを追加開始しない。
+- 欠損ノード入力は同じpointerが所有するgestureだけをキャンセルし、別pointerの操作を壊さない。
+- 操作案内はライト`text-zinc-600`／ダーク`text-zinc-400`で通常文字の判読性を維持する。
+- stage統合テストで別pointerの欠損ノード、blank選択callback後のpinch、node cancel callback後のpinchを、headerテストでテーマ別配色を検証する。
+
 - [x] **Step 1: semantic cohesionを監査する**
 
 各本番ファイルの変更理由を一文で記述し、異なるactor、policy、lifecycleが同居していないことを確認する。

@@ -230,6 +230,20 @@ describe("createStageInteractions", () => {
     expect(onConnectionTargetChangeRef.current).not.toHaveBeenCalled();
   });
 
+  it("別pointerの欠損ノード入力では所有中のgestureをキャンセルしない", () => {
+    const { stage, handlers } = createStage();
+    const { controller, nodesRef, onMoveNodeRef } = createController();
+    controller.bind(stage as never);
+
+    nodePointerDown(controller, 1, pointer(100, 60, { pointerId: 1 }) as never);
+    nodesRef.current = [];
+    nodePointerDown(controller, 999, pointer(50, 50, { pointerId: 2 }) as never);
+    nodesRef.current = [node];
+    handlers.pointermove?.(pointer(108, 66, { pointerId: 1 }));
+
+    expect(onMoveNodeRef.current).toHaveBeenCalledWith(1, 28, 46);
+  });
+
   it("欠損ノードのtouchを追跡せず次の有効なnode touchを通常gestureへ渡す", () => {
     const { stage } = createStage();
     const { controller, onSelectNodeRef } = createController();
@@ -484,6 +498,46 @@ describe("createStageInteractions", () => {
     handlers.pointermove?.(pointer(60, 60, { pointerId: 1 }));
 
     expect(onMoveNode).toHaveBeenCalledWith(1, 30, 50);
+  });
+
+  it("空白選択callbackから再入したpinchと並行してパンを開始しない", () => {
+    const { stage, handlers } = createStage();
+    const { controller, onSelectNodeRef, onViewportChangeRef } = createController();
+    controller.bind(stage as never);
+    handlers.pointerdown?.(pointer(0, 0, {
+      pointerId: 1,
+      pointerType: "touch",
+      target: stage,
+    }));
+    controller.cancelActiveGesture();
+
+    let startedPinch = false;
+    onSelectNodeRef.current = jest.fn((id: number | null) => {
+      if (id !== null || startedPinch) return;
+      startedPinch = true;
+      handlers.pointerdown?.(pointer(100, 0, {
+        pointerId: 2,
+        pointerType: "touch",
+        target: stage,
+      }));
+    });
+    handlers.pointerdown?.(pointer(50, 50, {
+      pointerId: 3,
+      pointerType: "mouse",
+      target: stage,
+    }));
+    handlers.pointermove?.(pointer(80, 80, {
+      pointerId: 3,
+      pointerType: "mouse",
+    }));
+
+    expect(onViewportChangeRef.current).not.toHaveBeenCalled();
+
+    handlers.pointermove?.(pointer(200, 0, {
+      pointerId: 2,
+      pointerType: "touch",
+    }));
+    expect(onViewportChangeRef.current).toHaveBeenCalledWith(expect.objectContaining({ scale: 2 }));
   });
 
   it("cancels the active connection before replacing it with a new pointerdown", () => {
@@ -937,6 +991,53 @@ describe("createStageInteractions", () => {
     }));
 
     expect(controller.hasActiveGesture()).toBe(true);
+    expect(onViewportChangeRef.current).toHaveBeenCalledWith(expect.objectContaining({ scale: 2 }));
+  });
+
+  it("node gestureのcancel callbackから再入したpinchと並行して操作を開始しない", () => {
+    const { stage, handlers } = createStage();
+    let startedPinch = false;
+    const {
+      controller,
+      onSelectNodeRef,
+      onMoveNodeRef,
+      onConnectionTargetChangeRef,
+      onViewportChangeRef,
+    } = createController({ nodes: [node, targetNode] });
+    onConnectionTargetChangeRef.current = jest.fn((id: number | null) => {
+      if (id !== null || startedPinch) return;
+      startedPinch = true;
+      handlers.pointerdown?.(pointer(150, 50, {
+        pointerId: 2,
+        pointerType: "touch",
+        target: stage,
+      }));
+    });
+    controller.bind(stage as never);
+    nodePointerDown(controller, 1, pointer(50, 50, {
+      shiftKey: true,
+      pointerId: 1,
+      pointerType: "touch",
+      path: [stage],
+    }) as never);
+
+    nodePointerDown(controller, 1, pointer(50, 50, {
+      pointerId: 3,
+      pointerType: "mouse",
+      path: [stage],
+    }) as never);
+    handlers.pointermove?.(pointer(60, 60, {
+      pointerId: 3,
+      pointerType: "mouse",
+    }));
+
+    expect((onSelectNodeRef.current as jest.Mock).mock.calls).toEqual([[1]]);
+    expect(onMoveNodeRef.current).not.toHaveBeenCalled();
+
+    handlers.pointermove?.(pointer(250, 50, {
+      pointerId: 2,
+      pointerType: "touch",
+    }));
     expect(onViewportChangeRef.current).toHaveBeenCalledWith(expect.objectContaining({ scale: 2 }));
   });
 

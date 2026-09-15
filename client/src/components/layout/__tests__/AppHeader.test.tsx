@@ -9,10 +9,11 @@ describe("AppHeader", () => {
 
   it("操作ヒントが表示される", () => {
     render(<AppHeader />);
-    expect(
-      screen.getByText(
-        "空白ダブルクリックで追加・ノードダブルクリックで編集・空白ドラッグで移動・ホイール/ピンチで拡大縮小・Fで中央表示・Shift+ノードドラッグで接続",
-      ),
-    ).toBeInTheDocument();
+    const operationHint = screen.getByText(
+      "空白ダブルクリックで追加・ノードダブルクリックで編集・空白ドラッグで移動・ホイール/ピンチで拡大縮小・Fで中央表示・Shift+ノードドラッグで接続",
+    );
+
+    expect(operationHint).toBeInTheDocument();
+    expect(operationHint).toHaveClass("text-zinc-600", "dark:text-zinc-400");
   });
 });

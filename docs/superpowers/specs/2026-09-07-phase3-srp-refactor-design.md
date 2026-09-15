@@ -90,9 +90,10 @@ Pixi stageとgesture群のルーティングだけを所有する。
 - blank／node pointer downの振り分け
 - blankとnodeのprimary button判定。右・中ボタンは選択やgestureを開始しない。
 - 単一pointer gesture中は、異なるpointerのblank downによる選択解除を行わない。
+- 欠損ノード入力は同じpointerが所有するgestureだけをキャンセルする。
 - 単一pointer gesture sessionへのイベント配送
 - `pointerSample`と`touchGestureCoordinator`への委譲
-- 再入可能callbackが新しいgestureやbindingを作った場合の所有権保護
+- 再入可能callbackが新しいgesture、pinch、bindingを作った場合の所有権再検証
 
 touch一覧、中点・距離計算、画面からワールドへの変換式は保持しない。
 
@@ -311,7 +312,8 @@ Map領域の高さは固定header高を差し引かず、viewport高のflex shel
 ### 既存テストの整理
 
 - `stageInteractions.test.ts`はstage binding、通常pointer gesture、touch coordinatorとの接続だけを検証する。
-- pinch切替時や外部cancel時のcallbackからcleanup、新pointer gesture、または新pinch開始が再入する統合境界と、pinch中のblank／node通常gesture抑止は`stageInteractions.test.ts`で検証する。
+- pinch切替時や外部cancel時のcallbackからcleanup、新pointer gesture、または新pinch開始が再入する統合境界と、pinch中およびblank選択／node cancel callback後のblank／node通常gesture抑止は`stageInteractions.test.ts`で検証する。
+- 欠損ノードの同一pointer／別pointer入力によるgestureキャンセル境界も`stageInteractions.test.ts`で検証する。
 - touch状態機械の詳細ケースは`touchGestureCoordinator.test.ts`へ移す。
 - `pinchZoomGesture.test.ts`はpointer所有権とcallback lifecycleだけを検証する。
 - `useMapWheelZoom.test.tsx`はlistener、preventDefault、callback、cleanupだけを検証する。

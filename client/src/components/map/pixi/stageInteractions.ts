@@ -78,14 +78,14 @@ export function createStageInteractions({
     const sample = toPointerSample(event, viewportRef.current);
     if (!hasFinitePointerCoordinates(sample)) return;
     if (!nodesRef.current.some((node) => node.id === nodeId)) {
-      pointerGestures.cancel();
+      if (pointerGestures.owns(sample.pointerId)) pointerGestures.cancel();
       return;
     }
     if (touchGestures.pointerDown(sample)) return;
 
     pointerGestures.cancel();
     if (
-      pointerGestures.hasActive()
+      hasActiveGesture()
       || activeBinding !== bindingAtEntry
       || !nodesRef.current.some((node) => node.id === nodeId)
     ) {
@@ -162,7 +162,7 @@ export function createStageInteractions({
           pointerGestures.cancel();
         }
       }
-      if (activeBinding !== binding || pointerGestures.hasActive()) return;
+      if (activeBinding !== binding || hasActiveGesture()) return;
 
       const gesture = createCanvasPanGesture({
         startSample: sample,

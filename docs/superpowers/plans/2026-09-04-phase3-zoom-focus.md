@@ -784,6 +784,8 @@ nodeとblankのpointer downで`touchGestures.pointerDown(sample)`を呼ぶ。同
 
 `onBeforePinch`のcancel callbackから同じtouch IDを解放・再登録して新しいpinchが同期的に開始された場合、外側の開始処理はcallback後の`activePinch`を再検証し、再入側のpinchを上書きしない。
 
+node gestureのcancel callbackまたはblankの選択callbackからpinchが同期的に開始される場合もあるため、stage側は各callback後に通常gestureとpinchの所有権を再検証し、外側のnode操作やパンを追加開始しない。欠損ノード入力は同じpointerが所有する通常gestureだけをキャンセルし、別pointerの操作を維持する。
+
 move/up/upoutside/pointercancelもそれぞれ`pointerMove`/`pointerUp`へ委譲する。固定pairの片方が終わった後のpinch抑止と、全touch解除後の復帰はcoordinatorが担う。
 
 - [ ] **Step 4: controllerのキャンセルと照会を公開する**
@@ -1183,6 +1185,8 @@ renderMapScene(runtime.app, runtime.constructors, {
 ```text
 空白ダブルクリックで追加・ノードダブルクリックで編集・空白ドラッグで移動・ホイール/ピンチで拡大縮小・Fで中央表示・Shift+ノードドラッグで接続
 ```
+
+操作案内の配色は、ライトテーマで`text-zinc-600`、ダークテーマで`dark:text-zinc-400`を使用し、通常サイズの文字を判読できるコントラストにする。
 
 - [ ] **Step 5: MapStageと操作案内テストをGREENにする**
 
