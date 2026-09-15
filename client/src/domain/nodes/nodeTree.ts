@@ -60,3 +60,50 @@ export function connectNodeTree(
     node.id === childId ? { ...node, parentId } : node
   ));
 }
+
+export function moveNodeSubtree(
+  nodes: readonly Node[],
+  rootId: number,
+  x: number,
+  y: number,
+): Node[] | null {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+
+  let root: Node | undefined;
+  const childrenByParent = new Map<number, number[]>();
+  for (const current of nodes) {
+    if (current.id === rootId) root = current;
+    if (current.parentId !== null) {
+      const children = childrenByParent.get(current.parentId);
+      if (children) children.push(current.id);
+      else childrenByParent.set(current.parentId, [current.id]);
+    }
+  }
+  if (!root) return null;
+
+  const dx = x - root.x;
+  const dy = y - root.y;
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) return null;
+
+  const subtreeIds = new Set<number>();
+  const queue = [rootId];
+  for (let index = 0; index < queue.length; index += 1) {
+    const id = queue[index];
+    if (subtreeIds.has(id)) continue;
+    subtreeIds.add(id);
+    for (const childId of childrenByParent.get(id) ?? []) queue.push(childId);
+  }
+
+  const movedNodes: Node[] = [];
+  for (const current of nodes) {
+    if (!subtreeIds.has(current.id) || (dx === 0 && dy === 0)) {
+      movedNodes.push(current);
+      continue;
+    }
+    const nextX = current.x + dx;
+    const nextY = current.y + dy;
+    if (!Number.isFinite(nextX) || !Number.isFinite(nextY)) return null;
+    movedNodes.push({ ...current, x: nextX, y: nextY });
+  }
+  return movedNodes;
+}
