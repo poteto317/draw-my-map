@@ -36,7 +36,7 @@ export function createTouchGestureCoordinator({
 
   return {
     pointerDown(sample) {
-      if (sample.pointerType !== "touch") return false;
+      if (sample.pointerType !== "touch") return activePinch !== null;
       if (!samples.has(sample.pointerId)) samples.set(sample.pointerId, sample);
       if (suppressUntilAllReleased || activePinch || samples.size > 2) return true;
       if (samples.size < 2) return false;
@@ -44,6 +44,7 @@ export function createTouchGestureCoordinator({
       const generationAtStart = generation;
       const [firstId, secondId] = [...samples.keys()];
       const canStartPinch = onBeforePinch();
+      if (activePinch) return true;
       const first = samples.get(firstId);
       const second = samples.get(secondId);
       if (

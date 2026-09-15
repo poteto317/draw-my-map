@@ -73,9 +73,9 @@ export type TouchGestureCoordinator = {
 ```
 
 - `pointerDown`はtouchを登録し、2本目で進行中の単一pointer gestureをキャンセルしてpinchを開始する。
-- pinch開始前のcancel callback後にgeneration、固定pair、stage binding、単一pointer所有権を再検証し、cleanupや新gesture開始で失効した場合はpinchを作らない。
+- pinch開始前のcancel callback後にgeneration、固定pair、stage binding、単一pointer所有権、既存`activePinch`を再検証し、cleanup、新gesture開始、再入pinch開始で失効した場合は外側のpinchを作らない。
 - `pointerDown`で登録済みのpointerだけを`pointerMove`で更新し、未知pointerのmoveは追跡集合へ追加しない。
-- 戻り値は、その入力をtouch coordinatorが所有してstage側の通常gesture開始を抑止すべきかを示す。
+- 戻り値は、stage側の通常gesture開始を抑止すべきかを示す。pinch所有中はmouse／pen入力にも`true`を返す。
 - 3本目は固定済みpairを変更しない。
 - pairの片方が終了した後、残ったtouchからパンを再開しない。
 - `cancel`は進行中pinchだけを終了する。外部のwheel操作で使用する。
@@ -270,7 +270,7 @@ Map領域の高さは固定header高を差し引かず、viewport高のflex shel
 ## データフロー
 
 1. `stageInteractions`がPixiイベントを`toPointerSample`へ渡す。
-2. touchなら`touchGestureCoordinator`が所有権を判定する。
+2. `touchGestureCoordinator`がtouchの所有権と、pinch中のmouse／pen入力抑止を判定する。
 3. pinchの座標更新は`pinchZoomGesture`から`calculatePinchViewport`へ委譲される。
 4. mouse wheelは`useMapWheelZoom`が受け、`calculateWheelZoomRequest`の結果をviewport commandへ渡す。
 5. keyboard入力は`useMapViewportShortcut`が受け、`resolveViewportFocusRequest`の結果をviewport commandへ渡す。
@@ -306,12 +306,12 @@ Map領域の高さは固定header高を差し引かず、viewport高のflex shel
 
 ### coordinator単体テスト
 
-- `touchGestureCoordinator.test.ts`: 2本目でのpinch開始、単一pointer gestureキャンセル、固定pair、3本目、未知move、終了後抑止、cancel、reset、開始callback中のreset
+- `touchGestureCoordinator.test.ts`: 2本目でのpinch開始、単一pointer gestureキャンセル、固定pair、3本目、未知move、終了後抑止、pinch中のmouse／pen、cancel、reset、開始callback中のreset／再入pinch
 
 ### 既存テストの整理
 
 - `stageInteractions.test.ts`はstage binding、通常pointer gesture、touch coordinatorとの接続だけを検証する。
-- pinch切替時や外部cancel時のcallbackからcleanup、新pointer gesture、または新pinch開始が再入する統合境界は`stageInteractions.test.ts`で検証する。
+- pinch切替時や外部cancel時のcallbackからcleanup、新pointer gesture、または新pinch開始が再入する統合境界と、pinch中のblank／node通常gesture抑止は`stageInteractions.test.ts`で検証する。
 - touch状態機械の詳細ケースは`touchGestureCoordinator.test.ts`へ移す。
 - `pinchZoomGesture.test.ts`はpointer所有権とcallback lifecycleだけを検証する。
 - `useMapWheelZoom.test.tsx`はlistener、preventDefault、callback、cleanupだけを検証する。

@@ -183,7 +183,7 @@ Expected: PASS。
 
 - [x] **Step 1: 失敗テストを書く**
 
-最初のtouchを通常gestureへ委ねること、2本目で通常gestureを一度キャンセルしてpinchを始めること、固定pair、3本目の無視、pair終了後の抑止、全touch終了後の解除、`cancel`、`reset`を独立して検証する。
+最初のtouchを通常gestureへ委ねること、2本目で通常gestureを一度キャンセルしてpinchを始めること、固定pair、3本目の無視、pinch中のmouse／pen入力抑止、pair終了後の抑止、全touch終了後の解除、`cancel`、`reset`、開始callbackから再入したpinchの保持を独立して検証する。
 
 - [x] **Step 2: REDを確認する**
 
@@ -280,6 +280,12 @@ Expected: PASS。
 
 - 2本目touchで単一gestureをcancelした後にgeneration、touch pair、stage binding、単一pointer所有権を再検証し、cleanupまたは新gesture開始で失効したpinchを作らない。
 - cancel callbackからの同期cleanupと新gesture開始をstage統合テストで再現する。
+
+**コードレビュー第8巡で追加したpinch所有権境界:**
+
+- pinch中はmouse／penのblank・node pointer downもcoordinatorが抑止し、パン、移動、接続を並行開始しない。
+- `onBeforePinch`から同じtouch IDを解放・再登録して新しいpinchが再入開始された場合、外側の開始処理は`activePinch`を再検証して上書きしない。
+- coordinator単体テストでmouse／pen抑止と再入pinchのbaseline保持を、stage統合テストでblank／node両経路の抑止を検証する。
 
 - [x] **Step 1: semantic cohesionを監査する**
 

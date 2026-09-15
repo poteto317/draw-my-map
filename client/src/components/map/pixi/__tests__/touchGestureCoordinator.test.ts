@@ -110,6 +110,17 @@ describe("createTouchGestureCoordinator", () => {
     coordinator.pointerUp(mouse);
   });
 
+  it.each(["mouse", "pen"])("pinch中は%s入力を通常gestureへ渡さない", (pointerType) => {
+    const { coordinator } = createCoordinator();
+    coordinator.pointerDown(touch(1, 0, 0));
+    coordinator.pointerDown(touch(2, 100, 0));
+
+    expect(coordinator.pointerDown({
+      ...touch(3, 50, 50),
+      pointerType,
+    })).toBe(true);
+  });
+
   it("pointerDownを受けていないtouch moveを追跡集合へ登録しない", () => {
     const { coordinator, onBeforePinch } = createCoordinator();
 
@@ -134,5 +145,34 @@ describe("createTouchGestureCoordinator", () => {
 
     expect(() => coordinator.pointerDown(touch(2, 100, 0))).not.toThrow();
     expect(coordinator.hasActivePinch()).toBe(false);
+  });
+
+  it("pinch開始callbackから再入して作られたpinchを外側の開始で上書きしない", () => {
+    let reentered = false;
+    const holder: { coordinator?: ReturnType<typeof createTouchGestureCoordinator> } = {};
+    const result = createCoordinator(() => {
+      if (reentered) return true;
+      reentered = true;
+      const coordinator = holder.coordinator!;
+      coordinator.pointerUp(touch(1, 0, 0));
+      coordinator.pointerUp(touch(2, 100, 0));
+      coordinator.pointerDown(touch(1, 0, 0));
+      coordinator.pointerDown(touch(2, 200, 0));
+      coordinator.pointerMove(touch(2, 400, 0));
+      return true;
+    });
+    const coordinator = result.coordinator;
+    holder.coordinator = coordinator;
+    coordinator.pointerDown(touch(1, 0, 0));
+
+    coordinator.pointerDown(touch(2, 100, 0));
+    result.onViewportChangeRef.current.mockClear();
+    coordinator.pointerMove(touch(2, 600, 0));
+
+    expect(result.onViewportChangeRef.current).toHaveBeenCalledWith({
+      offsetX: 0,
+      offsetY: 0,
+      scale: 3,
+    });
   });
 });

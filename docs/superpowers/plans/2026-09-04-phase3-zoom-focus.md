@@ -780,7 +780,9 @@ const touchGestures = createTouchGestureCoordinator({
 });
 ```
 
-nodeとblankのpointer downで`touchGestures.pointerDown(sample)`を呼ぶ。同じpointer IDのstage bubbleはcoordinator内で再登録せず、2本目で`onBeforePinch`を通じて単一gestureをキャンセルし、pinchを作る。3本目以降は通常gestureを開始しない。
+nodeとblankのpointer downで`touchGestures.pointerDown(sample)`を呼ぶ。同じpointer IDのstage bubbleはcoordinator内で再登録せず、2本目で`onBeforePinch`を通じて単一gestureをキャンセルし、pinchを作る。pinch中はtouchの追加だけでなくmouse／penのpointer downも処理済みとして返し、通常gestureを並行開始しない。3本目以降は通常gestureを開始しない。
+
+`onBeforePinch`のcancel callbackから同じtouch IDを解放・再登録して新しいpinchが同期的に開始された場合、外側の開始処理はcallback後の`activePinch`を再検証し、再入側のpinchを上書きしない。
 
 move/up/upoutside/pointercancelもそれぞれ`pointerMove`/`pointerUp`へ委譲する。固定pairの片方が終わった後のpinch抑止と、全touch解除後の復帰はcoordinatorが担う。
 

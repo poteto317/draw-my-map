@@ -244,6 +244,8 @@ wheel開始時は進行中のpointer gestureをキャンセルしてからズー
 
 `touchGestureCoordinator`は有効なtouch pointerの画面位置をpointer IDごとに保持する。`stageInteractions`はPixiイベントを`PointerSample`へ正規化してcoordinatorへ委譲する。coordinatorが2本目のtouchを受け取った時点で、`stageInteractions`から渡されたcallbackによって進行中のパン、ノード移動、接続をキャンセルし、接続候補もクリアしてピンチを開始する。
 
+pinchの所有中はmouse／penのblank・node pointer downも処理済みとして返し、パン、移動、接続を並行開始しない。開始前callbackから同じtouch IDを解放・再登録して新しいpinchが同期的に開始された場合は、外側の開始処理を中止して再入側のpinchを保持する。
+
 ピンチ開始時に次を固定する。
 
 - 2点の中点
@@ -276,8 +278,8 @@ offsetY = screen.height / 2 - nodeCenter.y * viewport.scale
 
 | 入力 | 開始する操作 | 進行中操作への扱い |
 | --- | --- | --- |
-| 空白の単一pointer down | 選択解除＋パン候補 | 同じ所有権内の旧gestureをキャンセル |
-| ノードのpointer down | 移動、またはShift接続 | 旧gestureをキャンセル |
+| 空白の単一pointer down | 選択解除＋パン候補 | 同じ所有権内の旧gestureをキャンセル。pinch中は開始しない |
+| ノードのpointer down | 移動、またはShift接続 | 旧gestureをキャンセル。pinch中は開始しない |
 | 2本目のtouch down | ピンチ | 全pointer gestureをキャンセルして置換 |
 | wheel | ズーム | pointer gestureをキャンセルしてから適用 |
 | `F`キー | フォーカス | pointer gesture中は無視 |
@@ -324,9 +326,10 @@ offsetY = screen.height / 2 - nodeCenter.y * viewport.scale
 - node、blank、Shift、別pointerの競合
 - wheelによるgestureキャンセル
 - 2本指の倍率・中点移動
+- pinch中のmouse／penによるblank・node gesture開始を抑止
 - 3本目のtouchを無視
 - pinch終了後に単一gestureを再開しない
-- runtime再bind、cleanup、遅延イベント、再入コールバック
+- runtime再bind、cleanup、遅延イベント、再入コールバックによるpinch上書き防止
 
 ### 統合
 

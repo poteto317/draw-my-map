@@ -814,6 +814,88 @@ describe("createStageInteractions", () => {
     expect(onViewportChangeRef.current).toHaveBeenCalledWith(expect.objectContaining({ scale: 2 }));
   });
 
+  it("pinch中のmouseによる空白パンを開始しない", () => {
+    const { stage, handlers } = createStage();
+    const { controller, onSelectNodeRef, onViewportChangeRef } = createController();
+    controller.bind(stage as never);
+    handlers.pointerdown?.(pointer(0, 0, {
+      pointerId: 1,
+      pointerType: "touch",
+      target: stage,
+    }));
+    handlers.pointerdown?.(pointer(100, 0, {
+      pointerId: 2,
+      pointerType: "touch",
+      target: stage,
+    }));
+    (onSelectNodeRef.current as jest.Mock).mockClear();
+    onViewportChangeRef.current.mockClear();
+
+    handlers.pointerdown?.(pointer(50, 50, {
+      pointerId: 3,
+      pointerType: "mouse",
+      target: stage,
+    }));
+    handlers.pointermove?.(pointer(80, 80, {
+      pointerId: 3,
+      pointerType: "mouse",
+    }));
+
+    expect(onSelectNodeRef.current).not.toHaveBeenCalled();
+    expect(onViewportChangeRef.current).not.toHaveBeenCalled();
+
+    handlers.pointermove?.(pointer(200, 0, {
+      pointerId: 2,
+      pointerType: "touch",
+    }));
+    expect(onViewportChangeRef.current).toHaveBeenCalledWith(expect.objectContaining({ scale: 2 }));
+  });
+
+  it("pinch中のpenによるノード操作を開始しない", () => {
+    const { stage, handlers } = createStage();
+    const {
+      controller,
+      onSelectNodeRef,
+      onMoveNodeRef,
+      onConnectionTargetChangeRef,
+      onViewportChangeRef,
+    } = createController({ nodes: [node, targetNode] });
+    controller.bind(stage as never);
+    handlers.pointerdown?.(pointer(0, 0, {
+      pointerId: 1,
+      pointerType: "touch",
+      target: stage,
+    }));
+    handlers.pointerdown?.(pointer(100, 0, {
+      pointerId: 2,
+      pointerType: "touch",
+      target: stage,
+    }));
+    (onSelectNodeRef.current as jest.Mock).mockClear();
+    onViewportChangeRef.current.mockClear();
+
+    nodePointerDown(controller, 1, pointer(50, 50, {
+      pointerId: 3,
+      pointerType: "pen",
+      path: [stage],
+    }) as never);
+    handlers.pointermove?.(pointer(80, 80, {
+      pointerId: 3,
+      pointerType: "pen",
+    }));
+
+    expect(onSelectNodeRef.current).not.toHaveBeenCalled();
+    expect(onMoveNodeRef.current).not.toHaveBeenCalled();
+    expect(onConnectionTargetChangeRef.current).not.toHaveBeenCalled();
+    expect(onViewportChangeRef.current).not.toHaveBeenCalled();
+
+    handlers.pointermove?.(pointer(200, 0, {
+      pointerId: 2,
+      pointerType: "touch",
+    }));
+    expect(onViewportChangeRef.current).toHaveBeenCalledWith(expect.objectContaining({ scale: 2 }));
+  });
+
   it("gesture cancel callbackから開始された新しいpinchを保持する", () => {
     const { stage, handlers } = createStage();
     let startedNextPinch = false;
@@ -848,34 +930,9 @@ describe("createStageInteractions", () => {
     expect(onViewportChangeRef.current).toHaveBeenCalledWith(expect.objectContaining({ scale: 2 }));
   });
 
-  it("開始時のpinchを置換したcancel callbackの新しいpinchを保持する", () => {
+  it("pinchをcancelした後は通常gestureを開始できる", () => {
     const { stage, handlers } = createStage();
-    let replacedPinch = false;
-    const { controller, onConnectionTargetChangeRef, onViewportChangeRef } = createController({
-      nodes: [node, targetNode],
-    });
-    onConnectionTargetChangeRef.current = jest.fn((id: number | null) => {
-      if (id !== null || replacedPinch) return;
-      replacedPinch = true;
-      handlers.pointerup?.(pointer(0, 100, {
-        pointerId: 1,
-        pointerType: "touch",
-      }));
-      handlers.pointerup?.(pointer(100, 100, {
-        pointerId: 2,
-        pointerType: "touch",
-      }));
-      handlers.pointerdown?.(pointer(0, 100, {
-        pointerId: 4,
-        pointerType: "touch",
-        target: stage,
-      }));
-      handlers.pointerdown?.(pointer(100, 100, {
-        pointerId: 5,
-        pointerType: "touch",
-        target: stage,
-      }));
-    });
+    const { controller, onMoveNodeRef } = createController();
     controller.bind(stage as never);
     handlers.pointerdown?.(pointer(0, 100, {
       pointerId: 1,
@@ -887,21 +944,17 @@ describe("createStageInteractions", () => {
       pointerType: "touch",
       target: stage,
     }));
+
+    controller.cancelActiveGesture();
     nodePointerDown(controller, 1, pointer(50, 50, {
-      shiftKey: true,
       pointerId: 3,
       pointerType: "mouse",
       path: [stage],
     }) as never);
-
-    controller.cancelActiveGesture();
-    handlers.pointermove?.(pointer(200, 100, {
-      pointerId: 5,
-      pointerType: "touch",
-    }));
+    handlers.pointermove?.(pointer(60, 60, { pointerId: 3, pointerType: "mouse" }));
 
     expect(controller.hasActiveGesture()).toBe(true);
-    expect(onViewportChangeRef.current).toHaveBeenCalledWith(expect.objectContaining({ scale: 2 }));
+    expect(onMoveNodeRef.current).toHaveBeenCalledWith(1, 30, 50);
   });
 
   it("pinch開始時のgesture cancel callbackからcleanupされても例外にしない", () => {
