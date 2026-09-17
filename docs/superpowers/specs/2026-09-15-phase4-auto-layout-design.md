@@ -119,14 +119,9 @@ setLayoutMode: (mode: NodeLayoutMode) => void;
 
 ### 1. 入力検証と索引
 
-1回の走査で次を検証し、同時に`id -> node`と`parentId -> children`を構築する。
+2段階の線形走査で検証と索引を構築し、全体を`O(n)`に保つ。第1段階では各ノードを走査して、有限かつ重複しないID、有限の`x`、`y`、`width`、`height`、0より大きい`width`と`height`を検証し、`id -> node`を構築する。第2段階では各ノードの`parentId`が`null`または第1段階で得たIDに存在することを確認し、ルート配列と`parentId -> children`を構築する。
 
-- IDは有限値かつ重複しない。
-- `parentId`は`null`または存在するノードIDである。
-- `x`、`y`、`width`、`height`は有限値である。
-- `width`と`height`は0より大きい。
-
-子配列は入力順に追加し、並び順を保つ。ルート配列も入力順とする。
+第2段階では、ルートと各子配列へ入力順に追加して並び順を保つ。各段階は入力を1回ずつ走査するため、親が子より後に現れる入力も受理しつつ、親存在確認と順序付き索引構築を線形時間で完了する。
 
 ### 2. 循環検出と深さ
 
@@ -167,11 +162,11 @@ childrenTop = top + (subtreeSpan - childrenHeight) / 2
 firstTreeTop = firstRoot.y - (firstRootSpan - firstRoot.height) / 2
 ```
 
-2つ目以降のツリーは、直前のツリーの割り当て区間の下端に`treeVerticalGap`を加えた位置から配置する。全座標計算で有限値を検証する。
+次のルートがある場合だけ、配置済みツリー内の実ノード下端の最大値を`checkedAdd(node.y, node.height)`で追跡する。この実下端に`treeVerticalGap`を`checkedAdd`して候補`top`を求め、候補`top`との実差分を共通gap判定で検証してから次のツリーを配置する。共通gap判定は`checkedSubtract(candidateTop, actualTreeBottom)`でoverflow、精度飽和、負の差分を拒否し、座標規模に応じたULP許容値を`treeVerticalGap * 1e-9`で絶対上限付きにして、意味のあるgap不足を拒否する。最後のルートでは次のツリーがないため、未使用の実下端・候補`top`・gapを計算しない。全ての使用する座標計算で有限値を検証する。
 
 ### 5. 重なり検出
 
-深さが異なるノードは、深さごとの最大幅と`horizontalGap`で分離される。同じ深さのノードは、上から下への配置時に直前ノードの下端を記録する。次のノードの上端が「直前の下端 + `verticalGap`」未満なら、アルゴリズム不変条件の違反として`null`を返す。
+深さが異なるノードは、深さごとの最大幅と`horizontalGap`で分離される。同じ深さのノードは、上から下への配置時に直前ノードの実下端を`checkedAdd(previous.y, previous.height)`で求め、`checkedSubtract(current.y, previousBottom)`で実gapを求める。下端計算または差分がoverflow・精度飽和・非有限となる場合、実gapが負の場合は`null`を返す。実gapと`verticalGap`の差は、座標規模に応じたULP許容値と`verticalGap * 1e-9`の絶対上限で判定し、その許容範囲を超える不足を不変条件違反として`null`を返す。
 
 汎用的な全ペアの衝突探索は行わない。列と部分木区間の不変条件で検出・回避し、線形時間を維持する。
 
