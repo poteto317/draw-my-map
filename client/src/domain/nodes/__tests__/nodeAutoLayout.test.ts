@@ -24,6 +24,22 @@ function overlaps(a: Node, b: Node): boolean {
     && a.y + a.height > b.y;
 }
 
+it("単一葉の未使用bottomとchildTopを計算せず大座標を維持する", () => {
+  const root = node(1, null, 0, Number.MAX_VALUE);
+  const result = layoutNodeForest([root]);
+  expect(result).toEqual([root]);
+  expect(result?.[0]).toBe(root);
+});
+
+it("最後の子の後へ未使用gapを加算しない", () => {
+  const root = node(1, null, 0, Number.MAX_VALUE);
+  const child = node(2, 1);
+  const result = layoutNodeForest([root, child]);
+  expect(result).not.toBeNull();
+  expect(result?.[0].y).toBe(Number.MAX_VALUE);
+  expect(result?.[1].y).toBe(Number.MAX_VALUE);
+});
+
 it("最初のルートを固定し、深さごとの最大幅でX列を揃える", () => {
   const result = layoutNodeForest([
     node(1, null, 80, 120, 140),
@@ -92,6 +108,16 @@ it("非整数Yの最初のルートを再計算せず同じ参照で固定する
   expect(result[0].y).toBe(0.1);
 });
 
+it("配置済みの全ノードは再配置でも同じ参照を保ち、新配列だけを返す", () => {
+  const laidOut = layoutNodeForest([node(1, null, 80, 120), node(2, 1), node(3, 2), node(4, 1)])!;
+
+  const result = layoutNodeForest(laidOut)!;
+
+  expect(result).not.toBe(laidOut);
+  expect(result).toHaveLength(laidOut.length);
+  result.forEach((current, index) => expect(current).toBe(laidOut[index]));
+});
+
 it("異なる寸法・深さ・複数ルートの全組み合わせが重ならない", () => {
   const result = layoutNodeForest([
     node(1, null, 20, 50, 130, 90), node(2, 1, 0, 0, 70, 40),
@@ -129,6 +155,59 @@ it("小数寸法の境界丸めで有効な配置を拒否せず、全ノード�
       expect(overlaps(result![left], result![right])).toBe(false);
     }
   }
+});
+
+it("大座標で兄弟の実gapが32へ丸められる配置を拒否する", () => {
+  const result = layoutNodeForest([
+    node(1, null, 0, 2 ** 57),
+    node(2, 1),
+    node(3, 1),
+  ]);
+
+  expect(result).toBeNull();
+});
+
+it("大座標で親子列の実gapが112へ丸められる配置を拒否する", () => {
+  expect(layoutNodeForest([node(1, null, 2 ** 56, 0, 112), node(2, 1)])).toBeNull();
+});
+
+it("大座標でツリー間の実gapが64へ丸められる配置を拒否する", () => {
+  expect(layoutNodeForest([node(1, null, 0, 2 ** 57, 100, 64), node(2, null)])).toBeNull();
+});
+
+it("逐次丸めで部分木spanを超えても全ノードの実下端からtree gapを確保する", () => {
+  const result = layoutNodeForest([
+    node(1, null, 0, 2 ** 56, 100, 352),
+    ...Array.from({ length: 8 }, (_, index) => node(index + 2, 1, 0, 0, 100, 9)),
+    node(10, null),
+  ]);
+
+  expect(result).not.toBeNull();
+  const actualBottom = Math.max(...result!.slice(0, 9).map((current) => current.y + current.height));
+  expect(actualBottom - 2 ** 56).toBe(464);
+  expect(result![9].y - actualBottom).toBe(80);
+});
+
+it("後続ツリーに必要な子の実下端がprecision saturationすると拒否する", () => {
+  expect(layoutNodeForest([
+    node(1, null, 0, 2 ** 56, 100, 128),
+    node(2, 1, 0, 0, 100, 1),
+    node(3, null),
+  ])).toBeNull();
+});
+
+it("子が親より先でも出力入力順と降順IDのルート配置順を維持する", () => {
+  const firstRoot = node(90, null, 80, 100);
+  const result = layoutNodeForest([
+    node(12, 10), node(92, 90), firstRoot,
+    node(52, 50), node(50, null, 900, 900), node(10, null, -100, -100),
+  ]);
+
+  expect(result?.map(({ id }) => id)).toEqual([12, 92, 90, 52, 50, 10]);
+  expect(result?.[2]).toBe(firstRoot);
+  expect(result?.[2]).toMatchObject({ x: 80, y: 100 });
+  expect(result?.filter(({ parentId }) => parentId === null).map(({ id, x, y }) => ({ id, x, y })))
+    .toEqual([{ id: 90, x: 80, y: 100 }, { id: 50, x: 80, y: 240 }, { id: 10, x: 80, y: 380 }]);
 });
 
 it.each<[string, Node[], Node[] | null]>([

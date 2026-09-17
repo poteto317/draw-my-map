@@ -6,7 +6,30 @@ function node(id: number, parentId: number | null): Node {
 }
 
 describe("indexNodeForest", () => {
-  it("入力順のルート・子と、子が親より前でも有効な深さ・post-orderを返す", () => {
+  it("逆順2,000ノードを線形範囲の入力読み取りで索引化し正しい深さを返す", () => {
+    const count = 2_000;
+    const input = Array.from({ length: count }, (_, index) => {
+      const id = count - index;
+      return node(id, id === 1 ? null : id - 1);
+    });
+    let reads = 0;
+    const observed = new Proxy(input, {
+      get(target, property, receiver) {
+        if (typeof property === "string" && /^\d+$/.test(property)) reads += 1;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    const indexed = indexNodeForest(observed);
+
+    expect(reads).toBeLessThanOrEqual(count * 3);
+    expect(indexed?.depthById.size).toBe(count);
+    expect(indexed?.depthById.get(1)).toBe(0);
+    expect(indexed?.depthById.get(1_000)).toBe(999);
+    expect(indexed?.depthById.get(2_000)).toBe(1_999);
+  });
+
+  it("親子関係と走査結果を合成して返す", () => {
     const indexed = indexNodeForest([
       node(4, 2), node(2, 1), node(3, 1), node(1, null), node(9, null),
     ]);
@@ -21,34 +44,9 @@ describe("indexNodeForest", () => {
   });
 
   it.each([
-    ["ID重複", [node(1, null), node(1, null)]],
-    ["親欠損", [node(1, 99)]],
-    ["自己参照", [node(1, 1)]],
-    ["循環", [node(1, 2), node(2, 1)]],
-    ["非有限ID", [{ ...node(1, null), id: Number.NaN }]],
-    ["非有限座標", [{ ...node(1, null), x: Number.POSITIVE_INFINITY }]],
-    ["非有限サイズ", [{ ...node(1, null), height: Number.NaN }]],
-    ["幅0", [{ ...node(1, null), width: 0 }]],
-    ["高さ負数", [{ ...node(1, null), height: -1 }]],
-  ])("%sを拒否する", (_name, nodes) => {
+    ["親子関係を構築できない入力", [node(1, 99)]],
+    ["走査できない循環入力", [node(1, 2), node(2, 1)]],
+  ])("%sを伝播する", (_name, nodes) => {
     expect(indexNodeForest(nodes)).toBeNull();
-  });
-
-  it("逆順の深いツリーを線形範囲の入力読み取りで索引化する", () => {
-    const count = 2_000;
-    const input = Array.from({ length: count }, (_, index) => {
-      const id = count - index;
-      return node(id, id === 1 ? null : id - 1);
-    });
-    let reads = 0;
-    const observed = new Proxy(input, {
-      get(target, property, receiver) {
-        if (typeof property === "string" && /^\d+$/.test(property)) reads += 1;
-        return Reflect.get(target, property, receiver);
-      },
-    });
-
-    expect(indexNodeForest(observed)?.depthById.get(count)).toBe(count - 1);
-    expect(reads).toBeLessThanOrEqual(count * 3);
   });
 });
