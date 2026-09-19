@@ -1,19 +1,45 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { AppHeader } from "@/components/layout/AppHeader";
 
 describe("AppHeader", () => {
   it("タイトル『Draw My Map』が表示される", () => {
-    render(<AppHeader />);
+    render(
+      <AppHeader
+        layoutMode="manual"
+        onLayoutModeChange={jest.fn()}
+      />,
+    );
+
     expect(screen.getByRole("heading", { name: "Draw My Map" })).toBeInTheDocument();
   });
 
-  it("操作ヒントが表示される", () => {
-    render(<AppHeader />);
-    const operationHint = screen.getByText(
-      "空白ダブルクリックで追加・ノードダブルクリックで編集・空白ドラッグで移動・ホイール/ピンチで拡大縮小・Fで中央表示・Shift+ノードドラッグで接続",
+  it("モード選択を変更commandへ接続する", () => {
+    const onLayoutModeChange = jest.fn();
+    render(
+      <AppHeader
+        layoutMode="manual"
+        onLayoutModeChange={onLayoutModeChange}
+      />,
     );
 
-    expect(operationHint).toBeInTheDocument();
-    expect(operationHint).toHaveClass("text-zinc-600", "dark:text-zinc-400");
+    fireEvent.click(screen.getByRole("button", { name: "自動配置" }));
+
+    expect(onLayoutModeChange).toHaveBeenCalledTimes(1);
+    expect(onLayoutModeChange).toHaveBeenCalledWith("auto");
+  });
+
+  it.each([
+    ["manual", /ノードドラッグで移動/],
+    ["auto", /追加・削除・接続時に自動整列/],
+  ] as const)("%sモードの操作案内を組み込む", (layoutMode, expectedHint) => {
+    render(
+      <AppHeader
+        layoutMode={layoutMode}
+        onLayoutModeChange={jest.fn()}
+      />,
+    );
+
+    const header = screen.getByRole("banner");
+    expect(header).toContainElement(screen.getByText(expectedHint));
   });
 });

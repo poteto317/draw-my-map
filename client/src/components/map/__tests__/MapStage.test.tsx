@@ -8,6 +8,8 @@ import {
   type ReactElement,
 } from "react";
 import { MapStage } from "@/components/map/MapStage";
+import { AutoLayoutMapStageHarness } from "@/components/map/testing/AutoLayoutMapStageHarness";
+import { CHILD_HORIZONTAL_GAP } from "@/config/shapes";
 import { useNodes } from "@/hooks/useNodes";
 import type { Node } from "@/types/node";
 
@@ -753,5 +755,99 @@ describe("MapStage boundary", () => {
       expect(movedNode).toMatchObject({ x: oldNode.x + 20, y: oldNode.y + 15 });
     }
     expect(after.find((node) => node.id === 4)).toEqual(before.find((node) => node.id === 4));
+  });
+
+  it("自動モードでShift接続した子を親の右列へ再配置する", async () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { getByTestId } = await renderReady(<AutoLayoutMapStageHarness />);
+    const before = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
+    const parent = before.find((node) => node.id === 1)!;
+    const child = before.find((node) => node.id === 2)!;
+
+    act(() => {
+      mockNodePointerHandlers[0].pointerdown?.(
+        pointer(parent.x + 10, parent.y + 10, { shiftKey: true }),
+      );
+      mockStageHandlers.pointermove?.(pointer(child.x + 10, child.y + 10));
+      mockStageHandlers.pointerup?.(pointer(child.x + 10, child.y + 10));
+    });
+
+    const nodes = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
+    const connectedParent = nodes.find((node) => node.id === 1)!;
+    const connectedChild = nodes.find((node) => node.id === 2)!;
+    expect(connectedChild.parentId).toBe(connectedParent.id);
+    expect(connectedChild.x).toBe(
+      connectedParent.x + connectedParent.width + CHILD_HORIZONTAL_GAP,
+    );
+  });
+
+  it("自動モードのpointer dragではノード座標を変更しない", async () => {
+    const { getByTestId } = await renderReady(<AutoLayoutMapStageHarness />);
+    const before = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
+    const root = before[0];
+
+    act(() => {
+      mockNodePointerHandlers[0].pointerdown?.(
+        pointer(root.x + 10, root.y + 10),
+      );
+      mockStageHandlers.pointermove?.(pointer(root.x + 80, root.y + 90));
+      mockStageHandlers.pointerup?.(pointer(root.x + 80, root.y + 90));
+    });
+
+    const after = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
+    expect(after.map(({ x, y }) => ({ x, y }))).toEqual(
+      before.map(({ x, y }) => ({ x, y })),
+    );
+  });
+
+  it("自動モードで離れた位置に追加したルートを既存列へ整列する", async () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { getByTestId } = await renderReady(<AutoLayoutMapStageHarness />);
+    const before = JSON.parse(
+      getByTestId("node-state").textContent ?? "[]",
+    ) as Node[];
+    const firstRoot = before.find((node) => node.id === 1)!;
+    const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+    mockStageBounds(container);
+
+    fireEvent.doubleClick(container, { clientX: 700, clientY: 500 });
+
+    const nodes = JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
+    const addedRoot = nodes.find((node) => node.id === 3)!;
+    expect(addedRoot.parentId).toBeNull();
+    expect(addedRoot.x).toBe(firstRoot.x);
+    expect(addedRoot.x).not.toBe(650);
+  });
+
+  it("自動モードで兄弟削除後に残った兄弟を親の中央へ戻す", async () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { getByTestId } = await renderReady(<AutoLayoutMapStageHarness />);
+
+    fireEvent.keyDown(window, { key: "Tab" });
+    fireEvent.keyDown(getByTestId("node-label-input"), { key: "Enter" });
+    fireEvent.keyDown(window, { key: "Enter" });
+
+    const beforeDelete = JSON.parse(
+      getByTestId("node-state").textContent ?? "[]",
+    ) as Node[];
+    const rootBeforeDelete = beforeDelete.find((node) => node.id === 1)!;
+    const remainingChildBeforeDelete = beforeDelete.find((node) => node.id === 3)!;
+    expect(remainingChildBeforeDelete.y).not.toBe(rootBeforeDelete.y);
+
+    fireEvent.keyDown(getByTestId("node-label-input"), { key: "Enter" });
+    fireEvent.keyDown(window, { key: "Delete" });
+
+    const nodes = JSON.parse(
+      getByTestId("node-state").textContent ?? "[]",
+    ) as Node[];
+    const remainingChild = nodes.find((node) => node.id === 3)!;
+    expect(nodes.map((node) => node.id)).toEqual([1, 2, 3]);
+    expect(remainingChild).toMatchObject({
+      parentId: rootBeforeDelete.id,
+      y: rootBeforeDelete.y,
+    });
   });
 });

@@ -8,6 +8,7 @@ export default function Home() {
   const {
     nodes,
     selectedNodeId,
+    layoutMode,
     addNode,
     addChildNode,
     addSiblingNode,
@@ -16,11 +17,15 @@ export default function Home() {
     moveNode,
     connectNodes,
     deleteNode,
+    setLayoutMode,
   } = useNodes();
 
   return (
     <div className="flex h-dvh flex-col bg-zinc-50 dark:bg-zinc-900">
-      <AppHeader />
+      <AppHeader
+        layoutMode={layoutMode}
+        onLayoutModeChange={setLayoutMode}
+      />
       <main className="min-h-0 flex-1 overflow-hidden">
         <MapStage
           nodes={nodes}
