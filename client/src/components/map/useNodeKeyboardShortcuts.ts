@@ -11,6 +11,11 @@ type NodeKeyboardShortcutOptions = {
   onStartEditing: (nodeId: number, initialText: string) => void;
 };
 
+const isInteractiveTarget = (target: EventTarget | null): boolean => (
+  target instanceof HTMLElement
+  && Boolean(target.closest("button, input, textarea, select, a[href], [contenteditable]"))
+);
+
 export function useNodeKeyboardShortcuts({
   selectedNodeId,
   isEditing,
@@ -21,7 +26,7 @@ export function useNodeKeyboardShortcuts({
 }: NodeKeyboardShortcutOptions): void {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (isEditing || selectedNodeId === null) return;
+      if (isEditing || selectedNodeId === null || isInteractiveTarget(event.target)) return;
 
       let createdId: number | null = null;
       if (event.key === "Tab") {

@@ -13,6 +13,17 @@ describe("AppHeader", () => {
     expect(screen.getByRole("heading", { name: "Draw My Map" })).toBeInTheDocument();
   });
 
+  it("狭い画面で内容を複数行に折り返せる", () => {
+    render(
+      <AppHeader
+        layoutMode="manual"
+        onLayoutModeChange={jest.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("banner")).toHaveClass("flex-wrap");
+  });
+
   it("モード選択を変更commandへ接続する", () => {
     const onLayoutModeChange = jest.fn();
     render(

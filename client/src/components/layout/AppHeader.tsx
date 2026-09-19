@@ -12,7 +12,7 @@ export function AppHeader({
   onLayoutModeChange,
 }: AppHeaderProps) {
   return (
-    <header className="flex items-center gap-4 bg-white px-6 py-3 shadow-sm dark:bg-zinc-800">
+    <header className="flex flex-wrap items-center gap-4 bg-white px-6 py-3 shadow-sm dark:bg-zinc-800">
       <h1 className="shrink-0 text-lg font-semibold text-zinc-800 dark:text-zinc-100">
         Draw My Map
       </h1>

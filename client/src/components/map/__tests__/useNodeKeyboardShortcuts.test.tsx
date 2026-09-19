@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { useNodeKeyboardShortcuts } from "@/components/map/useNodeKeyboardShortcuts";
 
 type ShortcutOptions = {
@@ -12,7 +12,7 @@ type ShortcutOptions = {
 
 function ShortcutHarness(options: ShortcutOptions) {
   useNodeKeyboardShortcuts(options);
-  return null;
+  return <button type="button">レイアウトモード</button>;
 }
 
 function createOptions(overrides: Partial<ShortcutOptions> = {}): ShortcutOptions {
@@ -111,6 +111,28 @@ describe("useNodeKeyboardShortcuts", () => {
     expect(options.onAddSiblingNode).not.toHaveBeenCalled();
     expect(options.onDeleteNode).not.toHaveBeenCalled();
   });
+
+  it.each(["Tab", "Enter", "Delete", "Backspace"])(
+    "ignores %s from an interactive control",
+    (key) => {
+      const options = createOptions();
+      render(<ShortcutHarness {...options} />);
+      const event = new KeyboardEvent("keydown", {
+        key,
+        bubbles: true,
+        cancelable: true,
+      });
+
+      screen.getByRole("button", { name: "レイアウトモード" })
+        .dispatchEvent(event);
+
+      expect(event.defaultPrevented).toBe(false);
+      expect(options.onAddChildNode).not.toHaveBeenCalled();
+      expect(options.onAddSiblingNode).not.toHaveBeenCalled();
+      expect(options.onDeleteNode).not.toHaveBeenCalled();
+      expect(options.onStartEditing).not.toHaveBeenCalled();
+    },
+  );
 
   it("removes its exact listener on unmount", () => {
     const options = createOptions();
