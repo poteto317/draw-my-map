@@ -17,11 +17,16 @@ describe("validateMapDocumentGraph", () => {
   it("親が子より後に現れるツリーと入力順を受理する", () => {
     const child = node(2, 1);
     const root = node(1, null);
+    const input = [child, root];
+    const inputBefore = input.map((current) => ({ ...current }));
+    const result = validateMapDocumentGraph(input);
 
-    expect(validateMapDocumentGraph([child, root])).toEqual({
+    expect(result).toEqual({
       ok: true,
       value: [child, root],
     });
+    if (result.ok) expect(result.value).not.toBe(input);
+    expect(input).toEqual(inputBefore);
   });
 
   it("ノードIDの重複を拒否する", () => {
@@ -50,7 +55,11 @@ describe("validateMapDocumentGraph", () => {
       const id = 10_000 - index;
       return node(id, id === 1 ? null : id - 1);
     });
+    const nodesBefore = nodes.map((current) => ({ ...current }));
+    const result = validateMapDocumentGraph(nodes);
 
-    expect(validateMapDocumentGraph(nodes)).toEqual({ ok: true, value: nodes });
+    expect(result).toEqual({ ok: true, value: nodes });
+    if (result.ok) expect(result.value).not.toBe(nodes);
+    expect(nodes).toEqual(nodesBefore);
   });
 });
