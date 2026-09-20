@@ -13,6 +13,7 @@ import { createMonotonicIdGenerator } from "@/domain/nodes/nodeIdGenerator";
 import { useNodeLayoutState } from "@/hooks/useNodeLayoutState";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
+import type { MapDocumentV1 } from "@/types/mapDocument";
 
 type UseNodesReturn = {
   nodes: Node[];
@@ -27,13 +28,13 @@ type UseNodesReturn = {
   connectNodes: (parentId: number, childId: number) => boolean;
   deleteNode: (id: number) => void;
   setLayoutMode: (mode: NodeLayoutMode) => void;
+  replaceMap: (document: MapDocumentV1) => void;
 };
 
 export function useNodes(): UseNodesReturn {
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
   const generateNodeIdRef = useRef<(() => number) | null>(null);
   generateNodeIdRef.current ??= createMonotonicIdGenerator();
-  const generateNodeId = generateNodeIdRef.current;
   const {
     nodes,
     layoutMode,
@@ -41,22 +42,37 @@ export function useNodes(): UseNodesReturn {
     applyManualMove,
     applyTreeChange,
     setLayoutMode,
+    replaceLayoutState,
   } = useNodeLayoutState();
 
-  const addNode = useCallback((x: number, y: number) => {
-    const id = generateNodeId();
-    applyTreeChange((currentNodes) => [
-      ...currentNodes,
-      createRootNode(id, x, y),
-    ]);
+  const generateAvailableNodeId = useCallback((currentNodes: readonly Node[]) => {
+    const occupiedIds = new Set(currentNodes.map((node) => node.id));
+    const generateNodeId = generateNodeIdRef.current!;
+    let id = generateNodeId();
+    while (occupiedIds.has(id)) id = generateNodeId();
     return id;
-  }, [applyTreeChange, generateNodeId]);
+  }, []);
+
+  const replaceMap = useCallback((document: MapDocumentV1) => {
+    generateNodeIdRef.current = createMonotonicIdGenerator();
+    replaceLayoutState(document.nodes, document.layoutMode);
+    setSelectedNodeId(null);
+  }, [replaceLayoutState]);
+
+  const addNode = useCallback((x: number, y: number) => {
+    let id!: number;
+    applyTreeChange((currentNodes) => {
+      id = generateAvailableNodeId(currentNodes);
+      return [...currentNodes, createRootNode(id, x, y)];
+    });
+    return id;
+  }, [applyTreeChange, generateAvailableNodeId]);
 
   const addChildNode = useCallback((parentId: number) => {
     let createdId: number | null = null;
     const applied = applyTreeChange((currentNodes) => {
       if (!currentNodes.some((node) => node.id === parentId)) return null;
-      const id = generateNodeId();
+      const id = generateAvailableNodeId(currentNodes);
       const child = createChildNode(currentNodes, parentId, id);
       if (!child) return null;
 
@@ -67,13 +83,13 @@ export function useNodes(): UseNodesReturn {
 
     setSelectedNodeId(createdId);
     return createdId;
-  }, [applyTreeChange, generateNodeId]);
+  }, [applyTreeChange, generateAvailableNodeId]);
 
   const addSiblingNode = useCallback((nodeId: number) => {
     let createdId: number | null = null;
     const applied = applyTreeChange((currentNodes) => {
       if (!currentNodes.some((node) => node.id === nodeId)) return null;
-      const id = generateNodeId();
+      const id = generateAvailableNodeId(currentNodes);
       const sibling = createSiblingNode(currentNodes, nodeId, id);
       if (!sibling) return null;
 
@@ -84,7 +100,7 @@ export function useNodes(): UseNodesReturn {
 
     setSelectedNodeId(createdId);
     return createdId;
-  }, [applyTreeChange, generateNodeId]);
+  }, [applyTreeChange, generateAvailableNodeId]);
 
   const selectNode = useCallback((id: number | null) => {
     setSelectedNodeId(id);
@@ -141,5 +157,6 @@ export function useNodes(): UseNodesReturn {
     connectNodes,
     deleteNode,
     setLayoutMode,
+    replaceMap,
   };
 }

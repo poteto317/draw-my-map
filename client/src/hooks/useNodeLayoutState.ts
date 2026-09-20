@@ -10,6 +10,7 @@ type UseNodeLayoutStateReturn = {
   applyManualMove: (update: NodeChange) => boolean;
   applyTreeChange: (update: NodeChange) => boolean;
   setLayoutMode: (mode: NodeLayoutMode) => void;
+  replaceLayoutState: (nodes: Node[], mode: NodeLayoutMode) => void;
 };
 
 type NodeChange = (currentNodes: readonly Node[]) => Node[] | null;
@@ -23,6 +24,13 @@ export function useNodeLayoutState(): UseNodeLayoutStateReturn {
   const commitNodes = useCallback((nextNodes: Node[]) => {
     nodesRef.current = nextNodes;
     setNodes(nextNodes);
+  }, []);
+
+  const replaceLayoutState = useCallback((nextNodes: Node[], mode: NodeLayoutMode) => {
+    nodesRef.current = nextNodes;
+    layoutModeRef.current = mode;
+    setNodes(nextNodes);
+    setLayoutModeState(mode);
   }, []);
 
   const applyNonStructuralChange = useCallback((update: NodeChange): boolean => {
@@ -71,5 +79,6 @@ export function useNodeLayoutState(): UseNodeLayoutStateReturn {
     applyManualMove,
     applyTreeChange,
     setLayoutMode,
+    replaceLayoutState,
   };
 }

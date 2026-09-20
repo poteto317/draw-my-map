@@ -2,6 +2,20 @@ import { startTransition } from "react";
 import { flushSync } from "react-dom";
 import { renderHook, act } from "@testing-library/react";
 import { useNodes } from "@/hooks/useNodes";
+import { RECT_HEIGHT, RECT_WIDTH } from "@/config/shapes";
+import type { MapDocumentV1 } from "@/types/mapDocument";
+
+function importedMap(): MapDocumentV1 {
+  return {
+    version: 1,
+    layoutMode: "manual",
+    nodes: [
+      { id: 1_000, parentId: null, x: 900, y: 800 },
+      { id: 1_001, parentId: 1_000, x: 15, y: 25 },
+      { id: 1_003, parentId: null, x: 450, y: 500 },
+    ].map((node) => ({ ...node, width: RECT_WIDTH, height: RECT_HEIGHT, label: "保存済み" })),
+  };
+}
 
 describe("useNodes", () => {
   afterEach(() => {
@@ -13,6 +27,93 @@ describe("useNodes", () => {
 
     expect(result.current.nodes).toEqual([]);
     expect(result.current.selectedNodeId).toBeNull();
+  });
+
+  it("インポートで全ノード・モードを座標維持で置き換え選択を解除する", () => {
+    const { result } = renderHook(() => useNodes());
+    const document = importedMap();
+    document.layoutMode = "auto";
+    const before = { ...document, nodes: document.nodes.map((node) => ({ ...node })) };
+    act(() => {
+      result.current.addNode(10, 20);
+      result.current.selectNode(1_000);
+    });
+
+    act(() => result.current.replaceMap(document));
+
+    expect(result.current.nodes).toEqual(before.nodes);
+    expect(result.current.layoutMode).toBe("auto");
+    expect(result.current.selectedNodeId).toBeNull();
+    expect(document).toEqual(before);
+  });
+
+  it("空マップのインポートで既存ノードと選択と自動モードを置き換える", () => {
+    const { result } = renderHook(() => useNodes());
+    act(() => {
+      result.current.selectNode(result.current.addNode(10, 20));
+      result.current.setLayoutMode("auto");
+    });
+
+    act(() => result.current.replaceMap({ version: 1, layoutMode: "manual", nodes: [] }));
+
+    expect(result.current.nodes).toEqual([]);
+    expect(result.current.layoutMode).toBe("manual");
+    expect(result.current.selectedNodeId).toBeNull();
+  });
+
+  it.each(["root", "child", "sibling"] as const)(
+    "インポートと同じbatchの%s追加は使用中IDをすべて飛ばす",
+    (kind) => {
+      jest.spyOn(Date, "now").mockReturnValue(1_000);
+      const { result } = renderHook(() => useNodes());
+      const { addNode, addChildNode, addSiblingNode } = result.current;
+      const document = importedMap();
+      const before = { ...document, nodes: document.nodes.map((node) => ({ ...node })) };
+      const add = () => {
+        if (kind === "child") return addChildNode(1_000);
+        if (kind === "sibling") return addSiblingNode(1_001);
+        return addNode(50, 60);
+      };
+      let ids!: (number | null)[];
+
+      act(() => {
+        result.current.replaceMap(document);
+        ids = [add(), add()];
+      });
+
+      expect(ids).toEqual([1_002, 1_004]);
+      expect(result.current.nodes.map((node) => node.id)).toEqual([1_000, 1_001, 1_003, 1_002, 1_004]);
+      expect(result.current.nodes.slice(3).map((node) => node.parentId))
+        .toEqual(kind === "root" ? [null, null] : [1_000, 1_000]);
+      expect(result.current.selectedNodeId).toBe(kind === "root" ? null : 1_004);
+      expect(document).toEqual(before);
+    },
+  );
+
+  it("再インポート後は初回の追加コールバックも再初期化されたID生成器を使う", () => {
+    const now = jest.spyOn(Date, "now").mockReturnValue(5_000);
+    const { result } = renderHook(() => useNodes());
+    const { addNode, addChildNode, addSiblingNode, replaceMap } = result.current;
+    act(() => addNode(0, 0));
+    now.mockReturnValue(1_000);
+    let firstId!: number;
+    let resetId!: number;
+
+    act(() => {
+      replaceMap(importedMap());
+      firstId = addNode(50, 60);
+    });
+    act(() => {
+      replaceMap(importedMap());
+      resetId = addNode(70, 80);
+    });
+
+    expect([firstId, resetId]).toEqual([1_002, 1_002]);
+    expect(result.current.nodes.map((node) => node.id)).toEqual([1_000, 1_001, 1_003, 1_002]);
+    expect(result.current.addNode).toBe(addNode);
+    expect(result.current.addChildNode).toBe(addChildNode);
+    expect(result.current.addSiblingNode).toBe(addSiblingNode);
+    expect(result.current.replaceMap).toBe(replaceMap);
   });
 
   // Production break caught: addNode drops an update made in the same React batch.

@@ -28,6 +28,49 @@ describe("useNodeLayoutState", () => {
     expect(result.current.layoutMode).toBe("manual");
   });
 
+  it("検証済みノードとモードを座標維持したまま置き換える", () => {
+    const { result } = renderHook(() => useNodeLayoutState());
+    const imported = [node(10, null, 900, 800), node(11, 10, 15, 25)];
+    const before = imported.map((item) => ({ ...item }));
+
+    act(() => result.current.replaceLayoutState(imported, "auto"));
+
+    expect(result.current.nodes).toBe(imported);
+    expect(result.current.nodes).toEqual(before);
+    expect(result.current.layoutMode).toBe("auto");
+  });
+
+  it("置き換えると初回renderの更新関数にもノードとモードを即時反映する", () => {
+    const { result } = renderHook(() => useNodeLayoutState());
+    const { replaceLayoutState, applyNonStructuralChange, applyManualMove } = result.current;
+    const imported = [node(10, null, 900, 800)];
+    let observedNodes!: readonly Node[];
+    let moved!: boolean;
+
+    act(() => {
+      replaceLayoutState(imported, "auto");
+      applyNonStructuralChange((current) => {
+        observedNodes = current;
+        return null;
+      });
+      moved = applyManualMove(() => []);
+    });
+
+    expect(observedNodes).toBe(imported);
+    expect(moved).toBe(false);
+    expect(result.current.nodes).toBe(imported);
+    expect(result.current.replaceLayoutState).toBe(replaceLayoutState);
+
+    act(() => {
+      replaceLayoutState(imported, "manual");
+      moved = applyManualMove((current) => current.map((item) => ({ ...item, x: 50 })));
+    });
+
+    expect(moved).toBe(true);
+    expect(result.current.nodes[0].x).toBe(50);
+    expect(result.current.layoutMode).toBe("manual");
+  });
+
   it("手動モードでは候補をそのまま確定する", () => {
     const { result } = renderHook(() => useNodeLayoutState());
     const candidate = [node(1, null, 50, 70)];
