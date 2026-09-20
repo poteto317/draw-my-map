@@ -1,0 +1,56 @@
+import { validateMapDocumentGraph } from "@/domain/persistence/mapDocumentGraph";
+import type { Node } from "@/types/node";
+
+function node(id: number, parentId: number | null): Node {
+  return {
+    id,
+    parentId,
+    x: 0,
+    y: 0,
+    width: 160,
+    height: 64,
+    label: `node-${id}`,
+  };
+}
+
+describe("validateMapDocumentGraph", () => {
+  it("親が子より後に現れるツリーと入力順を受理する", () => {
+    const child = node(2, 1);
+    const root = node(1, null);
+
+    expect(validateMapDocumentGraph([child, root])).toEqual({
+      ok: true,
+      value: [child, root],
+    });
+  });
+
+  it("ノードIDの重複を拒否する", () => {
+    expect(validateMapDocumentGraph([node(1, null), node(1, null)]))
+      .toEqual({ ok: false, error: "ノードID 1 が重複しています。" });
+  });
+
+  it("存在しない親ノードへの参照を拒否する", () => {
+    expect(validateMapDocumentGraph([node(1, 2)]))
+      .toEqual({ ok: false, error: "親ノード 2 が存在しません。" });
+  });
+
+  it("自分自身への参照を循環として拒否する", () => {
+    expect(validateMapDocumentGraph([node(1, 1)]))
+      .toEqual({ ok: false, error: "親子関係が循環しています。" });
+  });
+
+  it("ルートを持たない循環を拒否する", () => {
+    const result = validateMapDocumentGraph([node(1, 2), node(2, 1)]);
+
+    expect(result).toEqual({ ok: false, error: "親子関係が循環しています。" });
+  });
+
+  it("10,000ノードのチェーンをスタックオーバーフローせず受理する", () => {
+    const nodes = Array.from({ length: 10_000 }, (_, index) => {
+      const id = 10_000 - index;
+      return node(id, id === 1 ? null : id - 1);
+    });
+
+    expect(validateMapDocumentGraph(nodes)).toEqual({ ok: true, value: nodes });
+  });
+});
