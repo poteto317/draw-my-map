@@ -24,7 +24,7 @@ describe("normalizeMapDocumentNode", () => {
     ["id", 0, "node[0].idは1以上の安全な整数である必要があります。"],
     ["id", 1.5, "node[0].idは1以上の安全な整数である必要があります。"],
     ["id", Number.MAX_SAFE_INTEGER + 1, "node[0].idは1以上の安全な整数である必要があります。"],
-    ["parentId", -1, "node[0].parentIdはnullまたは0以上の安全な整数である必要があります。"],
+    ["parentId", -1, "node[0].parentIdはnullまたは1以上の安全な整数である必要があります。"],
     ["x", Number.NaN, "node[0].xは有限の数値である必要があります。"],
     ["y", Number.POSITIVE_INFINITY, "node[0].yは有限の数値である必要があります。"],
     ["width", 0, "node[0].widthは0より大きい有限の数値である必要があります。"],
@@ -33,5 +33,12 @@ describe("normalizeMapDocumentNode", () => {
   ])("node[0].%sの不正値を拒否する", (field, value, error) => {
     expect(normalizeMapDocumentNode({ ...validNode, [field]: value }, 0))
       .toEqual({ ok: false, error });
+  });
+
+  it("parentIdが0の場合は完全一致するエラーで拒否する", () => {
+    expect(normalizeMapDocumentNode({ ...validNode, parentId: 0 }, 0)).toEqual({
+      ok: false,
+      error: "node[0].parentIdはnullまたは1以上の安全な整数である必要があります。",
+    });
   });
 });

@@ -4,19 +4,42 @@ import type { MapDocumentResult, MapDocumentV1 } from "@/types/mapDocument";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 
-export function createMapDocument(
+function projectMapDocumentNode(node: Node): Node {
+  return {
+    id: node.id,
+    parentId: node.parentId,
+    x: node.x,
+    y: node.y,
+    width: node.width,
+    height: node.height,
+    label: node.label,
+  };
+}
+
+function projectMapDocument(
   nodes: readonly Node[],
   layoutMode: NodeLayoutMode,
 ): MapDocumentV1 {
   return {
     version: 1,
     layoutMode,
-    nodes: nodes.map((current) => ({ ...current })),
+    nodes: nodes.map(projectMapDocumentNode),
   };
 }
 
+export function createMapDocument(
+  nodes: readonly Node[],
+  layoutMode: NodeLayoutMode,
+): MapDocumentV1 {
+  return projectMapDocument(nodes, layoutMode);
+}
+
 export function serializeMapDocument(document: MapDocumentV1): string {
-  return `${JSON.stringify(document, null, 2)}\n`;
+  return `${JSON.stringify(
+    projectMapDocument(document.nodes, document.layoutMode),
+    null,
+    2,
+  )}\n`;
 }
 
 export function parseMapDocumentJson(

@@ -28,8 +28,8 @@ export function normalizeMapDocumentNode(
   if (!isSafeInteger(id) || id <= 0) {
     return failure(index, ".idは1以上の安全な整数である必要があります。");
   }
-  if (parentId !== null && (!isSafeInteger(parentId) || parentId < 0)) {
-    return failure(index, ".parentIdはnullまたは0以上の安全な整数である必要があります。");
+  if (parentId !== null && (!isSafeInteger(parentId) || parentId <= 0)) {
+    return failure(index, ".parentIdはnullまたは1以上の安全な整数である必要があります。");
   }
   if (!isFiniteNumber(x)) {
     return failure(index, ".xは有限の数値である必要があります。");

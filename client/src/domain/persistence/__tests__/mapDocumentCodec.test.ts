@@ -3,6 +3,7 @@ import {
   parseMapDocumentJson,
   serializeMapDocument,
 } from "@/domain/persistence/mapDocumentCodec";
+import type { MapDocumentV1 } from "@/types/mapDocument";
 import type { Node } from "@/types/node";
 
 function node(id: number, parentId: number | null, label = `node-${id}`): Node {
@@ -50,6 +51,32 @@ describe("MapDocument Codec", () => {
     expect(document.nodes).toEqual([node(1, null, "作成時")]);
     expect(document.nodes).not.toBe(nodes);
     expect(document.nodes[0]).not.toBe(originalNode);
+  });
+
+  it("作成時にノードの未知フィールドを除去する", () => {
+    const input = { ...node(1, null), selected: true };
+
+    expect(createMapDocument([input], "manual")).toEqual({
+      version: 1,
+      layoutMode: "manual",
+      nodes: [node(1, null)],
+    });
+  });
+
+  it("直列化時にトップレベルとノードの未知フィールドを除去する", () => {
+    const inputNode = { ...node(1, null), editing: true };
+    const document: MapDocumentV1 & { viewport: { x: number; y: number } } = {
+      version: 1,
+      layoutMode: "manual",
+      nodes: [inputNode],
+      viewport: { x: 100, y: 200 },
+    };
+
+    expect(JSON.parse(serializeMapDocument(document))).toEqual({
+      version: 1,
+      layoutMode: "manual",
+      nodes: [node(1, null)],
+    });
   });
 
   it("JSONとして解析できない文字列を拒否する", () => {
