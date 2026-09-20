@@ -21,17 +21,17 @@ describe("normalizeMapDocumentNode", () => {
   });
 
   it.each([
-    ["id", 0],
-    ["id", 1.5],
-    ["id", Number.MAX_SAFE_INTEGER + 1],
-    ["parentId", -1],
-    ["x", Number.NaN],
-    ["y", Number.POSITIVE_INFINITY],
-    ["width", 0],
-    ["height", -1],
-    ["label", 123],
-  ])("node[0].%sの不正値を拒否する", (field, value) => {
+    ["id", 0, "node[0].idは1以上の安全な整数である必要があります。"],
+    ["id", 1.5, "node[0].idは1以上の安全な整数である必要があります。"],
+    ["id", Number.MAX_SAFE_INTEGER + 1, "node[0].idは1以上の安全な整数である必要があります。"],
+    ["parentId", -1, "node[0].parentIdはnullまたは0以上の安全な整数である必要があります。"],
+    ["x", Number.NaN, "node[0].xは有限の数値である必要があります。"],
+    ["y", Number.POSITIVE_INFINITY, "node[0].yは有限の数値である必要があります。"],
+    ["width", 0, "node[0].widthは0より大きい有限の数値である必要があります。"],
+    ["height", -1, "node[0].heightは0より大きい有限の数値である必要があります。"],
+    ["label", 123, "node[0].labelは文字列である必要があります。"],
+  ])("node[0].%sの不正値を拒否する", (field, value, error) => {
     expect(normalizeMapDocumentNode({ ...validNode, [field]: value }, 0))
-      .toEqual(expect.objectContaining({ ok: false }));
+      .toEqual({ ok: false, error });
   });
 });
