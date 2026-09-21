@@ -1,20 +1,9 @@
 import { validateMapDocumentGraph } from "@/domain/persistence/mapDocumentGraph";
 import { normalizeMapDocumentNode } from "@/domain/persistence/mapDocumentNode";
+import { projectMapDocumentNode } from "@/domain/persistence/mapDocumentNodeProjection";
 import type { MapDocumentResult, MapDocumentV1 } from "@/types/mapDocument";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
-
-function projectMapDocumentNode(node: Node): Node {
-  return {
-    id: node.id,
-    parentId: node.parentId,
-    x: node.x,
-    y: node.y,
-    width: node.width,
-    height: node.height,
-    label: node.label,
-  };
-}
 
 function projectMapDocument(
   nodes: readonly Node[],

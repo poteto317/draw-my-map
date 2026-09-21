@@ -9,11 +9,14 @@ import {
   connectNodeTree,
   moveNodeSubtree,
 } from "@/domain/nodes/nodeTree";
-import { createMonotonicIdGenerator } from "@/domain/nodes/nodeIdGenerator";
+import {
+  createNodeIdAllocator,
+  type NodeIdAllocator,
+} from "@/domain/nodes/nodeIdAllocator";
 import { useNodeLayoutState } from "@/hooks/useNodeLayoutState";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
-import type { MapDocumentV1 } from "@/types/mapDocument";
+import type { NodeMapState } from "@/types/nodeMapState";
 
 type UseNodesReturn = {
   nodes: Node[];
@@ -28,13 +31,13 @@ type UseNodesReturn = {
   connectNodes: (parentId: number, childId: number) => boolean;
   deleteNode: (id: number) => void;
   setLayoutMode: (mode: NodeLayoutMode) => void;
-  replaceMap: (document: MapDocumentV1) => void;
+  replaceMap: (state: NodeMapState) => void;
 };
 
 export function useNodes(): UseNodesReturn {
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
-  const generateNodeIdRef = useRef<(() => number) | null>(null);
-  generateNodeIdRef.current ??= createMonotonicIdGenerator();
+  const nodeIdAllocatorRef = useRef<NodeIdAllocator | null>(null);
+  nodeIdAllocatorRef.current ??= createNodeIdAllocator();
   const {
     nodes,
     layoutMode,
@@ -45,34 +48,26 @@ export function useNodes(): UseNodesReturn {
     replaceLayoutState,
   } = useNodeLayoutState();
 
-  const generateAvailableNodeId = useCallback((currentNodes: readonly Node[]) => {
-    const occupiedIds = new Set(currentNodes.map((node) => node.id));
-    const generateNodeId = generateNodeIdRef.current!;
-    let id = generateNodeId();
-    while (occupiedIds.has(id)) id = generateNodeId();
-    return id;
-  }, []);
-
-  const replaceMap = useCallback((document: MapDocumentV1) => {
-    generateNodeIdRef.current = createMonotonicIdGenerator();
-    replaceLayoutState(document.nodes, document.layoutMode);
+  const replaceMap = useCallback((state: NodeMapState) => {
+    nodeIdAllocatorRef.current!.reset();
+    replaceLayoutState(state.nodes, state.layoutMode);
     setSelectedNodeId(null);
   }, [replaceLayoutState]);
 
   const addNode = useCallback((x: number, y: number) => {
     let id!: number;
     applyTreeChange((currentNodes) => {
-      id = generateAvailableNodeId(currentNodes);
+      id = nodeIdAllocatorRef.current!.nextAvailableId(currentNodes);
       return [...currentNodes, createRootNode(id, x, y)];
     });
     return id;
-  }, [applyTreeChange, generateAvailableNodeId]);
+  }, [applyTreeChange]);
 
   const addChildNode = useCallback((parentId: number) => {
     let createdId: number | null = null;
     const applied = applyTreeChange((currentNodes) => {
       if (!currentNodes.some((node) => node.id === parentId)) return null;
-      const id = generateAvailableNodeId(currentNodes);
+      const id = nodeIdAllocatorRef.current!.nextAvailableId(currentNodes);
       const child = createChildNode(currentNodes, parentId, id);
       if (!child) return null;
 
@@ -83,13 +78,13 @@ export function useNodes(): UseNodesReturn {
 
     setSelectedNodeId(createdId);
     return createdId;
-  }, [applyTreeChange, generateAvailableNodeId]);
+  }, [applyTreeChange]);
 
   const addSiblingNode = useCallback((nodeId: number) => {
     let createdId: number | null = null;
     const applied = applyTreeChange((currentNodes) => {
       if (!currentNodes.some((node) => node.id === nodeId)) return null;
-      const id = generateAvailableNodeId(currentNodes);
+      const id = nodeIdAllocatorRef.current!.nextAvailableId(currentNodes);
       const sibling = createSiblingNode(currentNodes, nodeId, id);
       if (!sibling) return null;
 
@@ -100,7 +95,7 @@ export function useNodes(): UseNodesReturn {
 
     setSelectedNodeId(createdId);
     return createdId;
-  }, [applyTreeChange, generateAvailableNodeId]);
+  }, [applyTreeChange]);
 
   const selectNode = useCallback((id: number | null) => {
     setSelectedNodeId(id);

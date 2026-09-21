@@ -20,14 +20,32 @@ describe("normalizeMapDocumentNode", () => {
     });
   });
 
+  it.each([null, [], "node", 10, true])(
+    "オブジェクトではない入力 %p を拒否する",
+    (value) => {
+      expect(normalizeMapDocumentNode(value, 0)).toEqual({
+        ok: false,
+        error: "node[0]はオブジェクトである必要があります。",
+      });
+    },
+  );
+
   it.each([
     ["id", 0, "node[0].idは1以上の安全な整数である必要があります。"],
     ["id", 1.5, "node[0].idは1以上の安全な整数である必要があります。"],
     ["id", Number.MAX_SAFE_INTEGER + 1, "node[0].idは1以上の安全な整数である必要があります。"],
     ["parentId", -1, "node[0].parentIdはnullまたは1以上の安全な整数である必要があります。"],
+    ["parentId", 1.5, "node[0].parentIdはnullまたは1以上の安全な整数である必要があります。"],
+    ["parentId", Number.MAX_SAFE_INTEGER + 1, "node[0].parentIdはnullまたは1以上の安全な整数である必要があります。"],
+    ["x", "12", "node[0].xは有限の数値である必要があります。"],
     ["x", Number.NaN, "node[0].xは有限の数値である必要があります。"],
+    ["y", null, "node[0].yは有限の数値である必要があります。"],
     ["y", Number.POSITIVE_INFINITY, "node[0].yは有限の数値である必要があります。"],
+    ["width", "160", "node[0].widthは0より大きい有限の数値である必要があります。"],
+    ["width", Number.POSITIVE_INFINITY, "node[0].widthは0より大きい有限の数値である必要があります。"],
     ["width", 0, "node[0].widthは0より大きい有限の数値である必要があります。"],
+    ["height", Number.POSITIVE_INFINITY, "node[0].heightは0より大きい有限の数値である必要があります。"],
+    ["height", Number.NEGATIVE_INFINITY, "node[0].heightは0より大きい有限の数値である必要があります。"],
     ["height", -1, "node[0].heightは0より大きい有限の数値である必要があります。"],
     ["label", 123, "node[0].labelは文字列である必要があります。"],
   ])("node[0].%sの不正値を拒否する", (field, value, error) => {

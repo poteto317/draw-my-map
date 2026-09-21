@@ -3,11 +3,10 @@ import { flushSync } from "react-dom";
 import { renderHook, act } from "@testing-library/react";
 import { useNodes } from "@/hooks/useNodes";
 import { RECT_HEIGHT, RECT_WIDTH } from "@/config/shapes";
-import type { MapDocumentV1 } from "@/types/mapDocument";
+import type { NodeMapState } from "@/types/nodeMapState";
 
-function importedMap(): MapDocumentV1 {
+function importedMap(): NodeMapState {
   return {
-    version: 1,
     layoutMode: "manual",
     nodes: [
       { id: 1_000, parentId: null, x: 900, y: 800 },
@@ -54,7 +53,7 @@ describe("useNodes", () => {
       result.current.setLayoutMode("auto");
     });
 
-    act(() => result.current.replaceMap({ version: 1, layoutMode: "manual", nodes: [] }));
+    act(() => result.current.replaceMap({ layoutMode: "manual", nodes: [] }));
 
     expect(result.current.nodes).toEqual([]);
     expect(result.current.layoutMode).toBe("manual");

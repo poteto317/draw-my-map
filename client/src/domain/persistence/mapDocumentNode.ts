@@ -1,5 +1,6 @@
 import type { MapDocumentResult } from "@/types/mapDocument";
 import type { Node } from "@/types/node";
+import { projectMapDocumentNode } from "@/domain/persistence/mapDocumentNodeProjection";
 
 type NodeRecord = Record<string, unknown>;
 
@@ -49,7 +50,7 @@ export function normalizeMapDocumentNode(
 
   return {
     ok: true,
-    value: {
+    value: projectMapDocumentNode({
       id,
       parentId,
       x,
@@ -57,6 +58,6 @@ export function normalizeMapDocumentNode(
       width,
       height,
       label,
-    },
+    }),
   };
 }

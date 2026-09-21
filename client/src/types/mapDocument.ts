@@ -1,10 +1,7 @@
-import type { NodeLayoutMode } from "@/types/nodeLayout";
-import type { Node } from "@/types/node";
+import type { NodeMapState } from "@/types/nodeMapState";
 
-export type MapDocumentV1 = {
+export type MapDocumentV1 = NodeMapState & {
   version: 1;
-  layoutMode: NodeLayoutMode;
-  nodes: Node[];
 };
 
 export type MapDocumentResult<T> =
