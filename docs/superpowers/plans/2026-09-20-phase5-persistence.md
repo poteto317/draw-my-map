@@ -31,14 +31,19 @@
 
 ### PR 1: Codecと状態置換
 
+- Create: `client/src/types/nodeMapState.ts` — versionから独立したノード状態型
 - Create: `client/src/types/mapDocument.ts` — 永続化ドキュメント型と共通結果型
+- Create: `client/src/domain/persistence/mapDocumentNodeProjection.ts` — 永続化Nodeの既知フィールド投影
 - Create: `client/src/domain/persistence/mapDocumentNode.ts` — 未知のノード値の正規化
 - Create: `client/src/domain/persistence/mapDocumentGraph.ts` — ID・親参照・循環の検証
 - Create: `client/src/domain/persistence/mapDocumentCodec.ts` — JSON解析・生成の公開境界
 - Create: `client/src/domain/persistence/__tests__/mapDocumentNode.test.ts`
+- Create: `client/src/domain/persistence/__tests__/mapDocumentNodeProjection.test.ts`
 - Create: `client/src/domain/persistence/__tests__/mapDocumentGraph.test.ts`
 - Create: `client/src/domain/persistence/__tests__/mapDocumentCodec.test.ts`
 - Modify: `client/src/hooks/useNodeLayoutState.ts` — 検証済みstateの原子的置き換え
+- Create: `client/src/domain/nodes/nodeIdAllocator.ts` — ID生成器の再初期化と使用中ID回避
+- Create: `client/src/domain/nodes/__tests__/nodeIdAllocator.test.ts`
 - Modify: `client/src/hooks/useNodes.ts` — `replaceMap`と衝突しないID採番
 - Modify: `client/src/hooks/__tests__/useNodeLayoutState.test.ts`
 - Modify: `client/src/hooks/__tests__/useNodes.test.ts`
@@ -57,6 +62,8 @@
 - Create: `client/src/components/layout/__tests__/MapPersistenceNotice.test.tsx`
 - Modify: `client/src/components/layout/AppHeader.tsx` — 永続化UIの配置slot
 - Modify: `client/src/components/layout/__tests__/AppHeader.test.tsx`
+- Modify: `client/src/components/map/MapStage.tsx` — マップ置換時の一時UI状態reset
+- Modify: `client/src/components/map/__tests__/MapStage.test.tsx`
 - Modify: `client/src/app/page.tsx` — `useNodes`と永続化Hook/UIの配線
 - Modify: `client/src/app/__tests__/page.test.tsx`
 
@@ -65,11 +72,13 @@
 ### Task 1: 永続化型とノード正規化
 
 **Files:**
+- Create: `client/src/types/nodeMapState.ts`
 - Create: `client/src/types/mapDocument.ts`
 - Create: `client/src/domain/persistence/mapDocumentNode.ts`
 - Test: `client/src/domain/persistence/__tests__/mapDocumentNode.test.ts`
 
 **Interfaces:**
+- Produces: `NodeMapState`
 - Produces: `MapDocumentV1`
 - Produces: `MapDocumentResult<T> = { ok: true; value: T } | { ok: false; error: string }`
 - Produces: `normalizeMapDocumentNode(value: unknown, index: number): MapDocumentResult<Node>`
@@ -122,10 +131,13 @@ Expected: FAIL because `mapDocumentNode` and `mapDocument` do not exist.
 - [ ] **Step 3: Add types and minimal node normalization**
 
 ```ts
-export type MapDocumentV1 = {
-  version: 1;
+export type NodeMapState = {
   layoutMode: NodeLayoutMode;
   nodes: Node[];
+};
+
+export type MapDocumentV1 = NodeMapState & {
+  version: 1;
 };
 
 export type MapDocumentResult<T> =
@@ -145,6 +157,7 @@ Expected: PASS.
 
 ```bash
 git add client/src/types/mapDocument.ts \
+  client/src/types/nodeMapState.ts \
   client/src/domain/persistence/mapDocumentNode.ts \
   client/src/domain/persistence/__tests__/mapDocumentNode.test.ts
 git commit -m "feat(persistence): 保存ノードの正規化を追加"
@@ -258,7 +271,10 @@ git commit -m "feat(persistence): 保存ツリーの整合性検証を追加"
 ### Task 3: Map Document Codec
 
 **Files:**
+- Create: `client/src/domain/persistence/mapDocumentNodeProjection.ts`
 - Create: `client/src/domain/persistence/mapDocumentCodec.ts`
+- Modify: `client/src/domain/persistence/mapDocumentNode.ts`
+- Test: `client/src/domain/persistence/__tests__/mapDocumentNodeProjection.test.ts`
 - Test: `client/src/domain/persistence/__tests__/mapDocumentCodec.test.ts`
 
 **Interfaces:**
@@ -268,7 +284,27 @@ git commit -m "feat(persistence): 保存ツリーの整合性検証を追加"
 - Produces: `serializeMapDocument(document: MapDocumentV1): string`
 - Produces: `parseMapDocumentJson(json: string): MapDocumentResult<MapDocumentV1>`
 
-- [ ] **Step 1: Write failing Codec tests**
+- [ ] **Step 1: Write a failing node-projection test**
+
+Create `mapDocumentNodeProjection.test.ts`. Pass a node-like object with an extra runtime field and assert that the result is a new object containing exactly the seven persisted `Node` fields.
+
+- [ ] **Step 2: Run the projection test and verify RED**
+
+Run: `npm test -- --runInBand src/domain/persistence/__tests__/mapDocumentNodeProjection.test.ts`
+
+Expected: FAIL because `mapDocumentNodeProjection.ts` does not exist.
+
+- [ ] **Step 3: Implement and share the node projection**
+
+Implement `projectMapDocumentNode(node)` in `mapDocumentNodeProjection.ts`. Use it from both `normalizeMapDocumentNode` and the Codec document projection so validation and export share the same persisted-field boundary.
+
+- [ ] **Step 4: Run the projection and normalizer tests and verify GREEN**
+
+Run: `npm test -- --runInBand src/domain/persistence/__tests__/mapDocumentNodeProjection.test.ts src/domain/persistence/__tests__/mapDocumentNode.test.ts`
+
+Expected: both suites PASS.
+
+- [ ] **Step 5: Write failing Codec tests**
 
 Cover empty and nested round trips, pretty JSON with trailing newline, invalid JSON, non-object root, unsupported version, invalid mode, non-array nodes, invalid node, and invalid graph. Assert that parsing creates new node objects and does not mutate the source object.
 
@@ -291,19 +327,34 @@ it("未対応versionを拒否する", () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [ ] **Step 6: Run Codec tests and verify RED**
 
 Run: `npm test -- --runInBand src/domain/persistence/__tests__/mapDocumentCodec.test.ts`
 
 Expected: FAIL because the Codec does not exist.
 
-- [ ] **Step 3: Implement minimal Codec orchestration**
+- [ ] **Step 7: Implement minimal Codec orchestration**
 
 `parseMapDocumentJson` must catch only JSON parsing errors at the parse boundary, validate the top-level record, normalize every node, then validate the complete graph. `createMapDocument` copies the node array and each node so export snapshots cannot be mutated by later state changes.
 
 ```ts
+function projectMapDocument(
+  nodes: readonly Node[],
+  layoutMode: NodeLayoutMode,
+): MapDocumentV1 {
+  return {
+    version: 1,
+    layoutMode,
+    nodes: nodes.map(projectMapDocumentNode),
+  };
+}
+
 export function serializeMapDocument(document: MapDocumentV1): string {
-  return `${JSON.stringify(document, null, 2)}\n`;
+  return `${JSON.stringify(
+    projectMapDocument(document.nodes, document.layoutMode),
+    null,
+    2,
+  )}\n`;
 }
 
 export function parseMapDocumentJson(
@@ -345,16 +396,19 @@ export function parseMapDocumentJson(
 }
 ```
 
-- [ ] **Step 4: Run persistence domain tests**
+- [ ] **Step 8: Run persistence domain tests**
 
 Run: `npm test -- --runInBand src/domain/persistence/__tests__`
 
 Expected: all persistence domain suites PASS.
 
-- [ ] **Step 5: Commit Task 3**
+- [ ] **Step 9: Commit Task 3**
 
 ```bash
 git add client/src/domain/persistence/mapDocumentCodec.ts \
+  client/src/domain/persistence/mapDocumentNode.ts \
+  client/src/domain/persistence/mapDocumentNodeProjection.ts \
+  client/src/domain/persistence/__tests__/mapDocumentNodeProjection.test.ts \
   client/src/domain/persistence/__tests__/mapDocumentCodec.test.ts
 git commit -m "feat(persistence): マップJSON形式を追加"
 ```
@@ -364,6 +418,8 @@ git commit -m "feat(persistence): マップJSON形式を追加"
 ### Task 4: 原子的状態置換とID衝突防止
 
 **Files:**
+- Create: `client/src/domain/nodes/nodeIdAllocator.ts`
+- Test: `client/src/domain/nodes/__tests__/nodeIdAllocator.test.ts`
 - Modify: `client/src/hooks/useNodeLayoutState.ts`
 - Modify: `client/src/hooks/useNodes.ts`
 - Modify: `client/src/hooks/__tests__/useNodeLayoutState.test.ts`
@@ -371,7 +427,7 @@ git commit -m "feat(persistence): マップJSON形式を追加"
 
 **Interfaces:**
 - Produces from `useNodeLayoutState`: `replaceLayoutState(nodes: Node[], mode: NodeLayoutMode): void`
-- Produces from `useNodes`: `replaceMap(document: MapDocumentV1): void`
+- Produces from `useNodes`: `replaceMap(state: NodeMapState): void`
 
 - [ ] **Step 1: Write failing layout-state replacement tests**
 
@@ -404,7 +460,27 @@ Run: `npm test -- --runInBand src/hooks/__tests__/useNodeLayoutState.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 5: Write failing `useNodes.replaceMap` and ID tests**
+- [ ] **Step 5: Write failing allocator unit tests**
+
+Create `nodeIdAllocator.test.ts`. Verify that occupied IDs are skipped without mutating the input and that `reset()` obtains a fresh generator.
+
+- [ ] **Step 6: Run the allocator test and verify RED**
+
+Run: `npm test -- --runInBand src/domain/nodes/__tests__/nodeIdAllocator.test.ts`
+
+Expected: FAIL because `nodeIdAllocator.ts` does not exist.
+
+- [ ] **Step 7: Implement the allocator**
+
+Implement generator ownership, reset, and occupied-ID skipping in `createNodeIdAllocator`. Keep it independent of React and persistence types.
+
+- [ ] **Step 8: Run the allocator test and verify GREEN**
+
+Run: `npm test -- --runInBand src/domain/nodes/__tests__/nodeIdAllocator.test.ts`
+
+Expected: PASS.
+
+- [ ] **Step 9: Write failing `useNodes.replaceMap` and ID integration tests**
 
 Test selection clearing and collision skipping for root, child, and sibling additions. Mock `Date.now()` to an imported ID so the regression is deterministic.
 
@@ -413,7 +489,6 @@ it("インポート時に選択を解除し使用中IDを飛ばす", () => {
   jest.spyOn(Date, "now").mockReturnValue(1_000);
   const { result } = renderHook(() => useNodes());
   act(() => result.current.replaceMap({
-    version: 1,
     layoutMode: "manual",
     nodes: [node(1_000, null, 10, 20), node(1_001, 1_000, 200, 20)],
   }));
@@ -424,35 +499,37 @@ it("インポート時に選択を解除し使用中IDを飛ばす", () => {
 });
 ```
 
-- [ ] **Step 6: Run `useNodes` tests and verify RED**
+- [ ] **Step 10: Run `useNodes` tests and verify RED**
 
 Run: `npm test -- --runInBand src/hooks/__tests__/useNodes.test.ts --testNamePattern='インポート'`
 
 Expected: FAIL because `replaceMap` is missing.
 
-- [ ] **Step 7: Implement `replaceMap` and collision skipping**
+- [ ] **Step 11: Implement `replaceMap` and delegate collision skipping**
 
-Reset `generateNodeIdRef.current` with `createMonotonicIdGenerator()` inside `replaceMap`. Add a focused helper that receives current nodes, repeatedly asks the generator for an ID, and skips IDs in a `Set`. Move root ID allocation inside `applyTreeChange` so same-batch imports and additions observe the latest node set. Preserve existing public return types.
+Delegate generator ownership, reset, and occupied-ID skipping to `nodeIdAllocator.ts`. Call the allocator reset inside `replaceMap`, and ask it for the next available ID from the latest nodes inside each `applyTreeChange`. Keep root ID allocation inside `applyTreeChange` so same-batch imports and additions observe the latest node set. Preserve existing public return types.
 
-- [ ] **Step 8: Run Hook suites**
+- [ ] **Step 12: Run Hook suites**
 
 Run: `npm test -- --runInBand src/hooks/__tests__/useNodeLayoutState.test.ts src/hooks/__tests__/useNodes.test.ts`
 
 Expected: both suites PASS.
 
-- [ ] **Step 9: Run PR 1 verification**
+- [ ] **Step 13: Run PR 1 verification**
 
 Run: `npm run verify`
 
 Expected: Tailwind scan, ESLint, typecheck, all Jest suites, and Next.js build PASS.
 
-- [ ] **Step 10: Commit Task 4**
+- [ ] **Step 14: Commit Task 4**
 
 ```bash
 git add client/src/hooks/useNodeLayoutState.ts \
   client/src/hooks/useNodes.ts \
   client/src/hooks/__tests__/useNodeLayoutState.test.ts \
-  client/src/hooks/__tests__/useNodes.test.ts
+  client/src/hooks/__tests__/useNodes.test.ts \
+  client/src/domain/nodes/nodeIdAllocator.ts \
+  client/src/domain/nodes/__tests__/nodeIdAllocator.test.ts
 git commit -m "feat(persistence): マップ全体の復元を追加"
 ```
 
@@ -534,7 +611,17 @@ expect(createMapJsonFileName(new Date(2026, 8, 20, 12, 34, 56)))
 
 - [ ] **Step 2: Write failing file-read tests**
 
-Use a real `File` for success. Mock `file.text()` rejection for failure and expect「JSONファイルを読み取れませんでした。」.
+Use a real `File` object, but define its `text` method explicitly because the pinned Jest jsdom environment does not implement `File.prototype.text()`. Resolve it with JSON for success, reject it for failure, and expect「JSONファイルを読み取れませんでした。」on rejection.
+
+```ts
+const file = new File([json], "map.json", { type: "application/json" });
+Object.defineProperty(file, "text", {
+  configurable: true,
+  value: jest.fn().mockResolvedValue(json),
+});
+```
+
+Keep production code on the browser-standard `File.text()` API; this shim belongs only to the Jest test fixture.
 
 - [ ] **Step 3: Run tests and verify RED**
 
@@ -571,14 +658,14 @@ git commit -m "feat(persistence): JSONファイル入出力境界を追加"
 **Interfaces:**
 - Consumes: `nodes: readonly Node[]`
 - Consumes: `layoutMode: NodeLayoutMode`
-- Consumes: `replaceMap(document: MapDocumentV1): void`
+- Consumes: `replaceMap(state: NodeMapState): void`
 - Produces: `exportJson(): void`
 - Produces: `importJsonFile(file: File): Promise<void>`
 - Produces: `notice: { kind: "status" | "warning" | "error"; message: string } | null`
 
 - [ ] **Step 1: Write failing restoration tests**
 
-Use `renderHook`, a storage double, and a stable `replaceMap` mock. Cover no value, valid value, invalid value, storage read exception, and rerender/Strict Mode behavior. For invalid storage, advance timers and assert `setItem` was not called.
+Use `renderHook`, a storage double, and a stable `replaceMap` mock. Cover no value, valid value, invalid value, storage read exception, `window.localStorage` property-access exception, and rerender/Strict Mode behavior. For invalid storage, advance timers and assert `setItem` was not called. The property-access exception test must prove the Hook reports a warning instead of letting the effect throw.
 
 ```ts
 it("壊れた保存値を空マップで上書きしない", () => {
@@ -602,17 +689,17 @@ Run: `npm test -- --runInBand src/hooks/__tests__/useMapPersistence.test.tsx --t
 
 Expected: FAIL because the hook does not exist.
 
-- [ ] **Step 3: Implement one-time restoration and baseline suppression**
+- [ ] **Step 3: Implement one-time restoration and persisted-snapshot suppression**
 
-Use a ref to prevent repeated restoration. Record the serialized post-restoration snapshot in `restoredSnapshotRef`; while the current serialized snapshot equals that baseline, do not auto-save. This rule must also cover no stored value and invalid stored value, so Strict Mode cannot trigger an empty overwrite.
+Use a ref to prevent repeated restoration. Record the serialized post-restoration snapshot in `lastPersistedSnapshotRef`; while the current serialized snapshot equals the last successfully persisted value, do not auto-save. Initialize this ref after every restoration outcome, including no stored value and invalid stored value, so Strict Mode cannot trigger an empty overwrite. Update it after each successful storage write, never after a failed write.
 
 - [ ] **Step 4: Write failing debounce tests**
 
-Rerender with three different snapshots within 300ms, assert no early write, then assert exactly one write containing the latest label after 300ms. Verify unmount cancels the timer and write exceptions create an error notice.
+Rerender with three different snapshots within 300ms, assert no early write, then assert exactly one write containing the latest label after 300ms. Add an A → B → A test that waits for the B write before returning to A and proves A is written again; this prevents comparison against a permanent restoration baseline. Verify unmount cancels the timer and write exceptions create an error notice without advancing `lastPersistedSnapshotRef`.
 
 - [ ] **Step 5: Implement debounced auto-save**
 
-After hydration, serialize each snapshot. If it differs from the restoration baseline, schedule a 300ms timer; cleanup clears it. Call `writeStoredMapJson` only inside the timer.
+After hydration, serialize each snapshot. If it differs from `lastPersistedSnapshotRef.current`, schedule a 300ms timer; cleanup clears it. Call `writeStoredMapJson` only inside the timer and update the ref only when that write succeeds.
 
 - [ ] **Step 6: Write failing import/export tests**
 
@@ -630,7 +717,7 @@ type UseMapPersistenceDependencies = {
 };
 ```
 
-Resolve `storage ?? window.localStorage` only inside mount/save effects so Next.js server rendering never reads `window`. Catch download exceptions at the hook boundary. Keep notice state independent from map state.
+Resolve `storage ?? window.localStorage` only inside mount/save effects so Next.js server rendering never reads `window`. Put both property access and adapter calls inside the same `try`/result boundary because reading `window.localStorage` itself can throw `SecurityError`. Catch download exceptions at the hook boundary. Keep notice state independent from map state.
 
 - [ ] **Step 8: Run the complete Hook suite**
 
@@ -683,7 +770,7 @@ Expected: FAIL because the component does not exist.
 
 - [ ] **Step 3: Implement controls**
 
-Use a ref for the hidden file input. The visible read button calls `.click()`. The input `onChange` awaits `onImport(file)` in `try/finally` and always resets `event.currentTarget.value`.
+Use a ref for the hidden file input. The visible read button calls `.click()`. At the start of the input `onChange`, store `const input = event.currentTarget` before awaiting. Await `onImport(file)` in `try/finally` and always reset `input.value`; do not access `event.currentTarget` after the async boundary.
 
 - [ ] **Step 4: Write failing notice tests**
 
@@ -726,26 +813,40 @@ git commit -m "feat(persistence): JSON入出力UIを追加"
 **Files:**
 - Modify: `client/src/app/page.tsx`
 - Modify: `client/src/app/__tests__/page.test.tsx`
+- Modify: `client/src/components/map/MapStage.tsx`
+- Modify: `client/src/components/map/__tests__/MapStage.test.tsx`
 
 **Interfaces:**
 - Consumes: `useNodes().nodes`, `layoutMode`, `replaceMap`
 - Consumes: `useMapPersistence({ nodes, layoutMode, replaceMap })`
 - Renders: `MapPersistenceControls` and `MapPersistenceNotice` through `AppHeader`
+- Produces: `MapStage.resetRevision` for clearing transient canvas state after a successful map replacement
 
 - [ ] **Step 1: Write failing page wiring tests**
 
-Remove the existing `AppHeader` mock so the real header, controls, notice, `useNodes`, and `useMapPersistence` run together. Keep only the `MapStage` mock, and make it render `nodes` and `selectedNodeId` into test outputs while exposing its existing callbacks as buttons. Mock only `downloadMapJson` to avoid an actual browser download. Clear `localStorage` and restore timers/mocks in `beforeEach` / `afterEach`. Prove export receives the current snapshot, a valid selected file replaces nodes and mode, and an invalid selected file leaves the rendered node snapshot unchanged while showing an alert.
+Remove the existing `AppHeader` mock so the real header, controls, notice, `useNodes`, and `useMapPersistence` run together. Keep only the `MapStage` mock, and make it render `nodes`, `selectedNodeId`, and `resetRevision` into test outputs while exposing its existing callbacks as buttons. Mock only `downloadMapJson` to avoid an actual browser download. Clear `localStorage` and restore timers/mocks in `beforeEach` / `afterEach`. Prove export receives the current snapshot, a valid selected file replaces nodes and mode and increments `resetRevision`, and an invalid selected file leaves the rendered node snapshot and revision unchanged while showing an alert.
+
+In `MapStage.test.tsx`, start label editing, change the draft, change the viewport, and begin a pointer gesture. Rerender with the same node ID but an incremented `resetRevision`; assert the editor disappears without committing the stale draft, the viewport returns to `INITIAL_VIEWPORT`, and completing the old gesture cannot move or connect a node. Include a parent test harness whose `useLayoutEffect` dispatches the old pointer-up during the revision commit; this must observe the gesture as already cancelled, so replacing the reset with a passive `useEffect` makes the test fail.
 
 - [ ] **Step 2: Run page tests and verify RED**
 
-Run: `npm test -- --runInBand src/app/__tests__/page.test.tsx`
+Run: `npm test -- --runInBand src/app/__tests__/page.test.tsx src/components/map/__tests__/MapStage.test.tsx`
 
-Expected: FAIL because `page.tsx` does not connect persistence.
+Expected: FAIL because `page.tsx` does not connect persistence and `MapStage` has no reset contract.
 
 - [ ] **Step 3: Connect page state and UI**
 
 ```tsx
-const persistence = useMapPersistence({ nodes, layoutMode, replaceMap });
+const [mapResetRevision, setMapResetRevision] = useState(0);
+const replacePersistedMap = useCallback((state: NodeMapState) => {
+  replaceMap(state);
+  setMapResetRevision((revision) => revision + 1);
+}, [replaceMap]);
+const persistence = useMapPersistence({
+  nodes,
+  layoutMode,
+  replaceMap: replacePersistedMap,
+});
 
 <AppHeader
   layoutMode={layoutMode}
@@ -758,11 +859,27 @@ const persistence = useMapPersistence({ nodes, layoutMode, replaceMap });
   )}
   persistenceNotice={<MapPersistenceNotice notice={persistence.notice} />}
 />
+
+<MapStage
+  resetRevision={mapResetRevision}
+  nodes={nodes}
+  selectedNodeId={selectedNodeId}
+  onDoubleClick={addNode}
+  onAddChildNode={addChildNode}
+  onAddSiblingNode={addSiblingNode}
+  onSelectNode={selectNode}
+  onUpdateLabel={updateNodeLabel}
+  onMoveNode={moveNode}
+  onConnectNodes={connectNodes}
+  onDeleteNode={deleteNode}
+/>
 ```
+
+On a `resetRevision` change, `MapStage` must use `useLayoutEffect` to synchronously cancel label editing without commit, cancel the active gesture/connection target, and call `setViewport(INITIAL_VIEWPORT)` before paint or browser input can observe the replacement. Keep the reset inside `MapStage`; `page.tsx` only advances the revision after a validated replacement.
 
 - [ ] **Step 4: Run page and persistence suites**
 
-Run: `npm test -- --runInBand src/app/__tests__/page.test.tsx src/hooks/__tests__/useMapPersistence.test.tsx src/components/layout/__tests__`
+Run: `npm test -- --runInBand src/app/__tests__/page.test.tsx src/hooks/__tests__/useMapPersistence.test.tsx src/components/layout/__tests__ src/components/map/__tests__/MapStage.test.tsx`
 
 Expected: all selected suites PASS.
 
@@ -771,9 +888,11 @@ Expected: all selected suites PASS.
 Temporarily remove each implementation branch, one at a time, and verify the named test fails before restoring it:
 
 1. Remove graph cycle rejection → cycle test fails.
-2. Remove restoration baseline suppression → invalid-storage overwrite test fails.
-3. Remove input reset → repeated-file test fails.
-4. Remove `replaceMap` selection clearing → selection test fails.
+2. Remove the equality guard against `lastPersistedSnapshotRef` → invalid-storage overwrite test fails.
+3. Stop updating `lastPersistedSnapshotRef` after a successful write, or compare permanently against the restoration snapshot → A → B → A test fails.
+4. Remove input reset → repeated-file test fails.
+5. Remove `replaceMap` selection clearing → selection test fails.
+6. Remove the `resetRevision` reaction → stale-edit/viewport/gesture reset test fails.
 
 After restoration, rerun the affected suites and ensure they pass. Do not commit mutation code.
 
@@ -794,17 +913,22 @@ Expected:
 Run:
 
 ```bash
-git diff --check
+git diff --check origin/main
 git status --short
-git diff --stat origin/main...HEAD
+git diff --stat origin/main
+git diff origin/main
+git ls-files --others --exclude-standard
 ```
 
-Confirm no generated output, temporary file, mutation code, or unrelated change remains.
+Review the tracked diff and every path listed as untracked. Confirm no generated output, temporary file, mutation code, or unrelated change remains.
 
 - [ ] **Step 8: Commit Task 9**
 
 ```bash
-git add client/src/app/page.tsx client/src/app/__tests__/page.test.tsx
+git add client/src/app/page.tsx \
+  client/src/app/__tests__/page.test.tsx \
+  client/src/components/map/MapStage.tsx \
+  client/src/components/map/__tests__/MapStage.test.tsx
 git commit -m "feat(persistence): マップ保存機能を画面へ統合"
 ```
 

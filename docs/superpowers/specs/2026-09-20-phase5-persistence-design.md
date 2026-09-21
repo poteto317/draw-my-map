@@ -41,13 +41,16 @@ Phase 5の前半として次を実装する。
 
 ## ドキュメント形式
 
-初期形式を`MapDocumentV1`として定義する。
+ノード状態は保存形式のversionから独立した`NodeMapState`として定義し、初期の永続化形式を`MapDocumentV1`として定義する。
 
 ```ts
-type MapDocumentV1 = {
-  version: 1;
+type NodeMapState = {
   layoutMode: "manual" | "auto";
   nodes: Node[];
+};
+
+type MapDocumentV1 = NodeMapState & {
+  version: 1;
 };
 ```
 
@@ -91,7 +94,7 @@ Codecの結果は成功値または日本語のエラーメッセージを持つ
 
 ### Map Document型
 
-永続化固有の型を`client/src/types/mapDocument.ts`へ置く。`Node`と`NodeLayoutMode`は既存の型を参照し、CodecやUIからHookの内部型をimportしない。
+ノード状態型`NodeMapState`を`client/src/types/nodeMapState.ts`へ置く。永続化固有の型は`client/src/types/mapDocument.ts`へ置き、`MapDocumentV1`は`NodeMapState`へversionを追加する。CodecやUIからHookの内部型をimportせず、Hookも永続化形式へ依存しない。
 
 ### Map Document Codec
 
@@ -104,13 +107,15 @@ Codecの結果は成功値または日本語のエラーメッセージを持つ
 
 DOM、`File`、`Blob`、`localStorage`、React stateには依存しない。
 
+永続化対象となるNodeの7フィールドへの投影は`mapDocumentNodeProjection.ts`へ分離し、JSON生成と入力正規化が同じフィールド定義を利用する。
+
 ### `useNodeLayoutState`
 
 検証済みのノード一覧とレイアウトモードを同時に置き換える原子的なcommandを提供する。内部のstateと同期Refを同じcommand内で更新する。復元時は自動レイアウトを再計算せず、保存座標を維持する。
 
 ### `useNodes`
 
-検証済みマップ全体を受け取る`replaceMap` commandを公開する。
+検証済み`NodeMapState`を受け取る`replaceMap` commandを公開する。永続化形式のversionは扱わない。
 
 - ノードとレイアウトモードを原子的に置き換える
 - 選択中ノードを解除する
@@ -118,6 +123,7 @@ DOM、`File`、`Blob`、`localStorage`、React stateには依存しない。
 - 置き換え後に追加するルート、子、兄弟のIDが既存IDと衝突しないことを保証する
 
 `useNodes`はJSON文字列、ファイル、`localStorage`を扱わない。
+ID生成器の保持、再初期化、使用中IDの回避は`nodeIdAllocator.ts`へ分離し、`useNodes`は状態変更commandの調停だけを行う。
 
 ### ブラウザ保存アダプター
 
@@ -157,9 +163,11 @@ DOM、`File`、`Blob`、`localStorage`、React stateには依存しない。
 
 通知表示は操作部品から分離し、`role="status"`または`role="alert"`と`aria-live`で読み上げ可能にする。`AppHeader`はレイアウトモードUIと永続化UIを配置する責務だけを持ち、CodecやStorage APIを扱わない。
 
+`MapStage`はマップ全体の置き換えを表す`resetRevision`を受け取る。値が変わったときは、`useLayoutEffect`でpaint前に、編集中ラベルとdraft、パン・ズーム、ドラッグ・接続などのポインター操作中状態を同期的に破棄して標準viewportへ戻す。永続化HookはPixiJSやキャンバス内部状態を直接扱わない。
+
 ### `page.tsx`
 
-`page.tsx`は`useNodes`の現在状態と`replaceMap`を`useMapPersistence`へ接続し、返されたcommandと通知をヘッダーUIへ渡す。マップの検証、ファイル処理、保存処理を直接実装しない。
+`page.tsx`は`useNodes`の現在状態と`replaceMap`を`useMapPersistence`へ接続し、返されたcommandと通知をヘッダーUIへ渡す。検証済みマップの置き換え成功ごとに`resetRevision`を進めて`MapStage`へ渡し、ドメイン状態と一時UI状態のリセットを調停する。マップの検証、ファイル処理、保存処理を直接実装しない。
 
 ## データフロー
 
@@ -192,8 +200,9 @@ DOM、`File`、`Blob`、`localStorage`、React stateには依存しない。
 1. 選択されたファイルを文字列として読む。
 2. 共通Codecで全体を解析・検証する。
 3. 正常時だけ`replaceMap`を1回呼ぶ。
-4. 選択を解除し、次の自動保存でlocalStorageへ反映する。
-5. 不正JSON、未対応version、不正ツリー、読み込み失敗時は現在状態を一切変更せず、日本語エラーを表示する。
+4. 選択、ラベル編集draft、viewport、ポインター操作中状態をリセットする。
+5. 次の自動保存でlocalStorageへ反映する。
+6. 不正JSON、未対応version、不正ツリー、読み込み失敗時は現在状態と一時UI状態を一切変更せず、日本語エラーを表示する。
 
 ## エラーと通知
 
