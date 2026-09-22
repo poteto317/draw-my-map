@@ -1,0 +1,199 @@
+# Phase 5 画像エクスポート設計
+
+## 目的
+
+現在のマインドマップ全体を、白背景のPNGまたはSVGとしてダウンロードできるようにする。画面のパン・ズーム、選択、編集、接続操作などの一時状態に依存せず、マップの内容だけを再現性のある形で書き出す。
+
+## スコープ
+
+次を実装する。
+
+- 全ノードが収まる範囲のSVG書き出し
+- 同じSVGを2倍解像度でラスタライズしたPNG書き出し
+- 白背景、接続線、ノード、ラベルの出力
+- 日時付きファイル名
+- 空マップと書き出し失敗の日本語通知
+- PNG生成中の重複実行防止
+
+次は対象外とする。
+
+- 現在表示中のviewport範囲だけの書き出し
+- 透過背景の選択
+- 出力倍率、余白、色、用紙サイズの設定UI
+- JPEG、PDF、WebPなどPNG / SVG以外の形式
+- 選択枠、編集中のラベル入力、接続先強調、カーソルの出力
+
+## 出力仕様
+
+### 出力範囲
+
+- 全ノードの`x`、`y`、`width`、`height`から外接矩形を求める。
+- 外接矩形の四方に32pxの余白を追加する。
+- ノードが負の座標にあっても、SVG内で左上を原点へ平行移動し、内容を切り取らない。
+- 現在のviewportと画面サイズは出力範囲に使用しない。
+- ノードが0件の場合は出力範囲を作らず、UI層が書き出しを中断する。
+
+### 描画要素
+
+- 背景は常に白とする。
+- 接続線は現在の`getEdgeCurve`が返すベジェ曲線を使い、色は`#64748b`、幅は2pxとする。
+- ノードは白填り、`#3b82f6`の2px枠線とする。選択や接続候補による色の変化は含めない。
+- ラベルが空のノードは画面表示と同じく「新しいノード」と出力する。
+- ラベルは14px、行高18px、Arial / Helvetica / sans-serif、`#27272a`、中央揃えとする。
+- ラベルはノードの左右に8pxずつ余白を保ち、ノード幅を超える行を改行する。入力中の改行も維持する。
+- 長い単語や日本語のように空白がない文字列は、文字単位で分割してノード幅内に収める。
+- ラベルはノードの中央を基準に複数行全体を垂直方向へ中央配置する。
+
+### SVG
+
+- `xmlns="http://www.w3.org/2000/svg"`を持つSVG 1.1として、単独で表示できる文字列を生成する。
+- `width`、`height`、`viewBox`を明示する。
+- 背景、接続線、ノード、ラベルの順で描画する。
+- ラベルをXMLとしてエスケープし、`<`、`>`、`&`、引用符を構造として解釈させない。
+- MIME typeは`image/svg+xml;charset=utf-8`とする。
+- ファイル名は`draw-my-map-YYYYMMDD-HHmmss.svg`とする。
+
+### PNG
+
+- 共通のSVG文字列をBlob URLにし、`Image`でデコードする。
+- Canvasのピクセル寸法はSVGの論理寸法の2倍とする。
+- 2D contextに`scale(2, 2)`を適用し、SVGを論理寸法で描画する。
+- `canvas.toBlob`を`image/png`で呼び出す。`null`の場合は失敗とする。
+- ファイル名は`draw-my-map-YYYYMMDD-HHmmss.png`とする。
+- SVG読み込みの成否にかかわらず、SVG用のBlob URLを解放する。
+
+## 責務境界
+
+### 出力範囲
+
+`client/src/domain/imageExport/mapExportBounds.ts`は、ノード座標から出力用の矩形と平行移動量を返す純粋関数だけを持つ。DOM、Canvas、PixiJSへ依存しない。
+
+### テキスト改行
+
+`client/src/domain/imageExport/mapExportText.ts`は、ラベルと最大幅、文字列幅の測定関数を受け取り、SVGへ出力する行配列を返す。測定方法を注入することで、改行アルゴリズムをDOMから分離する。
+
+`client/src/services/imageExport/mapTextMeasurement.ts`は、非表示Canvasの2D contextを使って指定文字列の幅を測定する。contextが取得できない場合は書き出し失敗とする。
+
+### SVGドキュメント
+
+`client/src/domain/imageExport/mapSvgDocument.ts`は、ノード、出力範囲、テキスト測定関数からSVG文字列を生成する。接続線の形状は既存の`getEdgeCurve`を再利用する。ダウンロード、Canvas、React stateは扱わない。
+
+### ダウンロード
+
+`client/src/services/imageExport/mapImageDownload.ts`は、Blobを指定名でダウンロードする共通処理と、SVGのBlob作成だけを担当する。利用後のダウンロード用Blob URLは`finally`で解放する。SVGの構築やPNG変換は行わない。
+
+### PNGラスタライズ
+
+`client/src/services/imageExport/mapPngRasterizer.ts`は、SVG文字列、論理幅、論理高さを受け取り、2倍解像度のPNG Blobを非同期で返す。Imageのデコード、Canvas描画、PNGエンコード、中間Blob URLの解放だけを担当する。
+
+### React Hook
+
+`client/src/hooks/useMapImageExport.ts`は、現在のノードを受け取り、`exportSvg`、`exportPng`、`isExportingPng`、`notice`を返す。範囲計算、SVG生成、PNG変換、ダウンロードの調停と、利用者向け通知への変換を行う。
+
+- SVG成功: 「SVGファイルを書き出しました。」
+- PNG成功: 「PNGファイルを書き出しました。」
+- 空マップ: 「書き出すノードがありません。」
+- SVG失敗: 「SVGファイルを書き出せませんでした。」
+- PNG失敗: 「PNGファイルを書き出せませんでした。」
+
+PNG処理中に再度`exportPng`が呼ばれた場合は新しい処理を開始しない。ノード配列は変更せず、画像出力は自動保存に影響させない。
+
+### UI
+
+`client/src/components/layout/MapImageExportControls.tsx`は、「PNG書き出し」と「SVG書き出し」の2ボタンを表示する。両方を`type="button"`とし、PNG処理中はPNGボタンだけをdisabledにする。
+
+通知は画像出力固有の表示コンポーネントを増やさず、既存の通知表示を汎用の`MapOperationNotice`へ改名して共用する。通知型も`OperationNotice`として永続化Hookと画像出力Hookの両方が使う。各Hookの通知stateは独立させ、`page.tsx`が両方をヘッダーの通知領域へ配置する。
+
+`AppHeader`はデータ操作と通知を`ReactNode`として配置するだけとし、画像生成やHookの状態を直接扱わない。
+
+## データフロー
+
+### SVG書き出し
+
+1. 利用者が「SVG書き出し」を押す。
+2. Hookがノードの有無を確認する。
+3. 出力範囲と座標変換を計算する。
+4. Canvasの文字幅測定を使ってラベルの行を決定する。
+5. エスケープ済みのSVG文字列を作る。
+6. SVG Blobを日時付きファイルとしてダウンロードする。
+7. 成功または失敗の通知を更新する。
+
+### PNG書き出し
+
+1. 利用者が「PNG書き出し」を押す。
+2. HookがPNG生成中でないことと、ノードの有無を確認する。
+3. SVG書き出しと同じ範囲・改行・SVG生成を行う。
+4. `isExportingPng`を`true`にする。
+5. SVGを2倍解像度のPNG Blobへ変換する。
+6. PNG Blobを日時付きファイルとしてダウンロードする。
+7. `finally`で`isExportingPng`を`false`に戻し、成功または失敗の通知を確定する。
+
+## エラー処理
+
+- ドメイン層はノードがない場合に`null`の出力範囲を返し、例外で通常分岐を表さない。
+- Canvas 2D contextを取得できない場合は画像生成失敗とする。
+- SVGのImage読み込みに失敗した場合はPromiseをrejectし、Hookが日本語通知へ変換する。
+- `canvas.toBlob`が`null`を返した場合はPromiseをrejectする。
+- Blob URLは全経路で解放する。
+- ブラウザがサポートできない大きさのCanvasやメモリ不足はPNG失敗として扱い、SVG書き出しは独立して利用可能に保つ。
+- 内部例外の文面やstack traceを利用者へ表示しない。
+
+## テスト方針
+
+実装コードより先に対応する失敗テストを追加する。
+
+### 範囲計算
+
+- 空配列は`null`
+- 1ノードの外接矩形と32px余白
+- 複数ノードの最小・最大座標
+- 負座標を含むマップ
+- 元のノード配列を変更しないこと
+
+### テキスト改行
+
+- 幅内のテキストは1行
+- 空白位置での改行
+- 日本語と長い単語の文字単位改行
+- 明示的な改行の維持
+- 空ラベルの既定文字列
+
+### SVG生成
+
+- `width`、`height`、`viewBox`と白背景
+- 負座標からの平行移動
+- 親子接続線のベジェpath
+- 親が存在しないノードの安全な無視
+- ノード矩形と複数行ラベル
+- `<script>`、`&`、引用符を含むラベルのXMLエスケープ
+- 元のノード状態を変更しないこと
+
+### ブラウザアダプター
+
+- SVG / PNGそれぞれのMIME typeと日時付きファイル名
+- download属性を持つリンクの起動
+- ダウンロード用Blob URLの解放
+- SVG読み込み用Blob URLの成功・失敗時の解放
+- Canvasの幅と高さが論理寸法の2倍であること
+- 2D contextの2倍scaleとImage描画
+- context取得失敗、Image読み込み失敗、`toBlob(null)`
+
+### HookとUI
+
+- 空マップでアダプターを呼ばない
+- SVG / PNG書き出し成功通知
+- SVG / PNG書き出し失敗通知
+- PNG生成中の`isExportingPng`と重複実行防止
+- PNG / SVGボタンの`type`、callback、disabled状態
+- `page.tsx`が現在ノード、画像出力command、通知を正しく配線すること
+- 既存のJSON入出力、localStorage保存、キャンバス操作が回帰しないこと
+
+## 実装完了条件
+
+- 全ノードが32pxの余白とともにPNG / SVGへ出力される。
+- PNGはSVGと同一内容を2倍解像度で持つ。
+- 背景は白、一時的なUI状態は含まれない。
+- 空マップと書き出し失敗に対し、マップを変更せず日本語通知を表示する。
+- すべての新規関数と主要な異常系にユニットテストがある。
+- `client`ディレクトリの`npm run verify`が成功する。
+- Phase 5の完了はPRマージ後の後処理で`ROADMAP.md`へ反映する。
