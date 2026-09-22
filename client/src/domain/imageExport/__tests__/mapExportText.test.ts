@@ -11,6 +11,10 @@ describe("wrapMapExportText", () => {
     expect(wrapMapExportText("alpha beta", 60, measure)).toEqual(["alpha", "beta"]);
   });
 
+  it("does not add an empty line when a soft break starts at leading whitespace", () => {
+    expect(wrapMapExportText(" abc", 20, measure)).toEqual(["ab", "c"]);
+  });
+
   it("wraps Japanese text by Unicode code point when there is no whitespace", () => {
     expect(wrapMapExportText("あいうえ", 20, measure)).toEqual(["あい", "うえ"]);
   });
