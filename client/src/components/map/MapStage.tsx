@@ -8,6 +8,7 @@ import { applyViewportTransform } from "@/components/map/pixi/applyViewportTrans
 import { renderMapScene } from "@/components/map/pixi/renderMapScene";
 import { usePixiApplication } from "@/components/map/pixi/usePixiApplication";
 import { useMapStageInteractions } from "@/components/map/useMapStageInteractions";
+import { useMapStageReset } from "@/components/map/useMapStageReset";
 import { useMapViewport } from "@/components/map/useMapViewport";
 import { useMapViewportShortcut } from "@/components/map/useMapViewportShortcut";
 import { useMapWheelZoom } from "@/components/map/useMapWheelZoom";
@@ -18,6 +19,7 @@ import type { Container } from "pixi.js";
 
 type MapStageProps = {
   nodes: Node[];
+  resetRevision?: number;
   selectedNodeId: number | null;
   onDoubleClick: (x: number, y: number) => void;
   onAddChildNode: (parentId: number) => number | null;
@@ -31,6 +33,7 @@ type MapStageProps = {
 
 export function MapStage({
   nodes,
+  resetRevision = 0,
   selectedNodeId,
   onDoubleClick,
   onAddChildNode,
@@ -46,6 +49,7 @@ export function MapStage({
   const appliedViewportRef = useRef<Viewport | null>(null);
   const runtime = usePixiApplication(containerRef);
   const editing = useNodeEditing(nodes, onUpdateLabel);
+  const cancelEditing = editing.cancelEditing;
   const {
     viewport,
     viewportRef,
@@ -66,6 +70,13 @@ export function MapStage({
     onSelectNode,
     onMoveNode,
     onConnectNodes,
+  });
+
+  useMapStageReset({
+    resetRevision,
+    cancelEditing,
+    cancelActiveGesture,
+    setViewport,
   });
 
   useMapWheelZoom({

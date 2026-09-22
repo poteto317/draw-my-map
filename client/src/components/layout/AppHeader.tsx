@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 import { LayoutModeOperationHint } from "@/components/layout/LayoutModeOperationHint";
 import { LayoutModeSelector } from "@/components/layout/LayoutModeSelector";
@@ -5,11 +6,15 @@ import { LayoutModeSelector } from "@/components/layout/LayoutModeSelector";
 type AppHeaderProps = {
   layoutMode: NodeLayoutMode;
   onLayoutModeChange: (mode: NodeLayoutMode) => void;
+  persistenceControls?: ReactNode;
+  persistenceNotice?: ReactNode;
 };
 
 export function AppHeader({
   layoutMode,
   onLayoutModeChange,
+  persistenceControls,
+  persistenceNotice,
 }: AppHeaderProps) {
   return (
     <header className="flex flex-wrap items-center gap-4 bg-white px-6 py-3 shadow-sm dark:bg-zinc-800">
@@ -21,6 +26,8 @@ export function AppHeader({
         onLayoutModeChange={onLayoutModeChange}
       />
       <LayoutModeOperationHint layoutMode={layoutMode} />
+      {persistenceControls}
+      {persistenceNotice && <div className="w-full">{persistenceNotice}</div>}
     </header>
   );
 }

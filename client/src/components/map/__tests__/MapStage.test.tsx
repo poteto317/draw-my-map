@@ -3,6 +3,7 @@ import {
   Suspense,
   startTransition,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactElement,
@@ -321,6 +322,34 @@ function ConcurrentInteractionHarness({
   );
 }
 
+type ResetTimingHarnessProps = {
+  onReady: (reset: () => void) => void;
+  onMoveNode: (id: number, x: number, y: number) => void;
+};
+
+function ResetTimingHarness({ onReady, onMoveNode }: ResetTimingHarnessProps) {
+  const [resetRevision, setResetRevision] = useState(0);
+
+  useEffect(() => {
+    onReady(() => setResetRevision((revision) => revision + 1));
+  }, [onReady]);
+
+  useLayoutEffect(() => {
+    if (resetRevision === 0) return;
+    mockStageHandlers.pointermove?.(pointer(140, 100));
+    mockStageHandlers.pointerup?.(pointer(140, 100));
+  }, [resetRevision]);
+
+  return (
+    <MapStage
+      {...defaultProps}
+      nodes={sampleNodes}
+      resetRevision={resetRevision}
+      onMoveNode={onMoveNode}
+    />
+  );
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   for (const event of Object.keys(mockStageHandlers) as StageEvent[]) {
@@ -630,6 +659,70 @@ describe("MapStage boundary", () => {
     fireEvent.doubleClick(input, { clientX: 100, clientY: 60 });
 
     expect(input).toHaveValue("編集中の下書き");
+  });
+
+  it("マップ置換時に編集中draftとviewportと進行中gestureを同期リセットする", async () => {
+    const onMoveNode = jest.fn();
+    const onUpdateLabel = jest.fn();
+    const { getByTestId, queryByTestId, rerender } = await renderReady(
+      <MapStage
+        {...defaultProps}
+        nodes={sampleNodes}
+        resetRevision={0}
+        onMoveNode={onMoveNode}
+        onUpdateLabel={onUpdateLabel}
+      />,
+    );
+    const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+    mockStageBounds(container);
+    fireEvent.doubleClick(container, { clientX: 100, clientY: 60 });
+    fireEvent.change(getByTestId("node-label-input"), {
+      target: { value: "古い下書き" },
+    });
+    act(() => {
+      mockStageHandlers.pointerdown?.(pointer(0, 0, { target: mockStage }));
+      mockStageHandlers.pointermove?.(pointer(20, 10));
+      mockNodePointerHandlers.at(-2)?.pointerdown?.(pointer(100, 60));
+      rerender(
+        <MapStage
+          {...defaultProps}
+          nodes={[{ ...sampleNodes[0], label: "読込後" }, sampleNodes[1]]}
+          resetRevision={1}
+          onMoveNode={onMoveNode}
+          onUpdateLabel={onUpdateLabel}
+        />,
+      );
+    });
+
+    expect(queryByTestId("node-label-input")).not.toBeInTheDocument();
+    expect(onUpdateLabel).not.toHaveBeenCalled();
+    expect(lastWorldContainer()?.position.set).toHaveBeenLastCalledWith(0, 0);
+    expect(lastWorldContainer()?.scale.set).toHaveBeenLastCalledWith(1);
+    act(() => {
+      mockStageHandlers.pointermove?.(pointer(140, 100));
+      mockStageHandlers.pointerup?.(pointer(140, 100));
+    });
+    expect(onMoveNode).not.toHaveBeenCalled();
+  });
+
+  it("親layout effectより前に古いgestureをキャンセルする", async () => {
+    const onMoveNode = jest.fn();
+    let reset!: () => void;
+    await renderReady(
+      <ResetTimingHarness
+        onReady={(command) => {
+          reset = command;
+        }}
+        onMoveNode={onMoveNode}
+      />,
+    );
+
+    act(() => {
+      mockNodePointerHandlers.at(-2)?.pointerdown?.(pointer(100, 60));
+      reset();
+    });
+
+    expect(onMoveNode).not.toHaveBeenCalled();
   });
 
   it("破棄された render の操作参照をコミット済みの値へ漏らさない", async () => {

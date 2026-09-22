@@ -1,38 +1,155 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import Home from "@/app/page";
-import type { NodeLayoutMode } from "@/types/nodeLayout";
+import type { Node } from "@/types/node";
 
-jest.mock("@/components/layout/AppHeader", () => ({
-  AppHeader: ({
-    layoutMode,
-    onLayoutModeChange,
+const mockDownloadMapJson = jest.fn();
+
+jest.mock("@/services/persistence/mapJsonDownload", () => {
+  const actual = jest.requireActual("@/services/persistence/mapJsonDownload");
+  return {
+    ...actual,
+    downloadMapJson: (json: string) => mockDownloadMapJson(json),
+  };
+});
+
+jest.mock("@/components/map/MapStage", () => ({
+  MapStage: ({
+    nodes,
+    selectedNodeId,
+    resetRevision,
+    onDoubleClick,
   }: {
-    layoutMode: NodeLayoutMode;
-    onLayoutModeChange: (mode: NodeLayoutMode) => void;
+    nodes: Node[];
+    selectedNodeId: number | null;
+    resetRevision?: number;
+    onDoubleClick: (x: number, y: number) => void;
   }) => (
-    <header>
-      <output data-testid="layout-mode">{layoutMode}</output>
-      <button type="button" onClick={() => onLayoutModeChange("auto")}>
-        自動配置へ変更
+    <div data-testid="map-stage">
+      <output data-testid="node-state">{JSON.stringify(nodes)}</output>
+      <output data-testid="selected-node-id">{selectedNodeId}</output>
+      <output data-testid="reset-revision">{resetRevision ?? 0}</output>
+      <button type="button" onClick={() => onDoubleClick(10, 20)}>
+        テスト用ノード追加
       </button>
-    </header>
+    </div>
   ),
 }));
 
-jest.mock("@/components/map/MapStage", () => ({
-  MapStage: () => <div data-testid="map-stage" />,
-}));
+const validImportedJson = `{
+  "version": 1,
+  "layoutMode": "auto",
+  "nodes": [
+    {
+      "id": 10,
+      "parentId": null,
+      "x": 20,
+      "y": 30,
+      "width": 160,
+      "height": 64,
+      "label": "読み込み済み"
+    }
+  ]
+}\n`;
+
+function jsonFile(contents: string): File {
+  const file = new File([contents], "map.json", { type: "application/json" });
+  Object.defineProperty(file, "text", {
+    configurable: true,
+    value: jest.fn().mockResolvedValue(contents),
+  });
+  return file;
+}
 
 describe("Home", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    mockDownloadMapJson.mockClear();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
   describe("配置モード配線", () => {
-    it("配置モードと変更commandをヘッダーへ接続する", () => {
+    it("配置モードと変更commandをヘッダーへ接続する", async () => {
+      const user = userEvent.setup();
       render(<Home />);
 
-      expect(screen.getByTestId("layout-mode")).toHaveTextContent("manual");
+      expect(screen.getByRole("button", { name: "手動配置" }))
+        .toHaveAttribute("aria-pressed", "true");
+      await user.click(screen.getByRole("button", { name: "自動配置" }));
 
-      fireEvent.click(screen.getByRole("button", { name: "自動配置へ変更" }));
+      expect(screen.getByRole("button", { name: "自動配置" }))
+        .toHaveAttribute("aria-pressed", "true");
+    });
+  });
 
-      expect(screen.getByTestId("layout-mode")).toHaveTextContent("auto");
+  describe("永続化配線", () => {
+    it("現在のマップをJSON書き出しcommandへ渡す", async () => {
+      const user = userEvent.setup();
+      render(<Home />);
+
+      await user.click(screen.getByRole("button", { name: "JSON書き出し" }));
+
+      expect(mockDownloadMapJson).toHaveBeenCalledWith(`{
+  "version": 1,
+  "layoutMode": "manual",
+  "nodes": []
+}\n`);
+      expect(screen.getByText("JSONファイルを書き出しました。"))
+        .toBeInTheDocument();
+    });
+
+    it("検証済みファイルでノード・モードを置換してstageをリセットする", async () => {
+      const user = userEvent.setup();
+      const { container } = render(<Home />);
+      const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+
+      await user.upload(input, jsonFile(validImportedJson));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("node-state")).toHaveTextContent("読み込み済み");
+      });
+      expect(screen.getByRole("button", { name: "自動配置" }))
+        .toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByTestId("selected-node-id")).toHaveTextContent("");
+      expect(screen.getByTestId("reset-revision")).toHaveTextContent("1");
+      expect(screen.getByText("マップを読み込みました。"))
+        .toBeInTheDocument();
+    });
+
+    it("不正ファイルではマップとstage revisionを変更しない", async () => {
+      const user = userEvent.setup();
+      const { container } = render(<Home />);
+      const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+      const before = screen.getByTestId("node-state").textContent;
+
+      await user.upload(input, jsonFile("{broken"));
+
+      await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(
+        "現在のマップは変更されていません。",
+      ));
+      expect(screen.getByTestId("node-state")).toHaveTextContent(before ?? "");
+      expect(screen.getByTestId("reset-revision")).toHaveTextContent("0");
+    });
+
+    it("ノード変更をlocalStorageへ自動保存する", async () => {
+      jest.useFakeTimers();
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+      render(<Home />);
+
+      await user.click(screen.getByRole("button", { name: "テスト用ノード追加" }));
+      jest.advanceTimersByTime(300);
+
+      const stored = window.localStorage.getItem("draw-my-map.map.v1");
+      expect(stored).not.toBeNull();
+      expect(JSON.parse(stored!)).toMatchObject({
+        version: 1,
+        layoutMode: "manual",
+        nodes: [expect.objectContaining({ x: -40, y: -10 })],
+      });
     });
   });
 

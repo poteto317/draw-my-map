@@ -53,4 +53,20 @@ describe("AppHeader", () => {
     const header = screen.getByRole("banner");
     expect(header).toContainElement(screen.getByText(expectedHint));
   });
+
+  it("永続化コントロールと通知をヘッダー内へ配置する", () => {
+    render(
+      <AppHeader
+        layoutMode="manual"
+        onLayoutModeChange={jest.fn()}
+        persistenceControls={<button type="button">保存操作</button>}
+        persistenceNotice={<p role="status">保存通知</p>}
+      />,
+    );
+
+    const header = screen.getByRole("banner");
+    expect(header).toContainElement(screen.getByRole("button", { name: "保存操作" }));
+    expect(header).toContainElement(screen.getByRole("status"));
+    expect(screen.getByRole("status").parentElement).toHaveClass("w-full");
+  });
 });
