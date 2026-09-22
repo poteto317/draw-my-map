@@ -17,37 +17,62 @@ export async function rasterizeMapSvgToPng(
   context.scale(PNG_SCALE, PNG_SCALE);
 
   const objectUrl = URL.createObjectURL(createMapSvgBlob(svg));
-  const image = new Image();
 
   return new Promise((resolve, reject) => {
-    let settled = false;
-    const finish = (complete: () => void) => {
-      if (settled) {
+    let state: "loading" | "encoding" | "settled" = "loading";
+    let image: HTMLImageElement | undefined;
+
+    const detachImageHandlers = () => {
+      if (!image) {
         return;
       }
-      settled = true;
+      image.onload = null;
+      image.onerror = null;
+    };
+    const finish = (complete: () => void) => {
+      if (state === "settled") {
+        return;
+      }
+      state = "settled";
+      detachImageHandlers();
       URL.revokeObjectURL(objectUrl);
       complete();
     };
-
-    image.onerror = () => {
-      finish(() => reject(new Error("Failed to load SVG image")));
+    const fail = (error: unknown) => {
+      finish(() => reject(error));
     };
-    image.onload = () => {
-      try {
-        context.drawImage(image, 0, 0, width, height);
-      } catch (error) {
-        finish(() => reject(error));
-        return;
-      }
-      canvas.toBlob((blob) => {
-        if (!blob) {
-          finish(() => reject(new Error("Failed to create PNG blob")));
+
+    try {
+      const loadedImage = new Image();
+      image = loadedImage;
+      loadedImage.onerror = () => {
+        if (state !== "loading") {
           return;
         }
-        finish(() => resolve(blob));
-      }, "image/png");
-    };
-    image.src = objectUrl;
+        fail(new Error("Failed to load SVG image"));
+      };
+      loadedImage.onload = () => {
+        if (state !== "loading") {
+          return;
+        }
+        state = "encoding";
+        detachImageHandlers();
+        try {
+          context.drawImage(loadedImage, 0, 0, width, height);
+          canvas.toBlob((blob) => {
+            if (!blob) {
+              fail(new Error("Failed to create PNG blob"));
+              return;
+            }
+            finish(() => resolve(blob));
+          }, "image/png");
+        } catch (error) {
+          fail(error);
+        }
+      };
+      loadedImage.src = objectUrl;
+    } catch (error) {
+      fail(error);
+    }
   });
 }

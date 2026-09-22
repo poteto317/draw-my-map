@@ -190,4 +190,176 @@ describe("mapPngRasterizer", () => {
     expect(revokeObjectURL).toHaveBeenCalledTimes(1);
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:map-svg");
   });
+
+  it("toBlobが同期例外を投げた場合は変換を拒否してobject URLを解放する", async () => {
+    const toBlobError = new Error("toBlob failed");
+    const context = {
+      scale: jest.fn(),
+      drawImage: jest.fn(),
+    } as unknown as CanvasRenderingContext2D;
+    const canvas = {
+      getContext: jest.fn(() => context),
+      toBlob: jest.fn(() => {
+        throw toBlobError;
+      }),
+    } as unknown as HTMLCanvasElement;
+    jest.spyOn(document, "createElement").mockReturnValue(canvas);
+    const image = {} as HTMLImageElement;
+    jest.spyOn(globalThis, "Image").mockImplementation(() => image);
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: jest.fn(() => "blob:map-svg"),
+    });
+    const revokeObjectURL = jest.fn();
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: revokeObjectURL,
+    });
+
+    const promise = rasterizeMapSvgToPng("<svg />", 320, 180);
+    expect(() => image.onload?.(new Event("load"))).not.toThrow();
+
+    await expect(promise).rejects.toBe(toBlobError);
+    expect(revokeObjectURL).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:map-svg");
+  });
+
+  it("Image生成が同期例外を投げた場合は変換を拒否してobject URLを解放する", async () => {
+    const imageError = new Error("Image constructor failed");
+    const context = {
+      scale: jest.fn(),
+    } as unknown as CanvasRenderingContext2D;
+    const canvas = {
+      getContext: jest.fn(() => context),
+    } as unknown as HTMLCanvasElement;
+    jest.spyOn(document, "createElement").mockReturnValue(canvas);
+    jest.spyOn(globalThis, "Image").mockImplementation(() => {
+      throw imageError;
+    });
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: jest.fn(() => "blob:map-svg"),
+    });
+    const revokeObjectURL = jest.fn();
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: revokeObjectURL,
+    });
+
+    const promise = rasterizeMapSvgToPng("<svg />", 320, 180);
+
+    await expect(promise).rejects.toBe(imageError);
+    expect(revokeObjectURL).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:map-svg");
+  });
+
+  it("image src設定が同期例外を投げた場合は変換を拒否してobject URLを解放する", async () => {
+    const sourceError = new Error("src setter failed");
+    const context = {
+      scale: jest.fn(),
+    } as unknown as CanvasRenderingContext2D;
+    const canvas = {
+      getContext: jest.fn(() => context),
+    } as unknown as HTMLCanvasElement;
+    jest.spyOn(document, "createElement").mockReturnValue(canvas);
+    const image = {} as HTMLImageElement;
+    Object.defineProperty(image, "src", {
+      set: () => {
+        throw sourceError;
+      },
+    });
+    jest.spyOn(globalThis, "Image").mockImplementation(() => image);
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: jest.fn(() => "blob:map-svg"),
+    });
+    const revokeObjectURL = jest.fn();
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: revokeObjectURL,
+    });
+
+    const promise = rasterizeMapSvgToPng("<svg />", 320, 180);
+
+    await expect(promise).rejects.toBe(sourceError);
+    expect(revokeObjectURL).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:map-svg");
+  });
+
+  it("重複したloadイベントでは描画とPNG変換を一度だけ実行する", async () => {
+    const png = new Blob(["png"], { type: "image/png" });
+    const drawImage = jest.fn();
+    const context = {
+      scale: jest.fn(),
+      drawImage,
+    } as unknown as CanvasRenderingContext2D;
+    let encodeCallback: BlobCallback | undefined;
+    const toBlob = jest.fn((callback: BlobCallback) => {
+      encodeCallback = callback;
+    });
+    const canvas = {
+      getContext: jest.fn(() => context),
+      toBlob,
+    } as unknown as HTMLCanvasElement;
+    jest.spyOn(document, "createElement").mockReturnValue(canvas);
+    const image = {} as HTMLImageElement;
+    jest.spyOn(globalThis, "Image").mockImplementation(() => image);
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: jest.fn(() => "blob:map-svg"),
+    });
+    const revokeObjectURL = jest.fn();
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: revokeObjectURL,
+    });
+
+    const promise = rasterizeMapSvgToPng("<svg />", 320, 180);
+    const load = image.onload;
+    load?.call(image, new Event("load"));
+    load?.call(image, new Event("load"));
+    encodeCallback?.(png);
+
+    await expect(promise).resolves.toBe(png);
+    expect(drawImage).toHaveBeenCalledTimes(1);
+    expect(toBlob).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).toHaveBeenCalledTimes(1);
+  });
+
+  it("load採用後のerrorイベントを無視してPNG変換を完了する", async () => {
+    const png = new Blob(["png"], { type: "image/png" });
+    const context = {
+      scale: jest.fn(),
+      drawImage: jest.fn(),
+    } as unknown as CanvasRenderingContext2D;
+    let encodeCallback: BlobCallback | undefined;
+    const canvas = {
+      getContext: jest.fn(() => context),
+      toBlob: jest.fn((callback: BlobCallback) => {
+        encodeCallback = callback;
+      }),
+    } as unknown as HTMLCanvasElement;
+    jest.spyOn(document, "createElement").mockReturnValue(canvas);
+    const image = {} as HTMLImageElement;
+    jest.spyOn(globalThis, "Image").mockImplementation(() => image);
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: jest.fn(() => "blob:map-svg"),
+    });
+    const revokeObjectURL = jest.fn();
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: revokeObjectURL,
+    });
+
+    const promise = rasterizeMapSvgToPng("<svg />", 320, 180);
+    const load = image.onload;
+    const error = image.onerror;
+    load?.call(image, new Event("load"));
+    error?.call(image, new Event("error"));
+    encodeCallback?.(png);
+
+    await expect(promise).resolves.toBe(png);
+    expect(revokeObjectURL).toHaveBeenCalledTimes(1);
+  });
 });
