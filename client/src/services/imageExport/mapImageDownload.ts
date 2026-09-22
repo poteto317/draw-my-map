@@ -12,7 +12,7 @@ export function createMapImageFileName(
 }
 
 export function createMapSvgBlob(svg: string): Blob {
-  return new Blob([svg], { type: "image/svg+xml" });
+  return new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
 }
 
 export function downloadMapImage(blob: Blob, fileName: string): void {

@@ -33,7 +33,7 @@ describe("mapImageDownload", () => {
     const blob = createMapSvgBlob("<svg />");
 
     expect(blob).toBeInstanceOf(Blob);
-    expect(blob.type).toBe("image/svg+xml");
+    expect(blob.type).toBe("image/svg+xml;charset=utf-8");
   });
 
   it("画像Blobを指定したファイル名でダウンロードしてURLを解放する", () => {
