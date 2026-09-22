@@ -71,7 +71,7 @@ export function createMapSvgDocument(
       `<tspan x="${centerX}" y="${firstBaseline + index * MAP_EXPORT_LINE_HEIGHT}">${escapeXml(line)}</tspan>`
     )).join("");
     labels.push(
-      `<text text-anchor="middle" font-size="${MAP_EXPORT_FONT_SIZE}" fill="#27272a">${tspans}</text>`,
+      `<text text-anchor="middle" font-size="${MAP_EXPORT_FONT_SIZE}" font-family="Arial, Helvetica, sans-serif" fill="#27272a">${tspans}</text>`,
     );
   }
 
