@@ -52,16 +52,18 @@ export default function Home() {
             />
           </>
         )}
-        operationNotices={(
-          <>
-            {persistence.notice !== null && (
-              <MapOperationNotice notice={persistence.notice} />
-            )}
-            {imageExport.notice !== null && (
-              <MapOperationNotice notice={imageExport.notice} />
-            )}
-          </>
-        )}
+        operationNotices={persistence.notice === null && imageExport.notice === null
+          ? null
+          : (
+            <>
+              {persistence.notice !== null && (
+                <MapOperationNotice notice={persistence.notice} />
+              )}
+              {imageExport.notice !== null && (
+                <MapOperationNotice notice={imageExport.notice} />
+              )}
+            </>
+          )}
       />
       <main className="min-h-0 flex-1 overflow-hidden">
         <MapStage

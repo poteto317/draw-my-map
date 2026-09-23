@@ -79,6 +79,10 @@ function jsonFile(contents: string): File {
   return file;
 }
 
+function queryOperationNoticeWrapper(): HTMLDivElement | null {
+  return screen.queryByTestId("operation-notices");
+}
+
 describe("Home", () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -121,8 +125,9 @@ describe("Home", () => {
   "layoutMode": "manual",
   "nodes": []
 }\n`);
-      expect(screen.getByText("JSONファイルを書き出しました。"))
-        .toBeInTheDocument();
+      const persistenceNotice = screen.getByText("JSONファイルを書き出しました。");
+      expect(persistenceNotice).toBeInTheDocument();
+      expect(queryOperationNoticeWrapper()).toContainElement(persistenceNotice);
     });
 
     it("検証済みファイルでノード・モードを置換してstageをリセットする", async () => {
@@ -220,14 +225,22 @@ describe("Home", () => {
 
       await user.click(screen.getByRole("button", { name: "JSON書き出し" }));
 
-      expect(screen.getByText("JSONファイルを書き出しました。"))
-        .toHaveAttribute("role", "status");
-      expect(screen.getByText("書き出すノードがありません。"))
-        .toHaveAttribute("role", "alert");
+      const persistenceNotice = screen.getByText("JSONファイルを書き出しました。");
+      const imageExportNotice = screen.getByText("書き出すノードがありません。");
+      expect(persistenceNotice).toHaveAttribute("role", "status");
+      expect(imageExportNotice).toHaveAttribute("role", "alert");
+      expect(queryOperationNoticeWrapper()).toContainElement(persistenceNotice);
+      expect(queryOperationNoticeWrapper()).toContainElement(imageExportNotice);
     });
   });
 
   describe("レイアウト", () => {
+    it("通知がない通常時はheaderに全幅の通知行を確保しない", () => {
+      render(<Home />);
+
+      expect(queryOperationNoticeWrapper()).not.toBeInTheDocument();
+    });
+
     it("可変高headerを除いたviewport内の残領域をmapへ割り当てる", () => {
       render(<Home />);
       const main = screen.getByTestId("map-stage").closest("main")!;

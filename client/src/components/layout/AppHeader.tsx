@@ -27,7 +27,11 @@ export function AppHeader({
       />
       <LayoutModeOperationHint layoutMode={layoutMode} />
       {operationControls}
-      {operationNotices && <div className="w-full">{operationNotices}</div>}
+      {operationNotices && (
+        <div data-testid="operation-notices" className="w-full">
+          {operationNotices}
+        </div>
+      )}
     </header>
   );
 }
