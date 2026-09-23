@@ -2,9 +2,11 @@
 
 import { useNodes } from "@/hooks/useNodes";
 import { AppHeader } from "@/components/layout/AppHeader";
+import { MapImageExportControls } from "@/components/layout/MapImageExportControls";
 import { MapPersistenceControls } from "@/components/layout/MapPersistenceControls";
 import { MapOperationNotice } from "@/components/layout/MapOperationNotice";
 import { MapStage } from "@/components/map/MapStage";
+import { useMapImageExport } from "@/hooks/useMapImageExport";
 import { useMapPersistence } from "@/hooks/useMapPersistence";
 import { useResettingMapReplacement } from "@/hooks/useResettingMapReplacement";
 
@@ -30,6 +32,7 @@ export default function Home() {
     layoutMode,
     replaceMap: replaceMapAndReset,
   });
+  const imageExport = useMapImageExport({ nodes });
 
   return (
     <div className="flex h-dvh flex-col bg-zinc-50 dark:bg-zinc-900">
@@ -37,14 +40,28 @@ export default function Home() {
         layoutMode={layoutMode}
         onLayoutModeChange={setLayoutMode}
         operationControls={(
-          <MapPersistenceControls
-            onExport={persistence.exportJson}
-            onImport={persistence.importJsonFile}
-          />
+          <>
+            <MapPersistenceControls
+              onExport={persistence.exportJson}
+              onImport={persistence.importJsonFile}
+            />
+            <MapImageExportControls
+              onExportPng={imageExport.exportPng}
+              onExportSvg={imageExport.exportSvg}
+              isExportingPng={imageExport.isExportingPng}
+            />
+          </>
         )}
-        operationNotices={persistence.notice === null
-          ? null
-          : <MapOperationNotice notice={persistence.notice} />}
+        operationNotices={(
+          <>
+            {persistence.notice !== null && (
+              <MapOperationNotice notice={persistence.notice} />
+            )}
+            {imageExport.notice !== null && (
+              <MapOperationNotice notice={imageExport.notice} />
+            )}
+          </>
+        )}
       />
       <main className="min-h-0 flex-1 overflow-hidden">
         <MapStage

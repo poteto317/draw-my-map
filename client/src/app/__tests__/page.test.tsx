@@ -2,8 +2,26 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import Home from "@/app/page";
 import type { Node } from "@/types/node";
+import type { OperationNotice } from "@/types/operationNotice";
 
 const mockDownloadMapJson = jest.fn();
+const mockExportPng = jest.fn();
+const mockExportSvg = jest.fn();
+const mockUseMapImageExport = jest.fn();
+let mockImageExportNotice: OperationNotice | null = null;
+let mockIsExportingPng = false;
+
+jest.mock("@/hooks/useMapImageExport", () => ({
+  useMapImageExport: (options: { nodes: readonly Node[] }) => {
+    mockUseMapImageExport(options);
+    return {
+      exportPng: mockExportPng,
+      exportSvg: mockExportSvg,
+      isExportingPng: mockIsExportingPng,
+      notice: mockImageExportNotice,
+    };
+  },
+}));
 
 jest.mock("@/services/persistence/mapJsonDownload", () => {
   const actual = jest.requireActual("@/services/persistence/mapJsonDownload");
@@ -65,6 +83,11 @@ describe("Home", () => {
   beforeEach(() => {
     window.localStorage.clear();
     mockDownloadMapJson.mockClear();
+    mockExportPng.mockClear();
+    mockExportSvg.mockClear();
+    mockUseMapImageExport.mockClear();
+    mockImageExportNotice = null;
+    mockIsExportingPng = false;
   });
 
   afterEach(() => {
@@ -150,6 +173,57 @@ describe("Home", () => {
         layoutMode: "manual",
         nodes: [expect.objectContaining({ x: -40, y: -10 })],
       });
+    });
+  });
+
+  describe("画像書き出し配線", () => {
+    it("現在のノード配列を画像書き出しHookへ渡す", async () => {
+      const user = userEvent.setup();
+      render(<Home />);
+
+      expect(mockUseMapImageExport).toHaveBeenLastCalledWith({ nodes: [] });
+
+      await user.click(screen.getByRole("button", { name: "テスト用ノード追加" }));
+
+      expect(mockUseMapImageExport).toHaveBeenLastCalledWith({
+        nodes: [expect.objectContaining({ x: -40, y: -10 })],
+      });
+    });
+
+    it("PNGとSVGの各ボタンを画像書き出しcommandへ接続する", async () => {
+      const user = userEvent.setup();
+      render(<Home />);
+
+      await user.click(screen.getByRole("button", { name: "PNG書き出し" }));
+      await user.click(screen.getByRole("button", { name: "SVG書き出し" }));
+
+      expect(mockExportPng).toHaveBeenCalledTimes(1);
+      expect(mockExportSvg).toHaveBeenCalledTimes(1);
+    });
+
+    it("PNG処理中はPNG書き出しボタンを無効化する", () => {
+      mockIsExportingPng = true;
+
+      render(<Home />);
+
+      expect(screen.getByRole("button", { name: "PNG書き出し" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "SVG書き出し" })).toBeEnabled();
+    });
+
+    it("永続化通知と画像書き出し通知を同時に表示する", async () => {
+      mockImageExportNotice = {
+        kind: "warning",
+        message: "書き出すノードがありません。",
+      };
+      const user = userEvent.setup();
+      render(<Home />);
+
+      await user.click(screen.getByRole("button", { name: "JSON書き出し" }));
+
+      expect(screen.getByText("JSONファイルを書き出しました。"))
+        .toHaveAttribute("role", "status");
+      expect(screen.getByText("書き出すノードがありません。"))
+        .toHaveAttribute("role", "alert");
     });
   });
 
