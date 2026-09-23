@@ -22,7 +22,12 @@ export function wrapMapExportText(
       continue;
     }
 
-    while (measureText(remaining.join("")) > maxWidth) {
+    if (maxWidth <= 0) {
+      for (const character of remaining) wrappedLines.push(character);
+      continue;
+    }
+
+    while (remaining.length > 0 && measureText(remaining.join("")) > maxWidth) {
       let fittingLength = 0;
       while (
         fittingLength < remaining.length &&
@@ -53,7 +58,7 @@ export function wrapMapExportText(
       }
     }
 
-    wrappedLines.push(remaining.join(""));
+    if (remaining.length > 0) wrappedLines.push(remaining.join(""));
   }
 
   return wrappedLines;

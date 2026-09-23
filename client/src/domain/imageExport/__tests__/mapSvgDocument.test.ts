@@ -2,6 +2,26 @@ import { createMapSvgDocument } from "@/domain/imageExport/mapSvgDocument";
 
 const measureText = (text: string) => Array.from(text).length * 10;
 
+it.each([10, 16])("幅%sのノードでもSVG生成が終了しラベルを保持する", (width) => {
+  const nodes = [
+    { id: 1, parentId: null, x: 0, y: 0, width, height: 60, label: "A😀B" },
+  ];
+  const bounds = { minX: 0, minY: 0, width: 80, height: 124, offsetX: 32, offsetY: 32 };
+  let measurements = 0;
+  const boundedMeasure = (text: string) => {
+    // Stop a regression from hanging Jest after all code points are consumed.
+    if (++measurements > 100) throw new Error("SVG text wrapping did not terminate");
+    return measureText(text);
+  };
+
+  const { svg } = createMapSvgDocument(nodes, bounds, boundedMeasure);
+  const parsed = new DOMParser().parseFromString(svg, "image/svg+xml");
+
+  expect(parsed.querySelector("parsererror")).toBeNull();
+  expect(Array.from(parsed.querySelectorAll("tspan"), (span) => span.textContent))
+    .toEqual(["A", "😀", "B"]);
+});
+
 it("SVGの寸法と背景、辺、ノード、中央揃えラベルを描画順どおりに生成する", () => {
   const nodes = [
     { id: 1, parentId: null, x: -20, y: 10, width: 100, height: 60, label: "Parent" },
@@ -56,6 +76,44 @@ it("ラベルのXML特殊文字をすべてエスケープする", () => {
 
   expect(svg).toContain("&lt;script&gt;&amp;&quot;&apos;");
   expect(svg).not.toContain(`<script>&"'`);
+});
+
+it.each([0x00, 0x08, 0x0b, 0x0c, 0x0e, 0x1f, 0xd800, 0xdfff, 0xfffe, 0xffff])(
+  "XML 1.0禁止文字（コードポイント%i）を置換して解析可能なSVGを生成する",
+  (codePoint) => {
+    const nodes = [
+      {
+        id: 1, parentId: null, x: 0, y: 0, width: 300, height: 60,
+        label: `A${String.fromCodePoint(codePoint)}B<script>&"'`,
+      },
+    ];
+    const bounds = { minX: 0, minY: 0, width: 364, height: 124, offsetX: 32, offsetY: 32 };
+
+    const { svg } = createMapSvgDocument(nodes, bounds, measureText);
+    const parsed = new DOMParser().parseFromString(svg, "image/svg+xml");
+
+    expect(parsed.querySelector("parsererror")).toBeNull();
+    expect(parsed.querySelector("text")?.textContent).toBe(`A\uFFFDB<script>&"'`);
+    expect(parsed.querySelector("script")).toBeNull();
+  },
+);
+
+it("XMLで許可されるタブとUnicodeを保持しLFとCRの改行を描画する", () => {
+  const nodes = [
+    {
+      id: 1, parentId: null, x: 0, y: 0, width: 300, height: 100,
+      label: "A\tB\n日本語😀\r\u007F\u0085\uD7FF\uE000\uFFFD\u{10000}\u{10FFFF}",
+    },
+  ];
+  const bounds = { minX: 0, minY: 0, width: 364, height: 164, offsetX: 32, offsetY: 32 };
+
+  const { svg } = createMapSvgDocument(nodes, bounds, measureText);
+  const parsed = new DOMParser().parseFromString(svg, "image/svg+xml");
+
+  expect(parsed.querySelector("parsererror")).toBeNull();
+  expect(Array.from(parsed.querySelectorAll("tspan"), (span) => span.textContent)).toEqual([
+    "A\tB", "日本語😀", "\u007F\u0085\uD7FF\uE000\uFFFD\u{10000}\u{10FFFF}",
+  ]);
 });
 
 it("親ノードが存在しない子には辺を描画しない", () => {

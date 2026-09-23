@@ -3,6 +3,18 @@ import { getMapExportLabel, wrapMapExportText } from "../mapExportText";
 const measure = (text: string) => Array.from(text).length * 10;
 
 describe("wrapMapExportText", () => {
+  it.each([-6, 0, 5])("finishes narrow text at width %s without adding empty lines", (maxWidth) => {
+    let measurements = 0;
+    const boundedMeasure = (text: string) => {
+      // Stop a regression from hanging Jest after all code points are consumed.
+      if (++measurements > 100) throw new Error("Text wrapping did not terminate");
+      return measure(text);
+    };
+
+    expect(wrapMapExportText("A😀\n\nB", maxWidth, boundedMeasure))
+      .toEqual(["A", "😀", "", "B"]);
+  });
+
   it("keeps text on one line when it fits", () => {
     expect(wrapMapExportText("alpha", 60, measure)).toEqual(["alpha"]);
   });
