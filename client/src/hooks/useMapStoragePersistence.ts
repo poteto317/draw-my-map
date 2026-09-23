@@ -3,14 +3,14 @@
 import { useMapStorageAutoSave } from "@/hooks/useMapStorageAutoSave";
 import { useMapStorageRestoration } from "@/hooks/useMapStorageRestoration";
 import type { NodeMapState } from "@/types/nodeMapState";
-import type { PersistenceNotice } from "@/types/persistence";
+import type { OperationNotice } from "@/types/operationNotice";
 
 type MapStorage = Pick<Storage, "getItem" | "setItem">;
 
 type UseMapStoragePersistenceOptions = {
   currentSnapshot: string;
   replaceMap: (state: NodeMapState) => void;
-  publishNotice: (notice: PersistenceNotice) => void;
+  publishNotice: (notice: OperationNotice) => void;
   storage?: MapStorage;
 };
 

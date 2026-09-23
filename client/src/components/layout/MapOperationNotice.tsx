@@ -1,16 +1,16 @@
-import type { PersistenceNotice } from "@/types/persistence";
+import type { OperationNotice } from "@/types/operationNotice";
 
-type MapPersistenceNoticeProps = {
-  notice: PersistenceNotice | null;
+type MapOperationNoticeProps = {
+  notice: OperationNotice | null;
 };
 
-const noticeClassNames: Record<PersistenceNotice["kind"], string> = {
+const noticeClassNames: Record<OperationNotice["kind"], string> = {
   status: "text-zinc-600 dark:text-zinc-400",
   warning: "text-amber-700 dark:text-amber-300",
   error: "text-red-700 dark:text-red-300",
 };
 
-export function MapPersistenceNotice({ notice }: MapPersistenceNoticeProps) {
+export function MapOperationNotice({ notice }: MapOperationNoticeProps) {
   if (notice === null) return null;
 
   const isStatus = notice.kind === "status";

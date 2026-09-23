@@ -8,7 +8,7 @@ import type { MapDocumentResult } from "@/types/mapDocument";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 import type { NodeMapState } from "@/types/nodeMapState";
-import type { PersistenceNotice } from "@/types/persistence";
+import type { OperationNotice } from "@/types/operationNotice";
 
 type MapStorage = Pick<Storage, "getItem" | "setItem">;
 
@@ -24,7 +24,7 @@ type UseMapPersistenceOptions = {
 type UseMapPersistenceResult = {
   exportJson: () => void;
   importJsonFile: (file: File) => Promise<void>;
-  notice: PersistenceNotice | null;
+  notice: OperationNotice | null;
 };
 
 export function useMapPersistence({
@@ -35,7 +35,7 @@ export function useMapPersistence({
   downloadJson,
   readFile,
 }: UseMapPersistenceOptions): UseMapPersistenceResult {
-  const [notice, setNotice] = useState<PersistenceNotice | null>(null);
+  const [notice, setNotice] = useState<OperationNotice | null>(null);
   const currentSnapshot = useMemo(
     () => serializeMapDocument(createMapDocument(nodes, layoutMode)),
     [nodes, layoutMode],

@@ -5,12 +5,12 @@ import { parseMapDocumentJson, serializeMapDocument } from "@/domain/persistence
 import { readMapJsonFile } from "@/services/persistence/mapJsonFileReader";
 import type { MapDocumentResult } from "@/types/mapDocument";
 import type { NodeMapState } from "@/types/nodeMapState";
-import type { PersistenceNotice } from "@/types/persistence";
+import type { OperationNotice } from "@/types/operationNotice";
 
 type UseMapJsonImportOptions = {
   replaceMap: (state: NodeMapState) => void;
   requestSnapshotSave: (snapshot: string) => void;
-  publishNotice: (notice: PersistenceNotice) => void;
+  publishNotice: (notice: OperationNotice) => void;
   readFile?: (file: File) => Promise<MapDocumentResult<string>>;
 };
 

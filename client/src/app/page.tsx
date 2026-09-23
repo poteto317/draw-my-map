@@ -3,7 +3,7 @@
 import { useNodes } from "@/hooks/useNodes";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { MapPersistenceControls } from "@/components/layout/MapPersistenceControls";
-import { MapPersistenceNotice } from "@/components/layout/MapPersistenceNotice";
+import { MapOperationNotice } from "@/components/layout/MapOperationNotice";
 import { MapStage } from "@/components/map/MapStage";
 import { useMapPersistence } from "@/hooks/useMapPersistence";
 import { useResettingMapReplacement } from "@/hooks/useResettingMapReplacement";
@@ -36,15 +36,15 @@ export default function Home() {
       <AppHeader
         layoutMode={layoutMode}
         onLayoutModeChange={setLayoutMode}
-        persistenceControls={(
+        operationControls={(
           <MapPersistenceControls
             onExport={persistence.exportJson}
             onImport={persistence.importJsonFile}
           />
         )}
-        persistenceNotice={persistence.notice === null
+        operationNotices={persistence.notice === null
           ? null
-          : <MapPersistenceNotice notice={persistence.notice} />}
+          : <MapOperationNotice notice={persistence.notice} />}
       />
       <main className="min-h-0 flex-1 overflow-hidden">
         <MapStage

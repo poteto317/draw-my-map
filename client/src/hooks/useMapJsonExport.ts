@@ -2,11 +2,11 @@
 
 import { useCallback } from "react";
 import { downloadMapJson } from "@/services/persistence/mapJsonDownload";
-import type { PersistenceNotice } from "@/types/persistence";
+import type { OperationNotice } from "@/types/operationNotice";
 
 type UseMapJsonExportOptions = {
   currentSnapshot: string;
-  publishNotice: (notice: PersistenceNotice) => void;
+  publishNotice: (notice: OperationNotice) => void;
   downloadJson?: (json: string) => void;
 };
 

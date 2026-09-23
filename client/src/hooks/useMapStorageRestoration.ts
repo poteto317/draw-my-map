@@ -4,14 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { parseMapDocumentJson, serializeMapDocument } from "@/domain/persistence/mapDocumentCodec";
 import { readStoredMapJson } from "@/services/persistence/mapStorage";
 import type { NodeMapState } from "@/types/nodeMapState";
-import type { PersistenceNotice } from "@/types/persistence";
+import type { OperationNotice } from "@/types/operationNotice";
 
 type ReadableMapStorage = Pick<Storage, "getItem">;
 
 type UseMapStorageRestorationOptions = {
   currentSnapshot: string;
   replaceMap: (state: NodeMapState) => void;
-  publishNotice: (notice: PersistenceNotice) => void;
+  publishNotice: (notice: OperationNotice) => void;
   storage?: ReadableMapStorage;
 };
 

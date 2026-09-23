@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { writeStoredMapJson } from "@/services/persistence/mapStorage";
-import type { PersistenceNotice } from "@/types/persistence";
+import type { OperationNotice } from "@/types/operationNotice";
 
 type WritableMapStorage = Pick<Storage, "setItem">;
 
@@ -10,7 +10,7 @@ type UseMapStorageAutoSaveOptions = {
   currentSnapshot: string;
   hydrated: boolean;
   initialPersistedSnapshot: string | null;
-  publishNotice: (notice: PersistenceNotice) => void;
+  publishNotice: (notice: OperationNotice) => void;
   storage?: WritableMapStorage;
 };
 

@@ -54,13 +54,13 @@ describe("AppHeader", () => {
     expect(header).toContainElement(screen.getByText(expectedHint));
   });
 
-  it("永続化コントロールと通知をヘッダー内へ配置する", () => {
+  it("操作コントロールと通知をヘッダー内へ配置する", () => {
     render(
       <AppHeader
         layoutMode="manual"
         onLayoutModeChange={jest.fn()}
-        persistenceControls={<button type="button">保存操作</button>}
-        persistenceNotice={<p role="status">保存通知</p>}
+        operationControls={<button type="button">保存操作</button>}
+        operationNotices={<p role="status">保存通知</p>}
       />,
     );
 
