@@ -15,3 +15,6 @@ Thumbs.db
 
 # Local Git worktrees
 .worktrees/
+
+# Superpowers scratch files
+.superpowers/sdd/
