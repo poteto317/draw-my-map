@@ -367,7 +367,7 @@ Expected: FAIL because `createMapSvgExport` does not exist.
 
 - [ ] **Step 3: 既定SVG生成ユースケースをHook外へ移す**
 
-`getMapExportBounds`が`null`なら`null`を返し、それ以外は`createMapTextMeasurer`を一度作って`createMapSvgDocument`へ渡す。
+空ノードなら文字測定を作らず`null`を返す。ノードがあれば`createMapTextMeasurer`を一度だけ作成し、同じ測定関数を`getMapExportBounds(nodes, measureText)`と`createMapSvgDocument(nodes, bounds, measureText)`へ渡す。
 
 - [ ] **Step 4: SVG Hookの失敗テストを書く**
 

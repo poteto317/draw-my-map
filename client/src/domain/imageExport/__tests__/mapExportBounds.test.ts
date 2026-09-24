@@ -35,6 +35,19 @@ it("単一ノードにも既定の余白を適用する", () => {
   });
 });
 
+it("第3引数で指定した余白を適用する", () => {
+  const nodes = [{ id: 7, parentId: null, x: 12, y: -8, width: 30, height: 18, label: "A" }];
+
+  expect(getMapExportBounds(nodes, measureText, 5)).toEqual({
+    minX: 12,
+    minY: -8,
+    width: 40,
+    height: 28,
+    offsetX: -7,
+    offsetY: 13,
+  });
+});
+
 it("ノードの高さを超える複数行ラベルを出力範囲に含める", () => {
   const nodes = [{
     id: 1,

@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- 出力範囲は現在のviewportではなく、全ノードの外接矩形に32pxの余白を追加した範囲とする。
+- 出力範囲は現在のviewportではなく、全ノードの矩形と折り返し後のラベル描画範囲の外接矩形に32pxの余白を追加した範囲とする。
 - 背景は白とする。
 - PNGは共通SVGを論理寸法の2倍のCanvasへ描画して生成する。
 - 選択、編集、パン、ズーム、ポインター操作中状態は出力しない。
@@ -26,7 +26,7 @@
 
 ## File Structure
 
-- Create: `client/src/domain/imageExport/mapExportBounds.ts` — ノード全体の出力範囲と座標オフセット
+- Create: `client/src/domain/imageExport/mapExportBounds.ts` — ノード矩形とラベル描画範囲を含む出力範囲と座標オフセット
 - Create: `client/src/domain/imageExport/mapExportText.ts` — ラベルの表示文字列と改行
 - Create: `client/src/domain/imageExport/mapSvgDocument.ts` — 範囲、線、ノード、テキストからSVGを構築
 - Create: `client/src/domain/imageExport/__tests__/mapExportBounds.test.ts`
@@ -70,12 +70,14 @@
 
 **Interfaces:**
 - Produces: `MapExportBounds = { minX: number; minY: number; width: number; height: number; offsetX: number; offsetY: number }`
-- Produces: `getMapExportBounds(nodes: readonly Node[], padding?: number): MapExportBounds | null`
+- Produces: `getMapExportBounds(nodes: readonly Node[], measureText: MeasureMapText, padding?: number): MapExportBounds | null`
 
 - [ ] **Step 1: Write the failing bounds tests**
 
 ```ts
 import { getMapExportBounds } from "@/domain/imageExport/mapExportBounds";
+
+const measureText = (text: string) => Array.from(text).length * 10;
 
 it("全ノードの外接矩形に32pxの余白を追加する", () => {
   const nodes = [
@@ -83,7 +85,7 @@ it("全ノードの外接矩形に32pxの余白を追加する", () => {
     { id: 2, parentId: 1, x: 180, y: 90, width: 120, height: 70, label: "B" },
   ];
 
-  expect(getMapExportBounds(nodes)).toEqual({
+  expect(getMapExportBounds(nodes, measureText)).toEqual({
     minX: -20,
     minY: 10,
     width: 384,
@@ -94,7 +96,7 @@ it("全ノードの外接矩形に32pxの余白を追加する", () => {
 });
 
 it("空のマップには出力範囲がない", () => {
-  expect(getMapExportBounds([])).toBeNull();
+  expect(getMapExportBounds([], measureText)).toBeNull();
 });
 ```
 
@@ -107,17 +109,42 @@ Expected: FAIL because `mapExportBounds.ts` does not exist.
 - [ ] **Step 3: Implement the minimal pure calculation**
 
 ```ts
+import {
+  getMapExportTextLayout,
+  MAP_EXPORT_HORIZONTAL_INSET,
+  type MeasureMapText,
+} from "@/domain/imageExport/mapExportText";
+
 export const MAP_EXPORT_PADDING = 32;
 
 export function getMapExportBounds(
   nodes: readonly Node[],
+  measureText: MeasureMapText,
   padding = MAP_EXPORT_PADDING,
 ): MapExportBounds | null {
   if (nodes.length === 0) return null;
-  const minX = Math.min(...nodes.map((node) => node.x));
-  const minY = Math.min(...nodes.map((node) => node.y));
-  const maxX = Math.max(...nodes.map((node) => node.x + node.width));
-  const maxY = Math.max(...nodes.map((node) => node.y + node.height));
+
+  const extents = nodes.map((node) => {
+    const centerX = node.x + node.width / 2;
+    const layout = getMapExportTextLayout(
+      node.label,
+      node.width - MAP_EXPORT_HORIZONTAL_INSET * 2,
+      node.y + node.height / 2,
+      measureText,
+    );
+
+    return {
+      left: Math.min(node.x, centerX - layout.width / 2),
+      top: Math.min(node.y, layout.top),
+      right: Math.max(node.x + node.width, centerX + layout.width / 2),
+      bottom: Math.max(node.y + node.height, layout.bottom),
+    };
+  });
+  const minX = Math.min(...extents.map(({ left }) => left));
+  const minY = Math.min(...extents.map(({ top }) => top));
+  const maxX = Math.max(...extents.map(({ right }) => right));
+  const maxY = Math.max(...extents.map(({ bottom }) => bottom));
+
   return {
     minX,
     minY,
