@@ -6,7 +6,7 @@
 
 **Architecture:** 既存の公開APIには薄い合成境界を残し、純粋なSVG生成とブラウザ固有処理、SVG/PNG別Hookを内側の責務へ分離する。各抽出は既存挙動を直接検出する責務別テストを先に追加し、統合テストは合成順序と公開契約だけを検証する。
 
-**Tech Stack:** Next.js 15、React 19、TypeScript、Jest、Testing Library、DOM/Canvas API
+**Tech Stack:** Next.js 16、React 19、TypeScript、Jest、Testing Library、DOM/Canvas API
 
 **Spec:** `docs/superpowers/specs/2026-09-23-phase5-image-export-srp-refactor-design.md`
 

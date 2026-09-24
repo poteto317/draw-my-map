@@ -23,6 +23,10 @@ describe("wrapMapExportText", () => {
     expect(wrapMapExportText("alpha", 60, measure)).toEqual(["alpha"]);
   });
 
+  it("幅内の前後・連続空白を保持する", () => {
+    expect(wrapMapExportText("  A  B  ", 100, measure)).toEqual(["  A  B  "]);
+  });
+
   it("prefers whitespace when wrapping", () => {
     expect(wrapMapExportText("alpha beta", 60, measure)).toEqual(["alpha", "beta"]);
   });

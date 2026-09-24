@@ -38,7 +38,7 @@ export function createMapSvgNodes(
       `<tspan x="${centerX}" y="${layout.firstBaseline + index * MAP_EXPORT_LINE_HEIGHT}">${escapeMapXmlText(line)}</tspan>`
     )).join("");
     labels.push(
-      `<text text-anchor="middle" font-size="${MAP_EXPORT_FONT_SIZE}" font-family="Arial, Helvetica, sans-serif" fill="#27272a">${tspans}</text>`,
+      `<text xml:space="preserve" text-anchor="middle" font-size="${MAP_EXPORT_FONT_SIZE}" font-family="Arial, Helvetica, sans-serif" fill="#27272a">${tspans}</text>`,
     );
   }
 

@@ -29,7 +29,7 @@ it("SVGの寸法と背景、辺、ノード、中央揃えラベルを描画順�
     '<rect x="32" y="32" width="100" height="60" fill="#ffffff" stroke="#3b82f6" stroke-width="2"',
   );
   expect(document.svg).toContain(
-    '<text text-anchor="middle" font-size="14" font-family="Arial, Helvetica, sans-serif" fill="#27272a"><tspan x="82" y="66.66666666666667">Parent</tspan></text>',
+    '<text xml:space="preserve" text-anchor="middle" font-size="14" font-family="Arial, Helvetica, sans-serif" fill="#27272a"><tspan x="82" y="66.66666666666667">Parent</tspan></text>',
   );
   expect(document.svg).toContain(
     '<tspan x="292" y="142.66666666666666">Child</tspan><tspan x="292" y="160.66666666666666">nodes</tspan>',

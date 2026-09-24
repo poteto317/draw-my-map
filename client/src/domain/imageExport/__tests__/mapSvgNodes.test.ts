@@ -72,6 +72,20 @@ it("明示改行と負座標を出力座標へ保持する", () => {
   expect(markup.labels).toContain('<tspan x="82" y="95.66666666666667">Second</tspan>');
 });
 
+it("前後・連続空白をSVG描画時にも保持する", () => {
+  const nodes = [
+    { id: 1, parentId: null, x: 0, y: 0, width: 200, height: 60, label: "  A  B  " },
+  ];
+  const bounds = { minX: 0, minY: 0, width: 264, height: 124, offsetX: 32, offsetY: 32 };
+
+  const markup = createMapSvgNodes(nodes, bounds, measureText);
+  const parsed = new DOMParser().parseFromString(`<svg>${markup.labels}</svg>`, "image/svg+xml");
+  const text = parsed.querySelector("text");
+
+  expect(text?.getAttribute("xml:space")).toBe("preserve");
+  expect(text?.textContent).toBe("  A  B  ");
+});
+
 it("凍結された入力を変更しない", () => {
   const node = Object.freeze({
     id: 1,

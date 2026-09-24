@@ -127,7 +127,7 @@ export function createMapSvgNodes(
 ): MapSvgNodeMarkup;
 ```
 
-ノード矩形と中央揃えラベルのマークアップ生成だけを担当し、ラベル文字は`escapeMapXmlText`へ委譲する。
+ノード矩形と中央揃えラベルのマークアップ生成だけを担当し、ラベル文字は`escapeMapXmlText`へ委譲する。ラベルの前後・連続空白がSVG描画で縮約されないよう、`text`要素には`xml:space="preserve"`を指定する。
 
 `mapSvgDocument.ts`は背景、辺、全矩形、全ラベルの順でマークアップを合成し、寸法付き`MapSvgDocument`を返すだけにする。
 
