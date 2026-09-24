@@ -69,6 +69,17 @@ it("ノードの高さを超える複数行ラベルを出力範囲に含める"
   });
 });
 
+it("有限座標間の差がオーバーフローする場合は失敗する", () => {
+  const nodes = [
+    { id: 1, parentId: null, x: -Number.MAX_VALUE, y: 0, width: 1, height: 18, label: "A" },
+    { id: 2, parentId: null, x: Number.MAX_VALUE, y: 0, width: 1, height: 18, label: "B" },
+  ];
+
+  expect(() => getMapExportBounds(nodes, measureText)).toThrow(
+    new RangeError("Map export bounds must be finite"),
+  );
+});
+
 it("凍結された入力配列を変更せずに範囲を計算する", () => {
   const nodes = Object.freeze([
     Object.freeze({ id: 1, parentId: null, x: 4, y: 6, width: 10, height: 20, label: "Fixed" }),

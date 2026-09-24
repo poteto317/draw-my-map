@@ -60,10 +60,9 @@ export function wrapMapExportText(
       }
 
       if (breakAt >= 0) {
-        const lineBeforeBreak = remaining.slice(0, breakAt).join("").trimEnd();
+        const lineBeforeBreak = remaining.slice(0, breakAt).join("");
         if (lineBeforeBreak.length > 0) wrappedLines.push(lineBeforeBreak);
         remaining = remaining.slice(breakAt + 1);
-        while (remaining.length > 0 && /\s/u.test(remaining[0])) remaining.shift();
       } else {
         wrappedLines.push(remaining.slice(0, fittingLength).join(""));
         remaining = remaining.slice(fittingLength);

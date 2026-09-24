@@ -31,6 +31,13 @@ describe("wrapMapExportText", () => {
     expect(wrapMapExportText("alpha beta", 60, measure)).toEqual(["alpha", "beta"]);
   });
 
+  it.each([
+    [20, ["A", " B"]],
+    [30, ["A ", "B"]],
+  ] as const)("幅%sのソフト改行では採用した空白だけを除去する", (maxWidth, expected) => {
+    expect(wrapMapExportText("A  B", maxWidth, measure)).toEqual(expected);
+  });
+
   it("does not add an empty line when a soft break starts at leading whitespace", () => {
     expect(wrapMapExportText(" abc", 20, measure)).toEqual(["ab", "c"]);
   });

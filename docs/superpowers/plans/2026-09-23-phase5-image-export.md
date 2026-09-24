@@ -13,6 +13,7 @@
 ## Global Constraints
 
 - 出力範囲は現在のviewportではなく、全ノードの矩形と折り返し後のラベル描画範囲の外接矩形に32pxの余白を追加した範囲とする。
+- 算出した出力範囲または座標オフセットが有限値でない場合は画像生成失敗とする。
 - 背景は白とする。
 - PNGは共通SVGを論理寸法の2倍のCanvasへ描画して生成する。
 - 選択、編集、パン、ズーム、ポインター操作中状態は出力しない。
@@ -98,6 +99,17 @@ it("全ノードの外接矩形に32pxの余白を追加する", () => {
 
 it("空のマップには出力範囲がない", () => {
   expect(getMapExportBounds([], measureText)).toBeNull();
+});
+
+it("有限座標間の差がオーバーフローする場合は失敗する", () => {
+  const nodes = [
+    { id: 1, parentId: null, x: -Number.MAX_VALUE, y: 0, width: 1, height: 18, label: "A" },
+    { id: 2, parentId: null, x: Number.MAX_VALUE, y: 0, width: 1, height: 18, label: "B" },
+  ];
+
+  expect(() => getMapExportBounds(nodes, measureText)).toThrow(
+    new RangeError("Map export bounds must be finite"),
+  );
 });
 ```
 
@@ -204,7 +216,7 @@ Expected: FAIL because `mapExportText.ts` does not exist.
 
 - [ ] **Step 3: Implement greedy wrapping with whitespace preference**
 
-Normalize `\r\n` and `\r` to `\n`. Process each explicit line independently. Accumulate Unicode code points with `Array.from`; when a candidate exceeds `maxWidth`, break at the last whitespace in the current line when available, otherwise break before the overflowing code point. Trim only whitespace used as a soft break; preserve explicit empty lines.
+Normalize `\r\n` and `\r` to `\n`. Process each explicit line independently. Accumulate Unicode code points with `Array.from`; when a candidate exceeds `maxWidth`, break at the last whitespace in the current line when available, otherwise break before the overflowing code point. Remove exactly the one whitespace code point selected as the soft break while preserving adjacent whitespace; preserve explicit empty lines.
 
 - [ ] **Step 4: Run the tests and verify GREEN**
 

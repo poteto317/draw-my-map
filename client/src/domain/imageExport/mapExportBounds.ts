@@ -44,7 +44,7 @@ export function getMapExportBounds(
   const maxX = Math.max(...extents.map(({ right }) => right));
   const maxY = Math.max(...extents.map(({ bottom }) => bottom));
 
-  return {
+  const bounds = {
     minX,
     minY,
     width: maxX - minX + padding * 2,
@@ -52,4 +52,10 @@ export function getMapExportBounds(
     offsetX: padding - minX,
     offsetY: padding - minY,
   };
+
+  if (!Object.values(bounds).every(Number.isFinite)) {
+    throw new RangeError("Map export bounds must be finite");
+  }
+
+  return bounds;
 }
