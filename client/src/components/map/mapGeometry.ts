@@ -1,13 +1,9 @@
 import type { Node } from "@/types/node";
+import type { Point } from "@/domain/nodes/nodeEdgeCurve";
 
-export type Point = { x: number; y: number };
+export type { EdgeCurve, Point } from "@/domain/nodes/nodeEdgeCurve";
+export { getNodeEdgeCurve as getEdgeCurve } from "@/domain/nodes/nodeEdgeCurve";
 
-export type EdgeCurve = {
-  start: Point;
-  control1: Point;
-  control2: Point;
-  end: Point;
-};
 
 export function toLocalPoint(
   clientX: number,
@@ -29,17 +25,4 @@ export function findNodeAtPoint(nodes: readonly Node[], point: Point): Node | un
   }
 
   return undefined;
-}
-
-export function getEdgeCurve(parent: Node, child: Node): EdgeCurve {
-  const start = { x: parent.x + parent.width, y: parent.y + parent.height / 2 };
-  const end = { x: child.x, y: child.y + child.height / 2 };
-  const controlX = (start.x + end.x) / 2;
-
-  return {
-    start,
-    control1: { x: controlX, y: start.y },
-    control2: { x: controlX, y: end.y },
-    end,
-  };
 }

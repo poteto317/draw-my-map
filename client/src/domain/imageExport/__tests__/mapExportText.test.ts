@@ -1,4 +1,8 @@
-import { getMapExportLabel, wrapMapExportText } from "../mapExportText";
+import {
+  getMapExportLabel,
+  getMapExportTextLayout,
+  wrapMapExportText,
+} from "../mapExportText";
 
 const measure = (text: string) => Array.from(text).length * 10;
 
@@ -43,5 +47,19 @@ describe("wrapMapExportText", () => {
 describe("getMapExportLabel", () => {
   it("uses the fallback label for an empty label", () => {
     expect(getMapExportLabel("")).toBe("新しいノード");
+  });
+});
+
+describe("getMapExportTextLayout", () => {
+  it("複数行全体の描画範囲と先頭baselineを中央基準で計算する", () => {
+    const layout = getMapExportTextLayout("A\nLongest\nB", 100, 50, measure);
+
+    expect(layout).toMatchObject({
+      lines: ["A", "Longest", "B"],
+      top: 23,
+      bottom: 77,
+      width: 70,
+    });
+    expect(layout.firstBaseline).toBeCloseTo(36.66666666666667);
   });
 });

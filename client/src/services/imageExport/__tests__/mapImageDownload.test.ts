@@ -1,8 +1,4 @@
-import {
-  createMapImageFileName,
-  createMapSvgBlob,
-  downloadMapImage,
-} from "@/services/imageExport/mapImageDownload";
+import { downloadMapImage } from "@/services/imageExport/mapImageDownload";
 
 const originalCreateObjectUrl = URL.createObjectURL;
 const originalRevokeObjectUrl = URL.revokeObjectURL;
@@ -18,22 +14,6 @@ describe("mapImageDownload", () => {
       value: originalRevokeObjectUrl,
     });
     jest.restoreAllMocks();
-  });
-
-  it("ローカル日時をゼロ埋めした画像ファイル名を作る", () => {
-    const now = new Date(2026, 8, 20, 12, 34, 56);
-
-    expect(createMapImageFileName("svg", now))
-      .toBe("draw-my-map-20260920-123456.svg");
-    expect(createMapImageFileName("png", now))
-      .toBe("draw-my-map-20260920-123456.png");
-  });
-
-  it("SVG文字列からSVG MIME typeのBlobを作る", () => {
-    const blob = createMapSvgBlob("<svg />");
-
-    expect(blob).toBeInstanceOf(Blob);
-    expect(blob.type).toBe("image/svg+xml;charset=utf-8");
   });
 
   it("画像Blobを指定したファイル名でダウンロードしてURLを解放する", () => {

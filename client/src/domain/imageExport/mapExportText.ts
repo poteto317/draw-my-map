@@ -1,5 +1,17 @@
 export type MeasureMapText = (text: string) => number;
 
+export type MapExportTextLayout = {
+  lines: string[];
+  firstBaseline: number;
+  top: number;
+  bottom: number;
+  width: number;
+};
+
+export const MAP_EXPORT_FONT_SIZE = 14;
+export const MAP_EXPORT_LINE_HEIGHT = 18;
+export const MAP_EXPORT_HORIZONTAL_INSET = 8;
+
 const FALLBACK_MAP_EXPORT_LABEL = "新しいノード";
 
 export function getMapExportLabel(label: string): string {
@@ -62,4 +74,28 @@ export function wrapMapExportText(
   }
 
   return wrappedLines;
+}
+
+export function getMapExportTextLayout(
+  label: string,
+  maxWidth: number,
+  centerY: number,
+  measureText: MeasureMapText,
+): MapExportTextLayout {
+  const lines = wrapMapExportText(
+    getMapExportLabel(label),
+    maxWidth,
+    measureText,
+  );
+  const blockHeight = lines.length * MAP_EXPORT_LINE_HEIGHT;
+
+  return {
+    lines,
+    firstBaseline: centerY
+      - ((lines.length - 1) * MAP_EXPORT_LINE_HEIGHT) / 2
+      + MAP_EXPORT_FONT_SIZE / 3,
+    top: centerY - blockHeight / 2,
+    bottom: centerY + blockHeight / 2,
+    width: Math.max(0, ...lines.map(measureText)),
+  };
 }
