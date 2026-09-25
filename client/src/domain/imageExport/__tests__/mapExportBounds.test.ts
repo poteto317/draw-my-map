@@ -80,6 +80,45 @@ it("有限座標間の差がオーバーフローする場合は失敗する", (
   );
 });
 
+it.each(["x", "y"] as const)(
+  "%s座標への正の寸法加算が精度飽和する場合は失敗する",
+  (axis) => {
+    const node = {
+      id: 1,
+      parentId: null,
+      x: axis === "x" ? Number.MAX_VALUE : 0,
+      y: axis === "y" ? Number.MAX_VALUE : 0,
+      width: axis === "x" ? 1e291 : 100,
+      height: axis === "y" ? 1e291 : 60,
+      label: "A",
+    };
+
+    expect(() => getMapExportBounds([node], measureText)).toThrow(RangeError);
+  },
+);
+
+it("大量のノードでも引数上限に依存せず外接矩形を計算する", () => {
+  const node = {
+    id: 1,
+    parentId: null,
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 60,
+    label: "A",
+  };
+  const nodes = Array.from({ length: 200_000 }, () => node);
+
+  expect(getMapExportBounds(nodes, measureText)).toEqual({
+    minX: 0,
+    minY: 0,
+    width: 164,
+    height: 124,
+    offsetX: 32,
+    offsetY: 32,
+  });
+});
+
 it("凍結された入力配列を変更せずに範囲を計算する", () => {
   const nodes = Object.freeze([
     Object.freeze({ id: 1, parentId: null, x: 4, y: 6, width: 10, height: 20, label: "Fixed" }),

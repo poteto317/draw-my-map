@@ -111,6 +111,8 @@ it("有限座標間の差がオーバーフローする場合は失敗する", (
     new RangeError("Map export bounds must be finite"),
   );
 });
+
+// 正の寸法加算が精度飽和するX/Y境界と、20万ノードの集約も検証する。
 ```
 
 - [ ] **Step 2: Run the tests and verify RED**
@@ -137,26 +139,42 @@ export function getMapExportBounds(
 ): MapExportBounds | null {
   if (nodes.length === 0) return null;
 
-  const extents = nodes.map((node) => {
-    const centerX = node.x + node.width / 2;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (const node of nodes) {
+    const nodeRight = node.x + node.width;
+    const nodeBottom = node.y + node.height;
+    if (
+      !Number.isFinite(nodeRight) ||
+      !Number.isFinite(nodeBottom) ||
+      nodeRight <= node.x ||
+      nodeBottom <= node.y
+    ) {
+      throw new RangeError("Map export bounds must be finite");
+    }
+
+    const centerX = node.x / 2 + nodeRight / 2;
     const layout = getMapExportTextLayout(
       node.label,
       node.width - MAP_EXPORT_HORIZONTAL_INSET * 2,
-      node.y + node.height / 2,
+      node.y / 2 + nodeBottom / 2,
       measureText,
     );
 
-    return {
+    const extent = {
       left: Math.min(node.x, centerX - layout.width / 2),
       top: Math.min(node.y, layout.top),
-      right: Math.max(node.x + node.width, centerX + layout.width / 2),
-      bottom: Math.max(node.y + node.height, layout.bottom),
+      right: Math.max(nodeRight, centerX + layout.width / 2),
+      bottom: Math.max(nodeBottom, layout.bottom),
     };
-  });
-  const minX = Math.min(...extents.map(({ left }) => left));
-  const minY = Math.min(...extents.map(({ top }) => top));
-  const maxX = Math.max(...extents.map(({ right }) => right));
-  const maxY = Math.max(...extents.map(({ bottom }) => bottom));
+    minX = Math.min(minX, extent.left);
+    minY = Math.min(minY, extent.top);
+    maxX = Math.max(maxX, extent.right);
+    maxY = Math.max(maxY, extent.bottom);
+  }
 
   return {
     minX,
@@ -216,7 +234,7 @@ Expected: FAIL because `mapExportText.ts` does not exist.
 
 - [ ] **Step 3: Implement greedy wrapping with whitespace preference**
 
-Normalize `\r\n` and `\r` to `\n`. Process each explicit line independently. Accumulate Unicode code points with `Array.from`; when a candidate exceeds `maxWidth`, break at the last whitespace in the current line when available, otherwise break before the overflowing code point. Remove exactly the one whitespace code point selected as the soft break while preserving adjacent whitespace; preserve explicit empty lines.
+Normalize `\r\n` and `\r` to `\n`. Process each explicit line independently. Accumulate Unicode code points with `Array.from`; use a cursor plus exponential/binary search to find the fitting prefix without repeatedly measuring the full remaining suffix. When a candidate exceeds `maxWidth`, break at the last whitespace in the current line when available, otherwise break before the overflowing code point. Remove exactly the one whitespace code point selected as the soft break while preserving adjacent whitespace; preserve explicit empty lines. Compute the widest line with iteration or `reduce`, and never spread unbounded character or line arrays into function arguments.
 
 - [ ] **Step 4: Run the tests and verify GREEN**
 

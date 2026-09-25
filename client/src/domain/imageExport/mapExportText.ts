@@ -92,7 +92,7 @@ export function wrapMapExportText(
     }
 
     if (maxWidth <= 0) {
-      wrappedLines.push(...codePoints);
+      for (const codePoint of codePoints) wrappedLines.push(codePoint);
       continue;
     }
 
@@ -156,6 +156,9 @@ export function getMapExportTextLayout(
       + MAP_EXPORT_FONT_SIZE / 3,
     top: centerY - blockHeight / 2,
     bottom: centerY + blockHeight / 2,
-    width: Math.max(0, ...lines.map(measureText)),
+    width: lines.reduce(
+      (widest, line) => Math.max(widest, measureText(line)),
+      0,
+    ),
   };
 }

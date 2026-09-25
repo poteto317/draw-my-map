@@ -65,6 +65,14 @@ describe("wrapMapExportText", () => {
     expect(measuredCharacters).toBeLessThanOrEqual(label.length * 4);
   });
 
+  it("幅がない大量文字でも引数上限に依存せず1文字ずつ折り返す", () => {
+    const label = "a".repeat(200_000);
+    const lines = wrapMapExportText(label, 0, measure);
+
+    expect(lines).toHaveLength(label.length);
+    expect(lines.join("")).toBe(label);
+  });
+
   it("normalizes CRLF and preserves explicit blank lines", () => {
     expect(wrapMapExportText("A\r\n\r\nB", 100, measure)).toEqual(["A", "", "B"]);
   });
@@ -87,5 +95,18 @@ describe("getMapExportTextLayout", () => {
       width: 70,
     });
     expect(layout.firstBaseline).toBeCloseTo(36.66666666666667);
+  });
+
+  it("大量の折り返し行でも引数上限に依存せず最大幅を計算する", () => {
+    const lineCount = 200_000;
+    const layout = getMapExportTextLayout(
+      Array.from({ length: lineCount }, () => "A").join("\n"),
+      100,
+      0,
+      measure,
+    );
+
+    expect(layout.lines).toHaveLength(lineCount);
+    expect(layout.width).toBe(10);
   });
 });
