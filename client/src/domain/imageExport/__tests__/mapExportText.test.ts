@@ -50,6 +50,21 @@ describe("wrapMapExportText", () => {
     expect(wrapMapExportText("abcdefgh", 30, measure)).toEqual(["abc", "def", "gh"]);
   });
 
+  it("長いラベルを折り返しても測定対象の総文字数が入力長に比例する", () => {
+    const label = "a".repeat(1_000);
+    let measuredCharacters = 0;
+    const boundedMeasure = (text: string) => {
+      const length = Array.from(text).length;
+      measuredCharacters += length;
+      return length * 10;
+    };
+    const lines = wrapMapExportText(label, 10, boundedMeasure);
+
+    expect(lines).toHaveLength(1_000);
+    expect(lines.join("")).toBe(label);
+    expect(measuredCharacters).toBeLessThanOrEqual(label.length * 4);
+  });
+
   it("normalizes CRLF and preserves explicit blank lines", () => {
     expect(wrapMapExportText("A\r\n\r\nB", 100, measure)).toEqual(["A", "", "B"]);
   });
