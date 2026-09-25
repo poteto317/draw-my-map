@@ -202,7 +202,9 @@ createMapSvgExport
   → createMapSvgDocument
     → createMapSvgEdges
     → createMapSvgNodes
-      → wrapMapExportText
+      → getMapExportTextLayout
+        → getMapExportLabel
+        → wrapMapExportText（公開入口でXML禁止文字を正規化）
       → escapeMapXmlText
 ```
 

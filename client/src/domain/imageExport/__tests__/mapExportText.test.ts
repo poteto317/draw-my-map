@@ -23,6 +23,18 @@ describe("wrapMapExportText", () => {
     expect(wrapMapExportText("alpha", 60, measure)).toEqual(["alpha"]);
   });
 
+  it("公開入口でXML禁止文字を正規化してから測定する", () => {
+    const measuredTexts: string[] = [];
+    const recordingMeasure = (text: string) => {
+      measuredTexts.push(text);
+      return measure(text);
+    };
+
+    expect(wrapMapExportText("A\u0000B", 100, recordingMeasure))
+      .toEqual(["A\uFFFDB"]);
+    expect(measuredTexts).not.toContainEqual(expect.stringContaining("\u0000"));
+  });
+
   it("幅内の前後・連続空白を保持する", () => {
     expect(wrapMapExportText("  A  B  ", 100, measure)).toEqual(["  A  B  "]);
   });

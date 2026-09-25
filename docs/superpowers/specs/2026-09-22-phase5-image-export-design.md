@@ -82,7 +82,7 @@
 
 ### テキスト改行
 
-`client/src/domain/imageExport/mapExportText.ts`は、ラベルと最大幅、文字列幅の測定関数を受け取り、SVGへ出力する行配列を返す。測定方法を注入することで、改行アルゴリズムをDOMから分離する。
+`client/src/domain/imageExport/mapExportText.ts`は、ラベルと最大幅、文字列幅の測定関数を受け取り、XML 1.0禁止文字を公開入口でU+FFFDへ正規化してから、SVGへ出力する行配列を返す。測定方法を注入することで、改行アルゴリズムをDOMから分離する。
 
 `client/src/services/imageExport/mapTextMeasurement.ts`は、非表示Canvasの2D contextを使って指定文字列の幅を測定する。contextが取得できない場合は書き出し失敗とする。
 

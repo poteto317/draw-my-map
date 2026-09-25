@@ -225,6 +225,7 @@ const measure = (text: string) => Array.from(text).length * 10;
 expect(wrapMapExportText("alpha beta", 60, measure)).toEqual(["alpha", "beta"]);
 expect(wrapMapExportText("あいうえ", 20, measure)).toEqual(["あい", "うえ"]);
 expect(wrapMapExportText("A\r\n\r\nB", 100, measure)).toEqual(["A", "", "B"]);
+expect(wrapMapExportText("A\u0000B", 100, measure)).toEqual(["A\uFFFDB"]);
 expect(getMapExportLabel("")).toBe("新しいノード");
 ```
 

@@ -82,7 +82,9 @@ export function wrapMapExportText(
   maxWidth: number,
   measureText: MeasureMapText,
 ): string[] {
-  const explicitLines = label.replace(/\r\n?/g, "\n").split("\n");
+  const explicitLines = normalizeMapXmlText(label)
+    .replace(/\r\n?/g, "\n")
+    .split("\n");
   const wrappedLines: string[] = [];
 
   for (const explicitLine of explicitLines) {
