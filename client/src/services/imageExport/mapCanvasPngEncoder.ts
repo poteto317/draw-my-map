@@ -1,18 +1,30 @@
 const PNG_SCALE = 2;
+const MAX_CANVAS_ATTRIBUTE_DIMENSION = 2 ** 32 - 1;
+
+function getCanvasPixelDimension(dimension: number): number {
+  const pixelDimension = Math.ceil(dimension * PNG_SCALE);
+  if (!Number.isFinite(pixelDimension)) {
+    throw new RangeError("PNG canvas dimensions must be finite");
+  }
+  if (pixelDimension > MAX_CANVAS_ATTRIBUTE_DIMENSION) {
+    throw new RangeError("PNG canvas dimensions are unsupported");
+  }
+  return pixelDimension;
+}
 
 export function createMapPngEncoder(
   width: number,
   height: number,
 ): (image: CanvasImageSource) => Promise<Blob> {
-  const pixelWidth = width * PNG_SCALE;
-  const pixelHeight = height * PNG_SCALE;
-  if (!Number.isFinite(pixelWidth) || !Number.isFinite(pixelHeight)) {
-    throw new RangeError("PNG canvas dimensions must be finite");
-  }
+  const pixelWidth = getCanvasPixelDimension(width);
+  const pixelHeight = getCanvasPixelDimension(height);
 
   const canvas = document.createElement("canvas");
-  canvas.width = Math.ceil(pixelWidth);
-  canvas.height = Math.ceil(pixelHeight);
+  canvas.width = pixelWidth;
+  canvas.height = pixelHeight;
+  if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+    throw new RangeError("PNG canvas dimensions are unsupported");
+  }
   const context = canvas.getContext("2d");
   if (!context) {
     throw new Error("Canvas 2D context is unavailable");

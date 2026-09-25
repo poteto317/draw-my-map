@@ -23,6 +23,24 @@ type MapExportExtent = {
   bottom: number;
 };
 
+function isRepresentable(value: number, expected: number): boolean {
+  const tolerance = Number.EPSILON * Math.max(1, Math.abs(expected)) * 4;
+  return Math.abs(value - expected) <= tolerance;
+}
+
+function hasRepresentablePadding(
+  min: number,
+  max: number,
+  offset: number,
+  size: number,
+  padding: number,
+): boolean {
+  return (
+    isRepresentable(min + offset, padding) &&
+    isRepresentable(max + offset, size - padding)
+  );
+}
+
 function getNodeExportExtent(
   node: Node,
   measureText: MeasureMapText,
@@ -84,6 +102,13 @@ export function getMapExportBounds(
   };
 
   if (!Object.values(bounds).every(Number.isFinite)) {
+    throw new RangeError("Map export bounds must be finite");
+  }
+
+  if (
+    !hasRepresentablePadding(minX, maxX, bounds.offsetX, bounds.width, padding) ||
+    !hasRepresentablePadding(minY, maxY, bounds.offsetY, bounds.height, padding)
+  ) {
     throw new RangeError("Map export bounds must be finite");
   }
 

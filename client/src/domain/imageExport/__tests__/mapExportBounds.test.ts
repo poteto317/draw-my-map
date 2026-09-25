@@ -97,6 +97,26 @@ it.each(["x", "y"] as const)(
   },
 );
 
+it.each(["x", "y"] as const)(
+  "%s座標の平行移動で余白が失われる場合は失敗する",
+  (axis) => {
+    const coordinate = Number.MAX_VALUE / 2;
+    const node = {
+      id: 1,
+      parentId: null,
+      x: axis === "x" ? coordinate : 0,
+      y: axis === "y" ? coordinate : 0,
+      width: axis === "x" ? 2e292 : 100,
+      height: axis === "y" ? 2e292 : 60,
+      label: "A",
+    };
+
+    expect(() => getMapExportBounds([node], measureText)).toThrow(
+      new RangeError("Map export bounds must be finite"),
+    );
+  },
+);
+
 it("大量のノードでも引数上限に依存せず外接矩形を計算する", () => {
   const node = {
     id: 1,

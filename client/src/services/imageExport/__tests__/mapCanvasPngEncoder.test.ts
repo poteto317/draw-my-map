@@ -50,6 +50,44 @@ describe("createMapPngEncoder", () => {
     );
   });
 
+  it.each([
+    [2 ** 31, 180],
+    [320, 2 ** 31],
+  ])("Canvas属性の上限を超えるピクセル寸法は失敗する", (width, height) => {
+    expect(() => createMapPngEncoder(width, height)).toThrow(
+      new RangeError("PNG canvas dimensions are unsupported"),
+    );
+  });
+
+  it.each(["width", "height"] as const)(
+    "Canvasが%s寸法を保持できない場合は失敗する",
+    (dimension) => {
+      let storedWidth = 0;
+      let storedHeight = 0;
+      Object.defineProperties(canvas, {
+        width: {
+          configurable: true,
+          get: () => storedWidth,
+          set: (value: number) => {
+            storedWidth = dimension === "width" ? value - 1 : value;
+          },
+        },
+        height: {
+          configurable: true,
+          get: () => storedHeight,
+          set: (value: number) => {
+            storedHeight = dimension === "height" ? value - 1 : value;
+          },
+        },
+      });
+
+      expect(() => createMapPngEncoder(320, 180)).toThrow(
+        new RangeError("PNG canvas dimensions are unsupported"),
+      );
+      expect(canvas.getContext).not.toHaveBeenCalled();
+    },
+  );
+
   it("2D context欠損を画像消費前に通知する", () => {
     jest.spyOn(canvas, "getContext").mockReturnValue(null);
     expect(() => createMapPngEncoder(320, 180)).toThrow("Canvas 2D context is unavailable");

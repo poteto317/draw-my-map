@@ -153,7 +153,7 @@ export function createMapPngEncoder(
 ): (image: CanvasImageSource) => Promise<Blob>;
 ```
 
-2倍解像度Canvasの作成、2D context取得、論理座標へのscaleをfactory呼び出し時に行い、返した関数が画像描画とPNG Blob符号化を担当する。Canvasのピクセル寸法は2倍後の値を有限性検証してから整数へ切り上げ、端の切り取りを防ぐ。2D context欠損はSVG画像ロードやObject URL生成より前に失敗する既存契約を維持する。
+2倍解像度Canvasの作成、2D context取得、論理座標へのscaleをfactory呼び出し時に行い、返した関数が画像描画とPNG Blob符号化を担当する。Canvasのピクセル寸法は2倍後の値を有限性検証してから整数へ切り上げ、端の切り取りを防ぐ。Canvas属性の上限を超える寸法と、ブラウザが代入値をそのまま保持できない寸法は描画前に拒否する。2D context欠損はSVG画像ロードやObject URL生成より前に失敗する既存契約を維持する。
 
 `mapPngRasterizer.ts`は最初に`const encode = createMapPngEncoder(width, height)`を呼び、続けて`withLoadedMapSvgImage(svg, encode)`を返す合成境界だけにする。公開関数は`async`のままとし、factoryの同期例外もPromise拒否へ変換する。
 
@@ -217,7 +217,7 @@ createMapSvgExport
 - `mapSvgNodes.test.ts`: 矩形、中央揃え、折り返し、狭いノード、XML文字を検証する。
 - `mapSvgDocument.test.ts`: 寸法、背景、描画順、合成結果だけを検証する。
 - `loadMapSvgImage.test.ts`: load/error、Image生成例外、src設定例外、競合イベント、URL解放を検証する。
-- `mapCanvasPngEncoder.test.ts`: factoryによる2倍Canvas準備、小数寸法の切り上げ、2倍後の非有限寸法とcontext欠損の同期例外、返した関数による描画例外、null Blob、`toBlob`例外を検証する。
+- `mapCanvasPngEncoder.test.ts`: factoryによる2倍Canvas準備、小数寸法の切り上げ、2倍後の非有限寸法、Canvas属性上限超過、代入後の実寸法不一致、context欠損の同期例外、返した関数による描画例外、null Blob、`toBlob`例外を検証する。
 - `mapPngRasterizer.test.ts`: loaderとencoderの合成契約、およびcontext欠損時にImage/Object URL生成へ進まない早期失敗契約を検証する。
 - `mapImageFileName.test.ts`: SVG/PNG共通の日時付きファイル名規則を検証する。
 - `mapSvgArtifact.test.ts`: UTF-8 SVG Blob表現を検証する。
