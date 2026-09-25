@@ -35,9 +35,12 @@ function hasRepresentablePadding(
   size: number,
   padding: number,
 ): boolean {
+  const translatedMin = min + offset;
+  const translatedMax = max + offset;
   return (
-    isRepresentable(min + offset, padding) &&
-    isRepresentable(max + offset, size - padding)
+    isRepresentable(translatedMin, padding) &&
+    isRepresentable(translatedMax, size - padding) &&
+    (padding <= 0 || (translatedMin > 0 && translatedMax < size))
   );
 }
 

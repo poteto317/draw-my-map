@@ -117,6 +117,32 @@ it.each(["x", "y"] as const)(
   },
 );
 
+it.each([
+  { axis: "x", edge: "右端" },
+  { axis: "y", edge: "下端" },
+] as const)(
+  "$edgeの余白が画像境界へ丸められる場合は失敗する",
+  ({ axis }) => {
+    const dimension = 2e292;
+    const nodes = [
+      { id: 1, parentId: null, x: 0, y: 0, width: 100, height: 60, label: "A" },
+      {
+        id: 2,
+        parentId: null,
+        x: axis === "x" ? Number.MAX_VALUE - dimension : 0,
+        y: axis === "y" ? Number.MAX_VALUE - dimension : 0,
+        width: axis === "x" ? dimension : 100,
+        height: axis === "y" ? dimension : 60,
+        label: "B",
+      },
+    ];
+
+    expect(() => getMapExportBounds(nodes, measureText)).toThrow(
+      new RangeError("Map export bounds must be finite"),
+    );
+  },
+);
+
 it("大量のノードでも引数上限に依存せず外接矩形を計算する", () => {
   const node = {
     id: 1,

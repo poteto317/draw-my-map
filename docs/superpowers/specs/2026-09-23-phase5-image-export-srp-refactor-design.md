@@ -211,6 +211,7 @@ createMapSvgExport
 - `useMapPngExport.test.tsx`: 空マップ、成功、変換失敗、同一tick連打、処理中状態の解除を検証する。
 - `useMapImageExport.test.tsx`: 共有通知の上書きと2つのHookの公開契約を統合境界として検証する。
 - `createMapSvgExport.test.ts`: 範囲・文字測定・SVG生成の既定経路を検証する。
+- `mapExportBounds.test.ts`: 外接矩形、余白、平行移動後の境界内包、極端な有限座標の精度飽和、入力不変を検証する。
 - `mapXmlText.test.ts`: XML構造文字、禁止文字、許可Unicodeを直接検証する。
 - `nodeEdgeCurve.test.ts`: 既存Bezier座標契約と同符号の極大有限座標における制御点の有限性をドメイン境界で検証する。
 - `mapSvgEdges.test.ts`: 親子辺、親欠損、入力不変を検証する。
