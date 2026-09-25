@@ -92,15 +92,15 @@
 
 ### ダウンロード
 
-`client/src/services/imageExport/mapImageDownload.ts`は、Blobを指定名でダウンロードする共通処理と、SVGのBlob作成だけを担当する。利用後のダウンロード用Blob URLは`finally`で解放する。SVGの構築やPNG変換は行わない。
+`client/src/services/imageExport/mapSvgArtifact.ts`はSVG文字列からUTF-8のSVG Blobを作る処理だけを担当する。`client/src/services/imageExport/mapImageDownload.ts`は受け取ったBlobを指定名でダウンロードし、利用後のダウンロード用Blob URLを`finally`で解放する処理だけを担当する。SVGの構築、Blob作成、PNG変換は行わない。
 
 ### PNGラスタライズ
 
-`client/src/services/imageExport/mapPngRasterizer.ts`は、SVG文字列、論理幅、論理高さを受け取り、2倍解像度のPNG Blobを非同期で返す。Imageのデコード、Canvas描画、PNGエンコード、中間Blob URLの解放だけを担当する。
+`client/src/services/imageExport/mapPngRasterizer.ts`は、SVG文字列、論理幅、論理高さを受け取り、`createMapPngEncoder`と`withLoadedMapSvgImage`を合成して2倍解像度のPNG Blobを非同期で返す。Imageのデコードと中間Blob URLの解放は`loadMapSvgImage.ts`、Canvas準備・描画・PNGエンコードは`mapCanvasPngEncoder.ts`が担当する。
 
 ### React Hook
 
-`client/src/hooks/useMapImageExport.ts`は、現在のノードを受け取り、`exportSvg`、`exportPng`、`isExportingPng`、`notice`を返す。範囲計算、SVG生成、PNG変換、ダウンロードの調停と、利用者向け通知への変換を行う。
+`client/src/hooks/useMapImageExport.ts`は、現在のノードを受け取り、共有する`notice` stateを所有して`useMapSvgExport`と`useMapPngExport`を合成し、`exportSvg`、`exportPng`、`isExportingPng`、`notice`を返す。SVG・PNG別の生成、変換、ダウンロード、利用者向け通知への変換は各専用Hookが担当する。
 
 - SVG成功: 「SVGファイルを書き出しました。」
 - PNG成功: 「PNGファイルを書き出しました。」
