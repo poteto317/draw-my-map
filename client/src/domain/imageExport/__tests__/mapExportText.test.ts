@@ -85,6 +85,21 @@ describe("getMapExportLabel", () => {
 });
 
 describe("getMapExportTextLayout", () => {
+  it("XML禁止文字を置換後の文字幅で描画範囲を計算する", () => {
+    const replacementAwareMeasure = (text: string) => (
+      Array.from(text).reduce(
+        (width, codePoint) => width + (codePoint === "\uFFFD" ? 80 : 10),
+        0,
+      )
+    );
+
+    expect(getMapExportTextLayout("A\u0000B", 200, 50, replacementAwareMeasure))
+      .toMatchObject({
+        lines: ["A\uFFFDB"],
+        width: 100,
+      });
+  });
+
   it("複数行全体の描画範囲と先頭baselineを中央基準で計算する", () => {
     const layout = getMapExportTextLayout("A\nLongest\nB", 100, 50, measure);
 

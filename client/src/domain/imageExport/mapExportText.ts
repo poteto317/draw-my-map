@@ -1,3 +1,5 @@
+import { normalizeMapXmlText } from "@/domain/imageExport/mapXmlText";
+
 export type MeasureMapText = (text: string) => number;
 
 export type MapExportTextLayout = {
@@ -72,7 +74,7 @@ function findFittingLength(
 }
 
 export function getMapExportLabel(label: string): string {
-  return label || FALLBACK_MAP_EXPORT_LABEL;
+  return normalizeMapXmlText(label || FALLBACK_MAP_EXPORT_LABEL);
 }
 
 export function wrapMapExportText(

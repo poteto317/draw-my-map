@@ -40,7 +40,7 @@
 - 同一tickのPNG連打では最初の処理だけを実行する。
 - SVGは白背景、辺、ノード矩形、ラベルの描画順を維持する。
 - ノードの高さを超える複数行ラベルもSVG/PNGの出力範囲へ含める。
-- XML 1.0禁止文字をU+FFFDへ置換し、構造文字をエスケープする。
+- XML 1.0禁止文字を文字幅測定前にU+FFFDへ置換し、構造文字をエスケープする。
 - PNGは同じSVGを2倍解像度でラスタライズする。
 - 成功、失敗、同期例外、競合イベントの全経路でObject URLを一度だけ解放する。
 - 外部依存を追加しない。
@@ -94,10 +94,11 @@ PNG固有のSVG要求、ラスタライズ、ダウンロード、排他状態�
 `client/src/domain/imageExport/mapXmlText.ts`を新設する。
 
 ```ts
+export function normalizeMapXmlText(value: string): string;
 export function escapeMapXmlText(value: string): string;
 ```
 
-XML 1.0で禁止されるコードポイントの置換と、XML構造文字のエスケープだけを担当する。
+XML 1.0で禁止されるコードポイントの置換と、XML構造文字のエスケープだけを担当する。正規化済みラベルを文字幅測定とSVG出力で共有し、算出範囲と描画内容を一致させる。
 
 `client/src/domain/nodes/nodeEdgeCurve.ts`を新設し、Node間のBezier曲線座標計算とその型だけを担当する。制御点の中点は有限座標同士の加算でオーバーフローしないよう、各X座標を先に半分にしてから加算する。`components/map/mapGeometry.ts`は既存利用者との互換性のためこれを再exportし、画像エクスポートはドメインモジュールを直接参照する。
 
@@ -212,7 +213,7 @@ createMapSvgExport
 - `useMapImageExport.test.tsx`: 共有通知の上書きと2つのHookの公開契約を統合境界として検証する。
 - `createMapSvgExport.test.ts`: 範囲・文字測定・SVG生成の既定経路を検証する。
 - `mapExportBounds.test.ts`: 外接矩形、余白、平行移動後の境界内包、極端な有限座標の精度飽和、入力不変を検証する。
-- `mapXmlText.test.ts`: XML構造文字、禁止文字、許可Unicodeを直接検証する。
+- `mapXmlText.test.ts`: XML構造文字、禁止文字の正規化、許可Unicodeを直接検証する。
 - `nodeEdgeCurve.test.ts`: 既存Bezier座標契約と同符号の極大有限座標における制御点の有限性をドメイン境界で検証する。
 - `mapSvgEdges.test.ts`: 親子辺、親欠損、入力不変を検証する。
 - `mapSvgNodes.test.ts`: 矩形、中央揃え、折り返し、狭いノード、XML文字を検証する。

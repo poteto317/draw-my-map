@@ -79,7 +79,7 @@ function jsonFile(contents: string): File {
   return file;
 }
 
-function queryOperationNoticeWrapper(): HTMLDivElement | null {
+function queryOperationNoticeWrapper(): HTMLElement | null {
   return screen.queryByTestId("operation-notices");
 }
 

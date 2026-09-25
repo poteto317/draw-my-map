@@ -1,4 +1,12 @@
-import { escapeMapXmlText } from "@/domain/imageExport/mapXmlText";
+import {
+  escapeMapXmlText,
+  normalizeMapXmlText,
+} from "@/domain/imageExport/mapXmlText";
+
+it("XML禁止文字だけを置換し構造文字は保持する", () => {
+  expect(normalizeMapXmlText(`A\u0000<script>&"'B`))
+    .toBe(`A\uFFFD<script>&"'B`);
+});
 
 it("XML禁止文字を置換し構造文字をエスケープする", () => {
   expect(escapeMapXmlText(`A\u0000<script>&"'B`))
