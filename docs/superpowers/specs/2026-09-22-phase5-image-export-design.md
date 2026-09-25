@@ -59,7 +59,8 @@
 ### PNG
 
 - 共通のSVG文字列をBlob URLにし、`Image`でデコードする。
-- Canvasのピクセル寸法はSVGの論理寸法の2倍とする。
+- Canvasのピクセル寸法はSVGの論理寸法を2倍した値以上の最小整数とし、端を切り取らない。
+- 2倍後のCanvas寸法が有限値でない場合は画像生成失敗とする。
 - 2D contextに`scale(2, 2)`を適用し、SVGを論理寸法で描画する。
 - `canvas.toBlob`を`image/png`で呼び出す。`null`の場合は失敗とする。
 - ファイル名は`draw-my-map-YYYYMMDD-HHmmss.png`とする。
@@ -181,7 +182,8 @@ PNG処理中に再度`exportPng`が呼ばれた場合は新しい処理を開始
 - download属性を持つリンクの起動
 - ダウンロード用Blob URLの解放
 - SVG読み込み用Blob URLの成功・失敗時の解放
-- Canvasの幅と高さが論理寸法の2倍であること
+- Canvasの幅と高さが論理寸法の2倍以上の最小整数であること
+- 2倍後のCanvas寸法が有限値でない場合に失敗すること
 - 2D contextの2倍scaleとImage描画
 - context取得失敗、Image読み込み失敗、`toBlob(null)`
 

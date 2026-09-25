@@ -295,6 +295,7 @@ expect(canvas.toBlob).toHaveBeenCalledWith(expect.any(Function), "image/png");
 ```
 
 factory呼び出し時にCanvasを準備し、2D context欠損は同期例外となることを検証する。返した関数では`drawImage`例外、`toBlob`例外、null BlobをそれぞれPromise拒否へ変換する。
+小数の論理寸法は2倍後に整数へ切り上げ、2倍計算で非有限値になる寸法は同期例外にすることも検証する。
 
 - [ ] **Step 6: Canvas符号化テストのREDを確認する**
 
@@ -304,7 +305,7 @@ Expected: FAIL because `mapCanvasPngEncoder` does not exist.
 
 - [ ] **Step 7: 2倍Canvas描画とPNG符号化を実装する**
 
-`PNG_SCALE = 2`をencoder側で所有する。`createMapPngEncoder(width, height)`でCanvasとcontextを準備して画像を消費する関数を返し、既存のエラーメッセージを維持する。context欠損をSVG画像ロードより前に検出するため、factoryの同期例外は公開ラスタライザーの`async`境界でPromise拒否へ変換する。
+`PNG_SCALE = 2`をencoder側で所有する。`createMapPngEncoder(width, height)`で2倍後のピクセル寸法を有限性検証し、`Math.ceil`で整数化してからCanvasとcontextを準備する。画像を消費する関数を返し、既存のエラーメッセージを維持する。context欠損をSVG画像ロードより前に検出するため、factoryの同期例外は公開ラスタライザーの`async`境界でPromise拒否へ変換する。
 
 - [ ] **Step 8: Canvas符号化テストをGREENにする**
 

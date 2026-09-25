@@ -34,6 +34,22 @@ describe("createMapPngEncoder", () => {
     expect(canvas.toBlob).toHaveBeenCalledWith(expect.any(Function), "image/png");
   });
 
+  it("小数の論理寸法は2倍以上の整数ピクセルへ切り上げる", () => {
+    createMapPngEncoder(320.25, 180.25);
+
+    expect(canvas.width).toBe(641);
+    expect(canvas.height).toBe(361);
+  });
+
+  it.each([
+    [Number.MAX_VALUE, 180],
+    [320, Number.MAX_VALUE],
+  ])("2倍後のCanvas寸法が有限値でない場合は失敗する", (width, height) => {
+    expect(() => createMapPngEncoder(width, height)).toThrow(
+      new RangeError("PNG canvas dimensions must be finite"),
+    );
+  });
+
   it("2D context欠損を画像消費前に通知する", () => {
     jest.spyOn(canvas, "getContext").mockReturnValue(null);
     expect(() => createMapPngEncoder(320, 180)).toThrow("Canvas 2D context is unavailable");

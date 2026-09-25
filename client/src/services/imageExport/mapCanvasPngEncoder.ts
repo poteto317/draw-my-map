@@ -4,9 +4,15 @@ export function createMapPngEncoder(
   width: number,
   height: number,
 ): (image: CanvasImageSource) => Promise<Blob> {
+  const pixelWidth = width * PNG_SCALE;
+  const pixelHeight = height * PNG_SCALE;
+  if (!Number.isFinite(pixelWidth) || !Number.isFinite(pixelHeight)) {
+    throw new RangeError("PNG canvas dimensions must be finite");
+  }
+
   const canvas = document.createElement("canvas");
-  canvas.width = width * PNG_SCALE;
-  canvas.height = height * PNG_SCALE;
+  canvas.width = Math.ceil(pixelWidth);
+  canvas.height = Math.ceil(pixelHeight);
   const context = canvas.getContext("2d");
   if (!context) {
     throw new Error("Canvas 2D context is unavailable");
