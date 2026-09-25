@@ -4,7 +4,9 @@
 
 **Goal:** マップ全体を白背景のSVGと、同一内容の2倍解像度PNGとして安全に書き出せるようにする。
 
-**Architecture:** ノードからの範囲計算、テキスト改行、SVG構築をDOM非依存のドメイン関数に分離する。ブラウザ層は文字幅測定、Blobダウンロード、SVGからPNGへの変換だけを担当し、React Hookがそれらを調停する。
+**Implementation status:** 本書は初期実装の順序を記録する。下記のFile Structureは現行構成へ同期している。Task 1〜3は最初のドメイン実装手順を履歴として残し、後から抽出したXML処理、辺曲線、SVG辺・ノード生成の現在の責務と実装手順は`2026-09-23-phase5-image-export-srp-refactor.md`のTask 1〜2を正とする。Task 4〜6は分割後の責務へ同期している。
+
+**Architecture:** ノードからの範囲計算、テキスト改行、SVG構築をDOM非依存のドメイン関数に分離する。ブラウザ層では文字幅測定、ファイル名、SVG Blob、ダウンロード、SVG画像ロード、Canvas PNG符号化を別モジュールに分ける。SVG/PNG別Hookが各書き出しを調停し、公開Hookは共有通知と両Hookの合成だけを担当する。
 
 **Tech Stack:** TypeScript 5、React 19、Next.js 16、Jest 30、Testing Library、Canvas 2D API、SVG、Blob / Object URL API
 
@@ -30,18 +32,43 @@
 
 - Create: `client/src/domain/imageExport/mapExportBounds.ts` — ノード矩形とラベル描画範囲を含む出力範囲と座標オフセット
 - Create: `client/src/domain/imageExport/mapExportText.ts` — ラベルの表示文字列と改行
-- Create: `client/src/domain/imageExport/mapSvgDocument.ts` — 範囲、線、ノード、テキストからSVGを構築
+- Create: `client/src/domain/imageExport/mapXmlText.ts` — XML禁止文字の正規化と構造文字のエスケープ
+- Create: `client/src/domain/imageExport/mapSvgEdges.ts` — 接続線SVGの生成
+- Create: `client/src/domain/imageExport/mapSvgNodes.ts` — ノード矩形・ラベルSVGの生成
+- Create: `client/src/domain/imageExport/mapSvgDocument.ts` — 背景、辺、ノードのSVG文書合成
+- Create: `client/src/domain/nodes/nodeEdgeCurve.ts` — 接続線のBezier曲線計算
 - Create: `client/src/domain/imageExport/__tests__/mapExportBounds.test.ts`
 - Create: `client/src/domain/imageExport/__tests__/mapExportText.test.ts`
+- Create: `client/src/domain/imageExport/__tests__/mapXmlText.test.ts`
+- Create: `client/src/domain/imageExport/__tests__/mapSvgEdges.test.ts`
+- Create: `client/src/domain/imageExport/__tests__/mapSvgNodes.test.ts`
 - Create: `client/src/domain/imageExport/__tests__/mapSvgDocument.test.ts`
+- Create: `client/src/domain/nodes/__tests__/nodeEdgeCurve.test.ts`
+- Modify: `client/src/components/map/mapGeometry.ts` — `getEdgeCurve`互換exportを維持
+- Modify: `client/src/components/map/__tests__/mapGeometry.test.ts`
 - Create: `client/src/services/imageExport/mapTextMeasurement.ts` — Canvas 2Dによる文字幅測定
-- Create: `client/src/services/imageExport/mapImageDownload.ts` — 日時付き名前、SVG Blob、Blobダウンロード
-- Create: `client/src/services/imageExport/mapPngRasterizer.ts` — 共通SVGの2倍解像度PNG変換
+- Create: `client/src/services/imageExport/createMapSvgExport.ts` — 範囲計算、文字幅測定、SVG文書生成のユースケース
+- Create: `client/src/services/imageExport/mapImageFileName.ts` — 日時付きファイル名
+- Create: `client/src/services/imageExport/mapSvgArtifact.ts` — UTF-8 SVG Blob生成
+- Create: `client/src/services/imageExport/mapImageDownload.ts` — BlobダウンロードとObject URL解放
+- Create: `client/src/services/imageExport/loadMapSvgImage.ts` — SVG画像ロードと中間Object URL解放
+- Create: `client/src/services/imageExport/mapCanvasPngEncoder.ts` — 2倍解像度Canvas描画とPNG符号化
+- Create: `client/src/services/imageExport/mapPngRasterizer.ts` — SVG画像ロードとCanvas符号化の合成
 - Create: `client/src/services/imageExport/__tests__/mapTextMeasurement.test.ts`
+- Create: `client/src/services/imageExport/__tests__/createMapSvgExport.test.ts`
+- Create: `client/src/services/imageExport/__tests__/mapImageFileName.test.ts`
+- Create: `client/src/services/imageExport/__tests__/mapSvgArtifact.test.ts`
 - Create: `client/src/services/imageExport/__tests__/mapImageDownload.test.ts`
+- Create: `client/src/services/imageExport/__tests__/loadMapSvgImage.test.ts`
+- Create: `client/src/services/imageExport/__tests__/mapCanvasPngEncoder.test.ts`
 - Create: `client/src/services/imageExport/__tests__/mapPngRasterizer.test.ts`
-- Create: `client/src/hooks/useMapImageExport.ts` — 出力コマンド、重複実行防止、通知の調停
+- Create: `client/src/hooks/useMapSvgExport.ts` — SVG書き出しの調停
+- Create: `client/src/hooks/useMapPngExport.ts` — PNG書き出しと重複実行防止の調停
+- Create: `client/src/hooks/useMapImageExport.ts` — 共有通知とSVG/PNG Hookの合成
+- Create: `client/src/hooks/__tests__/useMapSvgExport.test.tsx`
+- Create: `client/src/hooks/__tests__/useMapPngExport.test.tsx`
 - Create: `client/src/hooks/__tests__/useMapImageExport.test.tsx`
+- Create: `client/src/types/mapImageExport.ts` — 画像書き出しの共有依存型
 - Create: `client/src/types/operationNotice.ts` — 機能横断の通知型
 - Create: `client/src/components/layout/MapOperationNotice.tsx` — 機能横断の通知表示
 - Create: `client/src/components/layout/MapImageExportControls.tsx` — PNG / SVG操作
@@ -256,6 +283,8 @@ git commit -m "feat(image-export): ラベル改行をドメイン化"
 
 ### Task 3: SVGドキュメント生成
 
+> **履歴上の注意:** 以下は初期実装時の手順である。現在はprivate XML処理と要素生成を`mapXmlText.ts`、`mapSvgEdges.ts`、`mapSvgNodes.ts`、`nodeEdgeCurve.ts`へ分離している。現行の責務・テスト・変更手順はSRPリファクタリング計画のTask 1〜2を参照する。
+
 **Files:**
 - Create: `client/src/domain/imageExport/mapSvgDocument.ts`
 - Test: `client/src/domain/imageExport/__tests__/mapSvgDocument.test.ts`
@@ -310,12 +339,16 @@ git commit -m "feat(image-export): マップSVG生成を追加"
 
 ---
 
-### Task 4: 文字幅測定と画像ダウンロード
+### Task 4: 文字幅測定と画像成果物・ダウンロード
 
 **Files:**
 - Create: `client/src/services/imageExport/mapTextMeasurement.ts`
+- Create: `client/src/services/imageExport/mapImageFileName.ts`
+- Create: `client/src/services/imageExport/mapSvgArtifact.ts`
 - Create: `client/src/services/imageExport/mapImageDownload.ts`
 - Test: `client/src/services/imageExport/__tests__/mapTextMeasurement.test.ts`
+- Test: `client/src/services/imageExport/__tests__/mapImageFileName.test.ts`
+- Test: `client/src/services/imageExport/__tests__/mapSvgArtifact.test.ts`
 - Test: `client/src/services/imageExport/__tests__/mapImageDownload.test.ts`
 
 **Interfaces:**
@@ -328,13 +361,13 @@ git commit -m "feat(image-export): マップSVG生成を追加"
 
 Mock `document.createElement("canvas")` so `getContext("2d")` returns a controlled context. Assert that the font is set to `14px Arial, Helvetica, sans-serif`, the returned function delegates to `measureText`, and missing context throws.
 
-For downloads, assert exact local-time filename, SVG MIME type, anchor `href` / `download` / `click`, and `URL.revokeObjectURL` in both success and throwing-click paths.
+責務別に、ファイル名ではローカル日時、SVG成果物ではMIME type、ダウンロードではanchorの`href` / `download` / `click`と成功・click例外時の`URL.revokeObjectURL`を検証する。
 
 - [ ] **Step 2: Run the adapter tests and verify RED**
 
-Run: `npm test -- --runInBand src/services/imageExport/__tests__/mapTextMeasurement.test.ts src/services/imageExport/__tests__/mapImageDownload.test.ts`
+Run: `npm test -- --runInBand src/services/imageExport/__tests__/mapTextMeasurement.test.ts src/services/imageExport/__tests__/mapImageFileName.test.ts src/services/imageExport/__tests__/mapSvgArtifact.test.ts src/services/imageExport/__tests__/mapImageDownload.test.ts`
 
-Expected: FAIL because both service modules do not exist.
+Expected: FAIL because the service modules do not exist.
 
 - [ ] **Step 3: Implement text measurement**
 
@@ -348,20 +381,20 @@ export function createMapTextMeasurer(): MeasureMapText {
 }
 ```
 
-- [ ] **Step 4: Implement Blob creation, filename, and download**
+- [ ] **Step 4: Implement filename, SVG Blob creation, and download separately**
 
-Create filenames with the same local-time padding convention as JSON export. `downloadMapImage` must create one object URL, click a temporary anchor, and revoke the URL in `finally`.
+`mapImageFileName.ts`はJSON出力と同じローカル時刻のゼロ埋め規則、`mapSvgArtifact.ts`はUTF-8 SVG Blob生成だけを担当する。`downloadMapImage`は受け取ったBlobからObject URLを一つ作り、一時anchorをclickし、`finally`でURLを解放する。
 
 - [ ] **Step 5: Run the adapter tests and verify GREEN**
 
-Run: `npm test -- --runInBand src/services/imageExport/__tests__/mapTextMeasurement.test.ts src/services/imageExport/__tests__/mapImageDownload.test.ts`
+Run: `npm test -- --runInBand src/services/imageExport/__tests__/mapTextMeasurement.test.ts src/services/imageExport/__tests__/mapImageFileName.test.ts src/services/imageExport/__tests__/mapSvgArtifact.test.ts src/services/imageExport/__tests__/mapImageDownload.test.ts`
 
-Expected: both suites PASS.
+Expected: all four suites PASS.
 
 - [ ] **Step 6: Commit Task 4**
 
 ```bash
-git add client/src/services/imageExport/mapTextMeasurement.ts client/src/services/imageExport/mapImageDownload.ts client/src/services/imageExport/__tests__
+git add client/src/services/imageExport/mapTextMeasurement.ts client/src/services/imageExport/mapImageFileName.ts client/src/services/imageExport/mapSvgArtifact.ts client/src/services/imageExport/mapImageDownload.ts client/src/services/imageExport/__tests__
 git commit -m "feat(image-export): ブラウザ出力アダプターを追加"
 ```
 
@@ -370,40 +403,46 @@ git commit -m "feat(image-export): ブラウザ出力アダプターを追加"
 ### Task 5: SVGからPNGへの2倍ラスタライズ
 
 **Files:**
+- Create: `client/src/services/imageExport/loadMapSvgImage.ts`
+- Create: `client/src/services/imageExport/mapCanvasPngEncoder.ts`
 - Create: `client/src/services/imageExport/mapPngRasterizer.ts`
+- Test: `client/src/services/imageExport/__tests__/loadMapSvgImage.test.ts`
+- Test: `client/src/services/imageExport/__tests__/mapCanvasPngEncoder.test.ts`
 - Test: `client/src/services/imageExport/__tests__/mapPngRasterizer.test.ts`
 
 **Interfaces:**
-- Produces: `rasterizeMapSvgToPng(svg: string, width: number, height: number): Promise<Blob>`
+- Produces: `withLoadedMapSvgImage<T>(svg: string, consume: (image: HTMLImageElement) => Promise<T>): Promise<T>`
+- Produces: `createMapPngEncoder(width: number, height: number): (image: CanvasImageSource) => Promise<Blob>`
+- Produces: `rasterizeMapSvgToPng(svg: string, width: number, height: number): Promise<Blob>` as a composition boundary
 
 - [ ] **Step 1: Write a failing successful-rasterization test**
 
-Mock `Image`, `URL`, a canvas, and its 2D context. Trigger `image.onload` manually and make `toBlob` return a PNG Blob. Assert canvas pixel dimensions `width * 2` / `height * 2`, `context.scale(2, 2)`, `drawImage(image, 0, 0, width, height)`, `toBlob(callback, "image/png")`, and URL revocation.
+責務別に`Image`と`URL`、Canvasと2D contextをmockする。画像ロードでは`image.onload`後にconsumerへ同じ画像を渡し、Object URLを解放することを検証する。Canvas符号化ではピクセル寸法、`context.scale(2, 2)`、`drawImage(image, 0, 0, width, height)`、`toBlob(callback, "image/png")`を検証する。ラスタライザーではloaderからencoderへ画像を渡す合成だけを検証する。
 
 - [ ] **Step 2: Run the rasterizer test and verify RED**
 
-Run: `npm test -- --runInBand src/services/imageExport/__tests__/mapPngRasterizer.test.ts`
+Run: `npm test -- --runInBand src/services/imageExport/__tests__/loadMapSvgImage.test.ts src/services/imageExport/__tests__/mapCanvasPngEncoder.test.ts src/services/imageExport/__tests__/mapPngRasterizer.test.ts`
 
-Expected: FAIL because `mapPngRasterizer.ts` does not exist.
+Expected: FAIL because the loader, encoder, and rasterizer modules do not exist.
 
 - [ ] **Step 3: Implement minimal async rasterization**
 
-Create an SVG Blob, object URL, `Image`, and canvas. Resolve only after `toBlob` yields a Blob. Reject for missing 2D context, `image.onerror`, and `toBlob(null)`. Revoke the SVG object URL exactly once through a shared cleanup path.
+`loadMapSvgImage.ts`はSVG Blob、Object URL、`Image`のライフサイクルを担当する。`mapCanvasPngEncoder.ts`はCanvas準備、2倍描画、PNG符号化を担当する。`mapPngRasterizer.ts`は両者を合成し、ブラウザ詳細を再実装しない。
 
 - [ ] **Step 4: Add all failure-path tests**
 
-Cover missing context before image setup, image load error after URL creation, `drawImage` throwing, and `toBlob(null)`. Each case must reject and every created URL must be revoked.
+画像ロードではload errorとイベント競合、consumerの成功・拒否・同期例外を検証し、作成したURLを一度だけ解放する。Canvas符号化ではcontext欠損、`drawImage`例外、`toBlob`例外、`toBlob(null)`、非有限・上限超過寸法を検証する。
 
 - [ ] **Step 5: Run the rasterizer tests and verify GREEN**
 
-Run: `npm test -- --runInBand src/services/imageExport/__tests__/mapPngRasterizer.test.ts`
+Run: `npm test -- --runInBand src/services/imageExport/__tests__/loadMapSvgImage.test.ts src/services/imageExport/__tests__/mapCanvasPngEncoder.test.ts src/services/imageExport/__tests__/mapPngRasterizer.test.ts`
 
 Expected: PASS with no unhandled promise rejection.
 
 - [ ] **Step 6: Commit Task 5**
 
 ```bash
-git add client/src/services/imageExport/mapPngRasterizer.ts client/src/services/imageExport/__tests__/mapPngRasterizer.test.ts
+git add client/src/services/imageExport/loadMapSvgImage.ts client/src/services/imageExport/mapCanvasPngEncoder.ts client/src/services/imageExport/mapPngRasterizer.ts client/src/services/imageExport/__tests__
 git commit -m "feat(image-export): SVGの高解像度PNG変換を追加"
 ```
 
@@ -412,31 +451,42 @@ git commit -m "feat(image-export): SVGの高解像度PNG変換を追加"
 ### Task 6: 画像書き出しHook
 
 **Files:**
+- Create: `client/src/services/imageExport/createMapSvgExport.ts`
+- Test: `client/src/services/imageExport/__tests__/createMapSvgExport.test.ts`
+- Create: `client/src/types/mapImageExport.ts`
+- Create: `client/src/hooks/useMapSvgExport.ts`
+- Create: `client/src/hooks/useMapPngExport.ts`
 - Create: `client/src/hooks/useMapImageExport.ts`
+- Test: `client/src/hooks/__tests__/useMapSvgExport.test.tsx`
+- Test: `client/src/hooks/__tests__/useMapPngExport.test.tsx`
 - Test: `client/src/hooks/__tests__/useMapImageExport.test.tsx`
 
 **Interfaces:**
-- Consumes: 出力範囲、SVG生成、文字測定、ダウンロード、PNG変換
+- Produces: `createMapSvgExport(nodes: readonly Node[]): MapSvgDocument | null`
+- Produces shared `CreateSvgExport`, `DownloadImage`, and `RasterizePng` types
+- `useMapSvgExport` consumes: SVG生成、SVG Blob生成、ファイル名、ダウンロード
+- `useMapPngExport` consumes: SVG生成、PNG変換、ファイル名、ダウンロード
+- `useMapImageExport` consumes: SVG/PNG専用Hook and owns the shared notice state
 - Produces: `{ exportSvg: () => void; exportPng: () => Promise<void>; isExportingPng: boolean; notice: OperationNotice | null }`
-- Test seam: optional `createSvgExport`, `downloadSvg`, `rasterizePng`, and `downloadPng` dependencies
+- Test seam: optional `createSvgExport`, `downloadSvg`, `rasterizePng`, and `downloadPng` dependencies distributed to the responsible hook
 
 - [ ] **Step 1: Add `OperationNotice` and write failing Hook tests**
 
-Create `client/src/types/operationNotice.ts` with the existing `{ kind: "status" | "warning" | "error"; message: string }` shape. In the Hook tests, inject deterministic adapters and cover empty map, SVG success/failure, PNG success/failure, and exact Japanese notices.
+Create `client/src/types/operationNotice.ts` with the existing `{ kind: "status" | "warning" | "error"; message: string }` shape. 専用Hookのテストへdeterministic adapterを注入し、空マップ、SVG成功・失敗、PNG成功・失敗、正確な日本語通知を検証する。公開Hookのテストは依存の配線、共有通知、公開戻り値だけを検証する。
 
 - [ ] **Step 2: Run the Hook tests and verify RED**
 
-Run: `npm test -- --runInBand src/hooks/__tests__/useMapImageExport.test.tsx`
+Run: `npm test -- --runInBand src/services/imageExport/__tests__/createMapSvgExport.test.ts src/hooks/__tests__/useMapSvgExport.test.tsx src/hooks/__tests__/useMapPngExport.test.tsx src/hooks/__tests__/useMapImageExport.test.tsx`
 
-Expected: FAIL because `useMapImageExport.ts` does not exist.
+Expected: FAIL because the image-export hooks do not exist.
 
 - [ ] **Step 3: Implement SVG orchestration**
 
-The default `createSvgExport` obtains bounds, creates a browser text measurer, and returns `createMapSvgDocument`; it returns `null` for no nodes. `exportSvg` creates an SVG Blob, downloads it with an `.svg` filename, and publishes the specified success/error notice.
+`useMapSvgExport`は既定の`createMapSvgExport`を呼び、空マップを扱う。`exportSvg`はSVG Blobを作り、`.svg`名でダウンロードし、指定した成功・失敗通知をpublishする。
 
 - [ ] **Step 4: Implement PNG orchestration with a synchronous ref guard**
 
-Use `exportingPngRef` in addition to React state. Set the ref before the first await; ignore duplicate calls while true. Generate the shared SVG once per command, rasterize, download with a `.png` filename, then reset the ref and state in `finally`.
+`useMapPngExport`はReact stateに加えて`exportingPngRef`を使用する。最初のawaitより前にRefを設定し、trueの間は重複呼び出しを無視する。コマンドごとに共通SVGを一度生成し、ラスタライズして`.png`名でダウンロードした後、`finally`でRefとstateを戻す。
 
 - [ ] **Step 5: Add a deferred-Promise concurrency test**
 
@@ -444,14 +494,14 @@ Call `exportPng` twice before resolving the first rasterizer promise. Assert one
 
 - [ ] **Step 6: Run Hook and service tests and verify GREEN**
 
-Run: `npm test -- --runInBand src/hooks/__tests__/useMapImageExport.test.tsx src/services/imageExport/__tests__ src/domain/imageExport/__tests__`
+Run: `npm test -- --runInBand src/hooks/__tests__/useMapSvgExport.test.tsx src/hooks/__tests__/useMapPngExport.test.tsx src/hooks/__tests__/useMapImageExport.test.tsx src/services/imageExport/__tests__ src/domain/imageExport/__tests__`
 
 Expected: all image-export suites PASS.
 
 - [ ] **Step 7: Commit Task 6**
 
 ```bash
-git add client/src/hooks/useMapImageExport.ts client/src/hooks/__tests__/useMapImageExport.test.tsx client/src/types/operationNotice.ts
+git add client/src/services/imageExport/createMapSvgExport.ts client/src/services/imageExport/__tests__/createMapSvgExport.test.ts client/src/hooks/useMapSvgExport.ts client/src/hooks/useMapPngExport.ts client/src/hooks/useMapImageExport.ts client/src/hooks/__tests__/useMapSvgExport.test.tsx client/src/hooks/__tests__/useMapPngExport.test.tsx client/src/hooks/__tests__/useMapImageExport.test.tsx client/src/types/mapImageExport.ts client/src/types/operationNotice.ts
 git commit -m "feat(image-export): PNGとSVGの出力コマンドを追加"
 ```
 
@@ -541,7 +591,7 @@ Call `useMapImageExport({ nodes })`. Pass a fragment containing `MapPersistenceC
 
 - [ ] **Step 4: Run focused integration and image-export tests**
 
-Run: `npm test -- --runInBand src/app/__tests__/page.test.tsx src/hooks/__tests__/useMapImageExport.test.tsx src/components/layout/__tests__ src/domain/imageExport/__tests__ src/services/imageExport/__tests__`
+Run: `npm test -- --runInBand src/app/__tests__/page.test.tsx src/hooks/__tests__/useMapSvgExport.test.tsx src/hooks/__tests__/useMapPngExport.test.tsx src/hooks/__tests__/useMapImageExport.test.tsx src/components/layout/__tests__ src/domain/imageExport/__tests__ src/services/imageExport/__tests__`
 
 Expected: all focused suites PASS.
 
