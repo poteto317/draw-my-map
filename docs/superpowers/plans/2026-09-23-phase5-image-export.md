@@ -213,10 +213,11 @@ git commit -m "feat(image-export): マップ全体の出力範囲を計算"
 - Produces: `MeasureMapText = (text: string) => number`
 - Produces: `getMapExportLabel(label: string): string`
 - Produces: `wrapMapExportText(label: string, maxWidth: number, measureText: MeasureMapText): string[]`
+- Produces: `getMapExportTextLayout(label: string, maxWidth: number, centerY: number, measureText: MeasureMapText): MapExportTextLayout`
 
 - [ ] **Step 1: Write failing text-layout tests**
 
-Use a deterministic measurer `text.length * 10`. Cover one line, wrapping at whitespace, a Japanese string without whitespace, a long Latin word, CRLF normalization, explicit blank lines, and the fallback label.
+Use a deterministic Unicode code-point measurer `Array.from(text).length * 10`. Cover one line, wrapping at whitespace, consecutive and leading whitespace at the minimum width, a Japanese string without whitespace, a long Latin word, CRLF normalization, explicit blank lines, XML 1.0 forbidden-character normalization before measurement, and the fallback label.
 
 ```ts
 const measure = (text: string) => Array.from(text).length * 10;
@@ -235,7 +236,7 @@ Expected: FAIL because `mapExportText.ts` does not exist.
 
 - [ ] **Step 3: Implement greedy wrapping with whitespace preference**
 
-Normalize `\r\n` and `\r` to `\n`. Process each explicit line independently. Accumulate Unicode code points with `Array.from`; use a cursor plus exponential/binary search to find the fitting prefix without repeatedly measuring the full remaining suffix. When a candidate exceeds `maxWidth`, break at the last whitespace in the current line when available, otherwise break before the overflowing code point. Remove exactly the one whitespace code point selected as the soft break while preserving adjacent whitespace; preserve explicit empty lines. Compute the widest line with iteration or `reduce`, and never spread unbounded character or line arrays into function arguments.
+Normalize XML 1.0 forbidden characters to U+FFFD before measuring. Normalize `\r\n` and `\r` to `\n`, then process each explicit line independently. Accumulate Unicode code points with `Array.from`; use a cursor plus exponential/binary search to find the fitting prefix without repeatedly measuring the full remaining suffix. When a candidate exceeds `maxWidth`, break at the last whitespace in the current line when available, otherwise break before the overflowing code point. Remove exactly one whitespace code point selected as the soft break across a consecutive-whitespace run while preserving adjacent whitespace, even when each line can hold only one code point; preserve explicit empty lines. Compute the widest line with iteration or `reduce`, and never spread unbounded character or line arrays into function arguments.
 
 - [ ] **Step 4: Run the tests and verify GREEN**
 

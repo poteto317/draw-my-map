@@ -32,10 +32,15 @@ describe("wrapMapExportText", () => {
   });
 
   it.each([
+    [10, ["A", " ", "B"]],
     [20, ["A", " B"]],
     [30, ["A ", "B"]],
   ] as const)("幅%sのソフト改行では採用した空白だけを除去する", (maxWidth, expected) => {
     expect(wrapMapExportText("A  B", maxWidth, measure)).toEqual(expected);
+  });
+
+  it("先頭の連続空白でもソフト改行に採用した1文字だけを除去する", () => {
+    expect(wrapMapExportText("  A", 10, measure)).toEqual([" ", "A"]);
   });
 
   it("does not add an empty line when a soft break starts at leading whitespace", () => {

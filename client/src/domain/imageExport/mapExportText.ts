@@ -124,13 +124,23 @@ export function wrapMapExportText(
         if (/\s/u.test(codePoints[index])) breakAt = index;
       }
 
-      if (breakAt >= 0) {
+      if (breakAt >= 0 && (breakAt > start || start === 0)) {
         const lineBeforeBreak = codePoints.slice(start, breakAt).join("");
         if (lineBeforeBreak.length > 0) wrappedLines.push(lineBeforeBreak);
         start = breakAt + 1;
       } else {
-        wrappedLines.push(codePoints.slice(start, start + fittingLength).join(""));
+        const fittedLine = codePoints
+          .slice(start, start + fittingLength)
+          .join("");
+        wrappedLines.push(fittedLine);
         start += fittingLength;
+        if (
+          /\S/u.test(fittedLine) &&
+          start < codePoints.length &&
+          /\s/u.test(codePoints[start])
+        ) {
+          start += 1;
+        }
       }
     }
   }

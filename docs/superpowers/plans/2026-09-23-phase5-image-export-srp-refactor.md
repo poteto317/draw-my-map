@@ -32,6 +32,7 @@
 - Modify: `client/src/components/map/__tests__/mapGeometry.test.ts`
 
 **Interfaces:**
+- Produces: `normalizeMapXmlText(value: string): string`
 - Produces: `escapeMapXmlText(value: string): string`
 - Produces: `getNodeEdgeCurve(parent: Node, child: Node): EdgeCurve`
 - Preserves: `mapGeometry.ts`からの`getEdgeCurve`互換export
@@ -39,11 +40,18 @@
 - [ ] **Step 1: XML文字処理の失敗テストを書く**
 
 ```ts
-import { escapeMapXmlText } from "@/domain/imageExport/mapXmlText";
+import {
+  escapeMapXmlText,
+  normalizeMapXmlText,
+} from "@/domain/imageExport/mapXmlText";
 
-it("XML禁止文字を置換し構造文字をエスケープする", () => {
-  expect(escapeMapXmlText(`A\u0000<script>&"'B`))
-    .toBe("A\uFFFD&lt;script&gt;&amp;&quot;&apos;B");
+it("XML禁止文字を置換する", () => {
+  expect(normalizeMapXmlText("A\u0000B")).toBe("A\uFFFDB");
+});
+
+it("正規化済みの構造文字をエスケープする", () => {
+  expect(escapeMapXmlText(`A<script>&"'B`))
+    .toBe("A&lt;script&gt;&amp;&quot;&apos;B");
 });
 
 it("XML 1.0で許可される空白とUnicodeを保持する", () => {
@@ -60,7 +68,7 @@ Expected: FAIL because `mapXmlText` does not exist.
 
 - [ ] **Step 3: XML文字処理を移動する**
 
-`mapSvgDocument.ts`の既存正規表現と5種類のXMLエスケープをそのまま`escapeMapXmlText`へ移す。置換順序を変えない。
+`mapSvgDocument.ts`の既存正規表現を`normalizeMapXmlText`へ、5種類のXMLエスケープを`escapeMapXmlText`へ移す。XML禁止文字は文字幅測定前に正規化し、正規化済みラベルを範囲計算とSVG描画で共有する。エスケープの置換順序を変えない。
 
 - [ ] **Step 4: XML責務テストをGREENにする**
 
@@ -117,7 +125,7 @@ Expected: PASS.
 - Modify: `client/src/domain/imageExport/__tests__/mapSvgDocument.test.ts`
 
 **Interfaces:**
-- Consumes: `getNodeEdgeCurve`, `escapeMapXmlText`, `wrapMapExportText`, `getMapExportLabel`
+- Consumes: `getNodeEdgeCurve`, `escapeMapXmlText`, `getMapExportTextLayout`
 - Produces: `createMapSvgEdges(nodes, bounds): string`
 - Produces: `createMapSvgNodes(nodes, bounds, measureText): { rectangles: string; labels: string }`
 - Preserves: `createMapSvgDocument(nodes, bounds, measureText): MapSvgDocument`
@@ -174,7 +182,7 @@ Expected: FAIL because `mapSvgNodes` does not exist.
 
 - [ ] **Step 7: 矩形・ラベル生成を`mapSvgNodes.ts`へ移す**
 
-フォントサイズ`14`、行高`18`、水平inset`8`、font family、色、baseline式を変更しない。XML処理は`escapeMapXmlText`へ委譲する。
+フォントサイズ`14`、行高`18`、水平inset`8`、font family、色、baseline式を変更しない。`getMapExportTextLayout`でXML禁止文字を文字幅測定前に正規化し、構造文字のエスケープは`escapeMapXmlText`へ委譲する。
 
 - [ ] **Step 8: ノード生成テストをGREENにする**
 
