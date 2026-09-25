@@ -37,7 +37,8 @@
 ### 描画要素
 
 - 背景は常に白とする。
-- 接続線は現在の`getEdgeCurve`が返すベジェ曲線を使い、色は`#64748b`、幅は2pxとする。
+- 接続線は`getNodeEdgeCurve`が返すベジェ曲線を使い、色は`#64748b`、幅は2pxとする。
+- 開始・終了X座標が有限なら、同符号の極大値でも制御点を有限値のまま計算する。
 - ノードは白填り、`#3b82f6`の2px枠線とする。選択や接続候補による色の変化は含めない。
 - ラベルが空のノードは画面表示と同じく「新しいノード」と出力する。
 - ラベルは14px、行高18px、Arial / Helvetica / sans-serif、`#27272a`、中央揃えとする。
@@ -80,7 +81,7 @@
 
 ### SVGドキュメント
 
-`client/src/domain/imageExport/mapSvgDocument.ts`は、ノード、出力範囲、テキスト測定関数からSVG文字列を生成する。接続線の形状は既存の`getEdgeCurve`を再利用する。ダウンロード、Canvas、React stateは扱わない。
+`client/src/domain/imageExport/mapSvgDocument.ts`は、ノード、出力範囲、テキスト測定関数からSVG文字列を生成する。接続線の形状は`getNodeEdgeCurve`を再利用する。ダウンロード、Canvas、React stateは扱わない。
 
 ### ダウンロード
 

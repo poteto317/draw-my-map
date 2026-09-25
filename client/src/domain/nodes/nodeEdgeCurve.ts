@@ -12,7 +12,7 @@ export type EdgeCurve = {
 export function getNodeEdgeCurve(parent: Node, child: Node): EdgeCurve {
   const start = { x: parent.x + parent.width, y: parent.y + parent.height / 2 };
   const end = { x: child.x, y: child.y + child.height / 2 };
-  const controlX = (start.x + end.x) / 2;
+  const controlX = start.x / 2 + end.x / 2;
 
   return {
     start,

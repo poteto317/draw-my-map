@@ -240,7 +240,7 @@ git commit -m "feat(image-export): ラベル改行をドメイン化"
 - Test: `client/src/domain/imageExport/__tests__/mapSvgDocument.test.ts`
 
 **Interfaces:**
-- Consumes: `MapExportBounds`, `MeasureMapText`, `getEdgeCurve`
+- Consumes: `MapExportBounds`, `MeasureMapText`, `getNodeEdgeCurve`
 - Produces: `MapSvgDocument = { svg: string; width: number; height: number }`
 - Produces: `createMapSvgDocument(nodes: readonly Node[], bounds: MapExportBounds, measureText: MeasureMapText): MapSvgDocument`
 
@@ -264,7 +264,7 @@ Expected: FAIL because `mapSvgDocument.ts` does not exist.
 
 - [ ] **Step 3: Implement XML escaping and deterministic element ordering**
 
-Add a private `escapeXml` that replaces `&`, `<`, `>`, `"`, and `'`. Build elements in this order: background, valid parent-child paths, node rectangles, node labels. Offset every world coordinate by `bounds.offsetX` / `bounds.offsetY`; use `getEdgeCurve` before applying the offset.
+Add a private `escapeXml` that replaces `&`, `<`, `>`, `"`, and `'`. Build elements in this order: background, valid parent-child paths, node rectangles, node labels. Offset every world coordinate by `bounds.offsetX` / `bounds.offsetY`; use `getNodeEdgeCurve` before applying the offset.
 
 - [ ] **Step 4: Implement centered multiline labels**
 

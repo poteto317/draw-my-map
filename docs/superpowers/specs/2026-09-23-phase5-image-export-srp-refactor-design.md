@@ -99,7 +99,7 @@ export function escapeMapXmlText(value: string): string;
 
 XML 1.0で禁止されるコードポイントの置換と、XML構造文字のエスケープだけを担当する。
 
-`client/src/domain/nodes/nodeEdgeCurve.ts`を新設し、Node間のBezier曲線座標計算とその型だけを担当する。`components/map/mapGeometry.ts`は既存利用者との互換性のためこれを再exportし、画像エクスポートはドメインモジュールを直接参照する。
+`client/src/domain/nodes/nodeEdgeCurve.ts`を新設し、Node間のBezier曲線座標計算とその型だけを担当する。制御点の中点は有限座標同士の加算でオーバーフローしないよう、各X座標を先に半分にしてから加算する。`components/map/mapGeometry.ts`は既存利用者との互換性のためこれを再exportし、画像エクスポートはドメインモジュールを直接参照する。
 
 `client/src/domain/imageExport/mapSvgEdges.ts`を新設する。
 
@@ -212,7 +212,7 @@ createMapSvgExport
 - `useMapImageExport.test.tsx`: 共有通知の上書きと2つのHookの公開契約を統合境界として検証する。
 - `createMapSvgExport.test.ts`: 範囲・文字測定・SVG生成の既定経路を検証する。
 - `mapXmlText.test.ts`: XML構造文字、禁止文字、許可Unicodeを直接検証する。
-- `nodeEdgeCurve.test.ts`: 既存Bezier座標契約をドメイン境界で検証する。
+- `nodeEdgeCurve.test.ts`: 既存Bezier座標契約と同符号の極大有限座標における制御点の有限性をドメイン境界で検証する。
 - `mapSvgEdges.test.ts`: 親子辺、親欠損、入力不変を検証する。
 - `mapSvgNodes.test.ts`: 矩形、中央揃え、折り返し、狭いノード、XML文字を検証する。
 - `mapSvgDocument.test.ts`: 寸法、背景、描画順、合成結果だけを検証する。

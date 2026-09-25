@@ -86,6 +86,8 @@ it("親の右中央から子の左中央へBezier曲線を作る", () => {
 });
 ```
 
+同符号の極大有限X座標でも制御点が有限値に留まるケースを追加し、加算時のオーバーフローを検出する。
+
 - [ ] **Step 6: 辺曲線テストが未実装importでREDになることを確認する**
 
 Run: `npm test -- --runInBand src/domain/nodes/__tests__/nodeEdgeCurve.test.ts`
@@ -94,7 +96,7 @@ Expected: FAIL because `nodeEdgeCurve` does not exist.
 
 - [ ] **Step 7: 辺曲線をドメインへ移動して互換exportを残す**
 
-`Point`、`EdgeCurve`、計算式を`nodeEdgeCurve.ts`へ移す。`mapGeometry.ts`では`getNodeEdgeCurve as getEdgeCurve`と型を再exportし、既存利用者を変更しない。
+`Point`、`EdgeCurve`、計算式を`nodeEdgeCurve.ts`へ移す。制御点の中点は各X座標を先に半分にしてから加算し、有限座標同士の加算オーバーフローを避ける。`mapGeometry.ts`では`getNodeEdgeCurve as getEdgeCurve`と型を再exportし、既存利用者を変更しない。
 
 - [ ] **Step 8: ドメインテストと既存ジオメトリテストをGREENにする**
 
