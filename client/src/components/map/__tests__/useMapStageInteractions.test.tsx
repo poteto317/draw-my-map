@@ -63,8 +63,8 @@ function pointer(
 }
 
 const nodes: Node[] = [
-  { id: 1, parentId: null, x: 20, y: 40, width: 100, height: 60, label: "親" },
-  { id: 2, parentId: null, x: 200, y: 40, width: 100, height: 60, label: "子" },
+  { id: 1, parentId: null, x: 20, y: 40, width: 100, height: 60, label: "親" , importance: "medium" as const},
+  { id: 2, parentId: null, x: 200, y: 40, width: 100, height: 60, label: "子" , importance: "medium" as const},
 ];
 
 describe("useMapStageInteractions", () => {

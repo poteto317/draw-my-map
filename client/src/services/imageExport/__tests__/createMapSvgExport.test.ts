@@ -21,7 +21,7 @@ describe("createMapSvgExport", () => {
 
     const result = createMapSvgExport([{
       id: 1, parentId: null, x: 10, y: 20,
-      width: 120, height: 48, label: "中心ノード",
+      width: 120, height: 48, label: "中心ノード", importance: "medium",
     }]);
 
     expect(result).toMatchObject({ width: 184, height: 112 });
@@ -43,7 +43,7 @@ describe("createMapSvgExport", () => {
     const label = Array.from({ length: 10 }, (_, index) => `Line ${index + 1}`).join("\n");
 
     const result = createMapSvgExport([{
-      id: 1, parentId: null, x: 0, y: 0, width: 100, height: 64, label,
+      id: 1, parentId: null, x: 0, y: 0, width: 100, height: 64, label, importance: "medium",
     }]);
 
     expect(result).toMatchObject({ width: 164, height: 244 });

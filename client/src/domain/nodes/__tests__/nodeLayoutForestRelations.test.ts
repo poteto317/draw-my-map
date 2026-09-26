@@ -2,7 +2,7 @@ import { buildNodeForestRelations } from "@/domain/nodes/nodeLayoutForestRelatio
 import type { Node } from "@/types/node";
 
 function node(id: number, parentId: number | null): Node {
-  return { id, parentId, x: id * 10, y: id * 20, width: 100, height: 60, label: String(id) };
+  return { id, parentId, x: id * 10, y: id * 20, width: 100, height: 60, label: String(id) , importance: "medium" as const};
 }
 
 describe("buildNodeForestRelations", () => {

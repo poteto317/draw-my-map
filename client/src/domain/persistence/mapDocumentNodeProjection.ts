@@ -9,5 +9,6 @@ export function projectMapDocumentNode(node: Node): Node {
     width: node.width,
     height: node.height,
     label: node.label,
+    importance: node.importance,
   };
 }

@@ -3,7 +3,7 @@ import { useMapPngExport } from "@/hooks/useMapPngExport";
 
 const nodes = [{
   id: 1, parentId: null, x: 10, y: 20,
-  width: 120, height: 48, label: "中心ノード",
+  width: 120, height: 48, label: "中心ノード", importance: "medium" as const,
 }];
 const svgExport = {
   svg: '<svg xmlns="http://www.w3.org/2000/svg" />',

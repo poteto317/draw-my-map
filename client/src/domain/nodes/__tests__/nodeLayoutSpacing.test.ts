@@ -3,7 +3,7 @@ import { hasValidVerticalSpacing } from "@/domain/nodes/nodeLayoutSpacing";
 import type { Node } from "@/types/node";
 
 function node(id: number, parentId: number | null = null, height = 60): Node {
-  return { id, parentId, x: 0, y: 0, width: 100, height, label: String(id) };
+  return { id, parentId, x: 0, y: 0, width: 100, height, label: String(id) , importance: "medium" as const};
 }
 
 describe("hasValidVerticalSpacing", () => {

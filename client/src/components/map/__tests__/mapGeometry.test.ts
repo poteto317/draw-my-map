@@ -13,6 +13,7 @@ const target: Node = {
   width: 80,
   height: 40,
   label: "target",
+  importance: "medium" as const,
 };
 
 describe("map geometry", () => {

@@ -8,9 +8,19 @@ const validNode = {
   width: 160,
   height: 64,
   label: "ルート",
+  importance: "medium" as const,
 };
 
 describe("normalizeMapDocumentNode", () => {
+  it("V1ノードへ既定重要度を補完する", () => {
+    const { importance: _importance, ...v1Node } = validNode;
+
+    expect(normalizeMapDocumentNode(v1Node, 0)).toEqual({
+      ok: true,
+      value: validNode,
+    });
+  });
+
   it("既知フィールドだけを持つ新しいNodeへ正規化する", () => {
     const input = { ...validNode, ignored: "value" };
 

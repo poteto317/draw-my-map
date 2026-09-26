@@ -9,6 +9,7 @@ const node: Node = {
   width: 10,
   height: 10,
   label: "node",
+  importance: "medium" as const,
 };
 
 const input = {

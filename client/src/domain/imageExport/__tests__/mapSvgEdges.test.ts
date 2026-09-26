@@ -9,6 +9,7 @@ it("存在する親子関係だけを入力順と出力オフセットで辺に�
     width: 100,
     height: 60,
     label: "Parent",
+    importance: "medium" as const,
   });
   const child = Object.freeze({
     id: 2,
@@ -18,6 +19,7 @@ it("存在する親子関係だけを入力順と出力オフセットで辺に�
     width: 120,
     height: 70,
     label: "Child",
+    importance: "medium" as const,
   });
   const orphan = Object.freeze({
     id: 3,
@@ -27,6 +29,7 @@ it("存在する親子関係だけを入力順と出力オフセットで辺に�
     width: 100,
     height: 60,
     label: "Orphan",
+    importance: "medium" as const,
   });
   const nodes = Object.freeze([parent, child, orphan]);
   const bounds = Object.freeze({

@@ -18,7 +18,8 @@ const importedMapJson = `{
       "y": 30,
       "width": 160,
       "height": 64,
-      "label": "保存済み"
+      "label": "保存済み",
+      "importance": "medium"
     }
   ]
 }\n`;
@@ -65,6 +66,7 @@ describe("useMapStoragePersistence", () => {
         width: 160,
         height: 64,
         label: "保存済み",
+        importance: "medium" as const,
       }],
     });
 

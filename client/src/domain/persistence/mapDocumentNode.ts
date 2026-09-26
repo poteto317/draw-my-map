@@ -1,6 +1,7 @@
 import type { MapDocumentResult } from "@/types/mapDocument";
 import type { Node } from "@/types/node";
 import { projectMapDocumentNode } from "@/domain/persistence/mapDocumentNodeProjection";
+import { DEFAULT_NODE_IMPORTANCE } from "@/domain/nodes/nodeImportance";
 
 type NodeRecord = Record<string, unknown>;
 
@@ -47,7 +48,6 @@ export function normalizeMapDocumentNode(
   if (typeof label !== "string") {
     return failure(index, ".labelは文字列である必要があります。");
   }
-
   return {
     ok: true,
     value: projectMapDocumentNode({
@@ -58,6 +58,7 @@ export function normalizeMapDocumentNode(
       width,
       height,
       label,
+      importance: DEFAULT_NODE_IMPORTANCE,
     }),
   };
 }

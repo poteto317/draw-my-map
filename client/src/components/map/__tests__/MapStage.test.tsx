@@ -118,8 +118,8 @@ const defaultProps = {
 };
 
 const sampleNodes: Node[] = [
-  { id: 1, parentId: null, x: 50, y: 30, width: 100, height: 60, label: "ノード1" },
-  { id: 2, parentId: null, x: 200, y: 100, width: 100, height: 60, label: "ノード2" },
+  { id: 1, parentId: null, x: 50, y: 30, width: 100, height: 60, label: "ノード1" , importance: "medium" as const},
+  { id: 2, parentId: null, x: 200, y: 100, width: 100, height: 60, label: "ノード2" , importance: "medium" as const},
 ];
 
 async function renderReady(ui: ReactElement) {
@@ -469,6 +469,7 @@ describe("MapStage boundary", () => {
             width: 100,
             height: 60,
             label: "追加ノード",
+            importance: "medium" as const,
           }]}
         />,
       );

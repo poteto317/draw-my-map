@@ -12,7 +12,7 @@ function importedMap(): NodeMapState {
       { id: 1_000, parentId: null, x: 900, y: 800 },
       { id: 1_001, parentId: 1_000, x: 15, y: 25 },
       { id: 1_003, parentId: null, x: 450, y: 500 },
-    ].map((node) => ({ ...node, width: RECT_WIDTH, height: RECT_HEIGHT, label: "保存済み" })),
+    ].map((node) => ({ ...node, width: RECT_WIDTH, height: RECT_HEIGHT, label: "保存済み" , importance: "medium" as const})),
   };
 }
 

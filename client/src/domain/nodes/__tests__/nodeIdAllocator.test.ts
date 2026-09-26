@@ -10,6 +10,7 @@ function node(id: number): Node {
     width: 160,
     height: 64,
     label: `node-${id}`,
+    importance: "medium",
   };
 }
 

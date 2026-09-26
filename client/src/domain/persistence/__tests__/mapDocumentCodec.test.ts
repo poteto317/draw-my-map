@@ -15,6 +15,7 @@ function node(id: number, parentId: number | null, label = `node-${id}`): Node {
     width: 160,
     height: 64,
     label,
+    importance: "medium",
   };
 }
 

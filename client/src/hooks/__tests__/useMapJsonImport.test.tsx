@@ -19,7 +19,8 @@ const newerMapJson = `{
       "y": 50,
       "width": 160,
       "height": 64,
-      "label": "新しい選択"
+      "label": "新しい選択",
+      "importance": "medium"
     }
   ]
 }\n`;
@@ -104,6 +105,7 @@ describe("useMapJsonImport", () => {
         width: 160,
         height: 64,
         label: "新しい選択",
+        importance: "medium" as const,
       }],
     });
     expect(publishNotice).toHaveBeenCalledTimes(1);

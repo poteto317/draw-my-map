@@ -17,6 +17,7 @@ function node(
     width: RECT_WIDTH,
     height: RECT_HEIGHT,
     label: "",
+    importance: "medium" as const,
   };
 }
 
@@ -189,6 +190,7 @@ describe("useNodeLayoutState", () => {
       x: 50,
       y: 70,
       label: "更新",
+      importance: "medium" as const,
     });
   });
 

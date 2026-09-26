@@ -1,7 +1,7 @@
 import { renderHook } from "@testing-library/react";
 import { useMapViewportShortcut } from "@/components/map/useMapViewportShortcut";
 
-const node = { id: 1, parentId: null, x: 100, y: 50, width: 80, height: 40, label: "" };
+const node = { id: 1, parentId: null, x: 100, y: 50, width: 80, height: 40, label: "" , importance: "medium" as const};
 
 function pressF(target: EventTarget = window) {
   const event = new KeyboardEvent("keydown", { key: "f", bubbles: true, cancelable: true });

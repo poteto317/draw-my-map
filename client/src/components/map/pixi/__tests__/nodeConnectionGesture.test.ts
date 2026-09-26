@@ -10,8 +10,9 @@ const source: Node = {
   width: 100,
   height: 60,
   label: "Source",
+  importance: "medium" as const,
 };
-const target: Node = { ...source, id: 2, x: 200, label: "Target" };
+const target: Node = { ...source, id: 2, x: 200, label: "Target" , importance: "medium" as const};
 
 const pointer = (
   screenX: number,

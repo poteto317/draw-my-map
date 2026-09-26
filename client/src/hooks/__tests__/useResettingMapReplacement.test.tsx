@@ -12,6 +12,7 @@ const importedMap: NodeMapState = {
     width: 160,
     height: 64,
     label: "読み込み済み",
+    importance: "medium" as const,
   }],
 };
 

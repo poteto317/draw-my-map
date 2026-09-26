@@ -5,6 +5,7 @@ import {
   SIBLING_VERTICAL_GAP,
 } from "@/config/shapes";
 import type { Node } from "@/types/node";
+import { DEFAULT_NODE_IMPORTANCE } from "@/domain/nodes/nodeImportance";
 
 function createNode(id: number, parentId: number | null, x: number, y: number): Node {
   return {
@@ -15,6 +16,7 @@ function createNode(id: number, parentId: number | null, x: number, y: number): 
     width: RECT_WIDTH,
     height: RECT_HEIGHT,
     label: "",
+    importance: DEFAULT_NODE_IMPORTANCE,
   };
 }
 

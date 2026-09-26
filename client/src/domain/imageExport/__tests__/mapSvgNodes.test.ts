@@ -4,7 +4,7 @@ const measureText = (text: string) => Array.from(text).length * 10;
 
 it("矩形と中央揃えラベルを出力オフセット込みで生成する", () => {
   const nodes = [
-    { id: 1, parentId: null, x: -20, y: 10, width: 100, height: 60, label: "Parent" },
+    { id: 1, parentId: null, x: -20, y: 10, width: 100, height: 60, label: "Parent" , importance: "medium" as const},
   ];
   const bounds = { minX: -20, minY: 10, width: 164, height: 124, offsetX: 52, offsetY: 22 };
 
@@ -20,7 +20,7 @@ it("矩形と中央揃えラベルを出力オフセット込みで生成する"
 
 it.each([10, 16])("幅%sでもサロゲートペアを分割せずに折り返す", (width) => {
   const nodes = [
-    { id: 1, parentId: null, x: 0, y: 0, width, height: 60, label: "A😀B" },
+    { id: 1, parentId: null, x: 0, y: 0, width, height: 60, label: "A😀B" , importance: "medium" as const},
   ];
   const bounds = { minX: 0, minY: 0, width: 80, height: 124, offsetX: 32, offsetY: 32 };
   let measurements = 0;
@@ -44,6 +44,7 @@ it.each([0x00, 0x08, 0x0b, 0x0c, 0x0e, 0x1f, 0xd800, 0xdfff, 0xfffe, 0xffff])(
       {
         id: 1, parentId: null, x: 0, y: 0, width: 300, height: 60,
         label: `A${String.fromCodePoint(codePoint)}B<script>&\"'`,
+        importance: "medium" as const,
       },
     ];
     const bounds = { minX: 0, minY: 0, width: 364, height: 124, offsetX: 32, offsetY: 32 };
@@ -59,7 +60,7 @@ it.each([0x00, 0x08, 0x0b, 0x0c, 0x0e, 0x1f, 0xd800, 0xdfff, 0xfffe, 0xffff])(
 
 it("明示改行と負座標を出力座標へ保持する", () => {
   const nodes = [
-    { id: 1, parentId: null, x: -80, y: -50, width: 100, height: 100, label: "First\nSecond" },
+    { id: 1, parentId: null, x: -80, y: -50, width: 100, height: 100, label: "First\nSecond" , importance: "medium" as const},
   ];
   const bounds = { minX: -80, minY: -50, width: 164, height: 164, offsetX: 112, offsetY: 82 };
 
@@ -74,7 +75,7 @@ it("明示改行と負座標を出力座標へ保持する", () => {
 
 it("前後・連続空白をSVG描画時にも保持する", () => {
   const nodes = [
-    { id: 1, parentId: null, x: 0, y: 0, width: 200, height: 60, label: "  A  B  " },
+    { id: 1, parentId: null, x: 0, y: 0, width: 200, height: 60, label: "  A  B  " , importance: "medium" as const},
   ];
   const bounds = { minX: 0, minY: 0, width: 264, height: 124, offsetX: 32, offsetY: 32 };
 
@@ -95,6 +96,7 @@ it("凍結された入力を変更しない", () => {
     width: 100,
     height: 60,
     label: "Fixed",
+    importance: "medium" as const,
   });
   const nodes = Object.freeze([node]);
   const bounds = Object.freeze({

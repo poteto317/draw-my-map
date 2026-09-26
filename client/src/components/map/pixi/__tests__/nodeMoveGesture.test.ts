@@ -9,6 +9,7 @@ const node: Node = {
   width: 100,
   height: 60,
   label: "Node",
+  importance: "medium" as const,
 };
 
 const pointer = (

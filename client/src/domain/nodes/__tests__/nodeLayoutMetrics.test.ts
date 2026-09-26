@@ -3,7 +3,7 @@ import { calculateNodeLayoutMetrics } from "@/domain/nodes/nodeLayoutMetrics";
 import type { Node } from "@/types/node";
 
 function node(id: number, parentId: number | null, width = 100, height = 60, x = 80): Node {
-  return { id, parentId, width, height, x, y: 0, label: String(id) };
+  return { id, parentId, width, height, x, y: 0, label: String(id) , importance: "medium" as const};
 }
 
 describe("calculateNodeLayoutMetrics", () => {

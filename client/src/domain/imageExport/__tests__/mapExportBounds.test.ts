@@ -4,8 +4,8 @@ const measureText = (text: string) => Array.from(text).length * 10;
 
 it("全ノードの外接矩形に32pxの余白を追加する", () => {
   const nodes = [
-    { id: 1, parentId: null, x: -20, y: 10, width: 100, height: 60, label: "A" },
-    { id: 2, parentId: 1, x: 180, y: 90, width: 120, height: 70, label: "B" },
+    { id: 1, parentId: null, x: -20, y: 10, width: 100, height: 60, label: "A" , importance: "medium" as const},
+    { id: 2, parentId: 1, x: 180, y: 90, width: 120, height: 70, label: "B" , importance: "medium" as const},
   ];
 
   expect(getMapExportBounds(nodes, measureText)).toEqual({
@@ -23,7 +23,7 @@ it("空のマップには出力範囲がない", () => {
 });
 
 it("単一ノードにも既定の余白を適用する", () => {
-  const nodes = [{ id: 7, parentId: null, x: 12, y: -8, width: 30, height: 18, label: "A" }];
+  const nodes = [{ id: 7, parentId: null, x: 12, y: -8, width: 30, height: 18, label: "A" , importance: "medium" as const}];
 
   expect(getMapExportBounds(nodes, measureText)).toEqual({
     minX: 12,
@@ -36,7 +36,7 @@ it("単一ノードにも既定の余白を適用する", () => {
 });
 
 it("第3引数で指定した余白を適用する", () => {
-  const nodes = [{ id: 7, parentId: null, x: 12, y: -8, width: 30, height: 18, label: "A" }];
+  const nodes = [{ id: 7, parentId: null, x: 12, y: -8, width: 30, height: 18, label: "A" , importance: "medium" as const}];
 
   expect(getMapExportBounds(nodes, measureText, 5)).toEqual({
     minX: 12,
@@ -49,7 +49,7 @@ it("第3引数で指定した余白を適用する", () => {
 });
 
 it("負の余白は拒否する", () => {
-  const nodes = [{ id: 7, parentId: null, x: 12, y: -8, width: 30, height: 18, label: "A" }];
+  const nodes = [{ id: 7, parentId: null, x: 12, y: -8, width: 30, height: 18, label: "A" , importance: "medium" as const}];
 
   expect(() => getMapExportBounds(nodes, measureText, -1)).toThrow(
     new RangeError("Map export padding must be a non-negative finite number"),
@@ -74,6 +74,7 @@ it("ノードの高さを超える複数行ラベルを出力範囲に含める"
     width: 100,
     height: 64,
     label: Array.from({ length: 10 }, (_, index) => `Line ${index + 1}`).join("\n"),
+    importance: "medium" as const,
   }];
 
   expect(getMapExportBounds(nodes, measureText)).toEqual({
@@ -88,8 +89,8 @@ it("ノードの高さを超える複数行ラベルを出力範囲に含める"
 
 it("有限座標間の差がオーバーフローする場合は失敗する", () => {
   const nodes = [
-    { id: 1, parentId: null, x: -Number.MAX_VALUE, y: 0, width: 1, height: 18, label: "A" },
-    { id: 2, parentId: null, x: Number.MAX_VALUE, y: 0, width: 1, height: 18, label: "B" },
+    { id: 1, parentId: null, x: -Number.MAX_VALUE, y: 0, width: 1, height: 18, label: "A" , importance: "medium" as const},
+    { id: 2, parentId: null, x: Number.MAX_VALUE, y: 0, width: 1, height: 18, label: "B" , importance: "medium" as const},
   ];
 
   expect(() => getMapExportBounds(nodes, measureText)).toThrow(
@@ -108,6 +109,7 @@ it.each(["x", "y"] as const)(
       width: axis === "x" ? 1e291 : 100,
       height: axis === "y" ? 1e291 : 60,
       label: "A",
+      importance: "medium" as const,
     };
 
     expect(() => getMapExportBounds([node], measureText)).toThrow(RangeError);
@@ -126,6 +128,7 @@ it.each(["x", "y"] as const)(
       width: axis === "x" ? 2e292 : 100,
       height: axis === "y" ? 2e292 : 60,
       label: "A",
+      importance: "medium" as const,
     };
 
     expect(() => getMapExportBounds([node], measureText)).toThrow(
@@ -142,7 +145,7 @@ it.each([
   ({ axis }) => {
     const dimension = 2e292;
     const nodes = [
-      { id: 1, parentId: null, x: 0, y: 0, width: 100, height: 60, label: "A" },
+      { id: 1, parentId: null, x: 0, y: 0, width: 100, height: 60, label: "A" , importance: "medium" as const},
       {
         id: 2,
         parentId: null,
@@ -151,6 +154,7 @@ it.each([
         width: axis === "x" ? dimension : 100,
         height: axis === "y" ? dimension : 60,
         label: "B",
+        importance: "medium" as const,
       },
     ];
 
@@ -169,6 +173,7 @@ it("大量のノードでも引数上限に依存せず外接矩形を計算す�
     width: 100,
     height: 60,
     label: "A",
+    importance: "medium" as const,
   };
   const nodes = Array.from({ length: 200_000 }, () => node);
 
@@ -184,9 +189,9 @@ it("大量のノードでも引数上限に依存せず外接矩形を計算す�
 
 it("凍結された入力配列を変更せずに範囲を計算する", () => {
   const nodes = Object.freeze([
-    Object.freeze({ id: 1, parentId: null, x: 4, y: 6, width: 10, height: 20, label: "Fixed" }),
+    Object.freeze({ id: 1, parentId: null, x: 4, y: 6, width: 10, height: 20, label: "Fixed" , importance: "medium" as const}),
   ]);
 
   expect(() => getMapExportBounds(nodes, measureText)).not.toThrow();
-  expect(nodes[0]).toEqual({ id: 1, parentId: null, x: 4, y: 6, width: 10, height: 20, label: "Fixed" });
+  expect(nodes[0]).toEqual({ id: 1, parentId: null, x: 4, y: 6, width: 10, height: 20, label: "Fixed" , importance: "medium" as const});
 });

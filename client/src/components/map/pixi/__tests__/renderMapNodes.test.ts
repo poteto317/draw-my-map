@@ -4,7 +4,7 @@ import type { Node } from "@/types/node";
 
 const node: Node = {
   id: 1, parentId: null, x: 50, y: 30,
-  width: 100, height: 60, label: "",
+  width: 100, height: 60, label: "", importance: "medium",
 };
 
 function render(overrides: Partial<{

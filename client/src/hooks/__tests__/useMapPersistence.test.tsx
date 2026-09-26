@@ -30,7 +30,8 @@ const mapBJson = `{
       "y": 20,
       "width": 160,
       "height": 64,
-      "label": "B"
+      "label": "B",
+      "importance": "medium"
     }
   ]
 }\n`;
@@ -46,7 +47,8 @@ const mapCJson = `{
       "y": 20,
       "width": 160,
       "height": 64,
-      "label": "C"
+      "label": "C",
+      "importance": "medium"
     }
   ]
 }\n`;
@@ -62,7 +64,8 @@ const mapAJson = `{
       "y": 20,
       "width": 160,
       "height": 64,
-      "label": "A"
+      "label": "A",
+      "importance": "medium"
     }
   ]
 }\n`;
@@ -76,6 +79,7 @@ function node(label: string): Node {
     width: 160,
     height: 64,
     label,
+    importance: "medium",
   };
 }
 
@@ -141,6 +145,7 @@ describe("useMapPersistence", () => {
           width: 160,
           height: 64,
           label: "保存済み",
+          importance: "medium" as const,
         }],
       });
     });
@@ -223,6 +228,7 @@ describe("useMapPersistence", () => {
         width: 160,
         height: 64,
         label: "保存済み",
+        importance: "medium" as const,
       }] });
       act(() => jest.advanceTimersByTime(300));
 
@@ -406,6 +412,7 @@ describe("useMapPersistence", () => {
           width: 160,
           height: 64,
           label: "保存済み",
+          importance: "medium" as const,
         }],
       });
       expect(result.current.notice).toEqual({

@@ -15,6 +15,7 @@ function node(id: number, parentId: number | null, x = 0, y = 0): Node {
     width: 1,
     height: 1,
     label: "",
+    importance: "medium" as const,
   };
 }
 

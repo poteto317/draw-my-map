@@ -5,7 +5,7 @@ import type { Node } from "@/types/node";
 const nodes: readonly Node[] = Object.freeze([
   Object.freeze({
     id: 1, parentId: null, x: 10, y: 20,
-    width: 120, height: 48, label: "中心ノード",
+    width: 120, height: 48, label: "中心ノード", importance: "medium",
   }),
 ]);
 const svgExport = {
@@ -58,7 +58,7 @@ describe("useMapSvgExport", () => {
     });
     expect(nodes).toEqual([{
       id: 1, parentId: null, x: 10, y: 20,
-      width: 120, height: 48, label: "中心ノード",
+      width: 120, height: 48, label: "中心ノード", importance: "medium" as const,
     }]);
   });
 

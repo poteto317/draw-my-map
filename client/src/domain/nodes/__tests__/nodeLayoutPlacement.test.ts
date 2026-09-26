@@ -4,7 +4,7 @@ import { placeNodeForest } from "@/domain/nodes/nodeLayoutPlacement";
 import type { Node } from "@/types/node";
 
 function node(id: number, parentId: number | null, y = 0, height = 60): Node {
-  return { id, parentId, x: 80, y, width: 100, height, label: String(id) };
+  return { id, parentId, x: 80, y, width: 100, height, label: String(id) , importance: "medium" as const};
 }
 
 describe("placeNodeForest", () => {

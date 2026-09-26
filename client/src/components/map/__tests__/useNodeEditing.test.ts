@@ -4,7 +4,7 @@ import { useNodeEditing } from "@/components/map/useNodeEditing";
 import type { Node } from "@/types/node";
 
 const nodes: Node[] = [
-  { id: 1, parentId: null, x: 50, y: 30, width: 100, height: 60, label: "既存ラベル" },
+  { id: 1, parentId: null, x: 50, y: 30, width: 100, height: 60, label: "既存ラベル" , importance: "medium" as const},
 ];
 
 function useEditingStartedInLayout(

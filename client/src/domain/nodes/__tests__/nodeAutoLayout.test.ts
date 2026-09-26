@@ -14,7 +14,7 @@ function node(
   width = 100,
   height = 60,
 ): Node {
-  return { id, parentId, x, y, width, height, label: `node-${id}` };
+  return { id, parentId, x, y, width, height, label: `node-${id}`, importance: "medium" };
 }
 
 function overlaps(a: Node, b: Node): boolean {

@@ -14,6 +14,7 @@ const parent: Node = {
   width: RECT_WIDTH,
   height: RECT_HEIGHT,
   label: "parent",
+  importance: "medium" as const,
 };
 
 describe("node placement", () => {
@@ -26,6 +27,7 @@ describe("node placement", () => {
       width: RECT_WIDTH,
       height: RECT_HEIGHT,
       label: "",
+      importance: "medium" as const,
     });
   });
 
@@ -35,6 +37,7 @@ describe("node placement", () => {
       parentId: parent.id,
       x: parent.x + parent.width + 120,
       y: parent.y,
+      importance: "medium" as const,
     });
   });
 
@@ -48,6 +51,7 @@ describe("node placement", () => {
       id: 4,
       parentId: parent.id,
       y: 310 + RECT_HEIGHT + 40,
+      importance: "medium" as const,
     });
   });
 
@@ -69,6 +73,7 @@ describe("node placement", () => {
       width: RECT_WIDTH,
       height: RECT_HEIGHT,
       label: "",
+      importance: "medium" as const,
     });
   });
 
@@ -78,6 +83,7 @@ describe("node placement", () => {
       parentId: null,
       x: parent.x,
       y: parent.y + RECT_HEIGHT + 40,
+      importance: "medium" as const,
     });
   });
 
@@ -90,11 +96,13 @@ describe("node placement", () => {
       width: RECT_WIDTH,
       height: RECT_HEIGHT,
       label: "",
+      importance: "medium" as const,
     });
     expect(createChildNode([parent], parent.id, 2)).toMatchObject({
       width: RECT_WIDTH,
       height: RECT_HEIGHT,
       label: "",
+      importance: "medium" as const,
     });
   });
 });

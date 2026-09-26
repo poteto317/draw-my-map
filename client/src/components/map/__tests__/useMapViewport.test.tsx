@@ -69,7 +69,7 @@ describe("useMapViewport", () => {
 
   it("選択ノードを中央へ移して倍率を維持する", () => {
     const { result } = renderHook(() => useMapViewport());
-    const node = { id: 1, parentId: null, x: 100, y: 50, width: 80, height: 40, label: "" };
+    const node = { id: 1, parentId: null, x: 100, y: 50, width: 80, height: 40, label: "" , importance: "medium" as const};
 
     act(() => {
       result.current.zoomAt({ x: 0, y: 0 }, 2);

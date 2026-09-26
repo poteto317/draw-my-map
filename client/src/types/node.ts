@@ -1,3 +1,5 @@
+import type { NodeImportance } from "@/types/nodeImportance";
+
 export type Node = {
   id: number;
   parentId: number | null;
@@ -6,4 +8,5 @@ export type Node = {
   width: number;
   height: number;
   label: string;
+  importance: NodeImportance;
 };

@@ -11,6 +11,7 @@ const node: Node = {
   width: 100,
   height: 60,
   label: "既存ラベル",
+  importance: "medium" as const,
 };
 
 function renderEditor() {
