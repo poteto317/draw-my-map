@@ -2,6 +2,7 @@ import { StrictMode, type ReactNode } from "react";
 import { act, renderHook } from "@testing-library/react";
 import { useMapPersistence } from "@/hooks/useMapPersistence";
 import type { Node } from "@/types/node";
+import { createTestNode } from "@/testing/createTestNode";
 
 const storedMapJson = `{
   "version": 1,
@@ -71,16 +72,13 @@ const mapAJson = `{
 }\n`;
 
 function node(label: string): Node {
-  return {
-    id: 1,
-    parentId: null,
+  return createTestNode({
     x: 10,
     y: 20,
     width: 160,
     height: 64,
     label,
-    importance: "medium",
-  };
+  });
 }
 
 function storageDouble(initialValue: string | null) {

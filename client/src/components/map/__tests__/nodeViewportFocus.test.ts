@@ -1,9 +1,10 @@
 import { focusViewportOnNode } from "@/components/map/nodeViewportFocus";
 import type { Viewport } from "@/components/map/mapViewport";
 import type { Node } from "@/types/node";
+import { createTestNode } from "@/testing/createTestNode";
 
 const viewport: Viewport = { offsetX: 10, offsetY: 20, scale: 2 };
-const node: Node = {
+const node: Node = createTestNode({
   id: 1,
   parentId: null,
   x: 50,
@@ -11,8 +12,7 @@ const node: Node = {
   width: 100,
   height: 60,
   label: "node",
-  importance: "medium" as const,
-};
+});
 
 describe("focusViewportOnNode", () => {
   it("現在倍率を保ってノード中心を画面中央へ移す", () => {

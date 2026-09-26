@@ -33,24 +33,35 @@
 
 ### PR 1: 重要度モデルとV2永続化
 
-- Create: `client/src/types/nodeImportance.ts` — 重要度、表示レベル、フィルターモードの型
+- Create: `client/src/types/nodeImportance.ts` — 重要度型
+- Create: `client/src/types/nodeResolution.ts` — 表示レベル、フィルターモードの型
 - Modify: `client/src/types/node.ts` — `Node.importance`を必須化
-- Create: `client/src/domain/nodes/nodeImportance.ts` — 既定値と重要度判定
-- Create: `client/src/domain/nodes/__tests__/nodeImportance.test.ts`
+- Create: `client/src/domain/nodes/nodeImportance.ts` — 既定重要度
+- Create: `client/src/domain/nodes/nodeResolution.ts` — 重要度と表示レベルの判定
+- Create: `client/src/domain/nodes/__tests__/nodeResolution.test.ts`
 - Modify: `client/src/domain/nodes/nodePlacement.ts` — 新規ノードへ既定重要度を設定
 - Modify: `client/src/domain/nodes/__tests__/nodePlacement.test.ts`
 - Modify: `client/src/hooks/useNodes.ts` — `updateNodeImportance` command
+- Create: `client/src/domain/nodes/nodeImportanceUpdate.ts` — 重要度更新の純粋変換
+- Create: `client/src/domain/nodes/__tests__/nodeImportanceUpdate.test.ts`
 - Modify: `client/src/hooks/__tests__/useNodes.test.ts`
 - Modify: `client/src/types/mapDocument.ts` — V1入力とV2出力の型
 - Modify: `client/src/domain/persistence/mapDocumentNode.ts` — version別ノード正規化
 - Modify: `client/src/domain/persistence/mapDocumentNodeProjection.ts` — V2投影
-- Modify: `client/src/domain/persistence/mapDocumentCodec.ts` — V1移行とV2生成
+- Create: `client/src/domain/persistence/mapDocumentNodeImportance.ts` — V1既定値とV2重要度検証
+- Create: `client/src/domain/persistence/mapDocumentEncoder.ts` — V2生成とJSON直列化
+- Create: `client/src/domain/persistence/mapDocumentDecoder.ts` — JSON解析、version振り分け、グラフ検証
+- Modify: `client/src/domain/persistence/mapDocumentCodec.ts` — 互換APIの再公開
 - Modify: `client/src/domain/persistence/__tests__/mapDocumentNode.test.ts`
 - Modify: `client/src/domain/persistence/__tests__/mapDocumentNodeProjection.test.ts`
-- Modify: `client/src/domain/persistence/__tests__/mapDocumentCodec.test.ts`
+- Create: `client/src/domain/persistence/__tests__/mapDocumentNodeImportance.test.ts`
+- Create: `client/src/domain/persistence/__tests__/mapDocumentEncoder.test.ts`
+- Create: `client/src/domain/persistence/__tests__/mapDocumentDecoder.test.ts`
+- Modify: `client/src/domain/persistence/__tests__/mapDocumentCodec.test.ts` — 公開APIの往復統合テスト
 - Modify: `client/src/hooks/__tests__/useMapStorageRestoration.test.tsx`
 - Modify: `client/src/app/__tests__/page.test.tsx`
-- Modify: Node fixtureを持つ既存`client/src/**/__tests__/*.{ts,tsx}` — 必須`importance`の追加
+- Create: `client/src/testing/createTestNode.ts` — setup用Node既定値
+- Modify: Node fixtureを持つ既存`client/src/**/__tests__/*.{ts,tsx}` — setupを共通factoryへ移行し、期待値と契約では`importance`を明示
 
 ### PR 2: 表示判定とフィルターUI
 
@@ -104,31 +115,27 @@
 
 **Files:**
 - Create: `client/src/types/nodeImportance.ts`
+- Create: `client/src/types/nodeResolution.ts`
 - Modify: `client/src/types/node.ts`
 - Create: `client/src/domain/nodes/nodeImportance.ts`
-- Test: `client/src/domain/nodes/__tests__/nodeImportance.test.ts`
+- Create: `client/src/domain/nodes/nodeResolution.ts`
+- Test: `client/src/domain/nodes/__tests__/nodeResolution.test.ts`
 - Modify: `client/src/domain/nodes/nodePlacement.ts`
 - Test: `client/src/domain/nodes/__tests__/nodePlacement.test.ts`
+- Create: `client/src/testing/createTestNode.ts`
 - Modify: Node fixtureを持つ既存`client/src/**/__tests__/*.{ts,tsx}`
 
 **Interfaces:**
 - Produces: `NodeImportance = "high" | "medium" | "low"`
+- Produces: `DEFAULT_NODE_IMPORTANCE: NodeImportance`
 - Produces: `ResolutionLevel = "high" | "medium" | "all"`
 - Produces: `ResolutionFilterMode = "auto" | ResolutionLevel`
-- Produces: `DEFAULT_NODE_IMPORTANCE: NodeImportance`
 - Produces: `isNodeVisibleAtLevel(importance: NodeImportance, level: ResolutionLevel): boolean`
 
-- [ ] **Step 1: Write failing importance tests**
+- [ ] **Step 1: Write failing resolution visibility tests**
 
 ```ts
-import {
-  DEFAULT_NODE_IMPORTANCE,
-  isNodeVisibleAtLevel,
-} from "@/domain/nodes/nodeImportance";
-
-it("新規ノード用の既定重要度はmedium", () => {
-  expect(DEFAULT_NODE_IMPORTANCE).toBe("medium");
-});
+import { isNodeVisibleAtLevel } from "@/domain/nodes/nodeResolution";
 
 it.each([
   ["high", "high", true],
@@ -147,27 +154,34 @@ it.each([
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-Run: `npm test -- --runInBand src/domain/nodes/__tests__/nodeImportance.test.ts`
+Run: `npm test -- --runInBand src/domain/nodes/__tests__/nodeResolution.test.ts`
 
-Expected: FAIL because `nodeImportance.ts` does not exist.
+Expected: FAIL because `nodeResolution.ts` does not exist.
 
 - [ ] **Step 3: Add types and minimal importance rules**
 
 ```ts
 export type NodeImportance = "high" | "medium" | "low";
+```
+
+```ts
 export type ResolutionLevel = "high" | "medium" | "all";
 export type ResolutionFilterMode = "auto" | ResolutionLevel;
+```
 
+```ts
 export const DEFAULT_NODE_IMPORTANCE: NodeImportance = "medium";
+```
 
-const rank: Record<NodeImportance, number> = { high: 2, medium: 1, low: 0 };
-const minimumRank: Record<ResolutionLevel, number> = { high: 2, medium: 1, all: 0 };
+```ts
+const importanceRank: Record<NodeImportance, number> = { high: 2, medium: 1, low: 0 };
+const minimumVisibleRank: Record<ResolutionLevel, number> = { high: 2, medium: 1, all: 0 };
 
 export function isNodeVisibleAtLevel(
   importance: NodeImportance,
   level: ResolutionLevel,
 ): boolean {
-  return rank[importance] >= minimumRank[level];
+  return importanceRank[importance] >= minimumVisibleRank[level];
 }
 ```
 
@@ -181,24 +195,26 @@ Add this assertion to each root, child, and sibling creation test:
 expect(created).toMatchObject({ importance: "medium" });
 ```
 
-Use `npm run typecheck` as the exhaustive list and add `importance: "medium"` to every existing literal intended to satisfy`Node`. Do not make the field optional and do not add a runtime fallback outside V1 decoding.
+Use `npm run typecheck` as the exhaustive list. Setup用Nodeは`client/src/testing/createTestNode.ts`へ既定値を集約し、期待値、永続化契約、不正入力では`importance`を明示する。フィールドをoptionalにせず、V1 decoding以外へruntime fallbackを追加しない。
 
 - [ ] **Step 5: Run focused tests and typecheck**
 
-Run: `npm test -- --runInBand src/domain/nodes/__tests__/nodeImportance.test.ts src/domain/nodes/__tests__/nodePlacement.test.ts && npm run typecheck`
+Run: `npm test -- --runInBand src/domain/nodes/__tests__/nodeResolution.test.ts src/domain/nodes/__tests__/nodePlacement.test.ts && npm run typecheck`
 
 Expected: PASS.
 
 - [ ] **Step 6: Commit Task 1**
 
 ```bash
-git add client/src/types client/src/domain/nodes client/src/components client/src/hooks client/src/services
+git add client/src/types client/src/domain/nodes client/src/testing client/src/components client/src/hooks client/src/services
 git commit -m "feat(nodes): ノード重要度の基盤を追加"
 ```
 
 ### Task 2: 重要度更新command
 
 **Files:**
+- Create: `client/src/domain/nodes/nodeImportanceUpdate.ts`
+- Test: `client/src/domain/nodes/__tests__/nodeImportanceUpdate.test.ts`
 - Modify: `client/src/hooks/useNodes.ts`
 - Test: `client/src/hooks/__tests__/useNodes.test.ts`
 
@@ -240,35 +256,37 @@ For auto layout, spy on or compare node object positions before and after import
 
 - [ ] **Step 2: Run the focused test and verify RED**
 
-Run: `npm test -- --runInBand src/hooks/__tests__/useNodes.test.ts`
+Run: `npm test -- --runInBand src/domain/nodes/__tests__/nodeImportanceUpdate.test.ts src/hooks/__tests__/useNodes.test.ts`
 
 Expected: FAIL because `updateNodeImportance` is absent.
 
 - [ ] **Step 3: Implement the non-structural command**
 
 ```ts
-const updateNodeImportance = useCallback((id: number, importance: NodeImportance) => (
-  applyNonStructuralChange((currentNodes) => {
-    if (!currentNodes.some((node) => node.id === id)) return null;
-    return currentNodes.map((node) => (
-      node.id === id ? { ...node, importance } : node
-    ));
-  })
-), [applyNonStructuralChange]);
+export function replaceNodeImportance(
+  nodes: readonly Node[],
+  id: number,
+  importance: NodeImportance,
+): Node[] | null {
+  if (!nodes.some((node) => node.id === id)) return null;
+  return nodes.map((node) => (
+    node.id === id ? { ...node, importance } : node
+  ));
+}
 ```
 
-Add the exact signature to `UseNodesReturn` and return it from the Hook.
+Hookは`replaceNodeImportance`を`applyNonStructuralChange`へ渡す。正しい対象更新、対象外ノードの参照維持、不在IDの`null`を純粋関数テストで確認し、Hookでは公開commandと状態遷移を確認する。
 
 - [ ] **Step 4: Run tests and verify GREEN**
 
-Run: `npm test -- --runInBand src/hooks/__tests__/useNodes.test.ts`
+Run: `npm test -- --runInBand src/domain/nodes/__tests__/nodeImportanceUpdate.test.ts src/hooks/__tests__/useNodes.test.ts`
 
 Expected: PASS.
 
 - [ ] **Step 5: Commit Task 2**
 
 ```bash
-git add client/src/hooks/useNodes.ts client/src/hooks/__tests__/useNodes.test.ts
+git add client/src/domain/nodes/nodeImportanceUpdate.ts client/src/domain/nodes/__tests__/nodeImportanceUpdate.test.ts client/src/hooks/useNodes.ts client/src/hooks/__tests__/useNodes.test.ts
 git commit -m "feat(nodes): 重要度更新commandを追加"
 ```
 
@@ -278,9 +296,15 @@ git commit -m "feat(nodes): 重要度更新commandを追加"
 - Modify: `client/src/types/mapDocument.ts`
 - Modify: `client/src/domain/persistence/mapDocumentNode.ts`
 - Modify: `client/src/domain/persistence/mapDocumentNodeProjection.ts`
+- Create: `client/src/domain/persistence/mapDocumentNodeImportance.ts`
+- Create: `client/src/domain/persistence/mapDocumentEncoder.ts`
+- Create: `client/src/domain/persistence/mapDocumentDecoder.ts`
 - Modify: `client/src/domain/persistence/mapDocumentCodec.ts`
 - Modify: `client/src/domain/persistence/__tests__/mapDocumentNode.test.ts`
 - Modify: `client/src/domain/persistence/__tests__/mapDocumentNodeProjection.test.ts`
+- Create: `client/src/domain/persistence/__tests__/mapDocumentNodeImportance.test.ts`
+- Create: `client/src/domain/persistence/__tests__/mapDocumentEncoder.test.ts`
+- Create: `client/src/domain/persistence/__tests__/mapDocumentDecoder.test.ts`
 - Modify: `client/src/domain/persistence/__tests__/mapDocumentCodec.test.ts`
 - Modify: `client/src/hooks/__tests__/useMapStorageRestoration.test.tsx`
 - Modify: `client/src/app/__tests__/page.test.tsx`
@@ -342,14 +366,17 @@ Also assert that V1 ignores an unknown `importance` field and still returns `med
 
 - [ ] **Step 2: Run Codec tests and verify RED**
 
-Run: `npm test -- --runInBand src/domain/persistence/__tests__/mapDocumentNode.test.ts src/domain/persistence/__tests__/mapDocumentNodeProjection.test.ts src/domain/persistence/__tests__/mapDocumentCodec.test.ts`
+Run: `npm test -- --runInBand src/domain/persistence/__tests__/mapDocumentNodeImportance.test.ts src/domain/persistence/__tests__/mapDocumentEncoder.test.ts src/domain/persistence/__tests__/mapDocumentDecoder.test.ts src/domain/persistence/__tests__/mapDocumentCodec.test.ts`
 
-Expected: FAIL because output is version 1 and importance is not decoded.
+Expected: FAIL because the responsibility-specific modules do not exist and V1 importance is not migrated.
 
 - [ ] **Step 3: Split legacy input from current output types**
 
 ```ts
-type MapDocumentV1Node = Omit<Node, "importance">;
+type MapDocumentV1Node = Pick<
+  Node,
+  "id" | "parentId" | "x" | "y" | "width" | "height" | "label"
+>;
 
 export type MapDocumentV1 = {
   version: 1;
@@ -366,13 +393,15 @@ Keep `MapDocumentV1Node` private unless a test requires a public fixture type.
 - [ ] **Step 4: Implement version-aware node normalization**
 
 ```ts
-const importance = version === 1 ? DEFAULT_NODE_IMPORTANCE : node.importance;
-if (importance !== "high" && importance !== "medium" && importance !== "low") {
-  return failure(index, ".importanceはhigh、medium、lowのいずれかである必要があります。");
-}
+const importanceResult = normalizeMapDocumentNodeImportance(
+  node.importance,
+  index,
+  version,
+);
+if (!importanceResult.ok) return importanceResult;
 ```
 
-Pass `record.version` into normalization. Projection must always include `importance`; document creation and serialization must always emit `version: 2`.
+`mapDocumentNodeImportance`はV1の既定値補完とV2値検証だけを担当する。`mapDocumentEncoder`は投影、V2生成、直列化を担当し、`mapDocumentDecoder`はJSON解析、version振り分け、ノード・グラフ検証を担当する。`mapDocumentCodec`は従来の公開関数を再公開する互換ファサードとする。
 
 - [ ] **Step 5: Update storage and page expectations**
 

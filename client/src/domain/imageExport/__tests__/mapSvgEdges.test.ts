@@ -1,7 +1,8 @@
 import { createMapSvgEdges } from "@/domain/imageExport/mapSvgEdges";
+import { createTestNode } from "@/testing/createTestNode";
 
 it("存在する親子関係だけを入力順と出力オフセットで辺にし、入力を変更しない", () => {
-  const parent = Object.freeze({
+  const parent = Object.freeze(createTestNode({
     id: 1,
     parentId: null,
     x: -20,
@@ -9,9 +10,8 @@ it("存在する親子関係だけを入力順と出力オフセットで辺に�
     width: 100,
     height: 60,
     label: "Parent",
-    importance: "medium" as const,
-  });
-  const child = Object.freeze({
+  }));
+  const child = Object.freeze(createTestNode({
     id: 2,
     parentId: 1,
     x: 180,
@@ -19,9 +19,8 @@ it("存在する親子関係だけを入力順と出力オフセットで辺に�
     width: 120,
     height: 70,
     label: "Child",
-    importance: "medium" as const,
-  });
-  const orphan = Object.freeze({
+  }));
+  const orphan = Object.freeze(createTestNode({
     id: 3,
     parentId: 999,
     x: 300,
@@ -29,8 +28,7 @@ it("存在する親子関係だけを入力順と出力オフセットで辺に�
     width: 100,
     height: 60,
     label: "Orphan",
-    importance: "medium" as const,
-  });
+  }));
   const nodes = Object.freeze([parent, child, orphan]);
   const bounds = Object.freeze({
     minX: -20,

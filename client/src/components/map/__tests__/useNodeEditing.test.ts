@@ -2,9 +2,10 @@ import { act, renderHook } from "@testing-library/react";
 import { useLayoutEffect } from "react";
 import { useNodeEditing } from "@/components/map/useNodeEditing";
 import type { Node } from "@/types/node";
+import { createTestNode } from "@/testing/createTestNode";
 
 const nodes: Node[] = [
-  { id: 1, parentId: null, x: 50, y: 30, width: 100, height: 60, label: "既存ラベル" , importance: "medium" as const},
+  createTestNode({ x: 50, y: 30, label: "既存ラベル" }),
 ];
 
 function useEditingStartedInLayout(

@@ -1,8 +1,9 @@
 import { buildNodeForestRelations } from "@/domain/nodes/nodeLayoutForestRelations";
 import type { Node } from "@/types/node";
+import { createTestNode } from "@/testing/createTestNode";
 
 function node(id: number, parentId: number | null): Node {
-  return { id, parentId, x: id * 10, y: id * 20, width: 100, height: 60, label: String(id) , importance: "medium" as const};
+  return createTestNode({ id, parentId, x: id * 10, y: id * 20, label: String(id) });
 }
 
 describe("buildNodeForestRelations", () => {

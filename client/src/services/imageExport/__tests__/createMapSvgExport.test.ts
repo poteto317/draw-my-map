@@ -1,4 +1,5 @@
 import { createMapSvgExport } from "@/services/imageExport/createMapSvgExport";
+import { createTestNode } from "@/testing/createTestNode";
 
 describe("createMapSvgExport", () => {
   afterEach(() => jest.restoreAllMocks());
@@ -19,10 +20,10 @@ describe("createMapSvgExport", () => {
       { getContext: () => context } as unknown as HTMLCanvasElement
     ));
 
-    const result = createMapSvgExport([{
+    const result = createMapSvgExport([createTestNode({
       id: 1, parentId: null, x: 10, y: 20,
-      width: 120, height: 48, label: "中心ノード", importance: "medium",
-    }]);
+      width: 120, height: 48, label: "中心ノード",
+    })]);
 
     expect(result).toMatchObject({ width: 184, height: 112 });
     expect(result?.svg).toContain('width="184" height="112" viewBox="0 0 184 112"');
@@ -42,9 +43,7 @@ describe("createMapSvgExport", () => {
     ));
     const label = Array.from({ length: 10 }, (_, index) => `Line ${index + 1}`).join("\n");
 
-    const result = createMapSvgExport([{
-      id: 1, parentId: null, x: 0, y: 0, width: 100, height: 64, label, importance: "medium",
-    }]);
+    const result = createMapSvgExport([createTestNode({ height: 64, label })]);
 
     expect(result).toMatchObject({ width: 164, height: 244 });
     expect(result?.svg).toContain('width="164" height="244" viewBox="0 0 164 244"');

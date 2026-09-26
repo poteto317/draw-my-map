@@ -2,8 +2,9 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { INITIAL_VIEWPORT } from "@/components/map/mapViewport";
 import { NodeLabelEditor } from "@/components/map/NodeLabelEditor";
 import type { Node } from "@/types/node";
+import { createTestNode } from "@/testing/createTestNode";
 
-const node: Node = {
+const node: Node = createTestNode({
   id: 1,
   parentId: null,
   x: 50,
@@ -11,8 +12,7 @@ const node: Node = {
   width: 100,
   height: 60,
   label: "既存ラベル",
-  importance: "medium" as const,
-};
+});
 
 function renderEditor() {
   const onChange = jest.fn();

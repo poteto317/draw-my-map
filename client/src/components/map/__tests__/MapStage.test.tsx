@@ -13,6 +13,7 @@ import { AutoLayoutMapStageHarness } from "@/components/map/testing/AutoLayoutMa
 import { CHILD_HORIZONTAL_GAP } from "@/config/shapes";
 import { useNodes } from "@/hooks/useNodes";
 import type { Node } from "@/types/node";
+import { createTestNode } from "@/testing/createTestNode";
 
 type MockPointerEvent = {
   globalX: number;
@@ -118,8 +119,8 @@ const defaultProps = {
 };
 
 const sampleNodes: Node[] = [
-  { id: 1, parentId: null, x: 50, y: 30, width: 100, height: 60, label: "ノード1" , importance: "medium" as const},
-  { id: 2, parentId: null, x: 200, y: 100, width: 100, height: 60, label: "ノード2" , importance: "medium" as const},
+  createTestNode({ id: 1, x: 50, y: 30, label: "ノード1" }),
+  createTestNode({ id: 2, x: 200, y: 100, label: "ノード2" }),
 ];
 
 async function renderReady(ui: ReactElement) {
@@ -461,7 +462,7 @@ describe("MapStage boundary", () => {
       rerender(
         <MapStage
           {...defaultProps}
-          nodes={[...sampleNodes, {
+          nodes={[...sampleNodes, createTestNode({
             id: 3,
             parentId: null,
             x: 300,
@@ -469,8 +470,7 @@ describe("MapStage boundary", () => {
             width: 100,
             height: 60,
             label: "追加ノード",
-            importance: "medium" as const,
-          }]}
+          })]}
         />,
       );
     });

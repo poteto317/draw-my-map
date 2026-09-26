@@ -1,9 +1,10 @@
 import { getNodeLabelEditorLayout } from "@/components/map/nodeLabelEditorLayout";
 import type { Node } from "@/types/node";
+import { createTestNode } from "@/testing/createTestNode";
 
 describe("getNodeLabelEditorLayout", () => {
   it("viewportに合わせて編集欄の位置と寸法を投影する", () => {
-    const node: Node = {
+    const node: Node = createTestNode({
       id: 1,
       parentId: null,
       x: 10,
@@ -11,8 +12,7 @@ describe("getNodeLabelEditorLayout", () => {
       width: 100,
       height: 60,
       label: "node",
-      importance: "medium" as const,
-    };
+    });
 
     expect(getNodeLabelEditorLayout(
       node,

@@ -5,8 +5,9 @@ import {
 } from "@/domain/nodes/nodePlacement";
 import { RECT_HEIGHT, RECT_WIDTH } from "@/config/shapes";
 import type { Node } from "@/types/node";
+import { createTestNode } from "@/testing/createTestNode";
 
-const parent: Node = {
+const parent: Node = createTestNode({
   id: 1,
   parentId: null,
   x: 80,
@@ -14,8 +15,7 @@ const parent: Node = {
   width: RECT_WIDTH,
   height: RECT_HEIGHT,
   label: "parent",
-  importance: "medium" as const,
-};
+});
 
 describe("node placement", () => {
   it("centers a root node at the requested coordinates", () => {

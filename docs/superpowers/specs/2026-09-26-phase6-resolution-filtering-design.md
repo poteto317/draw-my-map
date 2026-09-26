@@ -184,13 +184,16 @@ Storageキーは既存の`draw-my-map.map.v1`を維持する。キーは保存�
 
 ### 型
 
-- `types/nodeImportance.ts`: 重要度型、表示レベル型、フィルターモード型
+- `types/nodeImportance.ts`: 重要度型
+- `types/nodeResolution.ts`: 表示レベル型、フィルターモード型
 - `types/node.ts`: `Node`へ重要度を追加
 - `types/mapDocument.ts`: V1入力型、V2出力型、Codec結果型
 
 ### ドメイン
 
-- `domain/nodes/nodeImportance.ts`: 重要度の順序、既定値、レベル条件の純粋判定
+- `domain/nodes/nodeImportance.ts`: 新規ノードとV1移行で使う既定重要度
+- `domain/nodes/nodeImportanceUpdate.ts`: 重要度更新の純粋変換
+- `domain/nodes/nodeResolution.ts`: 表示レベル条件の純粋判定
 - `domain/nodes/nodeResolutionFilter.ts`: 自動レベル判定、ヒステリシス、祖先を含む可視ID導出
 - `domain/persistence/*`: V1/V2ノード正規化、V2投影、version別Codec
 

@@ -2,6 +2,7 @@ import { renderHook, act } from "@testing-library/react";
 import { RECT_HEIGHT, RECT_WIDTH } from "@/config/shapes";
 import { useNodeLayoutState } from "@/hooks/useNodeLayoutState";
 import type { Node } from "@/types/node";
+import { createTestNode } from "@/testing/createTestNode";
 
 function node(
   id: number,
@@ -9,7 +10,7 @@ function node(
   x: number,
   y: number,
 ): Node {
-  return {
+  return createTestNode({
     id,
     parentId,
     x,
@@ -17,8 +18,7 @@ function node(
     width: RECT_WIDTH,
     height: RECT_HEIGHT,
     label: "",
-    importance: "medium" as const,
-  };
+  });
 }
 
 describe("useNodeLayoutState", () => {

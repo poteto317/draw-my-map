@@ -5,6 +5,7 @@ import {
   TREE_VERTICAL_GAP,
 } from "@/config/shapes";
 import type { Node } from "@/types/node";
+import { createTestNode } from "@/testing/createTestNode";
 
 function node(
   id: number,
@@ -14,7 +15,7 @@ function node(
   width = 100,
   height = 60,
 ): Node {
-  return { id, parentId, x, y, width, height, label: `node-${id}`, importance: "medium" };
+  return createTestNode({ id, parentId, x, y, width, height, label: `node-${id}` });
 }
 
 function overlaps(a: Node, b: Node): boolean {

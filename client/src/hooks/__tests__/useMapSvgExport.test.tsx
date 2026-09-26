@@ -1,12 +1,13 @@
 import { act, renderHook } from "@testing-library/react";
 import { useMapSvgExport } from "@/hooks/useMapSvgExport";
 import type { Node } from "@/types/node";
+import { createTestNode } from "@/testing/createTestNode";
 
 const nodes: readonly Node[] = Object.freeze([
-  Object.freeze({
+  Object.freeze(createTestNode({
     id: 1, parentId: null, x: 10, y: 20,
-    width: 120, height: 48, label: "中心ノード", importance: "medium",
-  }),
+    width: 120, height: 48, label: "中心ノード",
+  })),
 ]);
 const svgExport = {
   svg: '<svg xmlns="http://www.w3.org/2000/svg" />',

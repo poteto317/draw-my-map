@@ -1,17 +1,9 @@
 import { createNodeIdAllocator } from "@/domain/nodes/nodeIdAllocator";
 import type { Node } from "@/types/node";
+import { createTestNode } from "@/testing/createTestNode";
 
 function node(id: number): Node {
-  return {
-    id,
-    parentId: null,
-    x: 0,
-    y: 0,
-    width: 160,
-    height: 64,
-    label: `node-${id}`,
-    importance: "medium",
-  };
+  return createTestNode({ id, width: 160, height: 64, label: `node-${id}` });
 }
 
 function generatorFrom(values: number[]): () => number {

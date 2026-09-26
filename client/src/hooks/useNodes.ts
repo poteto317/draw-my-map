@@ -13,6 +13,7 @@ import {
   createNodeIdAllocator,
   type NodeIdAllocator,
 } from "@/domain/nodes/nodeIdAllocator";
+import { replaceNodeImportance } from "@/domain/nodes/nodeImportanceUpdate";
 import { useNodeLayoutState } from "@/hooks/useNodeLayoutState";
 import type { Node } from "@/types/node";
 import type { NodeImportance } from "@/types/nodeImportance";
@@ -112,12 +113,9 @@ export function useNodes(): UseNodesReturn {
   }, [applyNonStructuralChange]);
 
   const updateNodeImportance = useCallback((id: number, importance: NodeImportance) => (
-    applyNonStructuralChange((currentNodes) => {
-      if (!currentNodes.some((node) => node.id === id)) return null;
-      return currentNodes.map((node) => (
-        node.id === id ? { ...node, importance } : node
-      ));
-    })
+    applyNonStructuralChange((currentNodes) => (
+      replaceNodeImportance(currentNodes, id, importance)
+    ))
   ), [applyNonStructuralChange]);
 
   const moveNode = useCallback((id: number, x: number, y: number) => {

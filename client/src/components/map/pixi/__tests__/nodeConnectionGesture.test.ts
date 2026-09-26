@@ -1,8 +1,9 @@
 import { createNodeConnectionGesture } from "@/components/map/pixi/nodeConnectionGesture";
 import type { PointerSample } from "@/components/map/pixi/pointerGesture";
 import type { Node } from "@/types/node";
+import { createTestNode } from "@/testing/createTestNode";
 
-const source: Node = {
+const source: Node = createTestNode({
   id: 1,
   parentId: null,
   x: 20,
@@ -10,9 +11,8 @@ const source: Node = {
   width: 100,
   height: 60,
   label: "Source",
-  importance: "medium" as const,
-};
-const target: Node = { ...source, id: 2, x: 200, label: "Target" , importance: "medium" as const};
+});
+const target: Node = { ...source, id: 2, x: 200, label: "Target" };
 
 const pointer = (
   screenX: number,

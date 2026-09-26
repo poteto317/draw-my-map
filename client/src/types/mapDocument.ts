@@ -1,7 +1,10 @@
 import type { NodeMapState } from "@/types/nodeMapState";
 import type { Node } from "@/types/node";
 
-type MapDocumentV1Node = Omit<Node, "importance">;
+type MapDocumentV1Node = Pick<
+  Node,
+  "id" | "parentId" | "x" | "y" | "width" | "height" | "label"
+>;
 
 export type MapDocumentV1 = {
   version: 1;

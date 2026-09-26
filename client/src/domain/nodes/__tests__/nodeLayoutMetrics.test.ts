@@ -1,9 +1,10 @@
 import { indexNodeForest } from "@/domain/nodes/nodeLayoutForest";
 import { calculateNodeLayoutMetrics } from "@/domain/nodes/nodeLayoutMetrics";
 import type { Node } from "@/types/node";
+import { createTestNode } from "@/testing/createTestNode";
 
 function node(id: number, parentId: number | null, width = 100, height = 60, x = 80): Node {
-  return { id, parentId, width, height, x, y: 0, label: String(id) , importance: "medium" as const};
+  return createTestNode({ id, parentId, width, height, x, label: String(id) });
 }
 
 describe("calculateNodeLayoutMetrics", () => {

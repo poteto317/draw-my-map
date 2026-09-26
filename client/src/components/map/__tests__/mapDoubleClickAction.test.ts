@@ -1,7 +1,8 @@
 import { resolveMapDoubleClickAction } from "@/components/map/mapDoubleClickAction";
 import type { Node } from "@/types/node";
+import { createTestNode } from "@/testing/createTestNode";
 
-const node: Node = {
+const node: Node = createTestNode({
   id: 1,
   parentId: null,
   x: 70,
@@ -9,8 +10,7 @@ const node: Node = {
   width: 10,
   height: 10,
   label: "node",
-  importance: "medium" as const,
-};
+});
 
 const input = {
   client: { x: 300, y: 200 },

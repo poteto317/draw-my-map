@@ -1,11 +1,12 @@
 import { renderMapNodes } from "@/components/map/pixi/renderMapNodes";
 import { createPixiTestHarness } from "../testing/pixiTestHarness";
 import type { Node } from "@/types/node";
+import { createTestNode } from "@/testing/createTestNode";
 
-const node: Node = {
+const node: Node = createTestNode({
   id: 1, parentId: null, x: 50, y: 30,
-  width: 100, height: 60, label: "", importance: "medium",
-};
+  width: 100, height: 60, label: "",
+});
 
 function render(overrides: Partial<{
   selectedNodeId: number | null;

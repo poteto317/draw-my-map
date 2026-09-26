@@ -2,9 +2,10 @@ import { indexNodeForest, type IndexedNodeForest } from "@/domain/nodes/nodeLayo
 import type { NodeLayoutMetrics } from "@/domain/nodes/nodeLayoutMetrics";
 import { placeNodeForest } from "@/domain/nodes/nodeLayoutPlacement";
 import type { Node } from "@/types/node";
+import { createTestNode } from "@/testing/createTestNode";
 
 function node(id: number, parentId: number | null, y = 0, height = 60): Node {
-  return { id, parentId, x: 80, y, width: 100, height, label: String(id) , importance: "medium" as const};
+  return createTestNode({ id, parentId, x: 80, y, height, label: String(id) });
 }
 
 describe("placeNodeForest", () => {

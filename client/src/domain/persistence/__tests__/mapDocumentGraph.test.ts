@@ -1,8 +1,9 @@
 import { validateMapDocumentGraph } from "@/domain/persistence/mapDocumentGraph";
 import type { Node } from "@/types/node";
+import { createTestNode } from "@/testing/createTestNode";
 
 function node(id: number, parentId: number | null): Node {
-  return {
+  return createTestNode({
     id,
     parentId,
     x: 0,
@@ -10,8 +11,7 @@ function node(id: number, parentId: number | null): Node {
     width: 160,
     height: 64,
     label: `node-${id}`,
-    importance: "medium",
-  };
+  });
 }
 
 describe("validateMapDocumentGraph", () => {

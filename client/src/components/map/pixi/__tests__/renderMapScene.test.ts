@@ -2,16 +2,17 @@ import { INITIAL_VIEWPORT } from "@/components/map/mapViewport";
 import { renderMapScene } from "@/components/map/pixi/renderMapScene";
 import { createPixiTestHarness } from "../testing/pixiTestHarness";
 import type { Node } from "@/types/node";
+import { createTestNode } from "@/testing/createTestNode";
 
 const nodes: Node[] = [
-  {
+  createTestNode({
     id: 1, parentId: null, x: 50, y: 30,
-    width: 100, height: 60, label: "親", importance: "medium",
-  },
-  {
+    width: 100, height: 60, label: "親",
+  }),
+  createTestNode({
     id: 2, parentId: 1, x: 270, y: 30,
-    width: 100, height: 60, label: "子", importance: "medium",
-  },
+    width: 100, height: 60, label: "子",
+  }),
 ];
 
 describe("renderMapScene", () => {

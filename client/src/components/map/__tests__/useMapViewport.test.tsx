@@ -2,6 +2,7 @@ import { startTransition } from "react";
 import { flushSync } from "react-dom";
 import { act, renderHook } from "@testing-library/react";
 import { useMapViewport } from "@/components/map/useMapViewport";
+import { createTestNode } from "@/testing/createTestNode";
 
 describe("useMapViewport", () => {
   it("同一batchのパンを直前のviewportへ蓄積する", () => {
@@ -69,7 +70,7 @@ describe("useMapViewport", () => {
 
   it("選択ノードを中央へ移して倍率を維持する", () => {
     const { result } = renderHook(() => useMapViewport());
-    const node = { id: 1, parentId: null, x: 100, y: 50, width: 80, height: 40, label: "" , importance: "medium" as const};
+    const node = createTestNode({ x: 100, y: 50, width: 80, height: 40 });
 
     act(() => {
       result.current.zoomAt({ x: 0, y: 0 }, 2);

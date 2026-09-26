@@ -2,6 +2,7 @@ import { act, renderHook } from "@testing-library/react";
 import { INITIAL_VIEWPORT } from "@/components/map/mapViewport";
 import { useMapStageInteractions } from "@/components/map/useMapStageInteractions";
 import type { Node } from "@/types/node";
+import { createTestNode } from "@/testing/createTestNode";
 
 type StageEvent = "pointerdown" | "pointermove" | "pointerup" | "pointerupoutside" | "pointercancel";
 type PointerEvent = {
@@ -63,8 +64,8 @@ function pointer(
 }
 
 const nodes: Node[] = [
-  { id: 1, parentId: null, x: 20, y: 40, width: 100, height: 60, label: "親" , importance: "medium" as const},
-  { id: 2, parentId: null, x: 200, y: 40, width: 100, height: 60, label: "子" , importance: "medium" as const},
+  createTestNode({ id: 1, x: 20, y: 40, label: "親" }),
+  createTestNode({ id: 2, x: 200, y: 40, label: "子" }),
 ];
 
 describe("useMapStageInteractions", () => {

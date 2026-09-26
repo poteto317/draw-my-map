@@ -1,10 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
 import { useMapImageExport } from "@/hooks/useMapImageExport";
+import { createTestNode } from "@/testing/createTestNode";
 
-const nodes = [{
+const nodes = [createTestNode({
   id: 1, parentId: null, x: 10, y: 20,
-  width: 120, height: 48, label: "中心ノード", importance: "medium" as const,
-}];
+  width: 120, height: 48, label: "中心ノード",
+})];
 const svgExport = {
   svg: '<svg xmlns="http://www.w3.org/2000/svg" />',
   width: 184,

@@ -1,11 +1,12 @@
 import { createMapSvgDocument } from "@/domain/imageExport/mapSvgDocument";
+import { createTestNode } from "@/testing/createTestNode";
 
 const measureText = (text: string) => Array.from(text).length * 10;
 
 it("SVGの寸法と背景、辺、ノード、中央揃えラベルを描画順どおりに生成する", () => {
   const nodes = [
-    { id: 1, parentId: null, x: -20, y: 10, width: 100, height: 60, label: "Parent" , importance: "medium" as const},
-    { id: 2, parentId: 1, x: 180, y: 90, width: 120, height: 70, label: "Child nodes" , importance: "medium" as const},
+    createTestNode({ id: 1, x: -20, y: 10, label: "Parent" }),
+    createTestNode({ id: 2, parentId: 1, x: 180, y: 90, width: 120, height: 70, label: "Child nodes" }),
   ];
   const bounds = {
     minX: -20,

@@ -1,15 +1,16 @@
 import { renderMapEdges } from "@/components/map/pixi/renderMapEdges";
 import { createPixiTestHarness } from "../testing/pixiTestHarness";
 import type { Node } from "@/types/node";
+import { createTestNode } from "@/testing/createTestNode";
 
-const root: Node = {
+const root: Node = createTestNode({
   id: 1, parentId: null, x: 50, y: 30,
-  width: 100, height: 60, label: "親", importance: "medium",
-};
-const child: Node = {
+  width: 100, height: 60, label: "親",
+});
+const child: Node = createTestNode({
   id: 2, parentId: 1, x: 270, y: 90,
-  width: 100, height: 60, label: "子", importance: "medium",
-};
+  width: 100, height: 60, label: "子",
+});
 
 describe("renderMapEdges", () => {
   it("draws valid relationships as one edge layer", () => {

@@ -1,13 +1,6 @@
-import {
-  DEFAULT_NODE_IMPORTANCE,
-  isNodeVisibleAtLevel,
-} from "@/domain/nodes/nodeImportance";
+import { isNodeVisibleAtLevel } from "@/domain/nodes/nodeResolution";
 
-describe("node importance", () => {
-  it("新規ノード用の既定重要度はmedium", () => {
-    expect(DEFAULT_NODE_IMPORTANCE).toBe("medium");
-  });
-
+describe("node resolution", () => {
   it.each([
     ["high", "high", true],
     ["medium", "high", false],

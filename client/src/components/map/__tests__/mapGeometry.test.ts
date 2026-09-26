@@ -1,11 +1,12 @@
 import type { Node } from "@/types/node";
+import { createTestNode } from "@/testing/createTestNode";
 import {
   findNodeAtPoint,
   getEdgeCurve,
   toLocalPoint,
 } from "@/components/map/mapGeometry";
 
-const target: Node = {
+const target: Node = createTestNode({
   id: 1,
   parentId: null,
   x: 100,
@@ -13,8 +14,7 @@ const target: Node = {
   width: 80,
   height: 40,
   label: "target",
-  importance: "medium" as const,
-};
+});
 
 describe("map geometry", () => {
   it("converts client coordinates to local coordinates", () => {

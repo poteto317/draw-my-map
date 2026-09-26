@@ -1,7 +1,7 @@
 import type { MapDocumentResult } from "@/types/mapDocument";
 import type { Node } from "@/types/node";
+import { normalizeMapDocumentNodeImportance } from "@/domain/persistence/mapDocumentNodeImportance";
 import { projectMapDocumentNode } from "@/domain/persistence/mapDocumentNodeProjection";
-import { DEFAULT_NODE_IMPORTANCE } from "@/domain/nodes/nodeImportance";
 
 type NodeRecord = Record<string, unknown>;
 
@@ -49,9 +49,13 @@ export function normalizeMapDocumentNode(
   if (typeof label !== "string") {
     return failure(index, ".labelは文字列である必要があります。");
   }
-  const importance = version === 1 ? DEFAULT_NODE_IMPORTANCE : node.importance;
-  if (importance !== "high" && importance !== "medium" && importance !== "low") {
-    return failure(index, ".importanceはhigh、medium、lowのいずれかである必要があります。");
+  const importanceResult = normalizeMapDocumentNodeImportance(
+    node.importance,
+    index,
+    version,
+  );
+  if (!importanceResult.ok) {
+    return importanceResult;
   }
   return {
     ok: true,
@@ -63,7 +67,7 @@ export function normalizeMapDocumentNode(
       width,
       height,
       label,
-      importance,
+      importance: importanceResult.value,
     }),
   };
 }

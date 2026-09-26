@@ -3,8 +3,9 @@ import {
   resolveViewportFocusRequest,
 } from "@/components/map/viewportFocusShortcut";
 import type { Node } from "@/types/node";
+import { createTestNode } from "@/testing/createTestNode";
 
-const node: Node = {
+const node: Node = createTestNode({
   id: 1,
   parentId: null,
   x: 10,
@@ -12,8 +13,7 @@ const node: Node = {
   width: 100,
   height: 60,
   label: "node",
-  importance: "medium" as const,
-};
+});
 const screen = { width: 800, height: 600 };
 
 describe("isViewportFocusShortcut", () => {

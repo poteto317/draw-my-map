@@ -5,18 +5,10 @@ import {
   moveNodeSubtree,
 } from "@/domain/nodes/nodeTree";
 import type { Node } from "@/types/node";
+import { createTestNode } from "@/testing/createTestNode";
 
 function node(id: number, parentId: number | null, x = 0, y = 0): Node {
-  return {
-    id,
-    parentId,
-    x,
-    y,
-    width: 1,
-    height: 1,
-    label: "",
-    importance: "medium" as const,
-  };
+  return createTestNode({ id, parentId, x, y, width: 1, height: 1 });
 }
 
 describe("collectSubtreeIds", () => {

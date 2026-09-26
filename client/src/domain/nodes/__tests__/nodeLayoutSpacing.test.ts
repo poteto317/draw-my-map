@@ -1,9 +1,10 @@
 import { indexNodeForest } from "@/domain/nodes/nodeLayoutForest";
 import { hasValidVerticalSpacing } from "@/domain/nodes/nodeLayoutSpacing";
 import type { Node } from "@/types/node";
+import { createTestNode } from "@/testing/createTestNode";
 
 function node(id: number, parentId: number | null = null, height = 60): Node {
-  return { id, parentId, x: 0, y: 0, width: 100, height, label: String(id) , importance: "medium" as const};
+  return createTestNode({ id, parentId, height, label: String(id) });
 }
 
 describe("hasValidVerticalSpacing", () => {

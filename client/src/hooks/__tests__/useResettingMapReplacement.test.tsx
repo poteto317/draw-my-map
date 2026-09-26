@@ -1,10 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
 import { useResettingMapReplacement } from "@/hooks/useResettingMapReplacement";
 import type { NodeMapState } from "@/types/nodeMapState";
+import { createTestNode } from "@/testing/createTestNode";
 
 const importedMap: NodeMapState = {
   layoutMode: "auto",
-  nodes: [{
+  nodes: [createTestNode({
     id: 10,
     parentId: null,
     x: 20,
@@ -12,8 +13,7 @@ const importedMap: NodeMapState = {
     width: 160,
     height: 64,
     label: "読み込み済み",
-    importance: "medium" as const,
-  }],
+  })],
 };
 
 describe("useResettingMapReplacement", () => {
