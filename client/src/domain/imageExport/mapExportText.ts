@@ -73,6 +73,13 @@ function findFittingLength(
   return fittingLength;
 }
 
+function findLastNonWhitespaceIndex(codePoints: string[]): number {
+  for (let index = codePoints.length - 1; index >= 0; index -= 1) {
+    if (/\S/u.test(codePoints[index])) return index;
+  }
+  return -1;
+}
+
 export function getMapExportLabel(label: string): string {
   return normalizeMapXmlText(label || FALLBACK_MAP_EXPORT_LABEL);
 }
@@ -89,6 +96,7 @@ export function wrapMapExportText(
 
   for (const explicitLine of explicitLines) {
     const codePoints = Array.from(explicitLine);
+    const lastNonWhitespaceIndex = findLastNonWhitespaceIndex(codePoints);
 
     if (codePoints.length === 0) {
       wrappedLines.push("");
@@ -123,7 +131,12 @@ export function wrapMapExportText(
 
       let breakAt = -1;
       for (let index = start; index < start + fittingLength; index += 1) {
-        if (/\s/u.test(codePoints[index])) breakAt = index;
+        if (
+          /\s/u.test(codePoints[index]) &&
+          index < lastNonWhitespaceIndex
+        ) {
+          breakAt = index;
+        }
       }
 
       if (breakAt >= 0 && (breakAt > start || start === 0)) {
@@ -139,7 +152,8 @@ export function wrapMapExportText(
         if (
           /\S/u.test(fittedLine) &&
           start < codePoints.length &&
-          /\s/u.test(codePoints[start])
+          /\s/u.test(codePoints[start]) &&
+          start < lastNonWhitespaceIndex
         ) {
           start += 1;
         }

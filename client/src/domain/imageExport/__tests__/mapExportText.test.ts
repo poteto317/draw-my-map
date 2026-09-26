@@ -39,6 +39,17 @@ describe("wrapMapExportText", () => {
     expect(wrapMapExportText("  A  B  ", 100, measure)).toEqual(["  A  B  "]);
   });
 
+  it.each([
+    ["A ", 10, ["A", " "]],
+    ["A  ", 10, ["A", " ", " "]],
+    ["A  ", 20, ["A ", " "]],
+  ] as const)(
+    "幅境界を超えた末尾空白を保持する: %p / 幅%s",
+    (label, maxWidth, expected) => {
+      expect(wrapMapExportText(label, maxWidth, measure)).toEqual(expected);
+    },
+  );
+
   it("prefers whitespace when wrapping", () => {
     expect(wrapMapExportText("alpha beta", 60, measure)).toEqual(["alpha", "beta"]);
   });
