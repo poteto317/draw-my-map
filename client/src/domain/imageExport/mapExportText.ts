@@ -80,6 +80,12 @@ function findLastNonWhitespaceIndex(codePoints: string[]): number {
   return -1;
 }
 
+function findWhitespaceRunEnd(codePoints: string[], start: number): number {
+  let end = start;
+  while (end < codePoints.length && /\s/u.test(codePoints[end])) end += 1;
+  return end;
+}
+
 export function getMapExportLabel(label: string): string {
   return normalizeMapXmlText(label || FALLBACK_MAP_EXPORT_LABEL);
 }
@@ -109,6 +115,7 @@ export function wrapMapExportText(
     }
 
     let start = 0;
+    let consumedWhitespaceRunEnd = -1;
     while (start < codePoints.length) {
       const fittingLength = findFittingLength(
         codePoints,
@@ -133,7 +140,8 @@ export function wrapMapExportText(
       for (let index = start; index < start + fittingLength; index += 1) {
         if (
           /\s/u.test(codePoints[index]) &&
-          index < lastNonWhitespaceIndex
+          index < lastNonWhitespaceIndex &&
+          index >= consumedWhitespaceRunEnd
         ) {
           breakAt = index;
         }
@@ -142,6 +150,7 @@ export function wrapMapExportText(
       if (breakAt >= 0 && (breakAt > start || start === 0)) {
         const lineBeforeBreak = codePoints.slice(start, breakAt).join("");
         if (lineBeforeBreak.length > 0) wrappedLines.push(lineBeforeBreak);
+        consumedWhitespaceRunEnd = findWhitespaceRunEnd(codePoints, breakAt);
         start = breakAt + 1;
       } else {
         const fittedLine = codePoints
@@ -153,8 +162,10 @@ export function wrapMapExportText(
           /\S/u.test(fittedLine) &&
           start < codePoints.length &&
           /\s/u.test(codePoints[start]) &&
-          start < lastNonWhitespaceIndex
+          start < lastNonWhitespaceIndex &&
+          start >= consumedWhitespaceRunEnd
         ) {
+          consumedWhitespaceRunEnd = findWhitespaceRunEnd(codePoints, start);
           start += 1;
         }
       }

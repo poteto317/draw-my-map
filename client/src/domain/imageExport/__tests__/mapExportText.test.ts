@@ -62,6 +62,16 @@ describe("wrapMapExportText", () => {
     expect(wrapMapExportText("A  B", maxWidth, measure)).toEqual(expected);
   });
 
+  it.each([
+    ["A   B", ["A", "  ", "B"]],
+    ["    A", [" ", "  ", "A"]],
+  ] as const)(
+    "同じ連続空白から除去するソフト改行文字は1文字だけにする: %p",
+    (label, expected) => {
+      expect(wrapMapExportText(label, 20, measure)).toEqual(expected);
+    },
+  );
+
   it("先頭の連続空白でもソフト改行に採用した1文字だけを除去する", () => {
     expect(wrapMapExportText("  A", 10, measure)).toEqual([" ", "A"]);
   });

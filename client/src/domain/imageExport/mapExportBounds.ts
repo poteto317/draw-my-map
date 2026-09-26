@@ -80,6 +80,12 @@ export function getMapExportBounds(
   measureText: MeasureMapText,
   padding = MAP_EXPORT_PADDING,
 ): MapExportBounds | null {
+  if (!Number.isFinite(padding) || padding < 0) {
+    throw new RangeError(
+      "Map export padding must be a non-negative finite number",
+    );
+  }
+
   if (nodes.length === 0) return null;
 
   let minX = Infinity;

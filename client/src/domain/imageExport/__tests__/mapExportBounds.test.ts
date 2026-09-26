@@ -48,6 +48,23 @@ it("第3引数で指定した余白を適用する", () => {
   });
 });
 
+it("負の余白は拒否する", () => {
+  const nodes = [{ id: 7, parentId: null, x: 12, y: -8, width: 30, height: 18, label: "A" }];
+
+  expect(() => getMapExportBounds(nodes, measureText, -1)).toThrow(
+    new RangeError("Map export padding must be a non-negative finite number"),
+  );
+});
+
+it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+  "空のマップでも非有限の余白 %s は拒否する",
+  (padding) => {
+    expect(() => getMapExportBounds([], measureText, padding)).toThrow(
+      new RangeError("Map export padding must be a non-negative finite number"),
+    );
+  },
+);
+
 it("ノードの高さを超える複数行ラベルを出力範囲に含める", () => {
   const nodes = [{
     id: 1,
