@@ -15,6 +15,7 @@ import {
 } from "@/domain/nodes/nodeIdAllocator";
 import { useNodeLayoutState } from "@/hooks/useNodeLayoutState";
 import type { Node } from "@/types/node";
+import type { NodeImportance } from "@/types/nodeImportance";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 import type { NodeMapState } from "@/types/nodeMapState";
 
@@ -27,6 +28,7 @@ type UseNodesReturn = {
   addSiblingNode: (nodeId: number) => number | null;
   selectNode: (id: number | null) => void;
   updateNodeLabel: (id: number, label: string) => void;
+  updateNodeImportance: (id: number, importance: NodeImportance) => boolean;
   moveNode: (id: number, x: number, y: number) => void;
   connectNodes: (parentId: number, childId: number) => boolean;
   deleteNode: (id: number) => void;
@@ -109,6 +111,15 @@ export function useNodes(): UseNodesReturn {
     ));
   }, [applyNonStructuralChange]);
 
+  const updateNodeImportance = useCallback((id: number, importance: NodeImportance) => (
+    applyNonStructuralChange((currentNodes) => {
+      if (!currentNodes.some((node) => node.id === id)) return null;
+      return currentNodes.map((node) => (
+        node.id === id ? { ...node, importance } : node
+      ));
+    })
+  ), [applyNonStructuralChange]);
+
   const moveNode = useCallback((id: number, x: number, y: number) => {
     applyManualMove((currentNodes) => (
       moveNodeSubtree(currentNodes, id, x, y)
@@ -148,6 +159,7 @@ export function useNodes(): UseNodesReturn {
     addSiblingNode,
     selectNode,
     updateNodeLabel,
+    updateNodeImportance,
     moveNode,
     connectNodes,
     deleteNode,

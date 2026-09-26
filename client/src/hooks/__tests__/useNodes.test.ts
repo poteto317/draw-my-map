@@ -200,6 +200,50 @@ describe("useNodes", () => {
     expect(result.current.nodes.map((node) => node.label)).toEqual(["更新ラベル", ""]);
   });
 
+  it("指定ノードの重要度だけを非構造変更として更新する", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+    act(() => {
+      result.current.addNode(100, 100);
+      result.current.addNode(300, 100);
+    });
+
+    let updated = false;
+    act(() => { updated = result.current.updateNodeImportance(1, "high"); });
+
+    expect(updated).toBe(true);
+    expect(result.current.nodes.map((node) => node.importance)).toEqual(["high", "medium"]);
+  });
+
+  it("存在しないノードの重要度更新ではstateを変更しない", () => {
+    const { result } = renderHook(() => useNodes());
+    act(() => { result.current.addNode(100, 100); });
+    const before = result.current.nodes;
+    let updated = true;
+
+    act(() => { updated = result.current.updateNodeImportance(999, "low"); });
+
+    expect(updated).toBe(false);
+    expect(result.current.nodes).toBe(before);
+  });
+
+  it("自動レイアウト中の重要度更新では座標を変更しない", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+    act(() => {
+      result.current.addNode(100, 100);
+      result.current.addNode(300, 100);
+      result.current.setLayoutMode("auto");
+    });
+    const before = result.current.nodes.map(({ id: nodeId, x, y }) => ({ id: nodeId, x, y }));
+
+    act(() => { result.current.updateNodeImportance(1, "low"); });
+
+    expect(result.current.nodes.map(({ id: nodeId, x, y }) => ({ id: nodeId, x, y }))).toEqual(before);
+  });
+
   it("葉または子孫のないノードだけを移動する", () => {
     let id = 0;
     jest.spyOn(Date, "now").mockImplementation(() => ++id);
