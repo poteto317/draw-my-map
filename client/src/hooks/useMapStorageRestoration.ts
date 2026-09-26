@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { parseMapDocumentJson, serializeMapDocument } from "@/domain/persistence/mapDocumentCodec";
+import { parseMapDocumentJson } from "@/domain/persistence/mapDocumentCodec";
 import { readStoredMapJson } from "@/services/persistence/mapStorage";
 import type { NodeMapState } from "@/types/nodeMapState";
 import type { OperationNotice } from "@/types/operationNotice";
@@ -75,14 +75,13 @@ export function useMapStorageRestoration({
       return;
     }
 
-    const persistedSnapshot = serializeMapDocument(parsed.value);
     replaceMap({
       layoutMode: parsed.value.layoutMode,
       nodes: parsed.value.nodes,
     });
     setRestoration({
       hydrated: true,
-      initialPersistedSnapshot: persistedSnapshot,
+      initialPersistedSnapshot: stored.value,
     });
   }, [currentSnapshot, publishNotice, replaceMap, storage]);
   /* eslint-enable react-hooks/set-state-in-effect */

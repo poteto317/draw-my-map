@@ -121,7 +121,7 @@ describe("Home", () => {
       await user.click(screen.getByRole("button", { name: "JSON書き出し" }));
 
       expect(mockDownloadMapJson).toHaveBeenCalledWith(`{
-  "version": 1,
+  "version": 2,
   "layoutMode": "manual",
   "nodes": []
 }\n`);
@@ -140,6 +140,8 @@ describe("Home", () => {
       await waitFor(() => {
         expect(screen.getByTestId("node-state")).toHaveTextContent("読み込み済み");
       });
+      expect(screen.getByTestId("node-state"))
+        .toHaveTextContent('"importance":"medium"');
       expect(screen.getByRole("button", { name: "自動配置" }))
         .toHaveAttribute("aria-pressed", "true");
       expect(screen.getByTestId("selected-node-id")).toHaveTextContent("");
@@ -174,9 +176,13 @@ describe("Home", () => {
       const stored = window.localStorage.getItem("draw-my-map.map.v1");
       expect(stored).not.toBeNull();
       expect(JSON.parse(stored!)).toMatchObject({
-        version: 1,
+        version: 2,
         layoutMode: "manual",
-        nodes: [expect.objectContaining({ x: -40, y: -10 })],
+        nodes: [expect.objectContaining({
+          x: -40,
+          y: -10,
+          importance: "medium",
+        })],
       });
     });
   });

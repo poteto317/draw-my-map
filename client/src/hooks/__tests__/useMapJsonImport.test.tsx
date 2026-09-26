@@ -3,13 +3,13 @@ import { useMapJsonImport } from "@/hooks/useMapJsonImport";
 import type { MapDocumentResult } from "@/types/mapDocument";
 
 const importedMapJson = `{
-  "version": 1,
+  "version": 2,
   "layoutMode": "auto",
   "nodes": []
 }\n`;
 
 const newerMapJson = `{
-  "version": 1,
+  "version": 2,
   "layoutMode": "manual",
   "nodes": [
     {

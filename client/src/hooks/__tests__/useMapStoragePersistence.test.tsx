@@ -2,13 +2,29 @@ import { act, renderHook } from "@testing-library/react";
 import { useMapStoragePersistence } from "@/hooks/useMapStoragePersistence";
 
 const emptyMapJson = `{
-  "version": 1,
+  "version": 2,
   "layoutMode": "manual",
   "nodes": []
 }\n`;
 
 const importedMapJson = `{
   "version": 1,
+  "layoutMode": "auto",
+  "nodes": [
+    {
+      "id": 10,
+      "parentId": null,
+      "x": 20,
+      "y": 30,
+      "width": 160,
+      "height": 64,
+      "label": "保存済み"
+    }
+  ]
+}\n`;
+
+const migratedMapJson = `{
+  "version": 2,
   "layoutMode": "auto",
   "nodes": [
     {
@@ -43,7 +59,7 @@ describe("useMapStoragePersistence", () => {
     jest.useRealTimers();
   });
 
-  it("保存済みマップを復元して同じsnapshotを書き戻さない", () => {
+  it("V1保存済みマップを復元して300ms後にV2で書き戻す", () => {
     const storage = storageDouble(importedMapJson);
     const replaceMap = jest.fn();
     const { rerender } = renderHook(
@@ -70,9 +86,15 @@ describe("useMapStoragePersistence", () => {
       }],
     });
 
-    rerender({ snapshot: importedMapJson });
-    act(() => jest.advanceTimersByTime(300));
+    rerender({ snapshot: migratedMapJson });
+    act(() => jest.advanceTimersByTime(299));
     expect(storage.setItem).not.toHaveBeenCalled();
+
+    act(() => jest.advanceTimersByTime(1));
+    expect(storage.setItem).toHaveBeenCalledWith(
+      "draw-my-map.map.v1",
+      migratedMapJson,
+    );
   });
 
   it("連続変更の最後のsnapshotだけを保存する", () => {

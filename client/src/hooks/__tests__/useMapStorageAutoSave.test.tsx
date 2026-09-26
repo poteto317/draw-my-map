@@ -2,13 +2,13 @@ import { act, renderHook } from "@testing-library/react";
 import { useMapStorageAutoSave } from "@/hooks/useMapStorageAutoSave";
 
 const emptyMapJson = `{
-  "version": 1,
+  "version": 2,
   "layoutMode": "manual",
   "nodes": []
 }\n`;
 
 const changedMapJson = `{
-  "version": 1,
+  "version": 2,
   "layoutMode": "auto",
   "nodes": []
 }\n`;

@@ -20,6 +20,7 @@ function isSafeInteger(value: unknown): value is number {
 export function normalizeMapDocumentNode(
   value: unknown,
   index: number,
+  version: 1 | 2,
 ): MapDocumentResult<Node> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return failure(index, "はオブジェクトである必要があります。");
@@ -48,6 +49,10 @@ export function normalizeMapDocumentNode(
   if (typeof label !== "string") {
     return failure(index, ".labelは文字列である必要があります。");
   }
+  const importance = version === 1 ? DEFAULT_NODE_IMPORTANCE : node.importance;
+  if (importance !== "high" && importance !== "medium" && importance !== "low") {
+    return failure(index, ".importanceはhigh、medium、lowのいずれかである必要があります。");
+  }
   return {
     ok: true,
     value: projectMapDocumentNode({
@@ -58,7 +63,7 @@ export function normalizeMapDocumentNode(
       width,
       height,
       label,
-      importance: DEFAULT_NODE_IMPORTANCE,
+      importance,
     }),
   };
 }

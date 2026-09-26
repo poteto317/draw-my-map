@@ -2,7 +2,7 @@ import { act, renderHook } from "@testing-library/react";
 import { useMapFilePersistence } from "@/hooks/useMapFilePersistence";
 
 const emptyMapJson = `{
-  "version": 1,
+  "version": 2,
   "layoutMode": "manual",
   "nodes": []
 }\n`;

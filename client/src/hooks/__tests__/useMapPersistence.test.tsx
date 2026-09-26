@@ -20,7 +20,7 @@ const storedMapJson = `{
 }\n`;
 
 const mapBJson = `{
-  "version": 1,
+  "version": 2,
   "layoutMode": "manual",
   "nodes": [
     {
@@ -37,7 +37,7 @@ const mapBJson = `{
 }\n`;
 
 const mapCJson = `{
-  "version": 1,
+  "version": 2,
   "layoutMode": "manual",
   "nodes": [
     {
@@ -54,7 +54,7 @@ const mapCJson = `{
 }\n`;
 
 const mapAJson = `{
-  "version": 1,
+  "version": 2,
   "layoutMode": "manual",
   "nodes": [
     {
@@ -208,7 +208,7 @@ describe("useMapPersistence", () => {
       }
     });
 
-    it("復元済みスナップショットを直後に書き戻さない", () => {
+    it("V1復元済みスナップショットを300ms後にV2で書き戻す", () => {
       const storage = storageDouble(storedMapJson);
 
       const { rerender } = renderHook(
@@ -232,7 +232,25 @@ describe("useMapPersistence", () => {
       }] });
       act(() => jest.advanceTimersByTime(300));
 
-      expect(storage.setItem).not.toHaveBeenCalled();
+      expect(storage.setItem).toHaveBeenCalledWith(
+        "draw-my-map.map.v1",
+        `{
+  "version": 2,
+  "layoutMode": "auto",
+  "nodes": [
+    {
+      "id": 10,
+      "parentId": null,
+      "x": 20,
+      "y": 30,
+      "width": 160,
+      "height": 64,
+      "label": "保存済み",
+      "importance": "medium"
+    }
+  ]
+}\n`,
+      );
     });
   });
 

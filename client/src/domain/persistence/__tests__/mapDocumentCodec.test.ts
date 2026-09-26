@@ -3,7 +3,7 @@ import {
   parseMapDocumentJson,
   serializeMapDocument,
 } from "@/domain/persistence/mapDocumentCodec";
-import type { MapDocumentV1 } from "@/types/mapDocument";
+import type { MapDocument } from "@/types/mapDocument";
 import type { Node } from "@/types/node";
 
 function node(id: number, parentId: number | null, label = `node-${id}`): Node {
@@ -20,6 +20,77 @@ function node(id: number, parentId: number | null, label = `node-${id}`): Node {
 }
 
 describe("MapDocument Codec", () => {
+  it("V2で重要度を往復する", () => {
+    const document = createMapDocument([
+      { ...node(1, null), importance: "high" },
+      { ...node(2, 1), importance: "low" },
+    ], "manual");
+
+    expect(document.version).toBe(2);
+    expect(parseMapDocumentJson(serializeMapDocument(document))).toEqual({
+      ok: true,
+      value: document,
+    });
+  });
+
+  it("V1ノードへmediumを補完してV2として返す", () => {
+    const legacy = JSON.stringify({
+      version: 1,
+      layoutMode: "manual",
+      nodes: [{
+        id: 1,
+        parentId: null,
+        x: 0,
+        y: 0,
+        width: 160,
+        height: 64,
+        label: "旧形式",
+      }],
+    });
+
+    expect(parseMapDocumentJson(legacy)).toEqual({
+      ok: true,
+      value: {
+        version: 2,
+        layoutMode: "manual",
+        nodes: [expect.objectContaining({ id: 1, importance: "medium" })],
+      },
+    });
+  });
+
+  it("V1では未知のimportanceフィールドを無視してmediumを補完する", () => {
+    const legacy = JSON.stringify({
+      version: 1,
+      layoutMode: "manual",
+      nodes: [{ ...node(1, null), importance: "urgent" }],
+    });
+
+    expect(parseMapDocumentJson(legacy)).toEqual({
+      ok: true,
+      value: {
+        version: 2,
+        layoutMode: "manual",
+        nodes: [{ ...node(1, null), importance: "medium" }],
+      },
+    });
+  });
+
+  it.each([undefined, "urgent", 1])(
+    "V2の不正重要度%pを拒否する",
+    (importance) => {
+      const json = JSON.stringify({
+        version: 2,
+        layoutMode: "manual",
+        nodes: [{ ...node(1, null), importance }],
+      });
+
+      expect(parseMapDocumentJson(json)).toEqual({
+        ok: false,
+        error: "node[0].importanceはhigh、medium、lowのいずれかである必要があります。",
+      });
+    },
+  );
+
   it("空のマップをJSONへ変換して往復する", () => {
     const document = createMapDocument([], "manual");
 
@@ -37,7 +108,7 @@ describe("MapDocument Codec", () => {
     const json = serializeMapDocument(document);
 
     expect(json.endsWith("\n")).toBe(true);
-    expect(json).toContain('\n  "version": 1');
+    expect(json).toContain('\n  "version": 2');
     expect(parseMapDocumentJson(json)).toEqual({ ok: true, value: document });
   });
 
@@ -58,7 +129,7 @@ describe("MapDocument Codec", () => {
     const input = { ...node(1, null), selected: true };
 
     expect(createMapDocument([input], "manual")).toEqual({
-      version: 1,
+      version: 2,
       layoutMode: "manual",
       nodes: [node(1, null)],
     });
@@ -66,15 +137,15 @@ describe("MapDocument Codec", () => {
 
   it("直列化時にトップレベルとノードの未知フィールドを除去する", () => {
     const inputNode = { ...node(1, null), editing: true };
-    const document: MapDocumentV1 & { viewport: { x: number; y: number } } = {
-      version: 1,
+    const document: MapDocument & { viewport: { x: number; y: number } } = {
+      version: 2,
       layoutMode: "manual",
       nodes: [inputNode],
       viewport: { x: 100, y: 200 },
     };
 
     expect(JSON.parse(serializeMapDocument(document))).toEqual({
-      version: 1,
+      version: 2,
       layoutMode: "manual",
       nodes: [node(1, null)],
     });
@@ -96,7 +167,7 @@ describe("MapDocument Codec", () => {
   );
 
   it("未対応versionを拒否する", () => {
-    expect(parseMapDocumentJson('{"version":2,"layoutMode":"manual","nodes":[]}'))
+    expect(parseMapDocumentJson('{"version":3,"layoutMode":"manual","nodes":[]}'))
       .toEqual({ ok: false, error: "未対応のマップ形式です。" });
   });
 
@@ -154,7 +225,7 @@ describe("MapDocument Codec", () => {
       expect(result).toEqual({
         ok: true,
         value: {
-          version: 1,
+          version: 2,
           layoutMode: "manual",
           nodes: [node(1, null)],
         },

@@ -13,9 +13,17 @@ const validNode = {
 
 describe("normalizeMapDocumentNode", () => {
   it("V1ノードへ既定重要度を補完する", () => {
-    const { importance: _importance, ...v1Node } = validNode;
+    const v1Node = {
+      id: validNode.id,
+      parentId: validNode.parentId,
+      x: validNode.x,
+      y: validNode.y,
+      width: validNode.width,
+      height: validNode.height,
+      label: validNode.label,
+    };
 
-    expect(normalizeMapDocumentNode(v1Node, 0)).toEqual({
+    expect(normalizeMapDocumentNode(v1Node, 0, 1)).toEqual({
       ok: true,
       value: validNode,
     });
@@ -24,7 +32,7 @@ describe("normalizeMapDocumentNode", () => {
   it("既知フィールドだけを持つ新しいNodeへ正規化する", () => {
     const input = { ...validNode, ignored: "value" };
 
-    expect(normalizeMapDocumentNode(input, 0)).toEqual({
+    expect(normalizeMapDocumentNode(input, 0, 2)).toEqual({
       ok: true,
       value: validNode,
     });
@@ -33,7 +41,7 @@ describe("normalizeMapDocumentNode", () => {
   it.each([null, [], "node", 10, true])(
     "オブジェクトではない入力 %p を拒否する",
     (value) => {
-      expect(normalizeMapDocumentNode(value, 0)).toEqual({
+      expect(normalizeMapDocumentNode(value, 0, 2)).toEqual({
         ok: false,
         error: "node[0]はオブジェクトである必要があります。",
       });
@@ -59,12 +67,12 @@ describe("normalizeMapDocumentNode", () => {
     ["height", -1, "node[0].heightは0より大きい有限の数値である必要があります。"],
     ["label", 123, "node[0].labelは文字列である必要があります。"],
   ])("node[0].%sの不正値を拒否する", (field, value, error) => {
-    expect(normalizeMapDocumentNode({ ...validNode, [field]: value }, 0))
+    expect(normalizeMapDocumentNode({ ...validNode, [field]: value }, 0, 2))
       .toEqual({ ok: false, error });
   });
 
   it("parentIdが0の場合は完全一致するエラーで拒否する", () => {
-    expect(normalizeMapDocumentNode({ ...validNode, parentId: 0 }, 0)).toEqual({
+    expect(normalizeMapDocumentNode({ ...validNode, parentId: 0 }, 0, 2)).toEqual({
       ok: false,
       error: "node[0].parentIdはnullまたは1以上の安全な整数である必要があります。",
     });

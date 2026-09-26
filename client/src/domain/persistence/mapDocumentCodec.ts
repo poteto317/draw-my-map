@@ -1,16 +1,20 @@
 import { validateMapDocumentGraph } from "@/domain/persistence/mapDocumentGraph";
 import { normalizeMapDocumentNode } from "@/domain/persistence/mapDocumentNode";
 import { projectMapDocumentNode } from "@/domain/persistence/mapDocumentNodeProjection";
-import type { MapDocumentResult, MapDocumentV1 } from "@/types/mapDocument";
+import type {
+  MapDocument,
+  MapDocumentResult,
+  MapDocumentV2,
+} from "@/types/mapDocument";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 
 function projectMapDocument(
   nodes: readonly Node[],
   layoutMode: NodeLayoutMode,
-): MapDocumentV1 {
+): MapDocumentV2 {
   return {
-    version: 1,
+    version: 2,
     layoutMode,
     nodes: nodes.map(projectMapDocumentNode),
   };
@@ -19,11 +23,11 @@ function projectMapDocument(
 export function createMapDocument(
   nodes: readonly Node[],
   layoutMode: NodeLayoutMode,
-): MapDocumentV1 {
+): MapDocumentV2 {
   return projectMapDocument(nodes, layoutMode);
 }
 
-export function serializeMapDocument(document: MapDocumentV1): string {
+export function serializeMapDocument(document: MapDocument): string {
   return `${JSON.stringify(
     projectMapDocument(document.nodes, document.layoutMode),
     null,
@@ -33,7 +37,7 @@ export function serializeMapDocument(document: MapDocumentV1): string {
 
 export function parseMapDocumentJson(
   json: string,
-): MapDocumentResult<MapDocumentV1> {
+): MapDocumentResult<MapDocumentV2> {
   let value: unknown;
   try {
     value = JSON.parse(json);
@@ -46,7 +50,7 @@ export function parseMapDocumentJson(
   }
 
   const record = value as Record<string, unknown>;
-  if (record.version !== 1) {
+  if (record.version !== 1 && record.version !== 2) {
     return { ok: false, error: "未対応のマップ形式です。" };
   }
   if (record.layoutMode !== "manual" && record.layoutMode !== "auto") {
@@ -58,7 +62,7 @@ export function parseMapDocumentJson(
 
   const nodes: Node[] = [];
   for (const [index, candidate] of record.nodes.entries()) {
-    const normalized = normalizeMapDocumentNode(candidate, index);
+    const normalized = normalizeMapDocumentNode(candidate, index, record.version);
     if (!normalized.ok) return normalized;
     nodes.push(normalized.value);
   }
@@ -69,7 +73,7 @@ export function parseMapDocumentJson(
   return {
     ok: true,
     value: {
-      version: 1,
+      version: 2,
       layoutMode: record.layoutMode,
       nodes: graph.value,
     },
