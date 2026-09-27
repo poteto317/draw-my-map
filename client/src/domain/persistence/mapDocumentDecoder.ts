@@ -3,9 +3,14 @@ import { normalizeMapDocumentNode } from "@/domain/persistence/mapDocumentNode";
 import type { MapDocumentResult, MapDocumentV2 } from "@/types/mapDocument";
 import type { Node } from "@/types/node";
 
-export function parseMapDocumentJson(
+type ParsedMapDocumentJson = {
+  document: MapDocumentV2;
+  sourceVersion: 1 | 2;
+};
+
+export function parseMapDocumentJsonWithVersion(
   json: string,
-): MapDocumentResult<MapDocumentV2> {
+): MapDocumentResult<ParsedMapDocumentJson> {
   let value: unknown;
   try {
     value = JSON.parse(json);
@@ -41,9 +46,20 @@ export function parseMapDocumentJson(
   return {
     ok: true,
     value: {
-      version: 2,
-      layoutMode: record.layoutMode,
-      nodes: graph.value,
+      document: {
+        version: 2,
+        layoutMode: record.layoutMode,
+        nodes: graph.value,
+      },
+      sourceVersion: record.version,
     },
   };
+}
+
+export function parseMapDocumentJson(
+  json: string,
+): MapDocumentResult<MapDocumentV2> {
+  const parsed = parseMapDocumentJsonWithVersion(json);
+  if (!parsed.ok) return parsed;
+  return { ok: true, value: parsed.value.document };
 }

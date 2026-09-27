@@ -1,4 +1,7 @@
-export { parseMapDocumentJson } from "@/domain/persistence/mapDocumentDecoder";
+export {
+  parseMapDocumentJson,
+  parseMapDocumentJsonWithVersion,
+} from "@/domain/persistence/mapDocumentDecoder";
 export {
   createMapDocument,
   serializeMapDocument,

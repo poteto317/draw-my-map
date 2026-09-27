@@ -7,6 +7,9 @@ const emptyMapJson = `{
   "nodes": []
 }\n`;
 
+const nonCanonicalEmptyMapJson =
+  '{"nodes":[],"layoutMode":"manual","version":2}';
+
 const importedMapJson = `{
   "version": 1,
   "layoutMode": "auto",
@@ -57,6 +60,24 @@ describe("useMapStoragePersistence", () => {
 
   afterEach(() => {
     jest.useRealTimers();
+  });
+
+  it("V2保存値の表記差だけでは書き戻さない", () => {
+    const storage = storageDouble(nonCanonicalEmptyMapJson);
+    const { rerender } = renderHook(
+      ({ snapshot }) => useMapStoragePersistence({
+        currentSnapshot: snapshot,
+        replaceMap: jest.fn(),
+        storage,
+        publishNotice: jest.fn(),
+      }),
+      { initialProps: { snapshot: emptyMapJson } },
+    );
+
+    rerender({ snapshot: emptyMapJson });
+    act(() => jest.advanceTimersByTime(300));
+
+    expect(storage.setItem).not.toHaveBeenCalled();
   });
 
   it("V1保存済みマップを復元して300ms後にV2で書き戻す", () => {

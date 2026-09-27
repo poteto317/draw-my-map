@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { parseMapDocumentJson } from "@/domain/persistence/mapDocumentCodec";
+import {
+  parseMapDocumentJsonWithVersion,
+  serializeMapDocument,
+} from "@/domain/persistence/mapDocumentCodec";
 import { readStoredMapJson } from "@/services/persistence/mapStorage";
 import type { NodeMapState } from "@/types/nodeMapState";
 import type { OperationNotice } from "@/types/operationNotice";
@@ -65,7 +68,7 @@ export function useMapStorageRestoration({
       return;
     }
 
-    const parsed = parseMapDocumentJson(stored.value);
+    const parsed = parseMapDocumentJsonWithVersion(stored.value);
     if (!parsed.ok) {
       publishNotice({ kind: "warning", message: RESTORE_WARNING });
       setRestoration({
@@ -75,13 +78,16 @@ export function useMapStorageRestoration({
       return;
     }
 
+    const { document, sourceVersion } = parsed.value;
     replaceMap({
-      layoutMode: parsed.value.layoutMode,
-      nodes: parsed.value.nodes,
+      layoutMode: document.layoutMode,
+      nodes: document.nodes,
     });
     setRestoration({
       hydrated: true,
-      initialPersistedSnapshot: stored.value,
+      initialPersistedSnapshot: sourceVersion === 1
+        ? stored.value
+        : serializeMapDocument(document),
     });
   }, [currentSnapshot, publishNotice, replaceMap, storage]);
   /* eslint-enable react-hooks/set-state-in-effect */
