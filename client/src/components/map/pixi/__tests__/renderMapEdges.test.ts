@@ -13,10 +13,10 @@ const child: Node = createTestNode({
 });
 
 describe("renderMapEdges", () => {
-  it("draws valid relationships as one edge layer", () => {
+  it("draws each valid relationship as an addressable edge target", () => {
     const harness = createPixiTestHarness();
 
-    renderMapEdges(harness.app.stage as never, harness.constructors as never, [root, child]);
+    const targets = renderMapEdges(harness.app.stage as never, harness.constructors as never, [root, child]);
 
     const edges = harness.Graphics.mock.results[0].value;
     expect(harness.Graphics).toHaveBeenCalledTimes(1);
@@ -24,6 +24,11 @@ describe("renderMapEdges", () => {
     expect(edges.bezierCurveTo).toHaveBeenCalledWith(210, 60, 210, 120, 270, 120);
     expect(edges.stroke).toHaveBeenCalledWith({ width: 2, color: 0x64748b });
     expect(harness.stage.addChild).toHaveBeenCalledWith(edges);
+    const target = targets.get("edge:2")!;
+    target.setInteractive(true);
+    target.setOpacity(0.5);
+    target.setRendered(false);
+    expect(edges).toMatchObject({ alpha: 0.5, visible: false, eventMode: "none" });
   });
 
   it("does not allocate a layer when every relationship is orphaned", () => {
@@ -37,6 +42,33 @@ describe("renderMapEdges", () => {
 
     expect(harness.Graphics).not.toHaveBeenCalled();
     expect(harness.stage.addChild).not.toHaveBeenCalled();
+  });
+
+  it("親子の両方が可視なエッジだけを初期表示する", () => {
+    const hiddenChild = { ...child, id: 3, parentId: 1 };
+    const harness = createPixiTestHarness();
+
+    renderMapEdges(
+      harness.app.stage as never,
+      harness.constructors as never,
+      [root, child, hiddenChild],
+      new Set(["node:1", "node:2", "edge:2"]),
+    );
+
+    const visibleEdge = harness.Graphics.mock.results[0].value;
+    const hiddenEdge = harness.Graphics.mock.results[1].value;
+    expect(harness.Graphics).toHaveBeenCalledTimes(2);
+    expect(visibleEdge.bezierCurveTo).toHaveBeenCalledTimes(1);
+    expect(visibleEdge).toMatchObject({
+      alpha: 1,
+      visible: true,
+      eventMode: "none",
+    });
+    expect(hiddenEdge).toMatchObject({
+      alpha: 0,
+      visible: false,
+      eventMode: "none",
+    });
   });
 
   it("resolves parents with a linear number of node-array reads", () => {

@@ -16,6 +16,7 @@ export type { LatestValue } from "@/components/map/pixi/pointerGesture";
 
 type StageInteractionOptions = {
   nodesRef: LatestValue<readonly Node[]>;
+  visibleNodeIdsRef?: LatestValue<ReadonlySet<number>>;
   viewportRef: LatestValue<Viewport>;
   onSelectNodeRef: LatestValue<(id: number | null) => void>;
   onMoveNodeRef: LatestValue<(id: number, x: number, y: number) => void>;
@@ -33,6 +34,7 @@ type StageBinding = {
 
 export function createStageInteractions({
   nodesRef,
+  visibleNodeIdsRef,
   viewportRef,
   onSelectNodeRef,
   onMoveNodeRef,
@@ -77,7 +79,8 @@ export function createStageInteractions({
 
     const sample = toPointerSample(event, viewportRef.current);
     if (!hasFinitePointerCoordinates(sample)) return;
-    if (!nodesRef.current.some((node) => node.id === nodeId)) {
+    if (!nodesRef.current.some((node) => node.id === nodeId)
+      || visibleNodeIdsRef !== undefined && !visibleNodeIdsRef.current.has(nodeId)) {
       if (pointerGestures.owns(sample.pointerId)) pointerGestures.cancel();
       return;
     }
@@ -88,6 +91,7 @@ export function createStageInteractions({
       hasActiveGesture()
       || activeBinding !== bindingAtEntry
       || !nodesRef.current.some((node) => node.id === nodeId)
+      || visibleNodeIdsRef !== undefined && !visibleNodeIdsRef.current.has(nodeId)
     ) {
       return;
     }
@@ -96,6 +100,7 @@ export function createStageInteractions({
       ? createNodeConnectionGesture({
         sourceNodeId: nodeId,
         nodesRef,
+        visibleNodeIdsRef,
         onConnectNodesRef,
         onConnectionTargetChangeRef,
       })
@@ -238,5 +243,6 @@ export function createStageInteractions({
     createNodePointerDownHandler,
     cancelActiveGesture: cancelAllInteractions,
     hasActiveGesture,
+    activeNodeIds: () => pointerGestures.current()?.gesture.activeNodeIds?.() ?? [],
   };
 }

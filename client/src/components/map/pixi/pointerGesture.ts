@@ -15,4 +15,5 @@ export type PointerGesture = {
   move: (sample: PointerSample) => void;
   end: (sample: PointerSample) => void;
   cancel: () => void;
+  activeNodeIds?: () => readonly number[];
 };

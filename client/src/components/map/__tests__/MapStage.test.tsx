@@ -1,4 +1,4 @@
-import { act, fireEvent, render } from "@testing-library/react";
+import { act, fireEvent } from "@testing-library/react";
 import {
   Suspense,
   startTransition,
@@ -6,104 +6,31 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  type ReactElement,
 } from "react";
 import { MapStage } from "@/components/map/MapStage";
+import {
+  lastWorldContainer,
+  mockContainers,
+  mockNodePointerHandlers,
+  mockStage,
+  mockStageBounds,
+  mockStageHandlers,
+  pointer,
+  renderReady,
+  resetMapStageTestRuntime,
+} from "@/components/map/testing/mapStageTestRuntime";
 import { AutoLayoutMapStageHarness } from "@/components/map/testing/AutoLayoutMapStageHarness";
 import { CHILD_HORIZONTAL_GAP } from "@/config/shapes";
 import { useNodes } from "@/hooks/useNodes";
 import type { Node } from "@/types/node";
 import { createTestNode } from "@/testing/createTestNode";
 
-type MockPointerEvent = {
-  globalX: number;
-  globalY: number;
-  pointerId: number;
-  pointerType: string;
-  composedPath: () => unknown[];
-  target?: unknown;
-  shiftKey?: boolean;
-  button: number;
-};
-
-type MockPointerHandler = (event: MockPointerEvent) => void;
-type StageEvent = "pointerdown" | "pointermove" | "pointerup" | "pointerupoutside" | "pointercancel";
-
-const mockStageHandlers: Partial<Record<StageEvent, MockPointerHandler>> = {};
-const mockNodePointerHandlers: Array<Partial<Record<"pointerdown", MockPointerHandler>>> = [];
-const mockContainers: Array<{
-  addChild: jest.Mock;
-  position: { set: jest.Mock };
-  scale: { set: jest.Mock };
-}> = [];
-
-function pointer(
-  globalX: number,
-  globalY: number,
-  options: Pick<MockPointerEvent, "shiftKey" | "target"> & { path?: unknown[] } = {},
-): MockPointerEvent {
-  const { path = [mockStage], ...eventOptions } = options;
-  return {
-    globalX,
-    globalY,
-    pointerId: 1,
-    pointerType: "mouse",
-    button: 0,
-    composedPath: () => path,
-    ...eventOptions,
-  };
-}
-
-const mockStage = {
-  removeChildren: jest.fn(() => []),
-  addChild: jest.fn(),
-  on: jest.fn((event: StageEvent, handler: MockPointerHandler) => {
-    mockStageHandlers[event] = handler;
-  }),
-  off: jest.fn((event: StageEvent, handler: MockPointerHandler) => {
-    if (mockStageHandlers[event] === handler) delete mockStageHandlers[event];
-  }),
-  eventMode: "none",
-  hitArea: null as unknown,
-};
-
-jest.mock("pixi.js", () => ({
-  Application: jest.fn().mockImplementation(() => ({
-    init: jest.fn().mockResolvedValue(undefined),
-    destroy: jest.fn(),
-    canvas: document.createElement("canvas"),
-    stage: mockStage,
-    screen: { x: 0, y: 0, width: 800, height: 600 },
-  })),
-  Graphics: jest.fn().mockImplementation(() => ({
-    rect: jest.fn().mockReturnThis(),
-    fill: jest.fn().mockReturnThis(),
-    stroke: jest.fn().mockReturnThis(),
-    moveTo: jest.fn().mockReturnThis(),
-    bezierCurveTo: jest.fn().mockReturnThis(),
-  })),
-  Text: jest.fn().mockImplementation(() => ({
-    anchor: { set: jest.fn() },
-    x: 0,
-    y: 0,
-  })),
-  Container: jest.fn().mockImplementation(() => {
-    const handlers: Partial<Record<"pointerdown", MockPointerHandler>> = {};
-    const container = {
-      addChild: jest.fn(),
-      position: { set: jest.fn() },
-      scale: { set: jest.fn() },
-      on: jest.fn((event: "pointerdown", handler: MockPointerHandler) => {
-        handlers[event] = handler;
-        mockNodePointerHandlers.push(handlers);
-      }),
-      eventMode: "none",
-      cursor: "default",
-    };
-    mockContainers.push(container);
-    return container;
-  }),
-}));
+jest.mock("pixi.js", () => {
+  const runtime = jest.requireActual<typeof import("@/components/map/testing/mapStageTestRuntime")>(
+    "@/components/map/testing/mapStageTestRuntime",
+  );
+  return runtime.createMockPixiModule();
+});
 
 const defaultProps = {
   nodes: [] as Node[],
@@ -122,34 +49,6 @@ const sampleNodes: Node[] = [
   createTestNode({ id: 1, x: 50, y: 30, label: "ノード1" }),
   createTestNode({ id: 2, x: 200, y: 100, label: "ノード2" }),
 ];
-
-async function renderReady(ui: ReactElement) {
-  let result!: ReturnType<typeof render>;
-  await act(async () => {
-    result = render(ui);
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-  return result;
-}
-
-function mockStageBounds(container: HTMLElement, left = 0, top = 0) {
-  jest.spyOn(container, "getBoundingClientRect").mockReturnValue({
-    left,
-    top,
-    right: left + 800,
-    bottom: top + 600,
-    width: 800,
-    height: 600,
-    x: left,
-    y: top,
-    toJSON: () => ({}),
-  });
-}
-
-function lastWorldContainer() {
-  return mockContainers.findLast((container) => container.scale.set.mock.calls.length > 0);
-}
 
 function KeyboardCreationHarness({ initiallySelected = true }: { initiallySelected?: boolean }) {
   const {
@@ -352,12 +251,7 @@ function ResetTimingHarness({ onReady, onMoveNode }: ResetTimingHarnessProps) {
 }
 
 beforeEach(() => {
-  jest.clearAllMocks();
-  for (const event of Object.keys(mockStageHandlers) as StageEvent[]) {
-    delete mockStageHandlers[event];
-  }
-  mockNodePointerHandlers.length = 0;
-  mockContainers.length = 0;
+  resetMapStageTestRuntime();
 });
 
 afterEach(() => {
@@ -369,6 +263,19 @@ describe("MapStage boundary", () => {
     await renderReady(<MapStage {...defaultProps} />);
 
     expect(document.querySelector(".cursor-crosshair")).toBeInTheDocument();
+  });
+
+  it("unmount時に共有runtimeへ登録したstage listenerを解除する", async () => {
+    const { unmount } = await renderReady(<MapStage {...defaultProps} />);
+    const registeredHandlers = Object.entries(mockStageHandlers);
+
+    expect(registeredHandlers.length).toBeGreaterThan(0);
+    unmount();
+
+    for (const [event, handler] of registeredHandlers) {
+      expect(mockStage.off).toHaveBeenCalledWith(event, handler);
+    }
+    expect(Object.keys(mockStageHandlers)).toHaveLength(0);
   });
 
   it("親要素の実寸高を使い固定header高へ依存しない", async () => {

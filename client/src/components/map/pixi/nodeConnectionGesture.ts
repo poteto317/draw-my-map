@@ -6,6 +6,7 @@ import type { Node } from "@/types/node";
 type NodeConnectionGestureOptions = {
   sourceNodeId: number;
   nodesRef: LatestValue<readonly Node[]>;
+  visibleNodeIdsRef?: LatestValue<ReadonlySet<number>>;
   onConnectNodesRef: LatestValue<(parentId: number, childId: number) => void>;
   onConnectionTargetChangeRef: LatestValue<(id: number | null) => void>;
 };
@@ -13,6 +14,7 @@ type NodeConnectionGestureOptions = {
 export function createNodeConnectionGesture({
   sourceNodeId,
   nodesRef,
+  visibleNodeIdsRef,
   onConnectNodesRef,
   onConnectionTargetChangeRef,
 }: NodeConnectionGestureOptions): PointerGesture | null {
@@ -22,7 +24,12 @@ export function createNodeConnectionGesture({
   let targetNodeId: number | null = null;
 
   const findTargetId = (sample: PointerSample) => {
-    const target = findNodeAtPoint(nodesRef.current, sample.world);
+    const target = findNodeAtPoint(
+      visibleNodeIdsRef === undefined
+        ? nodesRef.current
+        : nodesRef.current.filter((node) => visibleNodeIdsRef.current.has(node.id)),
+      sample.world,
+    );
 
     return target && canConnectNodes(nodesRef.current, sourceNodeId, target.id)
       ? target.id
@@ -55,5 +62,6 @@ export function createNodeConnectionGesture({
     cancel() {
       finish();
     },
+    activeNodeIds: () => targetNodeId === null ? [sourceNodeId] : [sourceNodeId, targetNodeId],
   };
 }

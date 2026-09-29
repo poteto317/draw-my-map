@@ -93,6 +93,131 @@ describe("useMapStageInteractions", () => {
     expect(stage.off).toHaveBeenCalledTimes(5);
   });
 
+  it("非表示ノードのpointerdownでは選択・移動・接続を開始しない", () => {
+    const { runtime, stage } = createRuntime();
+    const onSelectNode = jest.fn();
+    const onMoveNode = jest.fn();
+    const onConnectNodes = jest.fn();
+    const viewportRef = { current: INITIAL_VIEWPORT };
+    const { result } = renderHook(() =>
+      useMapStageInteractions({
+        runtime: runtime as never,
+        nodes,
+        visibleNodeIds: new Set([2]),
+        viewportRef,
+        onViewportChange: jest.fn(),
+        onSelectNode,
+        onMoveNode,
+        onConnectNodes,
+      }),
+    );
+
+    act(() => result.current.createNodePointerDownHandler()(
+      1,
+      pointer(50, 50, { shiftKey: true, path: [stage] }) as never,
+    ));
+
+    expect(onSelectNode).not.toHaveBeenCalled();
+    expect(onMoveNode).not.toHaveBeenCalled();
+    expect(onConnectNodes).not.toHaveBeenCalled();
+  });
+
+  it("同じノードを含む別Setへのrerender後も進行中の移動を継続する", () => {
+    const { runtime, stage, handlers } = createRuntime();
+    const onMoveNode = jest.fn();
+    const viewportRef = { current: INITIAL_VIEWPORT };
+    const { result, rerender } = renderHook(
+      ({ visibleNodeIds }: { visibleNodeIds: ReadonlySet<number> }) =>
+        useMapStageInteractions({
+          runtime: runtime as never,
+          nodes,
+          visibleNodeIds,
+          viewportRef,
+          onViewportChange: jest.fn(),
+          onSelectNode: jest.fn(),
+          onMoveNode,
+          onConnectNodes: jest.fn(),
+        }),
+      { initialProps: { visibleNodeIds: new Set([1, 2]) } },
+    );
+
+    act(() => {
+      result.current.createNodePointerDownHandler()(1, pointer(50, 50, { path: [stage] }) as never);
+      handlers.pointermove?.(pointer(70, 50));
+    });
+    rerender({ visibleNodeIds: new Set([1, 2]) });
+    act(() => handlers.pointermove?.(pointer(90, 50)));
+
+    expect(onMoveNode).toHaveBeenCalledTimes(2);
+  });
+
+  it("接続候補がhiddenになるとgestureをcancelし、pointerupで接続しない", () => {
+    const { runtime, stage, handlers } = createRuntime();
+    const onConnectNodes = jest.fn();
+    const viewportRef = { current: INITIAL_VIEWPORT };
+    const { result, rerender } = renderHook(
+      ({ visibleNodeIds }: { visibleNodeIds: ReadonlySet<number> }) =>
+        useMapStageInteractions({
+          runtime: runtime as never,
+          nodes,
+          visibleNodeIds,
+          viewportRef,
+          onViewportChange: jest.fn(),
+          onSelectNode: jest.fn(),
+          onMoveNode: jest.fn(),
+          onConnectNodes,
+        }),
+      { initialProps: { visibleNodeIds: new Set([1, 2]) } },
+    );
+
+    act(() => {
+      result.current.createNodePointerDownHandler()(1, pointer(50, 50, { shiftKey: true, path: [stage] }) as never);
+      handlers.pointermove?.(pointer(220, 60));
+    });
+    expect(result.current.connectionTargetNodeId).toBe(2);
+
+    rerender({ visibleNodeIds: new Set([1]) });
+    expect(result.current.connectionTargetNodeId).toBeNull();
+    act(() => handlers.pointerup?.(pointer(220, 60)));
+
+    expect(onConnectNodes).not.toHaveBeenCalled();
+  });
+
+  it("接続元がhiddenになるとhighlightをclearしてpointerupで接続しない", () => {
+    const { runtime, stage, handlers } = createRuntime();
+    const onConnectNodes = jest.fn();
+    const viewportRef = { current: INITIAL_VIEWPORT };
+    const { result, rerender } = renderHook(
+      ({ visibleNodeIds }: { visibleNodeIds: ReadonlySet<number> }) =>
+        useMapStageInteractions({
+          runtime: runtime as never,
+          nodes,
+          visibleNodeIds,
+          viewportRef,
+          onViewportChange: jest.fn(),
+          onSelectNode: jest.fn(),
+          onMoveNode: jest.fn(),
+          onConnectNodes,
+        }),
+      { initialProps: { visibleNodeIds: new Set([1, 2]) } },
+    );
+
+    act(() => {
+      result.current.createNodePointerDownHandler()(
+        1,
+        pointer(50, 50, { shiftKey: true, path: [stage] }) as never,
+      );
+      handlers.pointermove?.(pointer(220, 60));
+    });
+    expect(result.current.connectionTargetNodeId).toBe(2);
+
+    rerender({ visibleNodeIds: new Set([2]) });
+    expect(result.current.connectionTargetNodeId).toBeNull();
+    act(() => handlers.pointerup?.(pointer(220, 60)));
+
+    expect(onConnectNodes).not.toHaveBeenCalled();
+  });
+
   it("publishes and clears the connection target", () => {
     const { runtime, stage, handlers } = createRuntime();
     const onConnectNodes = jest.fn();

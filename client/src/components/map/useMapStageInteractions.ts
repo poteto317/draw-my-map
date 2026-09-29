@@ -3,11 +3,13 @@ import type { Viewport } from "@/components/map/mapViewport";
 import { createStageInteractions } from "@/components/map/pixi/stageInteractions";
 import type { LatestValue } from "@/components/map/pixi/pointerGesture";
 import type { PixiRuntime } from "@/components/map/pixi/pixiTypes";
+import { useStageInteractionValues } from "@/components/map/useStageInteractionValues";
 import type { Node } from "@/types/node";
 
 type UseMapStageInteractionsOptions = {
   runtime: PixiRuntime | null;
   nodes: readonly Node[];
+  visibleNodeIds?: ReadonlySet<number>;
   viewportRef: LatestValue<Viewport>;
   onViewportChange: (viewport: Viewport) => void;
   onSelectNode: (id: number | null) => void;
@@ -18,6 +20,7 @@ type UseMapStageInteractionsOptions = {
 export function useMapStageInteractions({
   runtime,
   nodes,
+  visibleNodeIds,
   viewportRef,
   onViewportChange,
   onSelectNode,
@@ -25,24 +28,27 @@ export function useMapStageInteractions({
   onConnectNodes,
 }: UseMapStageInteractionsOptions) {
   const [connectionTargetNodeId, setConnectionTargetNodeId] = useState<number | null>(null);
-  const nodesRef = useRef<readonly Node[]>(nodes);
-  const onSelectNodeRef = useRef(onSelectNode);
-  const onMoveNodeRef = useRef(onMoveNode);
-  const onConnectNodesRef = useRef(onConnectNodes);
   const onConnectionTargetChangeRef = useRef(setConnectionTargetNodeId);
-  const onViewportChangeRef = useRef(onViewportChange);
-
-  useLayoutEffect(() => {
-    nodesRef.current = nodes;
-    onSelectNodeRef.current = onSelectNode;
-    onMoveNodeRef.current = onMoveNode;
-    onConnectNodesRef.current = onConnectNodes;
-    onViewportChangeRef.current = onViewportChange;
-  }, [nodes, onSelectNode, onMoveNode, onConnectNodes, onViewportChange]);
+  const {
+    nodesRef,
+    visibleNodeIdsRef,
+    onSelectNodeRef,
+    onMoveNodeRef,
+    onConnectNodesRef,
+    onViewportChangeRef,
+  } = useStageInteractionValues({
+    nodes,
+    visibleNodeIds,
+    onViewportChange,
+    onSelectNode,
+    onMoveNode,
+    onConnectNodes,
+  });
 
   const interactionsRef = useRef<ReturnType<typeof createStageInteractions> | null>(null);
   interactionsRef.current ??= createStageInteractions({
     nodesRef,
+    visibleNodeIdsRef,
     viewportRef,
     onSelectNodeRef,
     onMoveNodeRef,
@@ -51,6 +57,12 @@ export function useMapStageInteractions({
     onViewportChangeRef,
   });
   const interactions = interactionsRef.current;
+
+  useLayoutEffect(() => {
+    if (interactions.activeNodeIds().some((nodeId) => !visibleNodeIdsRef.current.has(nodeId))) {
+      interactions.cancelActiveGesture();
+    }
+  }, [interactions, nodes, visibleNodeIds, visibleNodeIdsRef]);
 
   useEffect(() => {
     if (!runtime) return;

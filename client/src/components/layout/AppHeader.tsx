@@ -6,6 +6,8 @@ import { LayoutModeSelector } from "@/components/layout/LayoutModeSelector";
 type AppHeaderProps = {
   layoutMode: NodeLayoutMode;
   onLayoutModeChange: (mode: NodeLayoutMode) => void;
+  importanceControls?: ReactNode;
+  resolutionControls?: ReactNode;
   operationControls?: ReactNode;
   operationNotices?: ReactNode;
 };
@@ -13,6 +15,8 @@ type AppHeaderProps = {
 export function AppHeader({
   layoutMode,
   onLayoutModeChange,
+  importanceControls,
+  resolutionControls,
   operationControls,
   operationNotices,
 }: AppHeaderProps) {
@@ -26,6 +30,8 @@ export function AppHeader({
         onLayoutModeChange={onLayoutModeChange}
       />
       <LayoutModeOperationHint layoutMode={layoutMode} />
+      {importanceControls}
+      {resolutionControls}
       {operationControls}
       {operationNotices && (
         <div data-testid="operation-notices" className="w-full">

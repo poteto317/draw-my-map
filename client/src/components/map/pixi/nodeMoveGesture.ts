@@ -43,5 +43,6 @@ export function createNodeMoveGesture({
     },
     end: finish,
     cancel: finish,
+    activeNodeIds: () => [nodeId],
   };
 }

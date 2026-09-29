@@ -69,4 +69,28 @@ describe("AppHeader", () => {
     expect(header).toContainElement(screen.getByRole("status"));
     expect(screen.getByRole("status").parentElement).toHaveClass("w-full");
   });
+
+  it("重要度・表示スロットを操作案内の後、操作コントロールの前へDOM順で配置する", () => {
+    render(
+      <AppHeader
+        layoutMode="manual"
+        onLayoutModeChange={jest.fn()}
+        importanceControls={<div data-testid="importance-controls">重要度操作</div>}
+        resolutionControls={<div data-testid="resolution-controls">表示操作</div>}
+        operationControls={<button type="button">保存操作</button>}
+      />,
+    );
+
+    const hint = screen.getByText(/ノードドラッグで移動/);
+    const importanceControls = screen.getByTestId("importance-controls");
+    const resolutionControls = screen.getByTestId("resolution-controls");
+    const operationControls = screen.getByRole("button", { name: "保存操作" });
+
+    expect(hint.compareDocumentPosition(importanceControls))
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(importanceControls.compareDocumentPosition(resolutionControls))
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(resolutionControls.compareDocumentPosition(operationControls))
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
 });

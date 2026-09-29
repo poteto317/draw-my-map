@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import Home from "@/app/page";
 import type { Node } from "@/types/node";
@@ -10,6 +10,12 @@ const mockExportSvg = jest.fn();
 const mockUseMapImageExport = jest.fn();
 let mockImageExportNotice: OperationNotice | null = null;
 let mockIsExportingPng = false;
+let mockMapStageProps: {
+  nodes: Node[];
+  visibleNodeIds?: ReadonlySet<number>;
+  onSelectNode: (id: number | null) => void;
+  onViewportScaleChange?: (scale: number) => void;
+} | null = null;
 
 jest.mock("@/hooks/useMapImageExport", () => ({
   useMapImageExport: (options: { nodes: readonly Node[] }) => {
@@ -37,18 +43,35 @@ jest.mock("@/components/map/MapStage", () => ({
     selectedNodeId,
     resetRevision,
     onDoubleClick,
+    visibleNodeIds,
+    onSelectNode,
+    onViewportScaleChange,
   }: {
     nodes: Node[];
     selectedNodeId: number | null;
     resetRevision?: number;
     onDoubleClick: (x: number, y: number) => void;
+    visibleNodeIds?: ReadonlySet<number>;
+    onSelectNode: (id: number | null) => void;
+    onViewportScaleChange?: (scale: number) => void;
   }) => (
-    <div data-testid="map-stage">
+    <div data-testid="map-stage" ref={() => {
+      mockMapStageProps = { nodes, visibleNodeIds, onSelectNode, onViewportScaleChange };
+    }}>
       <output data-testid="node-state">{JSON.stringify(nodes)}</output>
       <output data-testid="selected-node-id">{selectedNodeId}</output>
       <output data-testid="reset-revision">{resetRevision ?? 0}</output>
       <button type="button" onClick={() => onDoubleClick(10, 20)}>
         テスト用ノード追加
+      </button>
+      <button type="button" onClick={() => onSelectNode(nodes[0]?.id ?? null)}>
+        テスト用ノード選択
+      </button>
+      <button type="button" onClick={() => onViewportScaleChange?.(0.5)}>
+        テスト用ズーム
+      </button>
+      <button type="button" onClick={() => onViewportScaleChange?.(0.97)}>
+        テスト用中倍率
       </button>
     </div>
   ),
@@ -66,6 +89,33 @@ const validImportedJson = `{
       "width": 160,
       "height": 64,
       "label": "読み込み済み"
+    }
+  ]
+}\n`;
+
+const resolutionImportedJson = `{
+  "version": 2,
+  "layoutMode": "auto",
+  "nodes": [
+    {
+      "id": 10,
+      "parentId": null,
+      "x": 20,
+      "y": 30,
+      "width": 160,
+      "height": 64,
+      "label": "親ノード",
+      "importance": "medium"
+    },
+    {
+      "id": 11,
+      "parentId": 10,
+      "x": 220,
+      "y": 30,
+      "width": 160,
+      "height": 64,
+      "label": "低重要度の子",
+      "importance": "low"
     }
   ]
 }\n`;
@@ -92,6 +142,7 @@ describe("Home", () => {
     mockUseMapImageExport.mockClear();
     mockImageExportNotice = null;
     mockIsExportingPng = false;
+    mockMapStageProps = null;
   });
 
   afterEach(() => {
@@ -100,6 +151,34 @@ describe("Home", () => {
   });
 
   describe("配置モード配線", () => {
+    it("選択したノードの重要度変更をstage propsへ反映する", async () => {
+      const user = userEvent.setup();
+      render(<Home />);
+      await user.click(screen.getByRole("button", { name: "テスト用ノード追加" }));
+      await user.click(screen.getByRole("button", { name: "テスト用ノード選択" }));
+      await user.click(screen.getByRole("button", { name: "重要度 高" }));
+
+      expect(mockMapStageProps?.nodes[0]).toMatchObject({ importance: "high" });
+    });
+
+    it("auto・手動high・auto復帰とviewport scaleをvisibleNodeIdsへ反映する", async () => {
+      const user = userEvent.setup();
+      render(<Home />);
+      await user.click(screen.getByRole("button", { name: "テスト用ノード追加" }));
+      await user.click(screen.getByRole("button", { name: "テスト用ノード選択" }));
+      await user.click(screen.getByRole("button", { name: "重要度 高" }));
+      await user.click(screen.getByRole("button", { name: "テスト用ノード追加" }));
+
+      const [highNode, mediumNode] = mockMapStageProps!.nodes;
+      await user.click(screen.getByRole("button", { name: "テスト用中倍率" }));
+      expect([...mockMapStageProps!.visibleNodeIds!]).toEqual([highNode.id, mediumNode.id]);
+      await user.click(screen.getByRole("button", { name: "表示 高のみ" }));
+      expect([...mockMapStageProps!.visibleNodeIds!]).toEqual([highNode.id]);
+      await user.click(screen.getByRole("button", { name: "表示 自動" }));
+      expect([...mockMapStageProps!.visibleNodeIds!]).toEqual([highNode.id, mediumNode.id]);
+      await user.click(screen.getByRole("button", { name: "テスト用ズーム" }));
+      expect([...mockMapStageProps!.visibleNodeIds!]).toEqual([highNode.id]);
+    });
     it("配置モードと変更commandをヘッダーへ接続する", async () => {
       const user = userEvent.setup();
       render(<Home />);
@@ -148,6 +227,35 @@ describe("Home", () => {
       expect(screen.getByTestId("reset-revision")).toHaveTextContent("1");
       expect(screen.getByText("マップを読み込みました。"))
         .toBeInTheDocument();
+    });
+
+    it.each([
+      ["auto", null],
+      ["high", "表示 高のみ"],
+      ["medium", "表示 中以上"],
+      ["all", "表示 すべて"],
+    ] as const)("%s modeからの読み込みresetはMapStageの最終scale=1と同期して自動ですべてを表示する", async (_mode, modeButton) => {
+      const user = userEvent.setup();
+      const { container } = render(<Home />);
+      const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+
+      await user.click(screen.getByRole("button", { name: "テスト用ズーム" }));
+      if (modeButton !== null) {
+        await user.click(screen.getByRole("button", { name: modeButton }));
+      }
+      await user.upload(input, jsonFile(resolutionImportedJson));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("reset-revision")).toHaveTextContent("1");
+      });
+      expect(screen.getByText("現在: すべて")).toBeInTheDocument();
+      expect([...mockMapStageProps!.visibleNodeIds!]).toEqual([10, 11]);
+
+      act(() => mockMapStageProps?.onViewportScaleChange?.(1));
+
+      expect(screen.getByRole("button", { name: "表示 自動" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByText("現在: すべて")).toBeInTheDocument();
+      expect([...mockMapStageProps!.visibleNodeIds!]).toEqual([10, 11]);
     });
 
     it("不正ファイルではマップとstage revisionを変更しない", async () => {

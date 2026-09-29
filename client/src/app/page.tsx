@@ -1,14 +1,19 @@
 "use client";
 
+import { useState } from "react";
 import { useNodes } from "@/hooks/useNodes";
 import { AppHeader } from "@/components/layout/AppHeader";
+import { NodeImportanceSelector } from "@/components/layout/NodeImportanceSelector";
+import { ResolutionFilterSelector } from "@/components/layout/ResolutionFilterSelector";
 import { MapImageExportControls } from "@/components/layout/MapImageExportControls";
 import { MapPersistenceControls } from "@/components/layout/MapPersistenceControls";
 import { MapOperationNotice } from "@/components/layout/MapOperationNotice";
 import { MapStage } from "@/components/map/MapStage";
+import { INITIAL_VIEWPORT } from "@/components/map/mapViewport";
 import { useMapImageExport } from "@/hooks/useMapImageExport";
 import { useMapPersistence } from "@/hooks/useMapPersistence";
 import { useResettingMapReplacement } from "@/hooks/useResettingMapReplacement";
+import { useMapResolutionFilter } from "@/hooks/useMapResolutionFilter";
 
 export default function Home() {
   const {
@@ -20,13 +25,22 @@ export default function Home() {
     addSiblingNode,
     selectNode,
     updateNodeLabel,
+    updateNodeImportance,
     moveNode,
     connectNodes,
     deleteNode,
     setLayoutMode,
     replaceMap,
   } = useNodes();
+  const [viewportScale, setViewportScale] = useState(1);
   const { replaceMapAndReset, resetRevision } = useResettingMapReplacement(replaceMap);
+  const resolutionFilter = useMapResolutionFilter({
+    nodes,
+    scale: viewportScale,
+    resetRevision,
+    resetScale: INITIAL_VIEWPORT.scale,
+  });
+  const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? null;
   const persistence = useMapPersistence({
     nodes,
     layoutMode,
@@ -39,6 +53,22 @@ export default function Home() {
       <AppHeader
         layoutMode={layoutMode}
         onLayoutModeChange={setLayoutMode}
+        importanceControls={(
+          <NodeImportanceSelector
+            importance={selectedNode?.importance ?? null}
+            disabled={selectedNode === null}
+            onChange={(importance) => {
+              if (selectedNode !== null) updateNodeImportance(selectedNode.id, importance);
+            }}
+          />
+        )}
+        resolutionControls={(
+          <ResolutionFilterSelector
+            mode={resolutionFilter.mode}
+            level={resolutionFilter.level}
+            onChange={resolutionFilter.setMode}
+          />
+        )}
         operationControls={(
           <>
             <MapPersistenceControls
@@ -68,6 +98,8 @@ export default function Home() {
       <main className="min-h-0 flex-1 overflow-hidden">
         <MapStage
           nodes={nodes}
+          visibleNodeIds={resolutionFilter.visibleNodeIds}
+          onViewportScaleChange={setViewportScale}
           selectedNodeId={selectedNodeId}
           onDoubleClick={addNode}
           onAddChildNode={addChildNode}

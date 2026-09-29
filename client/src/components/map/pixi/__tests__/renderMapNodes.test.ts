@@ -13,6 +13,7 @@ function render(overrides: Partial<{
   editingNodeId: number | null;
   connectionTargetNodeId: number | null;
   onNodePointerDown: jest.Mock;
+  visibleKeys: ReadonlySet<string>;
 }> = {}) {
   const harness = createPixiTestHarness();
   const onNodePointerDown = overrides.onNodePointerDown ?? jest.fn();
@@ -22,6 +23,7 @@ function render(overrides: Partial<{
     editingNodeId: overrides.editingNodeId ?? null,
     connectionTargetNodeId: overrides.connectionTargetNodeId ?? null,
     onNodePointerDown,
+    visibleKeys: overrides.visibleKeys ?? new Set(["node:1"]),
   });
   return { ...harness, onNodePointerDown };
 }
@@ -73,5 +75,47 @@ describe("renderMapNodes", () => {
     containerHandlers[0].pointerdown(event);
 
     expect(onNodePointerDown).toHaveBeenCalledWith(1, event);
+  });
+
+  it("非表示ノードは即時に非描画・非インタラクティブにする", () => {
+    const { stage } = render({ visibleKeys: new Set() });
+    const container = stage.addChild.mock.calls[0][0] as {
+      alpha: number;
+      visible: boolean;
+      eventMode: string;
+      cursor: string;
+    };
+
+    expect(container).toMatchObject({
+      alpha: 0,
+      visible: false,
+      eventMode: "none",
+      cursor: "default",
+    });
+  });
+
+  it("node keyのvisibility targetでPixi表示とinteractionを制御する", () => {
+    const harness = createPixiTestHarness();
+    const targets = renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+      nodes: [node], selectedNodeId: null, editingNodeId: null, connectionTargetNodeId: null,
+      onNodePointerDown: jest.fn(), visibleKeys: new Set(["node:1"]),
+    });
+    const container = harness.stage.addChild.mock.calls[0][0] as {
+      alpha: number; visible: boolean; eventMode: string; cursor: string;
+    };
+    const target = targets.get("node:1")!;
+
+    expect(container).toMatchObject({
+      alpha: 1,
+      visible: true,
+      eventMode: "static",
+      cursor: "pointer",
+    });
+
+    target.setOpacity(0.5);
+    target.setRendered(false);
+    target.setInteractive(false);
+
+    expect(container).toMatchObject({ alpha: 0.5, visible: false, eventMode: "none" });
   });
 });

@@ -1,24 +1,26 @@
 "use client";
 
-import { useEffect, useRef, type MouseEvent } from "react";
+import { useMemo, useRef, type MouseEvent } from "react";
 import { NodeLabelEditor } from "@/components/map/NodeLabelEditor";
 import { resolveMapDoubleClickAction } from "@/components/map/mapDoubleClickAction";
-import type { Viewport } from "@/components/map/mapViewport";
-import { applyViewportTransform } from "@/components/map/pixi/applyViewportTransform";
-import { renderMapScene } from "@/components/map/pixi/renderMapScene";
 import { usePixiApplication } from "@/components/map/pixi/usePixiApplication";
+import { useHiddenNodeInteractionReset } from "@/components/map/useHiddenNodeInteractionReset";
 import { useMapStageInteractions } from "@/components/map/useMapStageInteractions";
+import { useMapVisibilityTransition } from "@/components/map/useMapVisibilityTransition";
 import { useMapStageReset } from "@/components/map/useMapStageReset";
 import { useMapViewport } from "@/components/map/useMapViewport";
 import { useMapViewportShortcut } from "@/components/map/useMapViewportShortcut";
 import { useMapWheelZoom } from "@/components/map/useMapWheelZoom";
 import { useNodeEditing } from "@/components/map/useNodeEditing";
 import { useNodeKeyboardShortcuts } from "@/components/map/useNodeKeyboardShortcuts";
+import { useRenderedMapScene } from "@/components/map/useRenderedMapScene";
+import { useViewportScaleNotification } from "@/components/map/useViewportScaleNotification";
 import type { Node } from "@/types/node";
-import type { Container } from "pixi.js";
 
 type MapStageProps = {
   nodes: Node[];
+  visibleNodeIds?: ReadonlySet<number>;
+  onViewportScaleChange?: (scale: number) => void;
   resetRevision?: number;
   selectedNodeId: number | null;
   onDoubleClick: (x: number, y: number) => void;
@@ -33,6 +35,8 @@ type MapStageProps = {
 
 export function MapStage({
   nodes,
+  visibleNodeIds,
+  onViewportScaleChange,
   resetRevision = 0,
   selectedNodeId,
   onDoubleClick,
@@ -44,9 +48,11 @@ export function MapStage({
   onConnectNodes,
   onDeleteNode,
 }: MapStageProps) {
+  const effectiveVisibleNodeIds = useMemo(
+    () => visibleNodeIds ?? new Set(nodes.map((node) => node.id)),
+    [nodes, visibleNodeIds],
+  );
   const containerRef = useRef<HTMLDivElement>(null);
-  const worldContainerRef = useRef<Container | null>(null);
-  const appliedViewportRef = useRef<Viewport | null>(null);
   const runtime = usePixiApplication(containerRef);
   const editing = useNodeEditing(nodes, onUpdateLabel);
   const cancelEditing = editing.cancelEditing;
@@ -65,6 +71,7 @@ export function MapStage({
   } = useMapStageInteractions({
     runtime,
     nodes,
+    visibleNodeIds: effectiveVisibleNodeIds,
     viewportRef,
     onViewportChange: setViewport,
     onSelectNode,
@@ -72,11 +79,40 @@ export function MapStage({
     onConnectNodes,
   });
 
+  const scene = useRenderedMapScene({
+    runtime,
+    options: {
+      nodes,
+      selectedNodeId,
+      editingNodeId: editing.editingNodeId,
+      connectionTargetNodeId,
+      createNodePointerDownHandler,
+      visibleNodeIds: effectiveVisibleNodeIds,
+    },
+    viewport,
+    viewportRef,
+  });
+
+  useMapVisibilityTransition({
+    scene,
+    nodes,
+    visibleNodeIds: effectiveVisibleNodeIds,
+  });
+
   useMapStageReset({
     resetRevision,
     cancelEditing,
     cancelActiveGesture,
     setViewport,
+  });
+
+  useHiddenNodeInteractionReset({
+    selectedNodeId,
+    editingNodeId: editing.editingNodeId,
+    visibleNodeIds: effectiveVisibleNodeIds,
+    onSelectNode,
+    cancelEditing,
+    cancelActiveGesture,
   });
 
   useMapWheelZoom({
@@ -95,44 +131,7 @@ export function MapStage({
     onFocusNode: focusNode,
   });
 
-  useEffect(() => {
-    if (!runtime) return;
-
-    const onNodePointerDown = createNodePointerDownHandler();
-    const renderedViewport = viewportRef.current;
-    const worldContainer = renderMapScene(runtime.app, runtime.constructors, {
-      nodes,
-      selectedNodeId,
-      editingNodeId: editing.editingNodeId,
-      connectionTargetNodeId,
-      onNodePointerDown,
-      viewport: renderedViewport,
-    });
-    worldContainerRef.current = worldContainer;
-    appliedViewportRef.current = renderedViewport;
-
-    return () => {
-      if (worldContainerRef.current === worldContainer) {
-        worldContainerRef.current = null;
-        appliedViewportRef.current = null;
-      }
-    };
-  }, [
-    runtime,
-    nodes,
-    selectedNodeId,
-    editing.editingNodeId,
-    connectionTargetNodeId,
-    createNodePointerDownHandler,
-    viewportRef,
-  ]);
-
-  useEffect(() => {
-    const worldContainer = worldContainerRef.current;
-    if (!worldContainer || appliedViewportRef.current === viewport) return;
-    applyViewportTransform(worldContainer, viewport);
-    appliedViewportRef.current = viewport;
-  }, [viewport]);
+  useViewportScaleNotification(viewport.scale, onViewportScaleChange);
 
   useNodeKeyboardShortcuts({
     selectedNodeId,
@@ -151,7 +150,7 @@ export function MapStage({
       client: { x: event.clientX, y: event.clientY },
       bounds: container.getBoundingClientRect(),
       viewport: viewportRef.current,
-      nodes,
+      nodes: nodes.filter((node) => effectiveVisibleNodeIds.has(node.id)),
     });
     if (action === null) return;
 

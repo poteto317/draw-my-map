@@ -1,4 +1,7 @@
 import type { PixiConstructors } from "@/components/map/pixi/pixiTypes";
+import type { MapVisibilityTarget } from "@/components/map/pixi/mapVisibilityAnimator";
+import { nodeVisibilityKey } from "@/components/map/pixi/mapVisibilityKeys";
+import { createNodeVisibilityTarget } from "@/components/map/pixi/pixiVisibilityTarget";
 import type { Node } from "@/types/node";
 import type { Container, FederatedPointerEvent } from "pixi.js";
 
@@ -8,20 +11,26 @@ export type RenderMapNodesOptions = {
   editingNodeId: number | null;
   connectionTargetNodeId: number | null;
   onNodePointerDown: (nodeId: number, event: FederatedPointerEvent) => void;
+  visibleKeys?: ReadonlySet<string>;
 };
 
 export function renderMapNodes(
   stage: Container,
   constructors: PixiConstructors,
   options: RenderMapNodesOptions,
-): void {
+): Map<string, MapVisibilityTarget> {
+  const visibilityTargets = new Map<string, MapVisibilityTarget>();
   for (const node of options.nodes) {
+    const visibilityKey = nodeVisibilityKey(node.id);
+    const isVisible = options.visibleKeys?.has(visibilityKey) ?? true;
     const isEditing = node.id === options.editingNodeId;
     const isSelected = node.id === options.selectedNodeId;
     const isConnectionTarget = node.id === options.connectionTargetNodeId;
     const container = new constructors.Container();
-    container.eventMode = "static";
-    container.cursor = "pointer";
+    container.alpha = isVisible ? 1 : 0;
+    container.visible = isVisible;
+    container.eventMode = isVisible ? "static" : "none";
+    container.cursor = isVisible ? "pointer" : "default";
     container.on("pointerdown", (event: FederatedPointerEvent) => {
       options.onNodePointerDown(node.id, event);
     });
@@ -53,5 +62,10 @@ export function renderMapNodes(
     }
 
     stage.addChild(container);
+    visibilityTargets.set(
+      visibilityKey,
+      createNodeVisibilityTarget(visibilityKey, container),
+    );
   }
+  return visibilityTargets;
 }

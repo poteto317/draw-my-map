@@ -99,6 +99,7 @@ function createController(overrides: Partial<{
   onConnectNodes: (parentId: number, childId: number) => void;
   onConnectionTargetChange: (id: number | null) => void;
   dragThreshold: number;
+  visibleNodeIds: ReadonlySet<number>;
 }> = {}) {
   const nodesRef = { current: overrides.nodes ?? [node] };
   const viewportRef = {
@@ -113,6 +114,9 @@ function createController(overrides: Partial<{
     current: overrides.onConnectionTargetChange ?? jest.fn(),
   };
   const onViewportChangeRef = { current: jest.fn() };
+  const visibleNodeIdsRef = overrides.visibleNodeIds === undefined
+    ? undefined
+    : { current: overrides.visibleNodeIds };
   const controller = createStageInteractions({
     nodesRef,
     viewportRef,
@@ -121,6 +125,7 @@ function createController(overrides: Partial<{
     onConnectNodesRef,
     onConnectionTargetChangeRef,
     onViewportChangeRef,
+    visibleNodeIdsRef,
     dragThreshold: overrides.dragThreshold,
   });
 
@@ -133,6 +138,7 @@ function createController(overrides: Partial<{
     onConnectNodesRef,
     onConnectionTargetChangeRef,
     onViewportChangeRef,
+    visibleNodeIdsRef,
   };
 }
 
@@ -145,6 +151,17 @@ function nodePointerDown(
 }
 
 describe("createStageInteractions", () => {
+  it("hidden nodeからgestureを開始しない", () => {
+    const { stage } = createStage();
+    const { controller, onSelectNodeRef } = createController({
+      nodes: [node, targetNode],
+      visibleNodeIds: new Set([targetNode.id]),
+    });
+    controller.bind(stage as never);
+    nodePointerDown(controller, node.id, pointer(0, 0, { target: stage }) as never);
+
+    expect(onSelectNodeRef.current).not.toHaveBeenCalled();
+  });
   it("clears selection only for a pointerdown targeted directly at the stage", () => {
     const { stage, handlers } = createStage();
     const { controller, onSelectNodeRef } = createController();
@@ -310,6 +327,47 @@ describe("createStageInteractions", () => {
     expect(onConnectionTargetChangeRef.current).toHaveBeenNthCalledWith(1, 2);
     expect(onConnectNodesRef.current).toHaveBeenCalledWith(1, 2);
     expect(onConnectionTargetChangeRef.current).toHaveBeenLastCalledWith(null);
+  });
+
+  it("hiddenになった接続候補をcancelするとhighlightをclearする", () => {
+    const { stage, handlers } = createStage();
+    const {
+      controller,
+      onConnectionTargetChangeRef,
+      onConnectNodesRef,
+      visibleNodeIdsRef,
+    } = createController({ nodes: [node, targetNode], visibleNodeIds: new Set([1, 2]) });
+    controller.bind(stage as never);
+
+    nodePointerDown(controller, 1, pointer(50, 50, { shiftKey: true }) as never);
+    handlers.pointermove?.(pointer(220, 60));
+    expect(onConnectionTargetChangeRef.current).toHaveBeenCalledWith(2);
+
+    visibleNodeIdsRef!.current = new Set([1]);
+    controller.cancelActiveGesture();
+    handlers.pointerup?.(pointer(220, 60));
+
+    expect(onConnectionTargetChangeRef.current).toHaveBeenLastCalledWith(null);
+    expect(onConnectNodesRef.current).not.toHaveBeenCalled();
+  });
+
+  it("hiddenの中間祖先を含む完全nodesで接続可否を判定する", () => {
+    const { stage, handlers } = createStage();
+    const source = { ...node, id: 3, parentId: 2 };
+    const hiddenAncestor = { ...node, id: 2, parentId: 1, x: 350 };
+    const target = { ...node, id: 1, parentId: null, x: 200 };
+    const { controller, onConnectionTargetChangeRef, onConnectNodesRef } = createController({
+      nodes: [source, hiddenAncestor, target],
+      visibleNodeIds: new Set([source.id, target.id]),
+    });
+    controller.bind(stage as never);
+
+    nodePointerDown(controller, source.id, pointer(50, 50, { shiftKey: true }) as never);
+    handlers.pointermove?.(pointer(220, 60));
+    handlers.pointerup?.(pointer(220, 60));
+
+    expect(onConnectionTargetChangeRef.current).not.toHaveBeenCalledWith(target.id);
+    expect(onConnectNodesRef.current).not.toHaveBeenCalled();
   });
 
   it("cancels a connection on pointerupoutside and ignores later movement", () => {
