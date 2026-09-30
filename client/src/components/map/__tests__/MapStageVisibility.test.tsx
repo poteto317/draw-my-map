@@ -250,9 +250,11 @@ describe("MapStage visibility boundary", () => {
     expect(onMoveNode).toHaveBeenCalledTimes(1);
   });
 
-  it("非表示ノードのdouble-clickでは編集を開始しない", async () => {
+  it("非表示ノードの位置は編集せず背景への追加として扱う", async () => {
+    const onDoubleClick = jest.fn();
     const { queryByTestId } = await renderReady(
-      <MapStage {...defaultProps} nodes={sampleNodes} visibleNodeIds={new Set([2])} />,
+      <MapStage {...defaultProps} nodes={sampleNodes} visibleNodeIds={new Set([2])}
+        onDoubleClick={onDoubleClick} />,
     );
     const container = document.querySelector(".cursor-crosshair") as HTMLElement;
     mockStageBounds(container);
@@ -260,6 +262,8 @@ describe("MapStage visibility boundary", () => {
     fireEvent.doubleClick(container, { clientX: 100, clientY: 60 });
 
     expect(queryByTestId("node-label-input")).not.toBeInTheDocument();
+    expect(onDoubleClick).toHaveBeenCalledTimes(1);
+    expect(onDoubleClick).toHaveBeenCalledWith(100, 60);
   });
 
   it("viewport scaleは初回だけ通知し、callback差し替えでは再通知しない", async () => {
