@@ -13,7 +13,7 @@
 - 範囲はROADMAP Phase 7の2項目目「右パネルにイラスト生成ボタンを配置」のみ。画像生成API、イラストの保存・表示・再生成・削除は含めない。
 - ボタンの文言は「イラストを生成」（右クリックメニューの項目と同じ）とする。
 - ノード未選択のときはボタンを無効化し、「ノードを選択してください」と表示する。
-- 選択中のノードは、`Node.label`を表示する。ラベルが空の場合は「（ラベルなし）」と表示する。
+- 選択中のノードは、`Node.label`を表示する。ラベルが空の場合は、キャンバス・画像エクスポートと同じフォールバック`FALLBACK_NODE_LABEL`（「新しいノード」）で表示する。
 - パネルはキャンバスの右に固定幅（`w-60`、240px）で常時表示する。キャンバスは残りの幅を使う。
 - 右クリックメニューの既存の挙動（`onGenerateIllustration`の通知）は変えない。
 - `Node`型、永続化形式、Storageキー、`MapStage`の公開propsは変更しない。
@@ -410,3 +410,7 @@ git commit -m "docs(roadmap): Phase 7右パネルのボタン完了を反映"
 - **Placeholder scan:** `useIllustrationGeneration`の空実装は意図的で、後続項目で置き換える1か所として、コメントとROADMAPに明記する。
 - **Type consistency:** `IllustrationPanel`の`selectedNode: Pick<Node, "id" | "label"> | null`は、Task 1で定義し、Task 2で`selectedNode`（`Node | null`）を渡す。`onGenerate`と`MapStage`の`onGenerateIllustration`は、どちらも`(nodeId: number) => void`で、同じ`generateIllustration`を渡す。
 - **既知のリスク:** パネルの追加でキャンバスの幅が240px狭くなる。PixiJSは`resizeTo: container`で初期化時とウィンドウのリサイズ時に追従するため、パネルは固定幅（開閉しない）とし、追加のリサイズ処理は不要。狭い画面（例: 幅 640px 未満）では、キャンバスが狭くなる。小画面向けの折りたたみは、本計画に含めない（必要になった時点で別の項目として扱う）。
+
+## 実装後の変更
+
+- 実画面の確認で、空ラベルの表示がキャンバス・画像エクスポート（「新しいノード」）と食い違っていたため、共通定数`FALLBACK_NODE_LABEL`（`client/src/config/nodeLabel.ts`）に統一した。

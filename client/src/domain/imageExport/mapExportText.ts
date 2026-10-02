@@ -1,3 +1,4 @@
+import { FALLBACK_NODE_LABEL } from "@/config/nodeLabel";
 import { normalizeMapXmlText } from "@/domain/imageExport/mapXmlText";
 
 export type MeasureMapText = (text: string) => number;
@@ -13,8 +14,6 @@ export type MapExportTextLayout = {
 export const MAP_EXPORT_FONT_SIZE = 14;
 export const MAP_EXPORT_LINE_HEIGHT = 18;
 export const MAP_EXPORT_HORIZONTAL_INSET = 8;
-
-const FALLBACK_MAP_EXPORT_LABEL = "新しいノード";
 
 function measureCodePointRange(
   codePoints: string[],
@@ -87,7 +86,7 @@ function findWhitespaceRunEnd(codePoints: string[], start: number): number {
 }
 
 export function getMapExportLabel(label: string): string {
-  return normalizeMapXmlText(label || FALLBACK_MAP_EXPORT_LABEL);
+  return normalizeMapXmlText(label || FALLBACK_NODE_LABEL);
 }
 
 export function wrapMapExportText(

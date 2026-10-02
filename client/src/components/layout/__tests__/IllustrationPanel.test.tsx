@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { FALLBACK_NODE_LABEL } from "@/config/nodeLabel";
 import { IllustrationPanel } from "@/components/layout/IllustrationPanel";
 
 describe("IllustrationPanel", () => {
@@ -30,12 +31,14 @@ describe("IllustrationPanel", () => {
     expect(screen.getByRole("button", { name: "イラストを生成" })).toBeEnabled();
   });
 
-  it("ラベルが空のノードでは「（ラベルなし）」を表示する", () => {
+  it("ラベルが空のノードでは共通のフォールバックラベルを表示し、titleは付けない", () => {
     render(
       <IllustrationPanel selectedNode={{ id: 4, label: "" }} onGenerate={jest.fn()} />,
     );
 
-    expect(screen.getByText("（ラベルなし）")).toBeVisible();
+    const text = screen.getByText(FALLBACK_NODE_LABEL);
+    expect(text).toBeVisible();
+    expect(text).not.toHaveAttribute("title");
     expect(screen.getByRole("button", { name: "イラストを生成" })).toBeEnabled();
   });
 

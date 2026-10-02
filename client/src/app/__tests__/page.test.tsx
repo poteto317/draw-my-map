@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import Home from "@/app/page";
+import { FALLBACK_NODE_LABEL } from "@/config/nodeLabel";
 import type { Node } from "@/types/node";
 import type { OperationNotice } from "@/types/operationNotice";
 
@@ -392,7 +393,7 @@ describe("Home", () => {
       await user.click(screen.getByRole("button", { name: "テスト用ノード追加" }));
       await user.click(screen.getByRole("button", { name: "テスト用ノード選択" }));
 
-      expect(screen.getByText("（ラベルなし）")).toBeVisible();
+      expect(screen.getByText(FALLBACK_NODE_LABEL)).toBeVisible();
       expect(screen.getByRole("button", { name: "イラストを生成" })).toBeEnabled();
     });
 
@@ -437,7 +438,10 @@ describe("Home", () => {
       const main = screen.getByRole("main");
       expect(main).toHaveClass("flex");
       expect(main).toContainElement(screen.getByTestId("map-stage"));
-      expect(main).toContainElement(screen.getByRole("complementary", { name: "イラスト" }));
+      const panel = screen.getByRole("complementary", { name: "イラスト" });
+      expect(main).toContainElement(panel);
+      expect(screen.getByTestId("map-stage").parentElement).toHaveClass("min-w-0", "flex-1");
+      expect(panel).toHaveClass("w-60", "shrink-0");
     });
   });
 });

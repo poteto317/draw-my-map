@@ -1,3 +1,4 @@
+import { FALLBACK_NODE_LABEL } from "@/config/nodeLabel";
 import type { Node } from "@/types/node";
 
 type IllustrationPanelProps = {
@@ -6,9 +7,7 @@ type IllustrationPanelProps = {
 };
 
 export function IllustrationPanel({ selectedNode, onGenerate }: IllustrationPanelProps) {
-  const label = selectedNode === null
-    ? null
-    : selectedNode.label === "" ? "（ラベルなし）" : selectedNode.label;
+  const label = selectedNode?.label || FALLBACK_NODE_LABEL;
 
   return (
     <aside
@@ -23,7 +22,7 @@ export function IllustrationPanel({ selectedNode, onGenerate }: IllustrationPane
           <span className="text-xs text-zinc-500 dark:text-zinc-400">対象ノード</span>
           <p
             className="line-clamp-3 break-words text-sm text-zinc-800 dark:text-zinc-100"
-            title={selectedNode.label}
+            title={selectedNode.label || undefined}
           >
             {label}
           </p>
