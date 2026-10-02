@@ -32,8 +32,8 @@ export function IllustrationPanel({ selectedNode, generation, onGenerate }: Illu
           </p>
         </div>
       )}
-      {selectedNode !== null && forSelectedNode && generation.status === "generating" && (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">生成中です</p>
+      {forSelectedNode && generation.status === "generating" && (
+        <p role="status" className="text-sm text-zinc-500 dark:text-zinc-400">生成中です</p>
       )}
       {selectedNode !== null && forSelectedNode && generation.status === "succeeded" && (
         // eslint-disable-next-line @next/next/no-img-element -- data URLのため、next/imageは使わない

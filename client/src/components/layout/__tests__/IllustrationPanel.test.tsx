@@ -88,7 +88,7 @@ describe("IllustrationPanel", () => {
     );
 
     expect(screen.getByRole("button", { name: "生成中…" })).toBeDisabled();
-    expect(screen.getByText("生成中です")).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent("生成中です");
   });
 
   it("別のノードを生成中のときも、ボタンは無効（二重実行の防止）で、選択中のノードには生成中の表示を出さない", () => {

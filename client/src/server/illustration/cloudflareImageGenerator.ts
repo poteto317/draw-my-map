@@ -21,7 +21,9 @@ export function readCloudflareConfig(
 ): CloudflareConfig | null {
   const accountId = env.CLOUDFLARE_ACCOUNT_ID?.trim();
   const apiToken = env.CLOUDFLARE_API_TOKEN?.trim();
-  return accountId && apiToken ? { accountId, apiToken } : null;
+  // アカウントIDはURLのパスに埋め込むため、英数字・ハイフン・アンダースコアのみ許可する
+  if (!accountId || !apiToken || !/^[A-Za-z0-9_-]+$/.test(accountId)) return null;
+  return { accountId, apiToken };
 }
 
 type CloudflareResponseBody = {
@@ -38,10 +40,14 @@ function firstErrorMessage(body: CloudflareResponseBody | null): string {
 export function createCloudflareImageGenerator(
   config: CloudflareConfig,
   fetchImpl: typeof fetch = fetch,
+  timeoutMs = 60_000,
 ): ImageGenerator {
   const url = `https://api.cloudflare.com/client/v4/accounts/${config.accountId}/ai/run/@cf/black-forest-labs/flux-1-schnell`;
 
   return async (prompt) => {
+    // 上流が応答しないと、生成中の状態が続いてしまうため、時間切れで中断する
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     let response: Response;
     try {
       response = await fetchImpl(url, {
@@ -52,10 +58,13 @@ export function createCloudflareImageGenerator(
         },
         // seed は公式スキーマ上、整数（"Random positive integer"）
         body: JSON.stringify({ prompt, steps: 4, seed: Math.floor(Math.random() * 2_000_000_000) + 1 }),
+        signal: controller.signal,
       });
     } catch {
       // 例外のメッセージにトークンが含まれ得るため、固定の文言にする
       throw new ImageGenerationError("upstream-error", "画像生成の呼び出しに失敗しました");
+    } finally {
+      clearTimeout(timer);
     }
 
     const body = (await response.json().catch(() => null)) as CloudflareResponseBody | null;

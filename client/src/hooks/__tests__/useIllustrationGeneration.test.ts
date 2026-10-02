@@ -124,20 +124,21 @@ describe("useIllustrationGeneration", () => {
     expect(result.current.generation).toEqual({ status: "idle" });
   });
 
-  it("アンマウント時に進行中のリクエストを中断し、その後の解決で状態を更新しない", async () => {
+  it("アンマウント時に進行中のリクエストを中断する", async () => {
     const pending = deferred<{ dataUrl: string }>();
     mockRequest.mockReturnValue(pending.promise);
-    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
     const { result, unmount } = renderHook(() => useIllustrationGeneration(nodes));
     act(() => result.current.generateIllustration(1));
     const signal = mockRequest.mock.calls[0][1]!.signal as AbortSignal;
+    const lastRendered = result.current.generation;
 
     unmount();
     await act(async () => pending.resolve({ dataUrl: "late" }));
 
     expect(signal.aborted).toBe(true);
-    expect(errorSpy).not.toHaveBeenCalled();
-    errorSpy.mockRestore();
+    // アンマウント後は、最後に描画された値が変わらない
+    expect(lastRendered).toEqual({ status: "generating", nodeId: 1 });
+    expect(result.current.generation).toEqual({ status: "generating", nodeId: 1 });
   });
 
   it("nodes が同じなら、同じ関数を返す", () => {

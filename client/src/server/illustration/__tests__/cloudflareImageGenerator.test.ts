@@ -34,6 +34,58 @@ describe("readCloudflareConfig", () => {
   });
 });
 
+describe("readCloudflareConfig（アカウントIDの検証）", () => {
+  it.each([["acct/evil"], ["acct?x=1"], ["acct#frag"], [".."], ["acct 123"], ["a/../b"]])(
+    "URLを壊し得るアカウントID（%s）は null を返す",
+    (accountId) => {
+      expect(
+        readCloudflareConfig({ CLOUDFLARE_ACCOUNT_ID: accountId, CLOUDFLARE_API_TOKEN: "secret-token-xyz" }),
+      ).toBeNull();
+    },
+  );
+});
+
+describe("createCloudflareImageGenerator のタイムアウト", () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  function abortableFetch() {
+    return jest.fn((_url: unknown, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+      }),
+    );
+  }
+
+  it("上流が応答しないときは、タイムアウトで upstream-error になる", async () => {
+    jest.useFakeTimers();
+    const fetchImpl = abortableFetch();
+    const result = createCloudflareImageGenerator(config, fetchImpl as unknown as typeof fetch, 5_000)("p");
+    const assertion = expect(result).rejects.toMatchObject({
+      kind: "upstream-error",
+      message: expect.not.stringContaining("secret-token-xyz"),
+    });
+
+    await jest.advanceTimersByTimeAsync(5_000);
+
+    await assertion;
+    expect(fetchImpl.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("正常に完了したら、タイマーを解除する", async () => {
+    jest.useFakeTimers();
+    const fetchImpl = jest.fn().mockResolvedValue(
+      jsonResponse({ success: true, result: { image: "B" }, errors: [] }),
+    );
+
+    await createCloudflareImageGenerator(config, fetchImpl)("p");
+
+    expect(fetchImpl.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+});
+
 describe("createCloudflareImageGenerator", () => {
   it("正しいURL・認証ヘッダー・本文でPOSTし、画像を返す", async () => {
     const fetchImpl = jest.fn().mockResolvedValue(

@@ -20,7 +20,7 @@ export class IllustrationRequestError extends Error {
 const ERROR_MESSAGES: Record<IllustrationErrorKind, string> = {
   "invalid-label": "ノードのテキストが空、または長すぎるため、イラストを生成できません。",
   "not-configured": "イラスト生成の設定（Cloudflareの認証情報）が見つかりません。README の手順で設定してください。",
-  "quota-exceeded": "本日の無料の生成枠を使い切りました。時間をおいて（毎日 0:00 UTC にリセット）、再度お試しください。",
+  "quota-exceeded": "無料の利用上限に達しました（1日の無料枠を使い切ったか、一時的な制限です）。時間をおいて（無料枠は毎日 0:00 UTC にリセット）、再度お試しください。",
   "upstream-error": "イラストの生成に失敗しました。時間をおいて、再度お試しください。",
   network: "通信に失敗しました。接続を確認して、再度お試しください。",
 };
@@ -39,6 +39,9 @@ function kindFromStatus(status: number): IllustrationErrorKind {
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
 }
+
+// サーバーの応答でも、data URLに使える画像の種類は限定する
+const ALLOWED_MIME_TYPE = /^image\/(jpeg|png|webp)$/;
 
 type RequestOptions = { signal?: AbortSignal; fetchImpl?: typeof fetch };
 
@@ -63,7 +66,7 @@ export async function requestIllustration(
 
   const body: unknown = await response.json().catch(() => null);
   const { image, mimeType } = (body ?? {}) as { image?: unknown; mimeType?: unknown };
-  if (typeof image !== "string" || typeof mimeType !== "string") {
+  if (typeof image !== "string" || typeof mimeType !== "string" || !ALLOWED_MIME_TYPE.test(mimeType)) {
     throw new IllustrationRequestError("upstream-error");
   }
   return { dataUrl: `data:${mimeType};base64,${image}` };

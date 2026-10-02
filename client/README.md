@@ -58,6 +58,12 @@ Cloudflare Workers AI の無料プランには、1 日あたりの利用上限�
 
 無料枠の内容は、Cloudflare の都合で変更されうる。最新の内容は、公式の [料金ページ](https://developers.cloudflare.com/workers-ai/platform/pricing/) で確認する。
 
+### 公開時の注意
+
+- イラスト生成の API ルートには、認証・Origin の確認・レート制限がまだない。これらの環境変数を設定したまま、公開環境にデプロイしてはいけない（誰でも 1 日の無料枠を使い切れてしまう）。想定する使い方は、ローカルでの 1 人での開発である。
+- Cloudflare のアカウントは、Workers Free プランのものを使う。Workers Paid プランでは、無料枠を超えた分が Neuron 単位で課金される（[料金ページ](https://developers.cloudflare.com/workers-ai/platform/pricing/)）。従量課金を避ける方針に反する。
+- 公開する場合は、Origin の確認・認証・リクエスト本文のサイズ制限を追加することが前提になる。
+
 ### 認証情報の扱い
 
 - 認証情報は、サーバー側（Route Handler）だけが環境変数から読む。ブラウザには渡らない。
