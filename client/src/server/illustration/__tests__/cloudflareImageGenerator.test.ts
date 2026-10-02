@@ -187,6 +187,45 @@ describe("createCloudflareImageGenerator", () => {
     });
   });
 
+  it("NSFW の誤判定（code 8007）は content-rejected で、メッセージにトークンを含めない", async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          success: false,
+          errors: [{ code: 8007, message: "AiError: AiError: Input prompt contains NSFW content. (abc-123)" }],
+          messages: [],
+          result: {},
+        },
+        { status: 400 },
+      ),
+    );
+
+    const error = await createCloudflareImageGenerator(config, fetchImpl)("p").catch((e) => e);
+
+    expect(error).toMatchObject({ name: "ImageGenerationError", kind: "content-rejected" });
+    expect(String(error.message)).not.toContain("secret-token-xyz");
+  });
+
+  it("コードが違っても、メッセージに NSFW を含む 400 は content-rejected", async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(
+      jsonResponse({ success: false, errors: [{ code: 1234, message: "nsfw content detected" }] }, { status: 400 }),
+    );
+
+    await expect(createCloudflareImageGenerator(config, fetchImpl)("p")).rejects.toMatchObject({
+      kind: "content-rejected",
+    });
+  });
+
+  it("NSFW 以外の 400（code 5006）は upstream-error のまま", async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(
+      jsonResponse({ success: false, errors: [{ code: 5006, message: "invalid input" }] }, { status: 400 }),
+    );
+
+    await expect(createCloudflareImageGenerator(config, fetchImpl)("p")).rejects.toMatchObject({
+      kind: "upstream-error",
+    });
+  });
+
   it("HTTP 500 は upstream-error", async () => {
     const fetchImpl = jest.fn().mockResolvedValue(
       jsonResponse({ success: false, errors: [{ code: 9, message: "boom" }] }, { status: 500 }),

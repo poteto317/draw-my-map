@@ -94,4 +94,56 @@ describe("handleIllustrationRequest", () => {
     expect(response.status).toBe(502);
     expect(JSON.stringify(await response.json())).not.toContain("secret internal detail");
   });
+
+  describe("NSFW の誤判定への再試行", () => {
+    const rejected = () => new ImageGenerationError("content-rejected", "r");
+    const ok = { base64: "IMG", mimeType: "image/jpeg" };
+
+    it("content-rejected が2回続いても、3回目に成功すれば 200（生成は3回）", async () => {
+      const generate = jest.fn().mockRejectedValueOnce(rejected()).mockRejectedValueOnce(rejected()).mockResolvedValueOnce(ok);
+      const { deps: d } = deps(generate);
+
+      const response = await handleIllustrationRequest(post({ label: "目標" }), d);
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ image: "IMG", mimeType: "image/jpeg" });
+      expect(generate).toHaveBeenCalledTimes(3);
+    });
+
+    it("3回とも content-rejected なら 422 で、生成はちょうど3回", async () => {
+      const { deps: d, generate } = deps(jest.fn().mockRejectedValue(rejected()));
+
+      const response = await handleIllustrationRequest(post({ label: "目標" }), d);
+
+      expect(response.status).toBe(422);
+      expect(await response.json()).toEqual({ error: "content-rejected" });
+      expect(generate).toHaveBeenCalledTimes(3);
+    });
+
+    it("upstream-error は再試行せず 502", async () => {
+      const { deps: d, generate } = deps(jest.fn().mockRejectedValue(new ImageGenerationError("upstream-error", "u")));
+
+      const response = await handleIllustrationRequest(post({ label: "目標" }), d);
+
+      expect(response.status).toBe(502);
+      expect(generate).toHaveBeenCalledTimes(1);
+    });
+
+    it("quota-exceeded は再試行せず 429", async () => {
+      const { deps: d, generate } = deps(jest.fn().mockRejectedValue(new ImageGenerationError("quota-exceeded", "q")));
+
+      const response = await handleIllustrationRequest(post({ label: "目標" }), d);
+
+      expect(response.status).toBe(429);
+      expect(generate).toHaveBeenCalledTimes(1);
+    });
+
+    it("1回目に成功すれば、生成は1回だけ", async () => {
+      const { deps: d, generate } = deps();
+
+      await handleIllustrationRequest(post({ label: "目標" }), d);
+
+      expect(generate).toHaveBeenCalledTimes(1);
+    });
+  });
 });

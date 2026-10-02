@@ -14,6 +14,9 @@ export type IllustrationRouteDeps = {
   createGenerator: (config: CloudflareConfig) => ImageGenerator;
 };
 
+// NSFW の誤判定はランダムに起きるため、同じプロンプトで、最大この回数まで試す
+const MAX_GENERATION_ATTEMPTS = 3;
+
 function errorResponse(error: string, status: number): Response {
   return Response.json({ error }, { status });
 }
@@ -38,13 +41,22 @@ export async function handleIllustrationRequest(
   const config = readCloudflareConfig(env);
   if (config === null) return errorResponse("not-configured", 503);
 
-  try {
-    const image = await createGenerator(config)(buildIllustrationPrompt(validation.label));
-    return Response.json({ image: image.base64, mimeType: image.mimeType });
-  } catch (error) {
-    if (error instanceof ImageGenerationError && error.kind === "quota-exceeded") {
-      return errorResponse("quota-exceeded", 429);
+  const generate = createGenerator(config);
+  const prompt = buildIllustrationPrompt(validation.label);
+
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const image = await generate(prompt);
+      return Response.json({ image: image.base64, mimeType: image.mimeType });
+    } catch (error) {
+      if (error instanceof ImageGenerationError && error.kind === "content-rejected") {
+        if (attempt < MAX_GENERATION_ATTEMPTS) continue;
+        return errorResponse("content-rejected", 422);
+      }
+      if (error instanceof ImageGenerationError && error.kind === "quota-exceeded") {
+        return errorResponse("quota-exceeded", 429);
+      }
+      return errorResponse("upstream-error", 502);
     }
-    return errorResponse("upstream-error", 502);
   }
 }

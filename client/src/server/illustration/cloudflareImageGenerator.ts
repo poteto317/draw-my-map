@@ -1,6 +1,6 @@
 export type GeneratedImage = { base64: string; mimeType: "image/jpeg" };
 export type ImageGenerator = (prompt: string) => Promise<GeneratedImage>;
-export type ImageGenerationErrorKind = "quota-exceeded" | "upstream-error";
+export type ImageGenerationErrorKind = "quota-exceeded" | "upstream-error" | "content-rejected";
 export type CloudflareConfig = { accountId: string; apiToken: string };
 
 export class ImageGenerationError extends Error {
@@ -16,6 +16,10 @@ export class ImageGenerationError extends Error {
 // 公式ドキュメントに無料枠超過時の応答仕様の記載がないため、HTTP 429 とメッセージで保守的に判定する
 const QUOTA_MESSAGE_PATTERN = /neuron|allocation|quota|limit/i;
 
+// FLUX.1 schnell は、無害なプロンプトも、ランダムに NSFW と誤判定して拒否する（HTTP 400, code 8007）
+const CONTENT_REJECTED_CODE = 8007;
+const CONTENT_REJECTED_PATTERN = /NSFW/i;
+
 export function readCloudflareConfig(
   env: Record<string, string | undefined>,
 ): CloudflareConfig | null {
@@ -29,12 +33,16 @@ export function readCloudflareConfig(
 type CloudflareResponseBody = {
   success?: boolean;
   result?: { image?: unknown };
-  errors?: Array<{ message?: unknown }>;
+  errors?: Array<{ code?: unknown; message?: unknown }>;
 };
 
 function firstErrorMessage(body: CloudflareResponseBody | null): string {
   const message = body?.errors?.[0]?.message;
   return typeof message === "string" ? message : "";
+}
+
+function isContentRejected(body: CloudflareResponseBody | null): boolean {
+  return body?.errors?.[0]?.code === CONTENT_REJECTED_CODE || CONTENT_REJECTED_PATTERN.test(firstErrorMessage(body));
 }
 
 export function createCloudflareImageGenerator(
@@ -75,6 +83,11 @@ export function createCloudflareImageGenerator(
     }
 
     const errorMessage = firstErrorMessage(body);
+
+    // 内容の誤判定は、無料枠・一般の失敗より先に判定する（再試行の対象にするため）
+    if (response.status !== 429 && (!response.ok || body?.success !== true) && isContentRejected(body)) {
+      throw new ImageGenerationError("content-rejected", "画像生成AIが、内容を不適切と判定しました");
+    }
 
     if (response.status === 429 || (!response.ok && QUOTA_MESSAGE_PATTERN.test(errorMessage))) {
       throw new ImageGenerationError("quota-exceeded", "画像生成の無料枠を使い切りました");

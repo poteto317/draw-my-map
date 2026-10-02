@@ -3,6 +3,7 @@ export type IllustrationErrorKind =
   | "not-configured"
   | "quota-exceeded"
   | "upstream-error"
+  | "content-rejected"
   | "network";
 
 export type IllustrationImage = { dataUrl: string };
@@ -22,6 +23,7 @@ const ERROR_MESSAGES: Record<IllustrationErrorKind, string> = {
   "not-configured": "イラスト生成の設定（Cloudflareの認証情報）が見つかりません。README の手順で設定してください。",
   "quota-exceeded": "無料の利用上限に達しました（1日の無料枠を使い切ったか、一時的な制限です）。時間をおいて（無料枠は毎日 0:00 UTC にリセット）、再度お試しください。",
   "upstream-error": "イラストの生成に失敗しました。時間をおいて、再度お試しください。",
+  "content-rejected": "画像生成AIが、内容を不適切と判定しました（誤判定のことがあります）。もう一度お試しください。ノードのテキストを少し変えると、通ることもあります。",
   network: "通信に失敗しました。接続を確認して、再度お試しください。",
 };
 
@@ -33,6 +35,7 @@ function kindFromStatus(status: number): IllustrationErrorKind {
   if (status === 400) return "invalid-label";
   if (status === 503) return "not-configured";
   if (status === 429) return "quota-exceeded";
+  if (status === 422) return "content-rejected";
   return "upstream-error";
 }
 

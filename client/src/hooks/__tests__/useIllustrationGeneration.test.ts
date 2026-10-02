@@ -65,6 +65,19 @@ describe("useIllustrationGeneration", () => {
     });
   });
 
+  it("content-rejected の失敗は failed で、専用のメッセージを持つ", async () => {
+    mockRequest.mockRejectedValue(new IllustrationRequestError("content-rejected"));
+    const { result } = renderHook(() => useIllustrationGeneration(nodes));
+
+    await act(async () => result.current.generateIllustration(1));
+
+    expect(result.current.generation).toEqual({
+      status: "failed",
+      nodeId: 1,
+      message: describeIllustrationError("content-rejected"),
+    });
+  });
+
   it("想定外の例外は upstream-error のメッセージにする", async () => {
     mockRequest.mockRejectedValue(new Error("boom"));
     const { result } = renderHook(() => useIllustrationGeneration(nodes));
