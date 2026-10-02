@@ -1,6 +1,7 @@
 import {
   ILLUSTRATION_LABEL_MAX_LENGTH,
   buildIllustrationPrompt,
+  needsTranslation,
   validateIllustrationLabel,
 } from "@/domain/illustration/illustrationPrompt";
 
@@ -30,18 +31,39 @@ describe("validateIllustrationLabel", () => {
   });
 });
 
-describe("buildIllustrationPrompt", () => {
-  it("ラベルを含み、文字を描かない指示を含む英語のプロンプトを返す", () => {
-    const prompt = buildIllustrationPrompt("企画の背景");
-
-    expect(prompt).toContain("企画の背景");
-    expect(prompt).toContain("no text");
-    expect(prompt).toContain("white background");
+describe("needsTranslation", () => {
+  it("ASCII の印字可能文字だけなら翻訳不要", () => {
+    expect(needsTranslation("Budget plan 2026")).toBe(false);
+    expect(needsTranslation("  idea  ")).toBe(false);
   });
 
-  it("上限の長さのラベルでも、APIの上限（2048文字）に収まる", () => {
-    const prompt = buildIllustrationPrompt("あ".repeat(ILLUSTRATION_LABEL_MAX_LENGTH));
+  it("日本語を含めば翻訳が必要（混在も含む）", () => {
+    expect(needsTranslation("予算")).toBe(true);
+    expect(needsTranslation("Q3 目標")).toBe(true);
+  });
+
+  it("空・空白だけは翻訳不要", () => {
+    expect(needsTranslation("")).toBe(false);
+    expect(needsTranslation("   ")).toBe(false);
+  });
+});
+
+describe("buildIllustrationPrompt", () => {
+  it("英語の概念を、決まったテンプレートに埋め込む", () => {
+    expect(buildIllustrationPrompt("The budget")).toBe(
+      "A simple, clear flat-design illustration of an object or scene that symbolizes the concept: The budget. One large centered subject that fills most of the frame, plain white background, no text, no letters.",
+    );
+  });
+
+  it("概念の前後の空白を除く", () => {
+    expect(buildIllustrationPrompt("  idea ")).toContain("concept: idea.");
+  });
+
+  it("長すぎる概念は500文字に切り詰め、APIの上限（2048文字）に収める", () => {
+    const prompt = buildIllustrationPrompt("a".repeat(5000));
 
     expect(prompt.length).toBeLessThanOrEqual(2048);
+    expect(prompt).toContain("a".repeat(500));
+    expect(prompt).not.toContain("a".repeat(501));
   });
 });

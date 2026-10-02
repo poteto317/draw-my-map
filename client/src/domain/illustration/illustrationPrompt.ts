@@ -11,6 +11,17 @@ export function validateIllustrationLabel(label: string): IllustrationLabelValid
   return { ok: true, label: trimmed };
 }
 
-export function buildIllustrationPrompt(label: string): string {
-  return `A simple, clear flat-design illustration that represents the concept "${label}", centered subject, plain white background, no text, no letters`;
+// FLUX に日本語を渡すと文字を描いてしまうため、ASCII だけのラベルは翻訳しない
+export function needsTranslation(label: string): boolean {
+  const trimmed = label.trim();
+  return trimmed !== "" && !/^[\x20-\x7E]+$/.test(trimmed);
+}
+
+// プロンプトがAPIの上限（2048文字）を超えないよう、概念は500文字までにする
+const ILLUSTRATION_CONCEPT_MAX_LENGTH = 500;
+
+// concept は英語の概念（日本語のラベルではなく、翻訳後の文字列）
+export function buildIllustrationPrompt(concept: string): string {
+  const safeConcept = concept.trim().slice(0, ILLUSTRATION_CONCEPT_MAX_LENGTH);
+  return `A simple, clear flat-design illustration of an object or scene that symbolizes the concept: ${safeConcept}. One large centered subject that fills most of the frame, plain white background, no text, no letters.`;
 }

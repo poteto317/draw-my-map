@@ -1,5 +1,6 @@
 import {
   buildIllustrationPrompt,
+  needsTranslation,
   validateIllustrationLabel,
 } from "@/domain/illustration/illustrationPrompt";
 import {
@@ -8,10 +9,12 @@ import {
   type CloudflareConfig,
   type ImageGenerator,
 } from "@/server/illustration/cloudflareImageGenerator";
+import type { Translator } from "@/server/illustration/cloudflareTranslator";
 
 export type IllustrationRouteDeps = {
   env: Record<string, string | undefined>;
   createGenerator: (config: CloudflareConfig) => ImageGenerator;
+  createTranslator: (config: CloudflareConfig) => Translator;
 };
 
 // NSFW の誤判定はランダムに起きるため、同じプロンプトで、最大この回数まで試す
@@ -30,7 +33,7 @@ async function readLabel(request: Request): Promise<string | null> {
 
 export async function handleIllustrationRequest(
   request: Request,
-  { env, createGenerator }: IllustrationRouteDeps,
+  { env, createGenerator, createTranslator }: IllustrationRouteDeps,
 ): Promise<Response> {
   const rawLabel = await readLabel(request);
   if (rawLabel === null) return errorResponse("invalid-request", 400);
@@ -41,8 +44,21 @@ export async function handleIllustrationRequest(
   const config = readCloudflareConfig(env);
   if (config === null) return errorResponse("not-configured", 503);
 
+  // 翻訳は、NSFW の再試行の前に1回だけ行う。失敗しても、日本語のラベルでは描かない
+  let concept = validation.label;
+  if (needsTranslation(concept)) {
+    try {
+      concept = await createTranslator(config)(concept);
+    } catch (error) {
+      if (error instanceof ImageGenerationError && error.kind === "quota-exceeded") {
+        return errorResponse("quota-exceeded", 429);
+      }
+      return errorResponse("upstream-error", 502);
+    }
+  }
+
   const generate = createGenerator(config);
-  const prompt = buildIllustrationPrompt(validation.label);
+  const prompt = buildIllustrationPrompt(concept);
 
   for (let attempt = 1; ; attempt++) {
     try {

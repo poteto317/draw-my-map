@@ -12,8 +12,19 @@ function post(body: unknown, raw = false): Request {
   });
 }
 
-function deps(generate = jest.fn().mockResolvedValue({ base64: "IMG", mimeType: "image/jpeg" })) {
-  return { deps: { env, createGenerator: jest.fn().mockReturnValue(generate) }, generate };
+function deps(
+  generate = jest.fn().mockResolvedValue({ base64: "IMG", mimeType: "image/jpeg" }),
+  translate = jest.fn().mockResolvedValue("The translated concept"),
+) {
+  return {
+    deps: {
+      env,
+      createGenerator: jest.fn().mockReturnValue(generate),
+      createTranslator: jest.fn().mockReturnValue(translate),
+    },
+    generate,
+    translate,
+  };
 }
 
 describe("handleIllustrationRequest", () => {
@@ -25,8 +36,50 @@ describe("handleIllustrationRequest", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ image: "IMG", mimeType: "image/jpeg" });
     expect(generate).toHaveBeenCalledTimes(1);
-    expect(generate.mock.calls[0][0]).toContain("企画の背景");
-    expect(generate.mock.calls[0][0]).not.toContain("  企画の背景 ");
+    expect(generate.mock.calls[0][0]).toContain("The translated concept");
+  });
+
+  it("日本語のラベルは、翻訳を1回だけ呼び、プロンプトには英語だけを入れる", async () => {
+    const { deps: d, generate, translate } = deps();
+
+    await handleIllustrationRequest(post({ label: "  企画の背景 " }), d);
+
+    expect(translate).toHaveBeenCalledTimes(1);
+    expect(translate).toHaveBeenCalledWith("企画の背景");
+    expect(generate.mock.calls[0][0]).toContain("The translated concept");
+    expect(generate.mock.calls[0][0]).not.toContain("企画の背景");
+  });
+
+  it("ASCII だけのラベルは翻訳せず、そのままプロンプトに入れる", async () => {
+    const { deps: d, generate, translate } = deps();
+
+    await handleIllustrationRequest(post({ label: " Budget plan " }), d);
+
+    expect(translate).not.toHaveBeenCalled();
+    expect(generate.mock.calls[0][0]).toContain("concept: Budget plan.");
+  });
+
+  it("翻訳が無料枠超過なら 429 で、生成しない", async () => {
+    const { deps: d, generate } = deps(undefined, jest.fn().mockRejectedValue(new ImageGenerationError("quota-exceeded", "q")));
+
+    const response = await handleIllustrationRequest(post({ label: "目標" }), d);
+
+    expect(response.status).toBe(429);
+    expect(await response.json()).toEqual({ error: "quota-exceeded" });
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["upstream-error", new ImageGenerationError("upstream-error", "u")],
+    ["想定外の例外", new Error("secret internal detail")],
+  ])("翻訳が失敗（%s）したら 502 で、生成せず、日本語のラベルに戻さない", async (_name, error) => {
+    const { deps: d, generate } = deps(undefined, jest.fn().mockRejectedValue(error));
+
+    const response = await handleIllustrationRequest(post({ label: "目標" }), d);
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: "upstream-error" });
+    expect(generate).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -56,8 +109,9 @@ describe("handleIllustrationRequest", () => {
 
   it("設定が無ければ 503 not-configured で、生成しない（検証は設定の確認より先）", async () => {
     const createGenerator = jest.fn();
+    const createTranslator = jest.fn();
 
-    const response = await handleIllustrationRequest(post({ label: "目標" }), { env: {}, createGenerator });
+    const response = await handleIllustrationRequest(post({ label: "目標" }), { env: {}, createGenerator, createTranslator });
 
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ error: "not-configured" });
@@ -68,6 +122,7 @@ describe("handleIllustrationRequest", () => {
     const response = await handleIllustrationRequest(post({ label: "" }), {
       env: {},
       createGenerator: jest.fn(),
+      createTranslator: jest.fn(),
     });
 
     expect(response.status).toBe(400);
@@ -136,6 +191,14 @@ describe("handleIllustrationRequest", () => {
 
       expect(response.status).toBe(429);
       expect(generate).toHaveBeenCalledTimes(1);
+    });
+
+    it("生成を3回試しても、翻訳は1回だけ", async () => {
+      const { deps: d, translate } = deps(jest.fn().mockRejectedValue(rejected()));
+
+      await handleIllustrationRequest(post({ label: "目標" }), d);
+
+      expect(translate).toHaveBeenCalledTimes(1);
     });
 
     it("1回目に成功すれば、生成は1回だけ", async () => {
