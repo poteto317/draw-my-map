@@ -50,7 +50,7 @@ export default function Home() {
     replaceMap: replaceMapAndReset,
   });
   const imageExport = useMapImageExport({ nodes });
-  const { generation, generateIllustration } = useIllustrationGeneration(nodes);
+  const { generation, generateIllustration } = useIllustrationGeneration(nodes, resetRevision);
 
   return (
     <div className="flex h-dvh flex-col bg-zinc-50 dark:bg-zinc-900">

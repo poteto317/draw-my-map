@@ -30,7 +30,7 @@ describe("useIllustrationGeneration", () => {
   beforeEach(() => mockRequest.mockReset());
 
   it("初期状態は idle", () => {
-    const { result } = renderHook(() => useIllustrationGeneration(nodes));
+    const { result } = renderHook(() => useIllustrationGeneration(nodes, 0));
 
     expect(result.current.generation).toEqual({ status: "idle" });
   });
@@ -38,7 +38,7 @@ describe("useIllustrationGeneration", () => {
   it("生成中は generating、成功すると succeeded でdata URLを持つ", async () => {
     const pending = deferred<{ dataUrl: string }>();
     mockRequest.mockReturnValue(pending.promise);
-    const { result } = renderHook(() => useIllustrationGeneration(nodes));
+    const { result } = renderHook(() => useIllustrationGeneration(nodes, 0));
 
     act(() => result.current.generateIllustration(1));
     expect(result.current.generation).toEqual({ status: "generating", nodeId: 1 });
@@ -54,7 +54,7 @@ describe("useIllustrationGeneration", () => {
 
   it("APIの失敗は failed で、種類に応じたメッセージを持つ", async () => {
     mockRequest.mockRejectedValue(new IllustrationRequestError("quota-exceeded"));
-    const { result } = renderHook(() => useIllustrationGeneration(nodes));
+    const { result } = renderHook(() => useIllustrationGeneration(nodes, 0));
 
     await act(async () => result.current.generateIllustration(1));
 
@@ -67,7 +67,7 @@ describe("useIllustrationGeneration", () => {
 
   it("content-rejected の失敗は failed で、専用のメッセージを持つ", async () => {
     mockRequest.mockRejectedValue(new IllustrationRequestError("content-rejected"));
-    const { result } = renderHook(() => useIllustrationGeneration(nodes));
+    const { result } = renderHook(() => useIllustrationGeneration(nodes, 0));
 
     await act(async () => result.current.generateIllustration(1));
 
@@ -80,7 +80,7 @@ describe("useIllustrationGeneration", () => {
 
   it("想定外の例外は upstream-error のメッセージにする", async () => {
     mockRequest.mockRejectedValue(new Error("boom"));
-    const { result } = renderHook(() => useIllustrationGeneration(nodes));
+    const { result } = renderHook(() => useIllustrationGeneration(nodes, 0));
 
     await act(async () => result.current.generateIllustration(1));
 
@@ -93,7 +93,7 @@ describe("useIllustrationGeneration", () => {
   it("生成中の再要求は無視する（別のノードでも）", async () => {
     const pending = deferred<{ dataUrl: string }>();
     mockRequest.mockReturnValue(pending.promise);
-    const { result } = renderHook(() => useIllustrationGeneration(nodes));
+    const { result } = renderHook(() => useIllustrationGeneration(nodes, 0));
 
     act(() => result.current.generateIllustration(1));
     act(() => result.current.generateIllustration(1));
@@ -106,7 +106,7 @@ describe("useIllustrationGeneration", () => {
 
   it("完了後は、別のノードで、新しく生成できる", async () => {
     mockRequest.mockResolvedValueOnce({ dataUrl: "first" }).mockResolvedValueOnce({ dataUrl: "second" });
-    const { result } = renderHook(() => useIllustrationGeneration(nodes));
+    const { result } = renderHook(() => useIllustrationGeneration(nodes, 0));
 
     await act(async () => result.current.generateIllustration(1));
     await act(async () => result.current.generateIllustration(2));
@@ -116,7 +116,7 @@ describe("useIllustrationGeneration", () => {
   });
 
   it("空白だけのラベルは、リクエストせずに failed にする", () => {
-    const { result } = renderHook(() => useIllustrationGeneration(nodes));
+    const { result } = renderHook(() => useIllustrationGeneration(nodes, 0));
 
     act(() => result.current.generateIllustration(3));
 
@@ -129,7 +129,7 @@ describe("useIllustrationGeneration", () => {
   });
 
   it("存在しないノードIDは何もしない", () => {
-    const { result } = renderHook(() => useIllustrationGeneration(nodes));
+    const { result } = renderHook(() => useIllustrationGeneration(nodes, 0));
 
     act(() => result.current.generateIllustration(999));
 
@@ -140,7 +140,7 @@ describe("useIllustrationGeneration", () => {
   it("アンマウント時に進行中のリクエストを中断する", async () => {
     const pending = deferred<{ dataUrl: string }>();
     mockRequest.mockReturnValue(pending.promise);
-    const { result, unmount } = renderHook(() => useIllustrationGeneration(nodes));
+    const { result, unmount } = renderHook(() => useIllustrationGeneration(nodes, 0));
     act(() => result.current.generateIllustration(1));
     const signal = mockRequest.mock.calls[0][1]!.signal as AbortSignal;
     const lastRendered = result.current.generation;
@@ -155,11 +155,88 @@ describe("useIllustrationGeneration", () => {
   });
 
   it("nodes が同じなら、同じ関数を返す", () => {
-    const { result, rerender } = renderHook(() => useIllustrationGeneration(nodes));
+    const { result, rerender } = renderHook(() => useIllustrationGeneration(nodes, 0));
     const first = result.current.generateIllustration;
 
     rerender();
 
     expect(result.current.generateIllustration).toBe(first);
+  });
+
+  describe("マップの置き換え（resetRevision の変化）", () => {
+    function renderWithRevision() {
+      return renderHook(
+        ({ revision }: { revision: number }) => useIllustrationGeneration(nodes, revision),
+        { initialProps: { revision: 0 } },
+      );
+    }
+
+    it("成功の状態は、resetRevision が変わると idle に戻る", async () => {
+      mockRequest.mockResolvedValue({ dataUrl: "old" });
+      const { result, rerender } = renderWithRevision();
+      await act(async () => result.current.generateIllustration(1));
+      expect(result.current.generation).toMatchObject({ status: "succeeded" });
+
+      rerender({ revision: 1 });
+
+      expect(result.current.generation).toEqual({ status: "idle" });
+    });
+
+    it("失敗の状態も、resetRevision が変わると idle に戻る", async () => {
+      mockRequest.mockRejectedValue(new IllustrationRequestError("quota-exceeded"));
+      const { result, rerender } = renderWithRevision();
+      await act(async () => result.current.generateIllustration(1));
+      expect(result.current.generation).toMatchObject({ status: "failed" });
+
+      rerender({ revision: 1 });
+
+      expect(result.current.generation).toEqual({ status: "idle" });
+    });
+
+    it("resetRevision が同じなら、状態を保つ", async () => {
+      mockRequest.mockResolvedValue({ dataUrl: "kept" });
+      const { result, rerender } = renderWithRevision();
+      await act(async () => result.current.generateIllustration(1));
+
+      rerender({ revision: 0 });
+
+      expect(result.current.generation).toEqual({ status: "succeeded", nodeId: 1, dataUrl: "kept" });
+    });
+
+    it("生成中に resetRevision が変わると、リクエストを中断して idle に戻し、遅れて届いた結果を無視する", async () => {
+      const pending = deferred<{ dataUrl: string }>();
+      mockRequest.mockReturnValue(pending.promise);
+      const { result, rerender } = renderWithRevision();
+      act(() => result.current.generateIllustration(1));
+      const signal = mockRequest.mock.calls[0][1]!.signal as AbortSignal;
+
+      rerender({ revision: 1 });
+
+      expect(signal.aborted).toBe(true);
+      expect(result.current.generation).toEqual({ status: "idle" });
+
+      await act(async () => pending.resolve({ dataUrl: "late" }));
+      expect(result.current.generation).toEqual({ status: "idle" });
+    });
+
+    it("中断後は、すぐに新しい生成を受け付け、古いリクエストの完了で新しいロックを壊さない", async () => {
+      const first = deferred<{ dataUrl: string }>();
+      const second = deferred<{ dataUrl: string }>();
+      mockRequest.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+      const { result, rerender } = renderWithRevision();
+      act(() => result.current.generateIllustration(1));
+      rerender({ revision: 1 });
+
+      act(() => result.current.generateIllustration(1));
+      expect(mockRequest).toHaveBeenCalledTimes(2);
+      expect(result.current.generation).toEqual({ status: "generating", nodeId: 1 });
+
+      await act(async () => first.resolve({ dataUrl: "old" }));
+      act(() => result.current.generateIllustration(2));
+      expect(mockRequest).toHaveBeenCalledTimes(2);
+
+      await act(async () => second.resolve({ dataUrl: "new" }));
+      expect(result.current.generation).toEqual({ status: "succeeded", nodeId: 1, dataUrl: "new" });
+    });
   });
 });

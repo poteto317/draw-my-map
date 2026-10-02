@@ -23,8 +23,8 @@ let mockMapStageProps: {
 } | null = null;
 
 jest.mock("@/hooks/useIllustrationGeneration", () => ({
-  useIllustrationGeneration: (nodes: readonly Node[]) => {
-    mockUseIllustrationGeneration(nodes);
+  useIllustrationGeneration: (nodes: readonly Node[], resetRevision: number) => {
+    mockUseIllustrationGeneration(nodes, resetRevision);
     return { generation: mockGeneration, generateIllustration: mockGenerateIllustration };
   },
 }));
@@ -467,7 +467,21 @@ describe("Home", () => {
       render(<Home />);
       await user.click(screen.getByRole("button", { name: "テスト用ノード追加" }));
 
-      expect(mockUseIllustrationGeneration).toHaveBeenLastCalledWith(mockMapStageProps!.nodes);
+      expect(mockUseIllustrationGeneration).toHaveBeenLastCalledWith(mockMapStageProps!.nodes, expect.any(Number));
+    });
+
+    it("マップを読み込むと、増えた resetRevision を生成の入口へ渡す", async () => {
+      const user = userEvent.setup();
+      const { container } = render(<Home />);
+      expect(mockUseIllustrationGeneration).toHaveBeenLastCalledWith(expect.anything(), 0);
+      const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+
+      await user.upload(input, jsonFile(validImportedJson));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("reset-revision")).toHaveTextContent("1");
+      });
+      expect(mockUseIllustrationGeneration).toHaveBeenLastCalledWith(expect.anything(), 1);
     });
 
     it("生成の状態を、パネルへ渡す（選択中のノードの結果を画像で表示する）", async () => {
