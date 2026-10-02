@@ -37,20 +37,24 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 
 ## イラスト生成の設定
 
+詳しい手順は、`docs/setup/illustration-generation-setup.md` を見る。
+
 ノードのイラスト生成は、Cloudflare Workers AI（FLUX.1 schnell）を使う。生成を試すには、次の手順で認証情報を設定する。
 
 1. [Cloudflare](https://dash.cloudflare.com/sign-up) でアカウントを作成する（無料プランで足りる）。
-2. ダッシュボードで API トークンを作成する。権限には「Workers AI」を含める。
+2. ダッシュボードで API トークンを作成する。権限には「Workers AI - Read」と「Workers AI - Edit」の両方を含める。
 3. アカウント ID を確認する。ダッシュボードの Workers AI のページなどに表示される。
 4. `client/.env.example` を `client/.env.local` にコピーし、`CLOUDFLARE_ACCOUNT_ID` と `CLOUDFLARE_API_TOKEN` に値を設定する。
 5. 開発サーバー（`npm run dev`）を再起動する。環境変数は、起動時に読み込まれる。
 
 ```bash
 cd client
-cp .env.example .env.local
+cp -n .env.example .env.local
 # .env.local を編集して、2つの値を設定する
 npm run dev
 ```
+
+すでに `.env.local` がある場合は、`-n` によって上書きされない（トークンは作成時に 1 度しか表示されないため）。コピーは飛ばして、2 つの値が両方あることを確認する。
 
 ### 無料枠について
 
@@ -58,7 +62,7 @@ Cloudflare Workers AI の無料プランには、1 日あたりの利用上限�
 
 実測では、FLUX.1 schnell（4 ステップ）の 1 枚の生成で、応答の `usage.neurons` が 172.8 Neurons だった（2026-10-03 に測定）。このため、1 日 10,000 Neurons の無料枠で生成できるのは、1 日あたり約 57 枚である。この値は、Cloudflare がモデルや料金を変更すると、変わりうる。
 
-ノードのテキストは、FLUX が日本語を文字として描いてしまうため、先に Cloudflare の翻訳モデルで英語に翻訳してから、画像を生成する。翻訳 1 回の消費は 0.3〜0.5 Neurons 程度で、無視できる（これも実測（2026-10-03）の値で、変わりうる）。翻訳するのは、日本語の文字を含むノードのテキストだけである。また、NSFW フィルターの誤判定は、自動で最大 3 回まで再試行する。拒否されて再試行したリクエストも、無料枠を一部消費する可能性がある（拒否されたリクエストが課金対象かどうかは未確認）。最悪の場合、1 回のクリックで、最大 3 回分を消費しうる。
+ノードのテキストは、FLUX が日本語を文字として描いてしまうため、先に Cloudflare の翻訳モデルで英語に翻訳してから、画像を生成する。翻訳 1 回の消費は 0.3〜0.5 Neurons 程度で、無視できる（これも実測（2026-10-03）の値で、変わりうる）。翻訳するのは、日本語の文字を含むノードのテキストだけである。また、NSFW フィルターの誤判定は、自動で再試行し、生成は最大 3 回まで試す（再試行は最大 2 回）。拒否されて再試行したリクエストも、無料枠を一部消費する可能性がある（拒否されたリクエストが課金対象かどうかは未確認）。最悪の場合、1 回のクリックで、生成 3 回分（最初の試行と、再試行 2 回）を消費しうる。
 
 無料枠の内容は、Cloudflare の都合で変更されうる。最新の内容は、公式の [料金ページ](https://developers.cloudflare.com/workers-ai/platform/pricing/) で確認する。
 

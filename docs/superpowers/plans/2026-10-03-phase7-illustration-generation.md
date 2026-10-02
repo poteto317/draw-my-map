@@ -1405,3 +1405,5 @@ git commit -m "docs(illustration): 認証情報の設定手順を追加し、ROA
 - Cloudflare の呼び出しとエラーの分類を、共通の `runCloudflareModel`（エラー型は `cloudflareErrors.ts`）に切り出し、画像生成と翻訳で共有した。
 - 実測で、FLUX.1 schnell の 1 枚は 172.8 Neurons（`usage.neurons`）だった。翻訳は 1 回 0.3〜0.5 Neurons 程度。
 - 翻訳は、日本語の文字（ひらがな・カタカナ・漢字・全角形・半角カタカナ）を含むラベルだけに適用する。絵文字だけのラベルや `café` などは、翻訳せずそのまま使う。
+- マップを置き換えたとき（JSON の読み込み）に、古い生成の状態が新しいマップの同じ ID のノードに表示される問題を直した。`useIllustrationGeneration(nodes, resetRevision)` が、状態に保存時の `resetRevision` を添え、違う世代の状態は idle として扱う。置き換え時は、進行中のリクエストを中断してロックを解く。
+- 手順書と README の誤りを直した（サインアップ URL の綴り、直接 `curl` の `seed`、無料枠の実測値、時間切れのメッセージ、「最大 3 回まで再試行」の表現、`.env.local` の上書き防止（`cp -n`）、トークンの権限（Read と Edit の両方）、支払い方法を求められたときの案内）。
