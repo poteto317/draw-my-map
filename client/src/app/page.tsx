@@ -50,7 +50,7 @@ export default function Home() {
     replaceMap: replaceMapAndReset,
   });
   const imageExport = useMapImageExport({ nodes });
-  const { generateIllustration } = useIllustrationGeneration();
+  const { generation, generateIllustration } = useIllustrationGeneration(nodes);
 
   return (
     <div className="flex h-dvh flex-col bg-zinc-50 dark:bg-zinc-900">
@@ -118,7 +118,7 @@ export default function Home() {
             resetRevision={resetRevision}
           />
         )}
-        sidePanel={<IllustrationPanel selectedNode={selectedNode} onGenerate={generateIllustration} />}
+        sidePanel={<IllustrationPanel selectedNode={selectedNode} generation={generation} onGenerate={generateIllustration} />}
       />
     </div>
   );

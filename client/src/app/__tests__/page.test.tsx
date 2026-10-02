@@ -2,6 +2,7 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import Home from "@/app/page";
 import { FALLBACK_NODE_LABEL } from "@/config/nodeLabel";
+import type { IllustrationGenerationState } from "@/hooks/useIllustrationGeneration";
 import type { Node } from "@/types/node";
 import type { OperationNotice } from "@/types/operationNotice";
 
@@ -10,6 +11,8 @@ const mockExportPng = jest.fn();
 const mockExportSvg = jest.fn();
 const mockUseMapImageExport = jest.fn();
 const mockGenerateIllustration = jest.fn();
+const mockUseIllustrationGeneration = jest.fn();
+let mockGeneration: IllustrationGenerationState = { status: "idle" };
 let mockImageExportNotice: OperationNotice | null = null;
 let mockIsExportingPng = false;
 let mockMapStageProps: {
@@ -20,7 +23,10 @@ let mockMapStageProps: {
 } | null = null;
 
 jest.mock("@/hooks/useIllustrationGeneration", () => ({
-  useIllustrationGeneration: () => ({ generateIllustration: mockGenerateIllustration }),
+  useIllustrationGeneration: (nodes: readonly Node[]) => {
+    mockUseIllustrationGeneration(nodes);
+    return { generation: mockGeneration, generateIllustration: mockGenerateIllustration };
+  },
 }));
 
 jest.mock("@/hooks/useMapImageExport", () => ({
@@ -155,6 +161,8 @@ describe("Home", () => {
     mockExportSvg.mockClear();
     mockUseMapImageExport.mockClear();
     mockGenerateIllustration.mockClear();
+    mockUseIllustrationGeneration.mockClear();
+    mockGeneration = { status: "idle" };
     mockImageExportNotice = null;
     mockIsExportingPng = false;
     mockMapStageProps = null;
@@ -452,6 +460,26 @@ describe("Home", () => {
       await user.click(screen.getByRole("button", { name: "テスト用メニュー生成" }));
 
       expect(mockGenerateIllustration).toHaveBeenCalledWith(nodeId);
+    });
+
+    it("ノードの一覧を、生成の入口へ渡す", async () => {
+      const user = userEvent.setup();
+      render(<Home />);
+      await user.click(screen.getByRole("button", { name: "テスト用ノード追加" }));
+
+      expect(mockUseIllustrationGeneration).toHaveBeenLastCalledWith(mockMapStageProps!.nodes);
+    });
+
+    it("生成の状態を、パネルへ渡す（選択中のノードの結果を画像で表示する）", async () => {
+      const user = userEvent.setup();
+      render(<Home />);
+      await user.click(screen.getByRole("button", { name: "テスト用ノード追加" }));
+      await user.click(screen.getByRole("button", { name: "テスト用ノード選択" }));
+      const nodeId = mockMapStageProps!.nodes[0].id;
+      mockGeneration = { status: "succeeded", nodeId, dataUrl: "data:image/jpeg;base64,AAA" };
+      await user.click(screen.getByRole("button", { name: "テスト用中倍率" })); // 再描画を起こす
+
+      expect(screen.getByRole("img")).toHaveAttribute("src", "data:image/jpeg;base64,AAA");
     });
 
     it("選択を解除すると、パネルは案内に戻る", async () => {
