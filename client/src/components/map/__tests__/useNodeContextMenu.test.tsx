@@ -49,6 +49,24 @@ describe("useNodeContextMenu", () => {
     expect(result.current.menu).toBeNull();
   });
 
+  it("window blurで閉じる", () => {
+    const { result } = setup();
+    act(() => result.current.open(target));
+
+    act(() => { fireEvent.blur(window); });
+
+    expect(result.current.menu).toBeNull();
+  });
+
+  it("nodesに残っていてもvisibleNodeIdsから外れた対象ならmenuはnullになる", () => {
+    const { result, rerender } = setup();
+    act(() => result.current.open(target));
+
+    rerender({ nodes, visibleNodeIds: new Set([2]), resetRevision: 0 });
+
+    expect(result.current.menu).toBeNull();
+  });
+
   it("メニュー内のpointerdownでは閉じない", () => {
     const { result } = setup();
     const menuElement = document.createElement("div");

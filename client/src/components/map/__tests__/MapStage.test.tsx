@@ -433,6 +433,62 @@ describe("MapStage boundary", () => {
     expect(onSelectNode).not.toHaveBeenCalled();
   });
 
+  it("ラベル編集中の入力欄の右クリックでは標準メニューを抑止せず独自メニューも開かない", async () => {
+    const onSelectNode = jest.fn();
+    const { getByTestId, queryByRole } = await renderReady(
+      <MapStage
+        {...defaultProps}
+        nodes={sampleNodes}
+        onSelectNode={onSelectNode}
+        onGenerateIllustration={jest.fn()}
+      />,
+    );
+    const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+    mockStageBounds(container);
+    fireEvent.doubleClick(container, { clientX: 100, clientY: 60 });
+    onSelectNode.mockClear();
+
+    const notPrevented = fireEvent.contextMenu(getByTestId("node-label-input"), {
+      clientX: 100,
+      clientY: 60,
+    });
+
+    expect(notPrevented).toBe(true);
+    expect(queryByRole("menu")).not.toBeInTheDocument();
+    expect(onSelectNode).not.toHaveBeenCalled();
+  });
+
+  it("gesture中のノード右クリックではメニューを開かない", async () => {
+    const { queryByRole } = await renderReady(
+      <MapStage {...defaultProps} nodes={sampleNodes} onGenerateIllustration={jest.fn()} />,
+    );
+    const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+    mockStageBounds(container);
+
+    act(() => {
+      mockNodePointerHandlers.at(-2)?.pointerdown?.(pointer(100, 60));
+    });
+    const notPrevented = fireEvent.contextMenu(container, { clientX: 100, clientY: 60 });
+
+    expect(notPrevented).toBe(false);
+    expect(queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("onGenerateIllustration未指定でもノード右クリックは選択し、標準メニューを抑止する", async () => {
+    const onSelectNode = jest.fn();
+    const { queryByRole } = await renderReady(
+      <MapStage {...defaultProps} nodes={sampleNodes} onSelectNode={onSelectNode} />,
+    );
+    const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+    mockStageBounds(container);
+
+    const notPrevented = fireEvent.contextMenu(container, { clientX: 100, clientY: 60 });
+
+    expect(notPrevented).toBe(false);
+    expect(onSelectNode).toHaveBeenCalledWith(1);
+    expect(queryByRole("menu")).not.toBeInTheDocument();
+  });
+
   it("wheelでpointer位置をanchorにworld containerを拡大する", async () => {
     await renderReady(<MapStage {...defaultProps} nodes={sampleNodes} selectedNodeId={1} />);
     const canvas = document.querySelector("canvas")!;

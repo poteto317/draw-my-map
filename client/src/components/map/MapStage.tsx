@@ -170,8 +170,15 @@ export function MapStage({
   };
 
   const handleContextMenu = (event: MouseEvent<HTMLDivElement>) => {
+    if (
+      editing.editingNodeId !== null ||
+      (event.target instanceof Element && event.target.closest("input, textarea"))
+    ) {
+      return;
+    }
     event.preventDefault();
     if (event.target instanceof Element && event.target.closest('[role="menu"]')) return;
+    if (hasActiveGesture()) return;
     const container = containerRef.current;
     if (!container) return;
 
