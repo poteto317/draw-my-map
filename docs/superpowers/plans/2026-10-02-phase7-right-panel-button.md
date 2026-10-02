@@ -177,7 +177,7 @@ export function IllustrationPanel({ selectedNode, onGenerate }: IllustrationPane
 }
 ```
 
-注意: ラベルが空のとき`title`は空文字になる。テスト「長いラベルは全文をtitleで確認できる」は、空でないラベルだけを対象にする。
+注意（当初案）: ラベルが空のとき`title`は空文字になる。テスト「長いラベルは全文をtitleで確認できる」は、空でないラベルだけを対象にする。（最終的には、空ラベルのとき`title`属性を付けない形に変更した。末尾の「実装後の変更」を参照。）
 
 - [ ] **Step 4: 成功確認**
 
@@ -414,3 +414,5 @@ git commit -m "docs(roadmap): Phase 7右パネルのボタン完了を反映"
 ## 実装後の変更
 
 - 実画面の確認で、空ラベルの表示がキャンバス・画像エクスポート（「新しいノード」）と食い違っていたため、共通定数`FALLBACK_NODE_LABEL`（`client/src/config/nodeLabel.ts`）に統一した。
+- 空ラベルのとき、`title`属性を付けない（`title={selectedNode.label || undefined}`）形に変更した。
+- 単一責任のリファクタリングで、キャンバスとパネルを横に並べるレイアウトは`AppWorkspace`（`client/src/components/layout/AppWorkspace.tsx`）へ、空ラベルの代替文言の規則は`getNodeDisplayLabel`（`client/src/domain/nodes/nodeDisplayLabel.ts`）へ分離した。Task 2の手順にある`page.tsx`直書きのレイアウトは、最終的にこの形になっている。詳細は`docs/superpowers/plans/2026-10-02-phase7-right-panel-srp-refactor.md`を参照。
