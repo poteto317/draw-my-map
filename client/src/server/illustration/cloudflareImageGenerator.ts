@@ -46,9 +46,11 @@ export function createCloudflareImageGenerator(
 
   return async (prompt) => {
     // 上流が応答しないと、生成中の状態が続いてしまうため、時間切れで中断する
+    // タイマーは、応答ヘッダーの受信後も、本文の読み込みが終わるまで解除しない
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     let response: Response;
+    let body: CloudflareResponseBody | null;
     try {
       response = await fetchImpl(url, {
         method: "POST",
@@ -60,6 +62,11 @@ export function createCloudflareImageGenerator(
         body: JSON.stringify({ prompt, steps: 4, seed: Math.floor(Math.random() * 2_000_000_000) + 1 }),
         signal: controller.signal,
       });
+      body = (await response.json().catch((error: unknown) => {
+        // 時間切れによる中断は、JSONの不正とは区別する。ただし 429 は、ステータスだけで判定できるため、本文なしで続ける
+        if (controller.signal.aborted && response.status !== 429) throw error;
+        return null;
+      })) as CloudflareResponseBody | null;
     } catch {
       // 例外のメッセージにトークンが含まれ得るため、固定の文言にする
       throw new ImageGenerationError("upstream-error", "画像生成の呼び出しに失敗しました");
@@ -67,7 +74,6 @@ export function createCloudflareImageGenerator(
       clearTimeout(timer);
     }
 
-    const body = (await response.json().catch(() => null)) as CloudflareResponseBody | null;
     const errorMessage = firstErrorMessage(body);
 
     if (response.status === 429 || (!response.ok && QUOTA_MESSAGE_PATTERN.test(errorMessage))) {

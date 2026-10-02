@@ -73,6 +73,50 @@ describe("createCloudflareImageGenerator のタイムアウト", () => {
     expect(fetchImpl.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal);
   });
 
+  function stalledBodyFetch(status: number, ok: boolean) {
+    let signal: AbortSignal | undefined;
+    const fetchImpl = jest.fn((_url: unknown, init?: RequestInit) => {
+      signal = init?.signal ?? undefined;
+      return Promise.resolve({
+        ok,
+        status,
+        // ヘッダーは届くが、本文が止まったままで、中断されたときだけ失敗する
+        json: () =>
+          new Promise<unknown>((_resolve, reject) => {
+            signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+          }),
+      } as unknown as Response);
+    });
+    return fetchImpl;
+  }
+
+  it("ヘッダー受信後に本文が止まっても、タイムアウトで upstream-error になりタイマーが残らない", async () => {
+    jest.useFakeTimers();
+    const fetchImpl = stalledBodyFetch(200, true);
+    const result = createCloudflareImageGenerator(config, fetchImpl as unknown as typeof fetch)("p");
+    const assertion = expect(result).rejects.toMatchObject({
+      kind: "upstream-error",
+      message: expect.not.stringContaining("secret-token-xyz"),
+    });
+
+    await jest.advanceTimersByTimeAsync(60_000);
+
+    await assertion;
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it("HTTP 429 で本文の読み込みが時間切れになっても、quota-exceeded のまま", async () => {
+    jest.useFakeTimers();
+    const fetchImpl = stalledBodyFetch(429, false);
+    const result = createCloudflareImageGenerator(config, fetchImpl as unknown as typeof fetch)("p");
+    const assertion = expect(result).rejects.toMatchObject({ kind: "quota-exceeded" });
+
+    await jest.advanceTimersByTimeAsync(60_000);
+
+    await assertion;
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
   it("正常に完了したら、タイマーを解除する", async () => {
     jest.useFakeTimers();
     const fetchImpl = jest.fn().mockResolvedValue(
