@@ -1,7 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import type { Point } from "@/components/map/mapGeometry";
+import type { Viewport } from "@/components/map/mapViewport";
+import { isNodeContextMenuStale } from "@/components/map/nodeContextMenuStaleness";
+import { useNodeContextMenuDismissal } from "@/components/map/useNodeContextMenuDismissal";
 import type { Node } from "@/types/node";
 
 export type NodeContextMenuState = { nodeId: number; position: Point };
@@ -10,54 +13,38 @@ type UseNodeContextMenuOptions = {
   nodes: readonly Node[];
   visibleNodeIds: ReadonlySet<number>;
   resetRevision: number;
+  viewport: Viewport;
 };
 
-type StoredMenu = NodeContextMenuState & { revision: number };
+type StoredMenu = NodeContextMenuState & { revision: number; viewport: Viewport };
 
 export function useNodeContextMenu({
   nodes,
   visibleNodeIds,
   resetRevision,
+  viewport,
 }: UseNodeContextMenuOptions) {
   const [stored, setStored] = useState<StoredMenu | null>(null);
 
-  const isStale = stored !== null && (
-    stored.revision !== resetRevision
-    || !visibleNodeIds.has(stored.nodeId)
-    || !nodes.some((node) => node.id === stored.nodeId)
-  );
+  const isStale = stored !== null && isNodeContextMenuStale({
+    menuNodeId: stored.nodeId,
+    menuRevision: stored.revision,
+    resetRevision,
+    visibleNodeIds,
+    nodes,
+    menuViewport: stored.viewport,
+    viewport,
+  });
   if (isStale) setStored(null);
 
   const close = useCallback(() => setStored(null), []);
   const open = useCallback(
-    (menu: NodeContextMenuState) => setStored({ ...menu, revision: resetRevision }),
-    [resetRevision],
+    (menu: NodeContextMenuState) => setStored({ ...menu, revision: resetRevision, viewport }),
+    [resetRevision, viewport],
   );
 
   const isOpen = stored !== null && !isStale;
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
-    };
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (target instanceof Element && target.closest('[role="menu"]')) return;
-      close();
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("pointerdown", handlePointerDown, true);
-    window.addEventListener("wheel", close, true);
-    window.addEventListener("blur", close);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("pointerdown", handlePointerDown, true);
-      window.removeEventListener("wheel", close, true);
-      window.removeEventListener("blur", close);
-    };
-  }, [isOpen, close]);
+  useNodeContextMenuDismissal(isOpen, close);
 
   const menu: NodeContextMenuState | null = isOpen
     ? { nodeId: stored.nodeId, position: stored.position }

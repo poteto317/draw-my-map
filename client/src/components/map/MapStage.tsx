@@ -2,10 +2,15 @@
 
 import { useMemo, useRef, type MouseEvent } from "react";
 import { NodeContextMenu } from "@/components/map/NodeContextMenu";
-import { clampNodeContextMenuPosition } from "@/components/map/nodeContextMenuLayout";
-import { resolveNodeContextMenuTarget } from "@/components/map/nodeContextMenuTarget";
+import {
+  resolveMapContextMenuAction,
+  type MapContextMenuAction,
+} from "@/components/map/mapContextMenuAction";
+import { isInsideNodeContextMenu } from "@/components/map/nodeContextMenuDom";
+import { isTextEntryTarget } from "@/components/map/textEntryTarget";
 import { useNodeContextMenu } from "@/components/map/useNodeContextMenu";
 import { NodeLabelEditor } from "@/components/map/NodeLabelEditor";
+import { isDoubleClickFromMenuActivation } from "@/components/map/menuActivationDoubleClick";
 import { resolveMapDoubleClickAction } from "@/components/map/mapDoubleClickAction";
 import { usePixiApplication } from "@/components/map/pixi/usePixiApplication";
 import { useHiddenNodeInteractionReset } from "@/components/map/useHiddenNodeInteractionReset";
@@ -58,7 +63,12 @@ export function MapStage({
     () => visibleNodeIds ?? new Set(nodes.map((node) => node.id)),
     [nodes, visibleNodeIds],
   );
+  const visibleNodes = useMemo(
+    () => nodes.filter((node) => effectiveVisibleNodeIds.has(node.id)),
+    [nodes, effectiveVisibleNodeIds],
+  );
   const containerRef = useRef<HTMLDivElement>(null);
+  const menuActivatedAtRef = useRef<number | null>(null);
   const runtime = usePixiApplication(containerRef);
   const editing = useNodeEditing(nodes, onUpdateLabel);
   const cancelEditing = editing.cancelEditing;
@@ -73,6 +83,7 @@ export function MapStage({
     nodes,
     visibleNodeIds: effectiveVisibleNodeIds,
     resetRevision,
+    viewport,
   });
   const {
     connectionTargetNodeId,
@@ -154,6 +165,10 @@ export function MapStage({
   });
 
   const handleDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
+    // The 2nd click of a double-click on the menu item lands on the canvas after the menu closed.
+    // Date.now() is read only after a menu activation so normal double-clicks stay clock-neutral.
+    const activatedAt = menuActivatedAtRef.current;
+    if (activatedAt !== null && isDoubleClickFromMenuActivation(activatedAt, Date.now())) return;
     const container = containerRef.current;
     if (!container) return;
 
@@ -161,7 +176,7 @@ export function MapStage({
       client: { x: event.clientX, y: event.clientY },
       bounds: container.getBoundingClientRect(),
       viewport: viewportRef.current,
-      nodes: nodes.filter((node) => effectiveVisibleNodeIds.has(node.id)),
+      nodes: visibleNodes,
     });
     if (action === null) return;
 
@@ -170,36 +185,32 @@ export function MapStage({
   };
 
   const handleContextMenu = (event: MouseEvent<HTMLDivElement>) => {
-    if (
-      editing.editingNodeId !== null ||
-      (event.target instanceof Element && event.target.closest("input, textarea"))
-    ) {
-      return;
-    }
-    event.preventDefault();
-    if (event.target instanceof Element && event.target.closest('[role="menu"]')) return;
-    if (hasActiveGesture()) return;
+    // macOS Ctrl+click is a secondary click; the primary-button gesture it started is not a drag.
+    if (event.ctrlKey && hasActiveGesture()) cancelActiveGesture();
     const container = containerRef.current;
-    if (!container) return;
+    const action: MapContextMenuAction = container === null
+      ? { type: "suppress" }
+      : resolveMapContextMenuAction({
+        isEditing: editing.editingNodeId !== null,
+        isTextEntryTarget: isTextEntryTarget(event.target),
+        isInsideMenu: isInsideNodeContextMenu(event.target),
+        hasActiveGesture: hasActiveGesture(),
+        canOpenMenu: onGenerateIllustration !== undefined,
+        client: { x: event.clientX, y: event.clientY },
+        bounds: container.getBoundingClientRect(),
+        viewport: viewportRef.current,
+        visibleNodes,
+      });
 
-    const bounds = container.getBoundingClientRect();
-    const target = resolveNodeContextMenuTarget({
-      client: { x: event.clientX, y: event.clientY },
-      bounds,
-      viewport: viewportRef.current,
-      nodes: nodes.filter((node) => effectiveVisibleNodeIds.has(node.id)),
-    });
-    if (target === null) {
-      contextMenu.close();
-      return;
+    if (action.type === "native") return;
+    event.preventDefault();
+
+    if (action.type === "dismiss") contextMenu.close();
+    else if (action.type === "select") onSelectNode(action.nodeId);
+    else if (action.type === "open") {
+      onSelectNode(action.nodeId);
+      contextMenu.open({ nodeId: action.nodeId, position: action.position });
     }
-
-    onSelectNode(target.nodeId);
-    if (onGenerateIllustration === undefined) return;
-    contextMenu.open({
-      nodeId: target.nodeId,
-      position: clampNodeContextMenuPosition(target.anchor, bounds),
-    });
   };
 
   const menu = contextMenu.menu;
@@ -225,6 +236,7 @@ export function MapStage({
         <NodeContextMenu
           position={menu.position}
           onGenerateIllustration={() => {
+            menuActivatedAtRef.current = Date.now();
             contextMenu.close();
             onGenerateIllustration(menu.nodeId);
           }}

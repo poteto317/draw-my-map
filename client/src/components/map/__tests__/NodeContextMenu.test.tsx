@@ -1,6 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NodeContextMenu } from "@/components/map/NodeContextMenu";
+import { isInsideNodeContextMenu } from "@/components/map/nodeContextMenuDom";
+import { NODE_CONTEXT_MENU_SIZE } from "@/components/map/nodeContextMenuLayout";
 
 describe("NodeContextMenu", () => {
   it("指定位置にメニューと項目を表示する", () => {
@@ -30,5 +32,27 @@ describe("NodeContextMenu", () => {
     await userEvent.dblClick(screen.getByRole("menuitem"));
 
     expect(onDoubleClick).not.toHaveBeenCalled();
+  });
+
+  it("外形サイズをレイアウト定数どおりに指定する", () => {
+    render(<NodeContextMenu position={{ x: 0, y: 0 }} onGenerateIllustration={jest.fn()} />);
+
+    expect(screen.getByRole("menu")).toHaveStyle({
+      width: `${NODE_CONTEXT_MENU_SIZE.width}px`,
+      height: `${NODE_CONTEXT_MENU_SIZE.height}px`,
+    });
+  });
+
+  it("メニューとその項目はメニュー内判定でtrueになる", () => {
+    render(<NodeContextMenu position={{ x: 0, y: 0 }} onGenerateIllustration={jest.fn()} />);
+
+    expect(isInsideNodeContextMenu(screen.getByRole("menu"))).toBe(true);
+    expect(isInsideNodeContextMenu(screen.getByRole("menuitem"))).toBe(true);
+  });
+
+  it("項目のmousedownは既定動作を抑止してフォーカス移動を防ぐ", () => {
+    render(<NodeContextMenu position={{ x: 0, y: 0 }} onGenerateIllustration={jest.fn()} />);
+
+    expect(fireEvent.mouseDown(screen.getByRole("menuitem"))).toBe(false);
   });
 });

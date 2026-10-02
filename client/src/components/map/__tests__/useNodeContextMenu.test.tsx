@@ -1,9 +1,9 @@
-import { act, renderHook } from "@testing-library/react";
-import { fireEvent } from "@testing-library/react";
+import { act, fireEvent, renderHook } from "@testing-library/react";
 import { useNodeContextMenu } from "@/components/map/useNodeContextMenu";
 import { createTestNode } from "@/testing/createTestNode";
 
 const nodes = [createTestNode({ id: 1 }), createTestNode({ id: 2 })];
+const viewport = { offsetX: 0, offsetY: 0, scale: 1 };
 const target = { nodeId: 1, position: { x: 10, y: 20 } };
 
 function setup(overrides: Partial<Parameters<typeof useNodeContextMenu>[0]> = {}) {
@@ -12,6 +12,7 @@ function setup(overrides: Partial<Parameters<typeof useNodeContextMenu>[0]> = {}
       nodes,
       visibleNodeIds: new Set([1, 2]) as ReadonlySet<number>,
       resetRevision: 0,
+      viewport,
       ...overrides,
     },
   });
@@ -29,63 +30,24 @@ describe("useNodeContextMenu", () => {
     expect(result.current.menu).toBeNull();
   });
 
-  it("Escapeで閉じる", () => {
+  it("閉じるリスナーと接続されている（Escapeでmenuがnullになる）", () => {
     const { result } = setup();
     act(() => result.current.open(target));
+    expect(result.current.menu).toEqual(target);
 
     act(() => { fireEvent.keyDown(window, { key: "Escape" }); });
 
     expect(result.current.menu).toBeNull();
   });
 
-  it("メニュー外のpointerdownとwheelで閉じる", () => {
-    const { result } = setup();
-    act(() => result.current.open(target));
-    act(() => { fireEvent.pointerDown(document.body); });
-    expect(result.current.menu).toBeNull();
-
-    act(() => result.current.open(target));
-    act(() => { fireEvent.wheel(document.body); });
-    expect(result.current.menu).toBeNull();
-  });
-
-  it("window blurで閉じる", () => {
-    const { result } = setup();
-    act(() => result.current.open(target));
-
-    act(() => { fireEvent.blur(window); });
-
-    expect(result.current.menu).toBeNull();
-  });
-
-  it("nodesに残っていてもvisibleNodeIdsから外れた対象ならmenuはnullになる", () => {
+  it("失効した対象ではmenuがnullになる", () => {
     const { result, rerender } = setup();
     act(() => result.current.open(target));
 
-    rerender({ nodes, visibleNodeIds: new Set([2]), resetRevision: 0 });
-
+    rerender({ nodes, visibleNodeIds: new Set([2]), resetRevision: 0, viewport });
     expect(result.current.menu).toBeNull();
-  });
 
-  it("メニュー内のpointerdownでは閉じない", () => {
-    const { result } = setup();
-    const menuElement = document.createElement("div");
-    menuElement.setAttribute("role", "menu");
-    document.body.appendChild(menuElement);
-    act(() => result.current.open(target));
-
-    act(() => { fireEvent.pointerDown(menuElement); });
-
-    expect(result.current.menu).toEqual(target);
-    menuElement.remove();
-  });
-
-  it("対象ノードが削除または非表示になるとmenuはnullになる", () => {
-    const { result, rerender } = setup();
-    act(() => result.current.open(target));
-
-    rerender({ nodes: [nodes[1]], visibleNodeIds: new Set([2]), resetRevision: 0 });
-
+    rerender({ nodes, visibleNodeIds: new Set([1, 2]), resetRevision: 0, viewport });
     expect(result.current.menu).toBeNull();
   });
 
@@ -93,10 +55,49 @@ describe("useNodeContextMenu", () => {
     const { result, rerender } = setup();
     act(() => result.current.open(target));
 
-    rerender({ nodes, visibleNodeIds: new Set([1, 2]), resetRevision: 1 });
+    rerender({ nodes, visibleNodeIds: new Set([1, 2]), resetRevision: 1, viewport });
     expect(result.current.menu).toBeNull();
 
-    rerender({ nodes, visibleNodeIds: new Set([1, 2]), resetRevision: 0 });
+    rerender({ nodes, visibleNodeIds: new Set([1, 2]), resetRevision: 0, viewport });
     expect(result.current.menu).toBeNull();
+  });
+
+  it("リセット後でもopenできる", () => {
+    const { result, rerender } = setup();
+    rerender({ nodes, visibleNodeIds: new Set([1, 2]), resetRevision: 1, viewport });
+
+    act(() => result.current.open(target));
+
+    expect(result.current.menu).toEqual(target);
+  });
+
+  it("viewportが変わるとmenuはnullになり、戻しても復活しない", () => {
+    const { result, rerender } = setup();
+    act(() => result.current.open(target));
+
+    rerender({
+      nodes,
+      visibleNodeIds: new Set([1, 2]),
+      resetRevision: 0,
+      viewport: { offsetX: 30, offsetY: 0, scale: 1 },
+    });
+    expect(result.current.menu).toBeNull();
+
+    rerender({ nodes, visibleNodeIds: new Set([1, 2]), resetRevision: 0, viewport });
+    expect(result.current.menu).toBeNull();
+  });
+
+  it("値が同じ新しいviewportオブジェクトへ再レンダーしてもmenuは維持される", () => {
+    const { result, rerender } = setup();
+    act(() => result.current.open(target));
+
+    rerender({
+      nodes,
+      visibleNodeIds: new Set([1, 2]),
+      resetRevision: 0,
+      viewport: { ...viewport },
+    });
+
+    expect(result.current.menu).toEqual(target);
   });
 });
