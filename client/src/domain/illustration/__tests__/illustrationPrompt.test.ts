@@ -42,6 +42,25 @@ describe("needsTranslation", () => {
     expect(needsTranslation("Q3 目標")).toBe(true);
   });
 
+  it("ひらがな・カタカナ・漢字のいずれかを含めば翻訳が必要", () => {
+    expect(needsTranslation("ひらがな")).toBe(true);
+    expect(needsTranslation("カタカナ")).toBe(true);
+    expect(needsTranslation("AI予算")).toBe(true);
+  });
+
+  it("全角英数・半角カタカナ・全角記号も、日本語の入力として翻訳が必要", () => {
+    expect(needsTranslation("Ｂｕｄｇｅｔ")).toBe(true);
+    expect(needsTranslation("ﾊﾟｿｺﾝ")).toBe(true);
+    expect(needsTranslation("！？")).toBe(true);
+  });
+
+  it("日本語を含まない非ASCII（絵文字・アクセント付き）は、翻訳せずそのまま使う", () => {
+    expect(needsTranslation("🚀")).toBe(false);
+    expect(needsTranslation("café")).toBe(false);
+    expect(needsTranslation("Rocket launch")).toBe(false);
+    expect(needsTranslation("123")).toBe(false);
+  });
+
   it("空・空白だけは翻訳不要", () => {
     expect(needsTranslation("")).toBe(false);
     expect(needsTranslation("   ")).toBe(false);

@@ -11,10 +11,12 @@ export function validateIllustrationLabel(label: string): IllustrationLabelValid
   return { ok: true, label: trimmed };
 }
 
-// FLUX に日本語を渡すと文字を描いてしまうため、ASCII だけのラベルは翻訳しない
+// 翻訳モデルは日本語→英語に固定されているため、日本語の文字（ひらがな・カタカナ・漢字・全角形・半角カタカナ）を含むラベルだけを翻訳する
+// 絵文字やアクセント付きの英字などは、翻訳せずそのまま使う
+const JAPANESE_PATTERN = /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}！-｠｡-ﾟ]/u;
+
 export function needsTranslation(label: string): boolean {
-  const trimmed = label.trim();
-  return trimmed !== "" && !/^[\x20-\x7E]+$/.test(trimmed);
+  return JAPANESE_PATTERN.test(label.trim());
 }
 
 // プロンプトがAPIの上限（2048文字）を超えないよう、概念は500文字までにする

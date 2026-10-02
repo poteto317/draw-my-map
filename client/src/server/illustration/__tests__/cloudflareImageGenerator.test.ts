@@ -216,6 +216,32 @@ describe("createCloudflareImageGenerator", () => {
     });
   });
 
+  it("HTTP 200 でも success が false で code 8007 なら content-rejected", async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(
+      jsonResponse(
+        { success: false, errors: [{ code: 8007, message: "AiError: Input prompt contains NSFW content." }], result: {} },
+        { status: 200 },
+      ),
+    );
+
+    await expect(createCloudflareImageGenerator(config, fetchImpl)("p")).rejects.toMatchObject({
+      kind: "content-rejected",
+    });
+  });
+
+  it("メッセージに limit を含んでいても、code 8007 の400は quota-exceeded ではなく content-rejected（判定順序）", async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(
+      jsonResponse(
+        { success: false, errors: [{ code: 8007, message: "NSFW content detected, request limit applied" }] },
+        { status: 400 },
+      ),
+    );
+
+    await expect(createCloudflareImageGenerator(config, fetchImpl)("p")).rejects.toMatchObject({
+      kind: "content-rejected",
+    });
+  });
+
   it("NSFW 以外の 400（code 5006）は upstream-error のまま", async () => {
     const fetchImpl = jest.fn().mockResolvedValue(
       jsonResponse({ success: false, errors: [{ code: 5006, message: "invalid input" }] }, { status: 400 }),

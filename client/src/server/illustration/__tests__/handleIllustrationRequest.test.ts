@@ -59,6 +59,15 @@ describe("handleIllustrationRequest", () => {
     expect(generate.mock.calls[0][0]).toContain("concept: Budget plan.");
   });
 
+  it("絵文字だけのラベルは翻訳せず、そのままプロンプトに入れる", async () => {
+    const { deps: d, generate, translate } = deps();
+
+    await handleIllustrationRequest(post({ label: "🚀" }), d);
+
+    expect(translate).not.toHaveBeenCalled();
+    expect(generate.mock.calls[0][0]).toContain("concept: 🚀.");
+  });
+
   it("翻訳が無料枠超過なら 429 で、生成しない", async () => {
     const { deps: d, generate } = deps(undefined, jest.fn().mockRejectedValue(new ImageGenerationError("quota-exceeded", "q")));
 
