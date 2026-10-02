@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useNodes } from "@/hooks/useNodes";
 import { AppHeader } from "@/components/layout/AppHeader";
+import { AppWorkspace } from "@/components/layout/AppWorkspace";
 import { NodeImportanceSelector } from "@/components/layout/NodeImportanceSelector";
 import { ResolutionFilterSelector } from "@/components/layout/ResolutionFilterSelector";
 import { MapImageExportControls } from "@/components/layout/MapImageExportControls";
@@ -98,8 +99,8 @@ export default function Home() {
             </>
           )}
       />
-      <main className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="min-h-0 min-w-0 flex-1">
+      <AppWorkspace
+        canvas={(
           <MapStage
             nodes={nodes}
             visibleNodeIds={resolutionFilter.visibleNodeIds}
@@ -116,9 +117,9 @@ export default function Home() {
             onGenerateIllustration={generateIllustration}
             resetRevision={resetRevision}
           />
-        </div>
-        <IllustrationPanel selectedNode={selectedNode} onGenerate={generateIllustration} />
-      </main>
+        )}
+        sidePanel={<IllustrationPanel selectedNode={selectedNode} onGenerate={generateIllustration} />}
+      />
     </div>
   );
 }

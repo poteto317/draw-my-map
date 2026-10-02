@@ -71,4 +71,10 @@ describe("IllustrationPanel", () => {
 
     expect(screen.getByText(label)).toHaveAttribute("title", label);
   });
+
+  it("固定幅で、縮まない", () => {
+    render(<IllustrationPanel selectedNode={null} onGenerate={jest.fn()} />);
+
+    expect(screen.getByRole("complementary", { name: "イラスト" })).toHaveClass("w-60", "shrink-0");
+  });
 });
