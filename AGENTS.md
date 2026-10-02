@@ -30,3 +30,8 @@
 - `client`変更後は`client`ディレクトリで`npm run verify`を実行する。
 - `ROADMAP.md`は実装済み項目だけを、実装を含むブランチのマージ前コミットで更新する。
 - コミットメッセージはConventional Commits形式（例: `feat(map): ...`）。
+
+## 実装完了後のブランチの扱い
+
+- 作業は`.worktrees/<branch>`のgit worktreeで行い、全タスクの完了・最終レビュー・`npm run verify`成功の後は、ブランチをそのまま保持する（`superpowers:finishing-a-development-branch`の選択肢3）。
+- ユーザーが明示的に指示しない限り、mainへのマージ、push、Pull Request作成、worktreeやブランチの削除は行わない。完了報告では、ブランチ名・worktreeのパス・未決事項だけを伝え、選択肢の確認はしない。
