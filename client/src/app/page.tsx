@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { useNodes } from "@/hooks/useNodes";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { NodeImportanceSelector } from "@/components/layout/NodeImportanceSelector";
@@ -8,8 +8,10 @@ import { ResolutionFilterSelector } from "@/components/layout/ResolutionFilterSe
 import { MapImageExportControls } from "@/components/layout/MapImageExportControls";
 import { MapPersistenceControls } from "@/components/layout/MapPersistenceControls";
 import { MapOperationNotice } from "@/components/layout/MapOperationNotice";
+import { IllustrationPanel } from "@/components/layout/IllustrationPanel";
 import { MapStage } from "@/components/map/MapStage";
 import { INITIAL_VIEWPORT } from "@/components/map/mapViewport";
+import { useIllustrationGeneration } from "@/hooks/useIllustrationGeneration";
 import { useMapImageExport } from "@/hooks/useMapImageExport";
 import { useMapPersistence } from "@/hooks/useMapPersistence";
 import { useResettingMapReplacement } from "@/hooks/useResettingMapReplacement";
@@ -47,10 +49,7 @@ export default function Home() {
     replaceMap: replaceMapAndReset,
   });
   const imageExport = useMapImageExport({ nodes });
-  // 画像生成はPhase 7の後続項目で実装する。それまでは通知を受けるだけ。
-  const handleGenerateIllustration = useCallback((nodeId: number) => {
-    void nodeId;
-  }, []);
+  const { generateIllustration } = useIllustrationGeneration();
 
   return (
     <div className="flex h-dvh flex-col bg-zinc-50 dark:bg-zinc-900">
@@ -99,23 +98,26 @@ export default function Home() {
             </>
           )}
       />
-      <main className="min-h-0 flex-1 overflow-hidden">
-        <MapStage
-          nodes={nodes}
-          visibleNodeIds={resolutionFilter.visibleNodeIds}
-          onViewportScaleChange={setViewportScale}
-          selectedNodeId={selectedNodeId}
-          onDoubleClick={addNode}
-          onAddChildNode={addChildNode}
-          onAddSiblingNode={addSiblingNode}
-          onSelectNode={selectNode}
-          onUpdateLabel={updateNodeLabel}
-          onMoveNode={moveNode}
-          onConnectNodes={connectNodes}
-          onDeleteNode={deleteNode}
-          onGenerateIllustration={handleGenerateIllustration}
-          resetRevision={resetRevision}
-        />
+      <main className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="min-h-0 min-w-0 flex-1">
+          <MapStage
+            nodes={nodes}
+            visibleNodeIds={resolutionFilter.visibleNodeIds}
+            onViewportScaleChange={setViewportScale}
+            selectedNodeId={selectedNodeId}
+            onDoubleClick={addNode}
+            onAddChildNode={addChildNode}
+            onAddSiblingNode={addSiblingNode}
+            onSelectNode={selectNode}
+            onUpdateLabel={updateNodeLabel}
+            onMoveNode={moveNode}
+            onConnectNodes={connectNodes}
+            onDeleteNode={deleteNode}
+            onGenerateIllustration={generateIllustration}
+            resetRevision={resetRevision}
+          />
+        </div>
+        <IllustrationPanel selectedNode={selectedNode} onGenerate={generateIllustration} />
       </main>
     </div>
   );

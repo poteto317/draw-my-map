@@ -8,6 +8,7 @@ const mockDownloadMapJson = jest.fn();
 const mockExportPng = jest.fn();
 const mockExportSvg = jest.fn();
 const mockUseMapImageExport = jest.fn();
+const mockGenerateIllustration = jest.fn();
 let mockImageExportNotice: OperationNotice | null = null;
 let mockIsExportingPng = false;
 let mockMapStageProps: {
@@ -16,6 +17,10 @@ let mockMapStageProps: {
   onSelectNode: (id: number | null) => void;
   onViewportScaleChange?: (scale: number) => void;
 } | null = null;
+
+jest.mock("@/hooks/useIllustrationGeneration", () => ({
+  useIllustrationGeneration: () => ({ generateIllustration: mockGenerateIllustration }),
+}));
 
 jest.mock("@/hooks/useMapImageExport", () => ({
   useMapImageExport: (options: { nodes: readonly Node[] }) => {
@@ -46,6 +51,7 @@ jest.mock("@/components/map/MapStage", () => ({
     visibleNodeIds,
     onSelectNode,
     onViewportScaleChange,
+    onGenerateIllustration,
   }: {
     nodes: Node[];
     selectedNodeId: number | null;
@@ -54,6 +60,7 @@ jest.mock("@/components/map/MapStage", () => ({
     visibleNodeIds?: ReadonlySet<number>;
     onSelectNode: (id: number | null) => void;
     onViewportScaleChange?: (scale: number) => void;
+    onGenerateIllustration?: (nodeId: number) => void;
   }) => (
     <div data-testid="map-stage" ref={() => {
       mockMapStageProps = { nodes, visibleNodeIds, onSelectNode, onViewportScaleChange };
@@ -72,6 +79,9 @@ jest.mock("@/components/map/MapStage", () => ({
       </button>
       <button type="button" onClick={() => onViewportScaleChange?.(0.97)}>
         テスト用中倍率
+      </button>
+      <button type="button" onClick={() => onGenerateIllustration?.(nodes[0]?.id ?? -1)}>
+        テスト用メニュー生成
       </button>
     </div>
   ),
@@ -140,6 +150,7 @@ describe("Home", () => {
     mockExportPng.mockClear();
     mockExportSvg.mockClear();
     mockUseMapImageExport.mockClear();
+    mockGenerateIllustration.mockClear();
     mockImageExportNotice = null;
     mockIsExportingPng = false;
     mockMapStageProps = null;
@@ -363,6 +374,70 @@ describe("Home", () => {
       expect(shell).toHaveClass("h-dvh");
       expect(shell).not.toHaveClass("overflow-hidden");
       expect(main).toHaveClass("min-h-0", "flex-1", "overflow-hidden");
+    });
+  });
+
+  describe("イラスト生成パネルの配線", () => {
+    it("ノード未選択のときは案内を表示し、生成ボタンを無効にする", () => {
+      render(<Home />);
+
+      expect(screen.getByRole("complementary", { name: "イラスト" })).toBeInTheDocument();
+      expect(screen.getByText("ノードを選択してください")).toBeVisible();
+      expect(screen.getByRole("button", { name: "イラストを生成" })).toBeDisabled();
+    });
+
+    it("ノードを選択すると、ラベルを表示し、生成ボタンを有効にする", async () => {
+      const user = userEvent.setup();
+      render(<Home />);
+      await user.click(screen.getByRole("button", { name: "テスト用ノード追加" }));
+      await user.click(screen.getByRole("button", { name: "テスト用ノード選択" }));
+
+      expect(screen.getByText("（ラベルなし）")).toBeVisible();
+      expect(screen.getByRole("button", { name: "イラストを生成" })).toBeEnabled();
+    });
+
+    it("パネルの生成ボタンで、選択中のノードIDを生成の入口へ渡す", async () => {
+      const user = userEvent.setup();
+      render(<Home />);
+      await user.click(screen.getByRole("button", { name: "テスト用ノード追加" }));
+      await user.click(screen.getByRole("button", { name: "テスト用ノード選択" }));
+      const selectedId = mockMapStageProps!.nodes[0].id;
+
+      await user.click(screen.getByRole("button", { name: "イラストを生成" }));
+
+      expect(mockGenerateIllustration).toHaveBeenCalledTimes(1);
+      expect(mockGenerateIllustration).toHaveBeenCalledWith(selectedId);
+    });
+
+    it("右クリックメニューからの要求も、同じ生成の入口へ渡す", async () => {
+      const user = userEvent.setup();
+      render(<Home />);
+      await user.click(screen.getByRole("button", { name: "テスト用ノード追加" }));
+      const nodeId = mockMapStageProps!.nodes[0].id;
+
+      await user.click(screen.getByRole("button", { name: "テスト用メニュー生成" }));
+
+      expect(mockGenerateIllustration).toHaveBeenCalledWith(nodeId);
+    });
+
+    it("選択を解除すると、パネルは案内に戻る", async () => {
+      const user = userEvent.setup();
+      render(<Home />);
+      await user.click(screen.getByRole("button", { name: "テスト用ノード追加" }));
+      await user.click(screen.getByRole("button", { name: "テスト用ノード選択" }));
+      act(() => mockMapStageProps!.onSelectNode(null));
+
+      expect(screen.getByText("ノードを選択してください")).toBeVisible();
+      expect(screen.getByRole("button", { name: "イラストを生成" })).toBeDisabled();
+    });
+
+    it("キャンバスとパネルを横に並べて表示する", () => {
+      render(<Home />);
+
+      const main = screen.getByRole("main");
+      expect(main).toHaveClass("flex");
+      expect(main).toContainElement(screen.getByTestId("map-stage"));
+      expect(main).toContainElement(screen.getByRole("complementary", { name: "イラスト" }));
     });
   });
 });
