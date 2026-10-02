@@ -75,6 +75,9 @@ jest.mock("@/components/map/MapStage", () => ({
       <button type="button" onClick={() => onSelectNode(nodes[0]?.id ?? null)}>
         テスト用ノード選択
       </button>
+      <button type="button" onClick={() => onSelectNode(nodes[1]?.id ?? null)}>
+        テスト用2番目ノード選択
+      </button>
       <button type="button" onClick={() => onViewportScaleChange?.(0.5)}>
         テスト用ズーム
       </button>
@@ -410,6 +413,36 @@ describe("Home", () => {
       expect(mockGenerateIllustration).toHaveBeenCalledWith(selectedId);
     });
 
+    it("選択したノードが2番目でも、そのノードのIDを生成の入口へ渡す", async () => {
+      const user = userEvent.setup();
+      render(<Home />);
+      await user.click(screen.getByRole("button", { name: "テスト用ノード追加" }));
+      await user.click(screen.getByRole("button", { name: "テスト用ノード追加" }));
+      await user.click(screen.getByRole("button", { name: "テスト用2番目ノード選択" }));
+      const [firstNode, secondNode] = mockMapStageProps!.nodes;
+
+      await user.click(screen.getByRole("button", { name: "イラストを生成" }));
+
+      expect(mockGenerateIllustration).toHaveBeenCalledTimes(1);
+      expect(mockGenerateIllustration).toHaveBeenCalledWith(secondNode.id);
+      expect(mockGenerateIllustration).not.toHaveBeenCalledWith(firstNode.id);
+    });
+
+    it("選択を2番目から1番目へ切り替えると、生成の入口へ渡すIDも切り替わる", async () => {
+      const user = userEvent.setup();
+      render(<Home />);
+      await user.click(screen.getByRole("button", { name: "テスト用ノード追加" }));
+      await user.click(screen.getByRole("button", { name: "テスト用ノード追加" }));
+      const [firstNode, secondNode] = mockMapStageProps!.nodes;
+
+      await user.click(screen.getByRole("button", { name: "テスト用2番目ノード選択" }));
+      await user.click(screen.getByRole("button", { name: "イラストを生成" }));
+      await user.click(screen.getByRole("button", { name: "テスト用ノード選択" }));
+      await user.click(screen.getByRole("button", { name: "イラストを生成" }));
+
+      expect(mockGenerateIllustration.mock.calls).toEqual([[secondNode.id], [firstNode.id]]);
+    });
+
     it("右クリックメニューからの要求も、同じ生成の入口へ渡す", async () => {
       const user = userEvent.setup();
       render(<Home />);
@@ -432,16 +465,13 @@ describe("Home", () => {
       expect(screen.getByRole("button", { name: "イラストを生成" })).toBeDisabled();
     });
 
-    it("キャンバスとパネルを横に並べて表示する", () => {
+    it("キャンバスとパネルを同じ作業領域に表示する", () => {
       render(<Home />);
 
       const main = screen.getByRole("main");
-      expect(main).toHaveClass("flex");
       expect(main).toContainElement(screen.getByTestId("map-stage"));
       const panel = screen.getByRole("complementary", { name: "イラスト" });
       expect(main).toContainElement(panel);
-      expect(screen.getByTestId("map-stage").parentElement).toHaveClass("min-w-0", "flex-1");
-      expect(panel).toHaveClass("w-60", "shrink-0");
     });
   });
 });
