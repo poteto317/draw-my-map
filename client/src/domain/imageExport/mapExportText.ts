@@ -1,4 +1,4 @@
-import { FALLBACK_NODE_LABEL } from "@/config/nodeLabel";
+import { getNodeDisplayLabel } from "@/domain/nodes/nodeDisplayLabel";
 import { normalizeMapXmlText } from "@/domain/imageExport/mapXmlText";
 
 export type MeasureMapText = (text: string) => number;
@@ -86,7 +86,7 @@ function findWhitespaceRunEnd(codePoints: string[], start: number): number {
 }
 
 export function getMapExportLabel(label: string): string {
-  return normalizeMapXmlText(label || FALLBACK_NODE_LABEL);
+  return normalizeMapXmlText(getNodeDisplayLabel(label));
 }
 
 export function wrapMapExportText(

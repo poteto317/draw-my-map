@@ -2,7 +2,7 @@ import type { PixiConstructors } from "@/components/map/pixi/pixiTypes";
 import type { MapVisibilityTarget } from "@/components/map/pixi/mapVisibilityAnimator";
 import { nodeVisibilityKey } from "@/components/map/pixi/mapVisibilityKeys";
 import { createNodeVisibilityTarget } from "@/components/map/pixi/pixiVisibilityTarget";
-import { FALLBACK_NODE_LABEL } from "@/config/nodeLabel";
+import { getNodeDisplayLabel } from "@/domain/nodes/nodeDisplayLabel";
 import type { Node } from "@/types/node";
 import type { Container, FederatedPointerEvent } from "pixi.js";
 
@@ -47,7 +47,7 @@ export function renderMapNodes(
 
     if (!isEditing) {
       const text = new constructors.Text({
-        text: node.label || FALLBACK_NODE_LABEL,
+        text: getNodeDisplayLabel(node.label),
         style: {
           fontSize: 14,
           fill: 0x27272a,

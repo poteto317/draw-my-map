@@ -1,4 +1,4 @@
-import { FALLBACK_NODE_LABEL } from "@/config/nodeLabel";
+import { getNodeDisplayLabel } from "@/domain/nodes/nodeDisplayLabel";
 import type { Node } from "@/types/node";
 
 type IllustrationPanelProps = {
@@ -7,8 +7,6 @@ type IllustrationPanelProps = {
 };
 
 export function IllustrationPanel({ selectedNode, onGenerate }: IllustrationPanelProps) {
-  const label = selectedNode?.label || FALLBACK_NODE_LABEL;
-
   return (
     <aside
       aria-label="イラスト"
@@ -24,7 +22,7 @@ export function IllustrationPanel({ selectedNode, onGenerate }: IllustrationPane
             className="line-clamp-3 break-words text-sm text-zinc-800 dark:text-zinc-100"
             title={selectedNode.label || undefined}
           >
-            {label}
+            {getNodeDisplayLabel(selectedNode.label)}
           </p>
         </div>
       )}
