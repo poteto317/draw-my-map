@@ -58,8 +58,8 @@ export function createCloudflareImageGenerator(
           Authorization: `Bearer ${config.apiToken}`,
           "Content-Type": "application/json",
         },
-        // seed は公式スキーマ上、整数（"Random positive integer"）
-        body: JSON.stringify({ prompt, steps: 4, seed: Math.floor(Math.random() * 2_000_000_000) + 1 }),
+        // 実際の API は seed を拒否する（HTTP 400, code 5006）ため、送らない
+        body: JSON.stringify({ prompt, steps: 4 }),
         signal: controller.signal,
       });
       body = (await response.json().catch((error: unknown) => {

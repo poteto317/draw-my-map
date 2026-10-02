@@ -151,6 +151,18 @@ describe("createCloudflareImageGenerator", () => {
     expect(JSON.parse(init.body)).toMatchObject({ prompt: "a prompt", steps: 4 });
   });
 
+  it("リクエスト本文は prompt と steps だけを持つ（seed を送らない）", async () => {
+    // 実際の API は seed を含む本文を HTTP 400（code 5006）で拒否する。
+    const fetchImpl = jest.fn().mockResolvedValue(
+      jsonResponse({ success: true, result: { image: "BASE64DATA" }, errors: [] }),
+    );
+
+    await createCloudflareImageGenerator(config, fetchImpl)("a prompt");
+
+    const [, init] = fetchImpl.mock.calls[0];
+    expect(Object.keys(JSON.parse(init.body)).sort()).toEqual(["prompt", "steps"]);
+  });
+
   it("HTTP 429 は quota-exceeded", async () => {
     const fetchImpl = jest.fn().mockResolvedValue(
       jsonResponse({ success: false, errors: [{ code: 1, message: "rate" }] }, { status: 429 }),
