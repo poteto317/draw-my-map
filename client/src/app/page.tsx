@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useNodes } from "@/hooks/useNodes";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { NodeImportanceSelector } from "@/components/layout/NodeImportanceSelector";
@@ -47,6 +47,10 @@ export default function Home() {
     replaceMap: replaceMapAndReset,
   });
   const imageExport = useMapImageExport({ nodes });
+  // 画像生成はPhase 7の後続項目で実装する。それまでは通知を受けるだけ。
+  const handleGenerateIllustration = useCallback((nodeId: number) => {
+    void nodeId;
+  }, []);
 
   return (
     <div className="flex h-dvh flex-col bg-zinc-50 dark:bg-zinc-900">
@@ -109,6 +113,7 @@ export default function Home() {
           onMoveNode={moveNode}
           onConnectNodes={connectNodes}
           onDeleteNode={deleteNode}
+          onGenerateIllustration={handleGenerateIllustration}
           resetRevision={resetRevision}
         />
       </main>

@@ -1,6 +1,10 @@
 "use client";
 
 import { useMemo, useRef, type MouseEvent } from "react";
+import { NodeContextMenu } from "@/components/map/NodeContextMenu";
+import { clampNodeContextMenuPosition } from "@/components/map/nodeContextMenuLayout";
+import { resolveNodeContextMenuTarget } from "@/components/map/nodeContextMenuTarget";
+import { useNodeContextMenu } from "@/components/map/useNodeContextMenu";
 import { NodeLabelEditor } from "@/components/map/NodeLabelEditor";
 import { resolveMapDoubleClickAction } from "@/components/map/mapDoubleClickAction";
 import { usePixiApplication } from "@/components/map/pixi/usePixiApplication";
@@ -31,6 +35,7 @@ type MapStageProps = {
   onMoveNode: (id: number, x: number, y: number) => void;
   onConnectNodes: (parentId: number, childId: number) => void;
   onDeleteNode: (id: number) => void;
+  onGenerateIllustration?: (nodeId: number) => void;
 };
 
 export function MapStage({
@@ -47,6 +52,7 @@ export function MapStage({
   onMoveNode,
   onConnectNodes,
   onDeleteNode,
+  onGenerateIllustration,
 }: MapStageProps) {
   const effectiveVisibleNodeIds = useMemo(
     () => visibleNodeIds ?? new Set(nodes.map((node) => node.id)),
@@ -63,6 +69,11 @@ export function MapStage({
     zoomAt,
     focusNode,
   } = useMapViewport();
+  const contextMenu = useNodeContextMenu({
+    nodes,
+    visibleNodeIds: effectiveVisibleNodeIds,
+    resetRevision,
+  });
   const {
     connectionTargetNodeId,
     createNodePointerDownHandler,
@@ -158,11 +169,40 @@ export function MapStage({
     else onDoubleClick(action.point.x, action.point.y);
   };
 
+  const handleContextMenu = (event: MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    if (event.target instanceof Element && event.target.closest('[role="menu"]')) return;
+    const container = containerRef.current;
+    if (!container) return;
+
+    const bounds = container.getBoundingClientRect();
+    const target = resolveNodeContextMenuTarget({
+      client: { x: event.clientX, y: event.clientY },
+      bounds,
+      viewport: viewportRef.current,
+      nodes: nodes.filter((node) => effectiveVisibleNodeIds.has(node.id)),
+    });
+    if (target === null) {
+      contextMenu.close();
+      return;
+    }
+
+    onSelectNode(target.nodeId);
+    if (onGenerateIllustration === undefined) return;
+    contextMenu.open({
+      nodeId: target.nodeId,
+      position: clampNodeContextMenuPosition(target.anchor, bounds),
+    });
+  };
+
+  const menu = contextMenu.menu;
+
   return (
     <div
       ref={containerRef}
       className="relative h-full w-full cursor-crosshair"
       onDoubleClick={handleDoubleClick}
+      onContextMenu={handleContextMenu}
     >
       {editing.editingNode && (
         <NodeLabelEditor
@@ -172,6 +212,15 @@ export function MapStage({
           onChange={editing.setEditingText}
           onCommit={editing.commitEditing}
           onCancel={editing.cancelEditing}
+        />
+      )}
+      {menu && onGenerateIllustration && (
+        <NodeContextMenu
+          position={menu.position}
+          onGenerateIllustration={() => {
+            contextMenu.close();
+            onGenerateIllustration(menu.nodeId);
+          }}
         />
       )}
     </div>
