@@ -27,6 +27,15 @@ describe("replaceNodeIllustration", () => {
     expect(second[0].height).toBe(ILLUSTRATED_NODE_HEIGHT);
   });
 
+  it.each(["", "javascript:alert(1)", "data:image/svg+xml;base64,AAAA", "data:image/jpeg;base64,<x>"])(
+    "data URL として不正な値（%p）は null で、配列を変更しない",
+    (bad) => {
+      const nodes = [node(1)];
+      expect(replaceNodeIllustration(nodes, 1, bad)).toBeNull();
+      expect(nodes[0]).toEqual(node(1));
+    },
+  );
+
   it("対象のノードが無いときは null", () => {
     expect(replaceNodeIllustration([node(1)], 9, URL1)).toBeNull();
   });

@@ -165,6 +165,21 @@ describe("version 3 のイラスト", () => {
     expect(parsed.ok && parsed.value.document.nodes[0].illustration).toBe(IMAGE);
   });
 
+  it("イラストがあり高さが不足するノードは、高さを ILLUSTRATED_NODE_HEIGHT に正規化する", () => {
+    const parsed = parseMapDocumentJsonWithVersion(json(3, { ...baseNode, height: 60, illustration: IMAGE }));
+    expect(parsed.ok && parsed.value.document.nodes[0].height).toBe(116);
+  });
+
+  it("イラストがあり高さが十分なノードは、高さを変えない", () => {
+    const parsed = parseMapDocumentJsonWithVersion(json(3, { ...baseNode, height: 200, illustration: IMAGE }));
+    expect(parsed.ok && parsed.value.document.nodes[0].height).toBe(200);
+  });
+
+  it("イラストが無いノードの高さは、変えない", () => {
+    const parsed = parseMapDocumentJsonWithVersion(json(3, { ...baseNode, height: 60 }));
+    expect(parsed.ok && parsed.value.document.nodes[0].height).toBe(60);
+  });
+
   it("illustration が無いノードは、項目を持たない", () => {
     const parsed = parseMapDocumentJsonWithVersion(json(3, baseNode));
     expect(parsed.ok && "illustration" in parsed.value.document.nodes[0]).toBe(false);

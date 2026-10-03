@@ -1,3 +1,4 @@
+import { ILLUSTRATED_NODE_HEIGHT } from "@/config/shapes";
 import type { MapDocumentResult, MapDocumentVersion } from "@/types/mapDocument";
 import type { Node } from "@/types/node";
 import { isIllustrationDataUrl } from "@/domain/illustration/illustrationDataUrl";
@@ -73,7 +74,7 @@ export function normalizeMapDocumentNode(
       x,
       y,
       width,
-      height,
+      height: illustration === undefined ? height : Math.max(height, ILLUSTRATED_NODE_HEIGHT),
       label,
       importance: importanceResult.value,
       ...(illustration === undefined ? {} : { illustration }),
