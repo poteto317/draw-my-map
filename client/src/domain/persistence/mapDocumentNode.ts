@@ -1,8 +1,8 @@
-import { ILLUSTRATED_NODE_HEIGHT } from "@/config/shapes";
 import type { MapDocumentResult, MapDocumentVersion } from "@/types/mapDocument";
 import type { Node } from "@/types/node";
-import { isIllustrationDataUrl } from "@/domain/illustration/illustrationDataUrl";
+import { getIllustratedNodeMinHeight } from "@/domain/nodes/nodeIllustration";
 import { normalizeMapDocumentNodeImportance } from "@/domain/persistence/mapDocumentNodeImportance";
+import { normalizeMapDocumentNodeIllustration } from "@/domain/persistence/mapDocumentNodeIllustration";
 import { projectMapDocumentNode } from "@/domain/persistence/mapDocumentNodeProjection";
 
 type NodeRecord = Record<string, unknown>;
@@ -59,13 +59,15 @@ export function normalizeMapDocumentNode(
   if (!importanceResult.ok) {
     return importanceResult;
   }
-  let illustration: string | undefined;
-  if (version === 3 && node.illustration !== undefined) {
-    if (!isIllustrationDataUrl(node.illustration)) {
-      return failure(index, ".illustrationは、画像のdata URLである必要があります。");
-    }
-    illustration = node.illustration;
+  const illustrationResult = normalizeMapDocumentNodeIllustration(
+    node.illustration,
+    index,
+    version,
+  );
+  if (!illustrationResult.ok) {
+    return illustrationResult;
   }
+  const illustration = illustrationResult.value;
   return {
     ok: true,
     value: projectMapDocumentNode({
@@ -74,7 +76,7 @@ export function normalizeMapDocumentNode(
       x,
       y,
       width,
-      height: illustration === undefined ? height : Math.max(height, ILLUSTRATED_NODE_HEIGHT),
+      height: illustration === undefined ? height : getIllustratedNodeMinHeight(height),
       label,
       importance: importanceResult.value,
       ...(illustration === undefined ? {} : { illustration }),

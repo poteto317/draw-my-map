@@ -2,7 +2,7 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import Home from "@/app/page";
 import { FALLBACK_NODE_LABEL } from "@/config/nodeLabel";
-import type { IllustrationGenerationState } from "@/hooks/useIllustrationGeneration";
+import type { IllustrationGenerationState } from "@/types/illustrationGeneration";
 import type { Node } from "@/types/node";
 import type { OperationNotice } from "@/types/operationNotice";
 

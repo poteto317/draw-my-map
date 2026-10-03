@@ -1,5 +1,7 @@
 import { getNodeDisplayLabel } from "@/domain/nodes/nodeDisplayLabel";
-import type { IllustrationGenerationState } from "@/hooks/useIllustrationGeneration";
+import { IllustrationImage } from "@/components/layout/IllustrationImage";
+import { getIllustrationPanelView } from "@/components/layout/illustrationPanelView";
+import type { IllustrationGenerationState } from "@/types/illustrationGeneration";
 import type { Node } from "@/types/node";
 
 type IllustrationPanelProps = {
@@ -10,10 +12,8 @@ type IllustrationPanelProps = {
 };
 
 export function IllustrationPanel({ selectedNode, generation, onGenerate, onAttach }: IllustrationPanelProps) {
-  // 生成は同時に1件までなので、どのノードの生成中でもボタンを無効にする
-  const isGenerating = generation.status === "generating";
-  const forSelectedNode =
-    selectedNode !== null && generation.status !== "idle" && generation.nodeId === selectedNode.id;
+  const view = getIllustrationPanelView(selectedNode, generation);
+  const preview = view.image?.kind === "preview" ? view.image : null;
   return (
     <aside
       aria-label="イラスト"
@@ -33,52 +33,47 @@ export function IllustrationPanel({ selectedNode, generation, onGenerate, onAtta
           </p>
         </div>
       )}
-      {forSelectedNode && generation.status === "generating" && (
+      {view.status === "generating" && (
         <p role="status" className="text-sm text-zinc-500 dark:text-zinc-400">生成中です</p>
       )}
-      {selectedNode !== null && forSelectedNode && generation.status === "succeeded" ? (
+      {selectedNode !== null && preview !== null && (
         <>
-          {/* eslint-disable-next-line @next/next/no-img-element -- data URLのため、next/imageは使わない */}
-          <img
-            src={generation.dataUrl}
+          <IllustrationImage
+            src={preview.dataUrl}
             alt={`${getNodeDisplayLabel(selectedNode.label)}のイラスト`}
-            className="w-full rounded-md border border-zinc-200 dark:border-zinc-700"
           />
           <button
             type="button"
-            onClick={() => onAttach(selectedNode.id, generation.dataUrl)}
+            onClick={() => onAttach(selectedNode.id, preview.dataUrl)}
             className="rounded-md border border-blue-600 px-3 py-2 text-sm text-blue-600 transition-colors hover:bg-blue-50 dark:border-blue-400 dark:text-blue-400 dark:hover:bg-zinc-700"
           >
             ノードに設定
           </button>
         </>
-      ) : (
-        selectedNode?.illustration !== undefined && (
-          <div className="flex flex-col gap-1">
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">設定済みのイラスト</span>
-            {/* eslint-disable-next-line @next/next/no-img-element -- data URLのため、next/imageは使わない */}
-            <img
-              src={selectedNode.illustration}
-              alt={`${getNodeDisplayLabel(selectedNode.label)}の設定済みイラスト`}
-              className="w-full rounded-md border border-zinc-200 dark:border-zinc-700"
-            />
-          </div>
-        )
       )}
-      {forSelectedNode && generation.status === "failed" && (
+      {selectedNode !== null && view.image?.kind === "attached" && (
+        <div className="flex flex-col gap-1">
+          <span className="text-xs text-zinc-500 dark:text-zinc-400">設定済みのイラスト</span>
+          <IllustrationImage
+            src={view.image.dataUrl}
+            alt={`${getNodeDisplayLabel(selectedNode.label)}の設定済みイラスト`}
+          />
+        </div>
+      )}
+      {view.errorMessage !== null && (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-          {generation.message}
+          {view.errorMessage}
         </p>
       )}
       <button
         type="button"
-        disabled={selectedNode === null || isGenerating}
+        disabled={selectedNode === null || view.isGenerating}
         onClick={() => {
           if (selectedNode !== null) onGenerate(selectedNode.id);
         }}
         className="rounded-md bg-blue-600 px-3 py-2 text-sm text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400 dark:disabled:bg-zinc-700 dark:disabled:text-zinc-500"
       >
-        {isGenerating ? "生成中…" : "イラストを生成"}
+        {view.isGenerating ? "生成中…" : "イラストを生成"}
       </button>
     </aside>
   );

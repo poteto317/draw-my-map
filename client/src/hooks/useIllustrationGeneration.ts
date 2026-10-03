@@ -1,21 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { validateIllustrationLabel } from "@/domain/illustration/illustrationPrompt";
+import { describeIllustrationError } from "@/services/illustration/illustrationClient";
 import {
-  IllustrationRequestError,
-  describeIllustrationError,
-  requestIllustration,
-} from "@/services/illustration/illustrationClient";
-import {
-  IllustrationThumbnailError,
-  createIllustrationThumbnail,
-} from "@/services/illustration/illustrationThumbnail";
+  generateIllustrationThumbnail,
+  toIllustrationErrorKind,
+} from "@/services/illustration/illustrationGeneration";
+import type { IllustrationGenerationState } from "@/types/illustrationGeneration";
 import type { Node } from "@/types/node";
-
-export type IllustrationGenerationState =
-  | { status: "idle" }
-  | { status: "generating"; nodeId: number }
-  | { status: "succeeded"; nodeId: number; dataUrl: string }
-  | { status: "failed"; nodeId: number; message: string };
 
 // 状態を保存した時点の resetRevision を添えて持つ（マップ置き換え後の古い状態を見分けるため）
 type StoredGeneration = { state: IllustrationGenerationState; revision: number };
@@ -59,20 +50,18 @@ export function useIllustrationGeneration(nodes: readonly Node[], resetRevision:
     controllerRef.current = controller;
     setGeneration({ status: "generating", nodeId });
 
-    requestIllustration(validation.label, { signal: controller.signal })
-      .then((image) => createIllustrationThumbnail(image.dataUrl))
+    generateIllustrationThumbnail(validation.label, { signal: controller.signal })
       .then((dataUrl) => {
         if (controller.signal.aborted) return;
         setGeneration({ status: "succeeded", nodeId, dataUrl });
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        const kind = error instanceof IllustrationRequestError
-          ? error.kind
-          : error instanceof IllustrationThumbnailError
-            ? "image-processing"
-            : "upstream-error";
-        setGeneration({ status: "failed", nodeId, message: describeIllustrationError(kind) });
+        setGeneration({
+          status: "failed",
+          nodeId,
+          message: describeIllustrationError(toIllustrationErrorKind(error)),
+        });
       })
       .finally(() => {
         if (controllerRef.current === controller) controllerRef.current = null;

@@ -5,7 +5,11 @@ import {
   ILLUSTRATION_TOP_PADDING,
   RECT_HEIGHT,
 } from "@/config/shapes";
-import { getNodeIllustrationRect, getNodeLabelCenterOffset } from "@/domain/nodes/nodeIllustration";
+import {
+  getIllustratedNodeMinHeight,
+  getNodeIllustrationRect,
+  getNodeLabelCenterOffset,
+} from "@/domain/nodes/nodeIllustration";
 
 describe("ノードのイラストの配置", () => {
   it("定数が整合している", () => {
@@ -28,5 +32,16 @@ describe("ノードのイラストの配置", () => {
   it("イラストがあるノードは、イラストの下の領域の中央がテキストの中心", () => {
     // 下の領域 = 116 - 56 = 60、その中央 = 56 + 30 = 86
     expect(getNodeLabelCenterOffset({ height: ILLUSTRATED_NODE_HEIGHT, illustration: "data:image/png;base64,AAAA" })).toBe(86);
+  });
+});
+
+describe("getIllustratedNodeMinHeight", () => {
+  it("イラストの領域を含められない高さは、イラスト付きノードの高さにする", () => {
+    expect(getIllustratedNodeMinHeight(60)).toBe(116);
+  });
+
+  it("イラスト付きノードの高さ以上なら、そのまま返す", () => {
+    expect(getIllustratedNodeMinHeight(200)).toBe(200);
+    expect(getIllustratedNodeMinHeight(ILLUSTRATED_NODE_HEIGHT)).toBe(ILLUSTRATED_NODE_HEIGHT);
   });
 });

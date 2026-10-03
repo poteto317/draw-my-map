@@ -1,6 +1,7 @@
 import { parseMapDocumentJson, parseMapDocumentJsonWithVersion } from "@/domain/persistence/mapDocumentDecoder";
 import type { Node } from "@/types/node";
 import { createTestNode } from "@/testing/createTestNode";
+import { createJpegDataUrl } from "@/testing/jpegFixture";
 
 function node(id: number, parentId: number | null, label = `node-${id}`): Node {
   return createTestNode({
@@ -154,7 +155,7 @@ describe("MapDocument Decoder", () => {
 });
 
 const baseNode = { id: 1, parentId: null, x: 0, y: 0, width: 100, height: 116, label: "a", importance: "medium" };
-const IMAGE = "data:image/jpeg;base64,AAAA";
+const IMAGE = createJpegDataUrl(128, 128);
 const json = (version: number, node: Record<string, unknown>) =>
   JSON.stringify({ version, layoutMode: "manual", nodes: [node] });
 
@@ -192,7 +193,13 @@ describe("version 3 のイラスト", () => {
     expect(parsed.ok && parsed.value.document.version).toBe(3);
   });
 
-  it.each([123, "https://example.com/a.png", "data:image/svg+xml;base64,AAAA"])(
+  it.each([
+    123,
+    "https://example.com/a.png",
+    "data:image/svg+xml;base64,AAAA",
+    "data:image/png;base64,AAAA",
+    createJpegDataUrl(20000, 20000),
+  ])(
     "version 3 で不正な illustration（%p）は、読み込みを失敗にする",
     (illustration) => {
       expect(parseMapDocumentJsonWithVersion(json(3, { ...baseNode, illustration }))).toEqual({

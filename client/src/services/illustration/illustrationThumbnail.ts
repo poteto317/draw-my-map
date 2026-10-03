@@ -1,4 +1,5 @@
 import { ILLUSTRATION_THUMBNAIL_QUALITY, ILLUSTRATION_THUMBNAIL_SIZE } from "@/config/illustration";
+import { calculateCoverCrop } from "@/domain/illustration/illustrationCrop";
 import { isIllustrationDataUrl } from "@/domain/illustration/illustrationDataUrl";
 
 export class IllustrationThumbnailError extends Error {
@@ -12,11 +13,6 @@ export type ThumbnailDeps = {
   loadImage: (dataUrl: string) => Promise<{ image: CanvasImageSource; width: number; height: number }>;
   createCanvas: () => HTMLCanvasElement;
 };
-
-export function calculateCoverCrop(width: number, height: number) {
-  const size = Math.min(width, height);
-  return { sx: (width - size) / 2, sy: (height - size) / 2, size };
-}
 
 const defaultDeps: ThumbnailDeps = {
   loadImage: async (dataUrl) => {
