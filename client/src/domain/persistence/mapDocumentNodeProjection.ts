@@ -10,5 +10,6 @@ export function projectMapDocumentNode(node: Node): Node {
     height: node.height,
     label: node.label,
     importance: node.importance,
+    ...(node.illustration === undefined ? {} : { illustration: node.illustration }),
   };
 }

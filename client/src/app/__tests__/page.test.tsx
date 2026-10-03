@@ -223,7 +223,7 @@ describe("Home", () => {
       await user.click(screen.getByRole("button", { name: "JSON書き出し" }));
 
       expect(mockDownloadMapJson).toHaveBeenCalledWith(`{
-  "version": 2,
+  "version": 3,
   "layoutMode": "manual",
   "nodes": []
 }\n`);
@@ -307,7 +307,7 @@ describe("Home", () => {
       const stored = window.localStorage.getItem("draw-my-map.map.v1");
       expect(stored).not.toBeNull();
       expect(JSON.parse(stored!)).toMatchObject({
-        version: 2,
+        version: 3,
         layoutMode: "manual",
         nodes: [expect.objectContaining({
           x: -40,

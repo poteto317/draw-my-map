@@ -21,7 +21,7 @@ const storedMapJson = `{
 }\n`;
 
 const mapBJson = `{
-  "version": 2,
+  "version": 3,
   "layoutMode": "manual",
   "nodes": [
     {
@@ -38,7 +38,7 @@ const mapBJson = `{
 }\n`;
 
 const mapCJson = `{
-  "version": 2,
+  "version": 3,
   "layoutMode": "manual",
   "nodes": [
     {
@@ -55,7 +55,7 @@ const mapCJson = `{
 }\n`;
 
 const mapAJson = `{
-  "version": 2,
+  "version": 3,
   "layoutMode": "manual",
   "nodes": [
     {
@@ -233,7 +233,7 @@ describe("useMapPersistence", () => {
       expect(storage.setItem).toHaveBeenCalledWith(
         "draw-my-map.map.v1",
         `{
-  "version": 2,
+  "version": 3,
   "layoutMode": "auto",
   "nodes": [
     {

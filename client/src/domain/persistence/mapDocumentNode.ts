@@ -1,5 +1,6 @@
-import type { MapDocumentResult } from "@/types/mapDocument";
+import type { MapDocumentResult, MapDocumentVersion } from "@/types/mapDocument";
 import type { Node } from "@/types/node";
+import { isIllustrationDataUrl } from "@/domain/illustration/illustrationDataUrl";
 import { normalizeMapDocumentNodeImportance } from "@/domain/persistence/mapDocumentNodeImportance";
 import { projectMapDocumentNode } from "@/domain/persistence/mapDocumentNodeProjection";
 
@@ -20,7 +21,7 @@ function isSafeInteger(value: unknown): value is number {
 export function normalizeMapDocumentNode(
   value: unknown,
   index: number,
-  version: 1 | 2,
+  version: MapDocumentVersion,
 ): MapDocumentResult<Node> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return failure(index, "はオブジェクトである必要があります。");
@@ -57,6 +58,13 @@ export function normalizeMapDocumentNode(
   if (!importanceResult.ok) {
     return importanceResult;
   }
+  let illustration: string | undefined;
+  if (version === 3 && node.illustration !== undefined) {
+    if (!isIllustrationDataUrl(node.illustration)) {
+      return failure(index, ".illustrationは、画像のdata URLである必要があります。");
+    }
+    illustration = node.illustration;
+  }
   return {
     ok: true,
     value: projectMapDocumentNode({
@@ -68,6 +76,7 @@ export function normalizeMapDocumentNode(
       height,
       label,
       importance: importanceResult.value,
+      ...(illustration === undefined ? {} : { illustration }),
     }),
   };
 }

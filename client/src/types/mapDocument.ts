@@ -12,9 +12,11 @@ export type MapDocumentV1 = {
   nodes: MapDocumentV1Node[];
 };
 
-export type MapDocumentV2 = NodeMapState & { version: 2 };
+export type MapDocumentVersion = 1 | 2 | 3;
 
-export type MapDocument = MapDocumentV2;
+export type MapDocumentV3 = NodeMapState & { version: 3 };
+
+export type MapDocument = MapDocumentV3;
 
 export type MapDocumentResult<T> =
   | { ok: true; value: T }

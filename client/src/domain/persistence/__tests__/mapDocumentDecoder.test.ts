@@ -1,4 +1,4 @@
-import { parseMapDocumentJson } from "@/domain/persistence/mapDocumentDecoder";
+import { parseMapDocumentJson, parseMapDocumentJsonWithVersion } from "@/domain/persistence/mapDocumentDecoder";
 import type { Node } from "@/types/node";
 import { createTestNode } from "@/testing/createTestNode";
 
@@ -33,7 +33,7 @@ describe("MapDocument Decoder", () => {
     expect(parseMapDocumentJson(legacy)).toEqual({
       ok: true,
       value: {
-        version: 2,
+        version: 3,
         layoutMode: "manual",
         nodes: [expect.objectContaining({ id: 1, importance: "medium" })],
       },
@@ -50,7 +50,7 @@ describe("MapDocument Decoder", () => {
     expect(parseMapDocumentJson(legacy)).toEqual({
       ok: true,
       value: {
-        version: 2,
+        version: 3,
         layoutMode: "manual",
         nodes: [node(1, null)],
       },
@@ -89,7 +89,7 @@ describe("MapDocument Decoder", () => {
   );
 
   it.each([
-    ['{"version":3,"layoutMode":"manual","nodes":[]}', "未対応のマップ形式です。"],
+    ['{"version":4,"layoutMode":"manual","nodes":[]}', "未対応のマップ形式です。"],
     ['{"version":1,"layoutMode":"grid","nodes":[]}', "レイアウトモードが不正です。"],
     ['{"version":1,"layoutMode":"manual","nodes":{}}', "ノード一覧が不正です。"],
   ])("ドキュメント形式の不正を拒否する", (json, error) => {
@@ -140,7 +140,7 @@ describe("MapDocument Decoder", () => {
       expect(result).toEqual({
         ok: true,
         value: {
-          version: 2,
+          version: 3,
           layoutMode: "manual",
           nodes: [node(1, null)],
         },
@@ -150,5 +150,44 @@ describe("MapDocument Decoder", () => {
     } finally {
       parseSpy.mockRestore();
     }
+  });
+});
+
+const baseNode = { id: 1, parentId: null, x: 0, y: 0, width: 100, height: 116, label: "a", importance: "medium" };
+const IMAGE = "data:image/jpeg;base64,AAAA";
+const json = (version: number, node: Record<string, unknown>) =>
+  JSON.stringify({ version, layoutMode: "manual", nodes: [node] });
+
+describe("version 3 のイラスト", () => {
+  it("version 3 の illustration を読み込む", () => {
+    const parsed = parseMapDocumentJsonWithVersion(json(3, { ...baseNode, illustration: IMAGE }));
+    expect(parsed).toMatchObject({ ok: true, value: { sourceVersion: 3, document: { version: 3 } } });
+    expect(parsed.ok && parsed.value.document.nodes[0].illustration).toBe(IMAGE);
+  });
+
+  it("illustration が無いノードは、項目を持たない", () => {
+    const parsed = parseMapDocumentJsonWithVersion(json(3, baseNode));
+    expect(parsed.ok && "illustration" in parsed.value.document.nodes[0]).toBe(false);
+  });
+
+  it.each([1, 2])("version %i の illustration は無視する", (version) => {
+    const node = version === 1 ? { ...baseNode, illustration: IMAGE, importance: undefined } : { ...baseNode, illustration: IMAGE };
+    const parsed = parseMapDocumentJsonWithVersion(json(version, node));
+    expect(parsed.ok && "illustration" in parsed.value.document.nodes[0]).toBe(false);
+    expect(parsed.ok && parsed.value.document.version).toBe(3);
+  });
+
+  it.each([123, "https://example.com/a.png", "data:image/svg+xml;base64,AAAA"])(
+    "version 3 で不正な illustration（%p）は、読み込みを失敗にする",
+    (illustration) => {
+      expect(parseMapDocumentJsonWithVersion(json(3, { ...baseNode, illustration }))).toEqual({
+        ok: false,
+        error: "node[0].illustrationは、画像のdata URLである必要があります。",
+      });
+    },
+  );
+
+  it("version 4 は未対応", () => {
+    expect(parseMapDocumentJsonWithVersion(json(4, baseNode))).toEqual({ ok: false, error: "未対応のマップ形式です。" });
   });
 });

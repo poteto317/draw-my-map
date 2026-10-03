@@ -1,11 +1,11 @@
 import { validateMapDocumentGraph } from "@/domain/persistence/mapDocumentGraph";
 import { normalizeMapDocumentNode } from "@/domain/persistence/mapDocumentNode";
-import type { MapDocumentResult, MapDocumentV2 } from "@/types/mapDocument";
+import type { MapDocumentResult, MapDocumentV3, MapDocumentVersion } from "@/types/mapDocument";
 import type { Node } from "@/types/node";
 
 type ParsedMapDocumentJson = {
-  document: MapDocumentV2;
-  sourceVersion: 1 | 2;
+  document: MapDocumentV3;
+  sourceVersion: MapDocumentVersion;
 };
 
 export function parseMapDocumentJsonWithVersion(
@@ -23,7 +23,7 @@ export function parseMapDocumentJsonWithVersion(
   }
 
   const record = value as Record<string, unknown>;
-  if (record.version !== 1 && record.version !== 2) {
+  if (record.version !== 1 && record.version !== 2 && record.version !== 3) {
     return { ok: false, error: "未対応のマップ形式です。" };
   }
   if (record.layoutMode !== "manual" && record.layoutMode !== "auto") {
@@ -47,7 +47,7 @@ export function parseMapDocumentJsonWithVersion(
     ok: true,
     value: {
       document: {
-        version: 2,
+        version: 3,
         layoutMode: record.layoutMode,
         nodes: graph.value,
       },
@@ -58,7 +58,7 @@ export function parseMapDocumentJsonWithVersion(
 
 export function parseMapDocumentJson(
   json: string,
-): MapDocumentResult<MapDocumentV2> {
+): MapDocumentResult<MapDocumentV3> {
   const parsed = parseMapDocumentJsonWithVersion(json);
   if (!parsed.ok) return parsed;
   return { ok: true, value: parsed.value.document };

@@ -2,13 +2,13 @@ import { act, renderHook } from "@testing-library/react";
 import { useMapStoragePersistence } from "@/hooks/useMapStoragePersistence";
 
 const emptyMapJson = `{
-  "version": 2,
+  "version": 3,
   "layoutMode": "manual",
   "nodes": []
 }\n`;
 
 const nonCanonicalEmptyMapJson =
-  '{"nodes":[],"layoutMode":"manual","version":2}';
+  '{"nodes":[],"layoutMode":"manual","version":3}';
 
 const importedMapJson = `{
   "version": 1,
@@ -27,7 +27,7 @@ const importedMapJson = `{
 }\n`;
 
 const migratedMapJson = `{
-  "version": 2,
+  "version": 3,
   "layoutMode": "auto",
   "nodes": [
     {

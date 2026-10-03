@@ -1,14 +1,14 @@
 import { projectMapDocumentNode } from "@/domain/persistence/mapDocumentNodeProjection";
-import type { MapDocument, MapDocumentV2 } from "@/types/mapDocument";
+import type { MapDocument, MapDocumentV3 } from "@/types/mapDocument";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 
 function projectMapDocument(
   nodes: readonly Node[],
   layoutMode: NodeLayoutMode,
-): MapDocumentV2 {
+): MapDocumentV3 {
   return {
-    version: 2,
+    version: 3,
     layoutMode,
     nodes: nodes.map(projectMapDocumentNode),
   };
@@ -17,7 +17,7 @@ function projectMapDocument(
 export function createMapDocument(
   nodes: readonly Node[],
   layoutMode: NodeLayoutMode,
-): MapDocumentV2 {
+): MapDocumentV3 {
   return projectMapDocument(nodes, layoutMode);
 }
 
