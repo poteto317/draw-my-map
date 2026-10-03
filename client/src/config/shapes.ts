@@ -3,3 +3,9 @@ export const RECT_HEIGHT = 60;
 export const CHILD_HORIZONTAL_GAP = 120;
 export const SIBLING_VERTICAL_GAP = 40;
 export const TREE_VERTICAL_GAP = SIBLING_VERTICAL_GAP * 2;
+
+// ノードに紐付けるイラストの配置（ノード上部の中央に置き、その分だけノードの高さを伸ばす）
+export const ILLUSTRATION_SIZE = 48;
+export const ILLUSTRATION_TOP_PADDING = 8;
+export const ILLUSTRATION_AREA_HEIGHT = ILLUSTRATION_TOP_PADDING + ILLUSTRATION_SIZE;
+export const ILLUSTRATED_NODE_HEIGHT = RECT_HEIGHT + ILLUSTRATION_AREA_HEIGHT;
