@@ -217,6 +217,7 @@ export function MapStage({
   };
 
   const menu = contextMenu.menu;
+  const menuNode = menu === null ? undefined : nodes.find((node) => node.id === menu.nodeId);
 
   return (
     <div
@@ -238,6 +239,7 @@ export function MapStage({
       {menu && onGenerateIllustration && (
         <NodeContextMenu
           position={menu.position}
+          hasIllustration={menuNode?.illustration !== undefined}
           onGenerateIllustration={() => {
             menuActivatedAtRef.current = Date.now();
             contextMenu.close();

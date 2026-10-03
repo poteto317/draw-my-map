@@ -6,7 +6,7 @@ import { NODE_CONTEXT_MENU_SIZE } from "@/components/map/nodeContextMenuLayout";
 
 describe("NodeContextMenu", () => {
   it("指定位置にメニューと項目を表示する", () => {
-    render(<NodeContextMenu position={{ x: 10, y: 20 }} onGenerateIllustration={jest.fn()} />);
+    render(<NodeContextMenu hasIllustration={false} position={{ x: 10, y: 20 }} onGenerateIllustration={jest.fn()} />);
 
     expect(screen.getByRole("menu")).toHaveStyle({ left: "10px", top: "20px" });
     expect(screen.getByRole("menuitem", { name: "イラストを生成" })).toBeInTheDocument();
@@ -14,7 +14,7 @@ describe("NodeContextMenu", () => {
 
   it("項目クリックでコールバックを呼ぶ", async () => {
     const onGenerateIllustration = jest.fn();
-    render(<NodeContextMenu position={{ x: 0, y: 0 }} onGenerateIllustration={onGenerateIllustration} />);
+    render(<NodeContextMenu hasIllustration={false} position={{ x: 0, y: 0 }} onGenerateIllustration={onGenerateIllustration} />);
 
     await userEvent.click(screen.getByRole("menuitem", { name: "イラストを生成" }));
 
@@ -25,7 +25,7 @@ describe("NodeContextMenu", () => {
     const onDoubleClick = jest.fn();
     render(
       <div onDoubleClick={onDoubleClick}>
-        <NodeContextMenu position={{ x: 0, y: 0 }} onGenerateIllustration={jest.fn()} />
+        <NodeContextMenu hasIllustration={false} position={{ x: 0, y: 0 }} onGenerateIllustration={jest.fn()} />
       </div>,
     );
 
@@ -35,7 +35,7 @@ describe("NodeContextMenu", () => {
   });
 
   it("外形サイズをレイアウト定数どおりに指定する", () => {
-    render(<NodeContextMenu position={{ x: 0, y: 0 }} onGenerateIllustration={jest.fn()} />);
+    render(<NodeContextMenu hasIllustration={false} position={{ x: 0, y: 0 }} onGenerateIllustration={jest.fn()} />);
 
     expect(screen.getByRole("menu")).toHaveStyle({
       width: `${NODE_CONTEXT_MENU_SIZE.width}px`,
@@ -44,15 +44,23 @@ describe("NodeContextMenu", () => {
   });
 
   it("メニューとその項目はメニュー内判定でtrueになる", () => {
-    render(<NodeContextMenu position={{ x: 0, y: 0 }} onGenerateIllustration={jest.fn()} />);
+    render(<NodeContextMenu hasIllustration={false} position={{ x: 0, y: 0 }} onGenerateIllustration={jest.fn()} />);
 
     expect(isInsideNodeContextMenu(screen.getByRole("menu"))).toBe(true);
     expect(isInsideNodeContextMenu(screen.getByRole("menuitem"))).toBe(true);
   });
 
   it("項目のmousedownは既定動作を抑止してフォーカス移動を防ぐ", () => {
-    render(<NodeContextMenu position={{ x: 0, y: 0 }} onGenerateIllustration={jest.fn()} />);
+    render(<NodeContextMenu hasIllustration={false} position={{ x: 0, y: 0 }} onGenerateIllustration={jest.fn()} />);
 
     expect(fireEvent.mouseDown(screen.getByRole("menuitem"))).toBe(false);
+  });
+
+  it("イラストがあるノードでは、項目が「イラストを再生成」になり、クリックで同じコールバックを呼ぶ", async () => {
+    const onGenerateIllustration = jest.fn();
+    render(<NodeContextMenu position={{ x: 0, y: 0 }} hasIllustration onGenerateIllustration={onGenerateIllustration} />);
+    expect(screen.queryByRole("menuitem", { name: "イラストを生成" })).toBeNull();
+    await userEvent.click(screen.getByRole("menuitem", { name: "イラストを再生成" }));
+    expect(onGenerateIllustration).toHaveBeenCalledTimes(1);
   });
 });

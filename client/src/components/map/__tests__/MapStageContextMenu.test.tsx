@@ -65,6 +65,34 @@ describe("MapStage context menu boundary", () => {
     expect(getByRole("menu")).toHaveStyle({ left: "100px", top: "60px" });
   });
 
+  it("illustrationを持つノードを右クリックすると、メニューの項目が「イラストを再生成」になる", async () => {
+    const nodes = [
+      createTestNode({ id: 1, x: 50, y: 30, label: "ノード1", illustration: "data:image/jpeg;base64,AAAA", height: 116 }),
+    ];
+    const { getByRole, queryByRole } = await renderReady(
+      <MapStage {...defaultProps} nodes={nodes} onGenerateIllustration={jest.fn()} />,
+    );
+    const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+    mockStageBounds(container);
+
+    fireEvent.contextMenu(container, { clientX: 100, clientY: 60 });
+
+    expect(getByRole("menuitem", { name: "イラストを再生成" })).toBeInTheDocument();
+    expect(queryByRole("menuitem", { name: "イラストを生成" })).not.toBeInTheDocument();
+  });
+
+  it("illustrationを持たないノードを右クリックすると、項目は「イラストを生成」のまま", async () => {
+    const { getByRole } = await renderReady(
+      <MapStage {...defaultProps} nodes={sampleNodes} onGenerateIllustration={jest.fn()} />,
+    );
+    const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+    mockStageBounds(container);
+
+    fireEvent.contextMenu(container, { clientX: 100, clientY: 60 });
+
+    expect(getByRole("menuitem", { name: "イラストを生成" })).toBeInTheDocument();
+  });
+
   it("メニュー項目の選択で対象ノードIDを通知してメニューを閉じる", async () => {
     const onGenerateIllustration = jest.fn();
     const { getByRole, queryByRole } = await renderReady(

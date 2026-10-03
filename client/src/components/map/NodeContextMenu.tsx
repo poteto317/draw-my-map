@@ -1,15 +1,17 @@
 "use client";
 
+import { getIllustrationActionLabel } from "@/domain/illustration/illustrationActionLabel";
 import type { Point } from "@/components/map/mapGeometry";
 import { NODE_CONTEXT_MENU_ATTRIBUTE } from "@/components/map/nodeContextMenuDom";
 import { NODE_CONTEXT_MENU_SIZE } from "@/components/map/nodeContextMenuLayout";
 
 type NodeContextMenuProps = {
   position: Point;
+  hasIllustration: boolean;
   onGenerateIllustration: () => void;
 };
 
-export function NodeContextMenu({ position, onGenerateIllustration }: NodeContextMenuProps) {
+export function NodeContextMenu({ position, hasIllustration, onGenerateIllustration }: NodeContextMenuProps) {
   return (
     <div
       role="menu"
@@ -28,7 +30,7 @@ export function NodeContextMenu({ position, onGenerateIllustration }: NodeContex
         onClick={onGenerateIllustration}
         className="h-full w-full rounded px-3 text-left text-sm text-zinc-800 hover:bg-zinc-100 focus:bg-zinc-100 focus:outline-none dark:text-zinc-100 dark:hover:bg-zinc-700 dark:focus:bg-zinc-700"
       >
-        イラストを生成
+        {getIllustrationActionLabel(hasIllustration)}
       </button>
     </div>
   );
