@@ -14,7 +14,7 @@ import {
   type NodeIdAllocator,
 } from "@/domain/nodes/nodeIdAllocator";
 import { replaceNodeImportance } from "@/domain/nodes/nodeImportanceUpdate";
-import { replaceNodeIllustration } from "@/domain/nodes/nodeIllustrationUpdate";
+import { clearNodeIllustration, replaceNodeIllustration } from "@/domain/nodes/nodeIllustrationUpdate";
 import { useNodeLayoutState } from "@/hooks/useNodeLayoutState";
 import type { Node } from "@/types/node";
 import type { NodeImportance } from "@/types/nodeImportance";
@@ -32,6 +32,7 @@ type UseNodesReturn = {
   updateNodeLabel: (id: number, label: string) => void;
   updateNodeImportance: (id: number, importance: NodeImportance) => boolean;
   attachIllustration: (id: number, dataUrl: string) => boolean;
+  removeIllustration: (id: number) => boolean;
   moveNode: (id: number, x: number, y: number) => void;
   connectNodes: (parentId: number, childId: number) => boolean;
   deleteNode: (id: number) => void;
@@ -124,6 +125,10 @@ export function useNodes(): UseNodesReturn {
     applyTreeChange((currentNodes) => replaceNodeIllustration(currentNodes, id, dataUrl))
   ), [applyTreeChange]);
 
+  const removeIllustration = useCallback((id: number) => (
+    applyTreeChange((currentNodes) => clearNodeIllustration(currentNodes, id))
+  ), [applyTreeChange]);
+
   const moveNode = useCallback((id: number, x: number, y: number) => {
     applyManualMove((currentNodes) => (
       moveNodeSubtree(currentNodes, id, x, y)
@@ -165,6 +170,7 @@ export function useNodes(): UseNodesReturn {
     updateNodeLabel,
     updateNodeImportance,
     attachIllustration,
+    removeIllustration,
     moveNode,
     connectNodes,
     deleteNode,

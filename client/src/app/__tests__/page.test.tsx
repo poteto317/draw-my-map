@@ -442,6 +442,28 @@ describe("Home", () => {
       expect(mockDismissGeneration).toHaveBeenCalledTimes(1);
     });
 
+    it("設定したあと「イラストを削除」を押すと、設定済みのイラストが消え、生成ボタンが「イラストを生成」に戻る", async () => {
+      const user = userEvent.setup();
+      render(<Home />);
+      await user.click(screen.getByRole("button", { name: "テスト用ノード追加" }));
+      await user.click(screen.getByRole("button", { name: "テスト用ノード選択" }));
+      const nodeId = mockMapStageProps!.nodes[0].id;
+      mockGeneration = { status: "succeeded", nodeId, label: mockMapStageProps!.nodes[0].label, dataUrl: "data:image/jpeg;base64,AAAA" };
+      await user.click(screen.getByRole("button", { name: "テスト用ノード追加" })); // 再描画させ、モックの生成状態を反映する
+      await user.click(screen.getByRole("button", { name: "ノードに設定" }));
+      mockGeneration = { status: "idle" }; // 実物では dismissGeneration でプレビューが消える
+      await user.click(screen.getByRole("button", { name: "テスト用ノード追加" }));
+      expect(screen.getByText("設定済みのイラスト")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "イラストを再生成" })).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "イラストを削除" }));
+
+      expect(mockMapStageProps!.nodes[0].illustration).toBeUndefined();
+      expect(screen.queryByText("設定済みのイラスト")).toBeNull();
+      expect(screen.queryByRole("button", { name: "イラストを削除" })).toBeNull();
+      expect(screen.getByRole("button", { name: "イラストを生成" })).toBeInTheDocument();
+    });
+
     it("選択したノードが2番目でも、そのノードのIDを生成の入口へ渡す", async () => {
       const user = userEvent.setup();
       render(<Home />);

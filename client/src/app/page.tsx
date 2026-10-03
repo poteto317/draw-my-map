@@ -35,6 +35,7 @@ export default function Home() {
     setLayoutMode,
     replaceMap,
     attachIllustration,
+    removeIllustration,
   } = useNodes();
   const [viewportScale, setViewportScale] = useState(1);
   const { replaceMapAndReset, resetRevision } = useResettingMapReplacement(replaceMap);
@@ -127,6 +128,7 @@ export default function Home() {
             onAttach={(nodeId, dataUrl) => {
               if (attachIllustration(nodeId, dataUrl)) dismissGeneration();
             }}
+            onRemove={removeIllustration}
           />
         )}
       />

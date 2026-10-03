@@ -716,3 +716,41 @@ describe("useNodes の attachIllustration", () => {
     expect(result.current.nodes.find((n) => n.id === b)!.y).toBeGreaterThan(yBefore);
   });
 });
+
+describe("useNodes の removeIllustration", () => {
+  it("removeIllustration は、イラストを外して、高さを元に戻す", () => {
+    const { result } = renderHook(() => useNodes());
+    let id!: number;
+    act(() => { id = result.current.addNode(100, 100); });
+    act(() => { result.current.attachIllustration(id, "data:image/jpeg;base64,AAAA"); });
+    let removed = false;
+    act(() => { removed = result.current.removeIllustration(id); });
+    expect(removed).toBe(true);
+    expect(result.current.nodes[0].height).toBe(RECT_HEIGHT);
+    expect("illustration" in result.current.nodes[0]).toBe(false);
+  });
+
+  it("イラストが無いノード、存在しないノードには、false を返す", () => {
+    const { result } = renderHook(() => useNodes());
+    let id!: number;
+    act(() => { id = result.current.addNode(100, 100); });
+    let removed = true;
+    act(() => { removed = result.current.removeIllustration(id); });
+    expect(removed).toBe(false);
+    act(() => { removed = result.current.removeIllustration(99); });
+    expect(removed).toBe(false);
+  });
+
+  it("自動レイアウトのとき、削除で縮んだ分、兄弟ノードが上へ再配置される", () => {
+    const { result } = renderHook(() => useNodes());
+    act(() => { result.current.setLayoutMode("auto"); });
+    let rootId!: number; let a!: number; let b!: number;
+    act(() => { rootId = result.current.addNode(0, 0); });
+    act(() => { a = result.current.addChildNode(rootId)!; });
+    act(() => { b = result.current.addSiblingNode(a)!; });
+    act(() => { result.current.attachIllustration(a, "data:image/jpeg;base64,AAAA"); });
+    const yWith = result.current.nodes.find((n) => n.id === b)!.y;
+    act(() => { result.current.removeIllustration(a); });
+    expect(result.current.nodes.find((n) => n.id === b)!.y).toBeLessThan(yWith);
+  });
+});

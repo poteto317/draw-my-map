@@ -11,6 +11,8 @@ describe("getIllustrationPanelView", () => {
       isGenerating: false,
       status: null,
       image: null,
+      generateLabel: "イラストを生成",
+      canRemove: false,
       errorMessage: null,
     });
   });
@@ -20,6 +22,8 @@ describe("getIllustrationPanelView", () => {
       isGenerating: false,
       status: null,
       image: null,
+      generateLabel: "イラストを生成",
+      canRemove: false,
       errorMessage: null,
     });
   });
@@ -29,6 +33,8 @@ describe("getIllustrationPanelView", () => {
       isGenerating: true,
       status: "generating",
       image: null,
+      generateLabel: "イラストを生成",
+      canRemove: false,
       errorMessage: null,
     });
   });
@@ -38,6 +44,8 @@ describe("getIllustrationPanelView", () => {
       isGenerating: true,
       status: null,
       image: { kind: "attached", dataUrl: ATTACHED },
+      generateLabel: "イラストを再生成",
+      canRemove: true,
       errorMessage: null,
     });
   });
@@ -53,6 +61,8 @@ describe("getIllustrationPanelView", () => {
       isGenerating: true,
       status: null,
       image: null,
+      generateLabel: "イラストを生成",
+      canRemove: false,
       errorMessage: null,
     });
   });
@@ -85,6 +95,8 @@ describe("getIllustrationPanelView", () => {
       isGenerating: false,
       status: null,
       image: { kind: "attached", dataUrl: ATTACHED },
+      generateLabel: "イラストを再生成",
+      canRemove: true,
       errorMessage: "失敗",
     });
   });
@@ -128,6 +140,38 @@ describe("getIllustrationPanelView", () => {
         { status: "generating", nodeId: 1, label: "目標" },
       );
       expect(view.status).toBe("generating");
+    });
+  });
+
+  describe("生成ボタンのラベルと削除", () => {
+    const IMAGE = "data:image/jpeg;base64,AAAA";
+
+    it("イラストが無いノードでは、generateLabel は「イラストを生成」、canRemove は false", () => {
+      const view = getIllustrationPanelView({ id: 1, label: "a" }, { status: "idle" });
+      expect(view.generateLabel).toBe("イラストを生成");
+      expect(view.canRemove).toBe(false);
+    });
+
+    it("イラストがあるノードでは、generateLabel は「イラストを再生成」、canRemove は true", () => {
+      const view = getIllustrationPanelView({ id: 1, label: "a", illustration: IMAGE }, { status: "idle" });
+      expect(view.generateLabel).toBe("イラストを再生成");
+      expect(view.canRemove).toBe(true);
+    });
+
+    it("ノードが未選択のときは、「イラストを生成」で、canRemove は false", () => {
+      const view = getIllustrationPanelView(null, { status: "idle" });
+      expect(view.generateLabel).toBe("イラストを生成");
+      expect(view.canRemove).toBe(false);
+    });
+
+    it("生成のプレビュー中でも、ノードにイラストがあれば canRemove は true、ラベルは「再生成」", () => {
+      const view = getIllustrationPanelView(
+        { id: 1, label: "a", illustration: IMAGE },
+        { status: "succeeded", nodeId: 1, label: "a", dataUrl: "data:image/jpeg;base64,BBBB" },
+      );
+      expect(view.image).toEqual({ kind: "preview", dataUrl: "data:image/jpeg;base64,BBBB" });
+      expect(view.canRemove).toBe(true);
+      expect(view.generateLabel).toBe("イラストを再生成");
     });
   });
 });

@@ -9,9 +9,10 @@ type IllustrationPanelProps = {
   generation: IllustrationGenerationState;
   onGenerate: (nodeId: number) => void;
   onAttach: (nodeId: number, dataUrl: string) => void;
+  onRemove: (nodeId: number) => void;
 };
 
-export function IllustrationPanel({ selectedNode, generation, onGenerate, onAttach }: IllustrationPanelProps) {
+export function IllustrationPanel({ selectedNode, generation, onGenerate, onAttach, onRemove }: IllustrationPanelProps) {
   const view = getIllustrationPanelView(selectedNode, generation);
   const preview = view.image?.kind === "preview" ? view.image : null;
   return (
@@ -60,6 +61,15 @@ export function IllustrationPanel({ selectedNode, generation, onGenerate, onAtta
           />
         </div>
       )}
+      {selectedNode !== null && view.canRemove && (
+        <button
+          type="button"
+          onClick={() => onRemove(selectedNode.id)}
+          className="rounded-md border border-red-600 px-3 py-2 text-sm text-red-600 transition-colors hover:bg-red-50 dark:border-red-400 dark:text-red-400 dark:hover:bg-zinc-700"
+        >
+          イラストを削除
+        </button>
+      )}
       {view.errorMessage !== null && (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
           {view.errorMessage}
@@ -73,7 +83,7 @@ export function IllustrationPanel({ selectedNode, generation, onGenerate, onAtta
         }}
         className="rounded-md bg-blue-600 px-3 py-2 text-sm text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400 dark:disabled:bg-zinc-700 dark:disabled:text-zinc-500"
       >
-        {view.isGenerating ? "生成中…" : "イラストを生成"}
+        {view.isGenerating ? "生成中…" : view.generateLabel}
       </button>
     </aside>
   );

@@ -5,14 +5,14 @@ import { IllustrationPanel } from "@/components/layout/IllustrationPanel";
 
 describe("IllustrationPanel", () => {
   it("補足領域として名前付きで表示し、見出しを持つ", () => {
-    render(<IllustrationPanel selectedNode={null} generation={{ status: "idle" }} onGenerate={jest.fn()} onAttach={jest.fn()} />);
+    render(<IllustrationPanel selectedNode={null} generation={{ status: "idle" }} onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={jest.fn()} />);
 
     expect(screen.getByRole("complementary", { name: "イラスト" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "イラスト" })).toBeInTheDocument();
   });
 
   it("ノード未選択のときは案内を表示し、生成ボタンを無効にする", () => {
-    render(<IllustrationPanel selectedNode={null} generation={{ status: "idle" }} onGenerate={jest.fn()} onAttach={jest.fn()} />);
+    render(<IllustrationPanel selectedNode={null} generation={{ status: "idle" }} onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={jest.fn()} />);
 
     expect(screen.getByText("ノードを選択してください")).toBeVisible();
     expect(screen.getByRole("button", { name: "イラストを生成" })).toBeDisabled();
@@ -22,7 +22,7 @@ describe("IllustrationPanel", () => {
     render(
       <IllustrationPanel
         selectedNode={{ id: 3, label: "企画の背景" }}
-        generation={{ status: "idle" }} onGenerate={jest.fn()} onAttach={jest.fn()}
+        generation={{ status: "idle" }} onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={jest.fn()}
       />,
     );
 
@@ -33,7 +33,7 @@ describe("IllustrationPanel", () => {
 
   it("ラベルが空のノードでは共通のフォールバックラベルを表示し、titleは付けない", () => {
     render(
-      <IllustrationPanel selectedNode={{ id: 4, label: "" }} generation={{ status: "idle" }} onGenerate={jest.fn()} onAttach={jest.fn()} />,
+      <IllustrationPanel selectedNode={{ id: 4, label: "" }} generation={{ status: "idle" }} onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={jest.fn()} />,
     );
 
     const text = screen.getByText(FALLBACK_NODE_LABEL);
@@ -46,7 +46,7 @@ describe("IllustrationPanel", () => {
     const user = userEvent.setup();
     const onGenerate = jest.fn();
     render(
-      <IllustrationPanel selectedNode={{ id: 7, label: "目標" }} generation={{ status: "idle" }} onGenerate={onGenerate} onAttach={jest.fn()} />,
+      <IllustrationPanel selectedNode={{ id: 7, label: "目標" }} generation={{ status: "idle" }} onGenerate={onGenerate} onAttach={jest.fn()} onRemove={jest.fn()} />,
     );
 
     await user.click(screen.getByRole("button", { name: "イラストを生成" }));
@@ -58,7 +58,7 @@ describe("IllustrationPanel", () => {
   it("無効なボタンのクリックでは通知しない", async () => {
     const user = userEvent.setup();
     const onGenerate = jest.fn();
-    render(<IllustrationPanel selectedNode={null} generation={{ status: "idle" }} onGenerate={onGenerate} onAttach={jest.fn()} />);
+    render(<IllustrationPanel selectedNode={null} generation={{ status: "idle" }} onGenerate={onGenerate} onAttach={jest.fn()} onRemove={jest.fn()} />);
 
     await user.click(screen.getByRole("button", { name: "イラストを生成" }));
 
@@ -67,13 +67,13 @@ describe("IllustrationPanel", () => {
 
   it("長いラベルは全文をtitleで確認できる", () => {
     const label = "とても長いラベルのノード".repeat(10);
-    render(<IllustrationPanel selectedNode={{ id: 1, label }} generation={{ status: "idle" }} onGenerate={jest.fn()} onAttach={jest.fn()} />);
+    render(<IllustrationPanel selectedNode={{ id: 1, label }} generation={{ status: "idle" }} onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={jest.fn()} />);
 
     expect(screen.getByText(label)).toHaveAttribute("title", label);
   });
 
   it("固定幅で、縮まない", () => {
-    render(<IllustrationPanel selectedNode={null} generation={{ status: "idle" }} onGenerate={jest.fn()} onAttach={jest.fn()} />);
+    render(<IllustrationPanel selectedNode={null} generation={{ status: "idle" }} onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={jest.fn()} />);
 
     expect(screen.getByRole("complementary", { name: "イラスト" })).toHaveClass("w-60", "shrink-0");
   });
@@ -83,7 +83,7 @@ describe("IllustrationPanel", () => {
       <IllustrationPanel
         selectedNode={{ id: 1, label: "目標" }}
         generation={{ status: "generating", nodeId: 1, label: "目標" }}
-        onGenerate={jest.fn()} onAttach={jest.fn()}
+        onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={jest.fn()}
       />,
     );
 
@@ -96,7 +96,7 @@ describe("IllustrationPanel", () => {
       <IllustrationPanel
         selectedNode={{ id: 2, label: "予算" }}
         generation={{ status: "generating", nodeId: 1, label: "目標" }}
-        onGenerate={jest.fn()} onAttach={jest.fn()}
+        onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={jest.fn()}
       />,
     );
 
@@ -112,7 +112,7 @@ describe("IllustrationPanel", () => {
         selectedNode={{ id: 1, label: "目標" }}
         generation={{ status: "generating", nodeId: 1, label: "目標" }}
         onGenerate={onGenerate}
-        onAttach={jest.fn()}
+        onAttach={jest.fn()} onRemove={jest.fn()}
       />,
     );
 
@@ -126,7 +126,7 @@ describe("IllustrationPanel", () => {
       <IllustrationPanel
         selectedNode={{ id: 1, label: "目標" }}
         generation={{ status: "succeeded", nodeId: 1, label: "目標", dataUrl: "data:image/jpeg;base64,AAA" }}
-        onGenerate={jest.fn()} onAttach={jest.fn()}
+        onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={jest.fn()}
       />,
     );
 
@@ -140,7 +140,7 @@ describe("IllustrationPanel", () => {
       <IllustrationPanel
         selectedNode={{ id: 1, label: "" }}
         generation={{ status: "succeeded", nodeId: 1, label: "", dataUrl: "data:image/jpeg;base64,AAA" }}
-        onGenerate={jest.fn()} onAttach={jest.fn()}
+        onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={jest.fn()}
       />,
     );
 
@@ -152,7 +152,7 @@ describe("IllustrationPanel", () => {
       <IllustrationPanel
         selectedNode={{ id: 2, label: "予算" }}
         generation={{ status: "succeeded", nodeId: 1, label: "目標", dataUrl: "data:image/jpeg;base64,AAA" }}
-        onGenerate={jest.fn()} onAttach={jest.fn()}
+        onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={jest.fn()}
       />,
     );
 
@@ -164,7 +164,7 @@ describe("IllustrationPanel", () => {
       <IllustrationPanel
         selectedNode={{ id: 1, label: "目標" }}
         generation={{ status: "failed", nodeId: 1, message: "生成に失敗しました" }}
-        onGenerate={jest.fn()} onAttach={jest.fn()}
+        onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={jest.fn()}
       />,
     );
 
@@ -176,7 +176,7 @@ describe("IllustrationPanel", () => {
       <IllustrationPanel
         selectedNode={{ id: 2, label: "予算" }}
         generation={{ status: "failed", nodeId: 1, message: "生成に失敗しました" }}
-        onGenerate={jest.fn()} onAttach={jest.fn()}
+        onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={jest.fn()}
       />,
     );
 
@@ -189,7 +189,7 @@ describe("IllustrationPanel", () => {
       render(<IllustrationPanel
         selectedNode={{ id: 3, label: "予算" }}
         generation={{ status: "succeeded", nodeId: 3, label: "予算", dataUrl: "data:image/jpeg;base64,AAAA" }}
-        onGenerate={jest.fn()} onAttach={onAttach} />);
+        onGenerate={jest.fn()} onAttach={onAttach} onRemove={jest.fn()} />);
       await userEvent.click(screen.getByRole("button", { name: "ノードに設定" }));
       expect(onAttach).toHaveBeenCalledWith(3, "data:image/jpeg;base64,AAAA");
     });
@@ -197,7 +197,7 @@ describe("IllustrationPanel", () => {
     it("生成後にノードのテキストが変わったら、プレビューも「ノードに設定」も出さない", () => {
       render(<IllustrationPanel selectedNode={{ id: 3, label: "予算（変更後）" }}
         generation={{ status: "succeeded", nodeId: 3, label: "予算", dataUrl: "data:image/jpeg;base64,AAAA" }}
-        onGenerate={jest.fn()} onAttach={jest.fn()} />);
+        onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={jest.fn()} />);
       expect(screen.queryByRole("button", { name: "ノードに設定" })).toBeNull();
       expect(screen.queryByRole("img")).toBeNull();
     });
@@ -205,24 +205,59 @@ describe("IllustrationPanel", () => {
     it("別のノードの生成結果では、「ノードに設定」を出さない", () => {
       render(<IllustrationPanel selectedNode={{ id: 4, label: "x" }}
         generation={{ status: "succeeded", nodeId: 3, label: "予算", dataUrl: "data:image/jpeg;base64,AAAA" }}
-        onGenerate={jest.fn()} onAttach={jest.fn()} />);
+        onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={jest.fn()} />);
       expect(screen.queryByRole("button", { name: "ノードに設定" })).toBeNull();
     });
 
     it("プレビューが無く、ノードに設定済みのイラストがあるときは、それを表示する", () => {
       render(<IllustrationPanel selectedNode={{ id: 4, label: "予算", illustration: "data:image/jpeg;base64,BBBB" }}
-        generation={{ status: "idle" }} onGenerate={jest.fn()} onAttach={jest.fn()} />);
+        generation={{ status: "idle" }} onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={jest.fn()} />);
       expect(screen.getByAltText("予算の設定済みイラスト")).toHaveAttribute("src", "data:image/jpeg;base64,BBBB");
       expect(screen.queryByRole("button", { name: "ノードに設定" })).toBeNull();
     });
 
     it("生成中・失敗のときは、「ノードに設定」を出さない", () => {
       const { rerender } = render(<IllustrationPanel selectedNode={{ id: 1, label: "a" }}
-        generation={{ status: "generating", nodeId: 1, label: "a" }} onGenerate={jest.fn()} onAttach={jest.fn()} />);
+        generation={{ status: "generating", nodeId: 1, label: "a" }} onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={jest.fn()} />);
       expect(screen.queryByRole("button", { name: "ノードに設定" })).toBeNull();
       rerender(<IllustrationPanel selectedNode={{ id: 1, label: "a" }}
-        generation={{ status: "failed", nodeId: 1, message: "x" }} onGenerate={jest.fn()} onAttach={jest.fn()} />);
+        generation={{ status: "failed", nodeId: 1, message: "x" }} onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={jest.fn()} />);
       expect(screen.queryByRole("button", { name: "ノードに設定" })).toBeNull();
     });
+  });
+
+  it("設定済みのイラストがあるとき、「イラストを削除」で、ノードの ID を渡す", async () => {
+    const onRemove = jest.fn();
+    render(<IllustrationPanel
+      selectedNode={{ id: 5, label: "予算", illustration: "data:image/jpeg;base64,AAAA" }}
+      generation={{ status: "idle" }} onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={onRemove} />);
+    await userEvent.click(screen.getByRole("button", { name: "イラストを削除" }));
+    expect(onRemove).toHaveBeenCalledWith(5);
+  });
+
+  it("イラストが無いとき、未選択のときは、「イラストを削除」を出さない", () => {
+    const { rerender } = render(<IllustrationPanel selectedNode={{ id: 1, label: "a" }}
+      generation={{ status: "idle" }} onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={jest.fn()} />);
+    expect(screen.queryByRole("button", { name: "イラストを削除" })).toBeNull();
+    rerender(<IllustrationPanel selectedNode={null}
+      generation={{ status: "idle" }} onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={jest.fn()} />);
+    expect(screen.queryByRole("button", { name: "イラストを削除" })).toBeNull();
+  });
+
+  it("イラストがあるノードでは、生成ボタンが「イラストを再生成」になり、押すと生成を呼ぶ", async () => {
+    const onGenerate = jest.fn();
+    render(<IllustrationPanel
+      selectedNode={{ id: 5, label: "予算", illustration: "data:image/jpeg;base64,AAAA" }}
+      generation={{ status: "idle" }} onGenerate={onGenerate} onAttach={jest.fn()} onRemove={jest.fn()} />);
+    expect(screen.queryByRole("button", { name: "イラストを生成" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "イラストを再生成" }));
+    expect(onGenerate).toHaveBeenCalledWith(5);
+  });
+
+  it("生成中は、ボタンが「生成中…」で無効になる（再生成でも同じ）", () => {
+    render(<IllustrationPanel
+      selectedNode={{ id: 5, label: "予算", illustration: "data:image/jpeg;base64,AAAA" }}
+      generation={{ status: "generating", nodeId: 5, label: "予算" }} onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={jest.fn()} />);
+    expect(screen.getByRole("button", { name: "生成中…" })).toBeDisabled();
   });
 });
