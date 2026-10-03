@@ -20,7 +20,7 @@ export function createMapSvgDocument(
   const { rectangles, images, labels } = createMapSvgNodes(nodes, bounds, measureText);
 
   return {
-    svg: `<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="${bounds.width}" height="${bounds.height}" viewBox="0 0 ${bounds.width} ${bounds.height}">${background}${edges}${rectangles}${images}${labels}</svg>`,
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" width="${bounds.width}" height="${bounds.height}" viewBox="0 0 ${bounds.width} ${bounds.height}">${background}${edges}${rectangles}${images}${labels}</svg>`,
     width: bounds.width,
     height: bounds.height,
   };

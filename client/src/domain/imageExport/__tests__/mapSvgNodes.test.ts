@@ -114,7 +114,7 @@ describe("イラスト付きノード", () => {
 
   it("上部の中央に <image> を出す（オフセットを加える）", () => {
     const { images } = createMapSvgNodes([illustrated], bounds, measureText);
-    expect(images).toBe(`<image href="${IMAGE}" x="${10 + 5 + 26}" y="${20 + 7 + 8}" width="48" height="48" />`);
+    expect(images).toBe(`<image href="${IMAGE}" xlink:href="${IMAGE}" x="${10 + 5 + 26}" y="${20 + 7 + 8}" width="48" height="48" />`);
   });
 
   it("イラストが無いノードは、images が空", () => {

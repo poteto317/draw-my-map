@@ -25,7 +25,7 @@ function createNodeImageMarkup(node: Node, bounds: MapExportBounds): string | nu
   if (node.illustration === undefined || !isIllustrationDataUrl(node.illustration)) return null;
 
   const rect = getNodeIllustrationRect(node);
-  return `<image href="${node.illustration}" x="${rect.x + bounds.offsetX}" y="${rect.y + bounds.offsetY}" width="${rect.size}" height="${rect.size}" />`;
+  return `<image href="${node.illustration}" xlink:href="${node.illustration}" x="${rect.x + bounds.offsetX}" y="${rect.y + bounds.offsetY}" width="${rect.size}" height="${rect.size}" />`;
 }
 
 function createNodeLabelMarkup(node: Node, bounds: MapExportBounds, measureText: MeasureMapText): string {

@@ -57,3 +57,28 @@ it("イラストは、ノードの矩形の後、ラベルの前に描画する"
   expect(svg.indexOf("<image ")).toBeGreaterThan(svg.indexOf('<rect x="32"'));
   expect(svg.indexOf("<text ")).toBeGreaterThan(svg.indexOf("<image "));
 });
+
+describe("イラスト付きSVGのxlink:href", () => {
+  const XLINK_NS = "http://www.w3.org/1999/xlink";
+  const IMAGE = "data:image/jpeg;base64,AAAA";
+  const nodes = [createTestNode({ x: 0, y: 0, height: 116, label: "A", illustration: IMAGE })];
+  const bounds = { minX: 0, minY: 0, width: 164, height: 180, offsetX: 32, offsetY: 32 };
+
+  it("ルートが xmlns:xlink を宣言する", () => {
+    const { svg } = createMapSvgDocument(nodes, bounds, measureText);
+    expect(svg).toContain(`version="1.1" xmlns:xlink="${XLINK_NS}"`);
+  });
+
+  it("イラスト付きSVG全体が、XMLとして不正にならない", () => {
+    const { svg } = createMapSvgDocument(nodes, bounds, measureText);
+    const parsed = new DOMParser().parseFromString(svg, "image/svg+xml");
+    expect(parsed.getElementsByTagName("parsererror")).toHaveLength(0);
+  });
+
+  it("<image> は、href と xlink:href の両方に data URL を持つ", () => {
+    const { svg } = createMapSvgDocument(nodes, bounds, measureText);
+    const image = new DOMParser().parseFromString(svg, "image/svg+xml").getElementsByTagName("image")[0];
+    expect(image.getAttribute("href")).toBe(IMAGE);
+    expect(image.getAttributeNS(XLINK_NS, "href")).toBe(IMAGE);
+  });
+});
