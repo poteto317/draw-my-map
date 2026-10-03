@@ -82,19 +82,23 @@ import { isIllustrationDataUrl } from "@/domain/illustration/illustrationDataUrl
 import { MAX_ILLUSTRATION_DATA_URL_LENGTH } from "@/config/illustration";
 
 describe("isIllustrationDataUrl", () => {
-  it.each(["jpeg", "png", "webp"])("%s の base64 data URL を受け付ける", (type) => {
-    expect(isIllustrationDataUrl(`data:image/${type};base64,AAAA`)).toBe(true);
+  it("jpeg の base64 data URL を受け付ける", () => {
+    expect(isIllustrationDataUrl("data:image/jpeg;base64,AAAA")).toBe(true);
+  });
+
+  it.each(["png", "webp"])("%s は拒否する（アプリが出力するのは jpeg だけ）", (type) => {
+    expect(isIllustrationDataUrl(`data:image/${type};base64,AAAA`)).toBe(false);
   });
 
   it.each([
     ["文字列でない", 1],
     ["null", null],
     ["svg は不可（スクリプトを含みうる）", "data:image/svg+xml;base64,AAAA"],
-    ["base64 でない", "data:image/png,AAAA"],
+    ["base64 でない", "data:image/jpeg,AAAA"],
     ["http の URL", "https://example.com/a.png"],
-    ["本体が空", "data:image/png;base64,"],
-    ["属性を壊す文字を含む", 'data:image/png;base64,AA"AA'],
-    ["改行を含む", "data:image/png;base64,AA\nAA"],
+    ["本体が空", "data:image/jpeg;base64,"],
+    ["属性を壊す文字を含む", 'data:image/jpeg;base64,AA"AA'],
+    ["改行を含む", "data:image/jpeg;base64,AA\nAA"],
   ])("%s は拒否する", (_name, value) => {
     expect(isIllustrationDataUrl(value)).toBe(false);
   });
@@ -222,8 +226,8 @@ export const MAX_ILLUSTRATION_DATA_URL_LENGTH = 100_000;
 ```ts
 import { MAX_ILLUSTRATION_DATA_URL_LENGTH } from "@/config/illustration";
 
-// svg は除く（スクリプトを含みうる）。属性や XML に入れても壊れない文字だけを許す
-const ILLUSTRATION_DATA_URL_PATTERN = /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+// アプリが保存するのは JPEG だけ。svg は除く（スクリプトを含みうる）。属性や XML に入れても壊れない文字だけを許す
+const ILLUSTRATION_DATA_URL_PATTERN = /^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/;
 
 export function isIllustrationDataUrl(value: unknown): value is string {
   return typeof value === "string"
@@ -296,7 +300,7 @@ git commit -m "feat(illustration): ノードに紐付けるイラストの型・
 - Produces: `MapDocumentV3 = NodeMapState & { version: 3 }`（`MapDocument` は V3 を指す）。`parseMapDocumentJsonWithVersion` の `sourceVersion` は `1 | 2 | 3`。`createMapDocument` / `serializeMapDocument` は `version: 3` を出す。
 
 方針:
-- version 1・2 の `nodes[].illustration` は読まない（その version には無い項目）。version 3 だけが読み、あるのに `isIllustrationDataUrl` を満たさなければ、読み込み全体を失敗にする（エラー文: `node[N].illustrationは、画像のdata URLである必要があります。`）。
+- version 1・2 の `nodes[].illustration` は読まない（その version には無い項目）。version 3 だけが読み、あるのに `isIllustrationDataUrl`（jpeg のみ）と縦横 512px 以下の検証（`jpegDimensions.ts`）を満たさなければ、読み込み全体を失敗にする（エラー文: `node[N].illustrationは、画像のdata URLである必要があります。`）。
 - `projectMapDocumentNode` は、`illustration` があるときだけ項目を出す（無いノードの JSON は、従来と同じ形）。
 - `useMapStorageRestoration.ts` の `sourceVersion === 1` の判定は、変更しない（version 2 の保存データは、読み込み時には書き換えず、次に変更があったときに version 3 で保存される）。
 
@@ -1198,3 +1202,5 @@ git commit -m "docs(roadmap): イラストのノード紐付け・表示を完�
 - **型の一致**: `illustration?: string`（Task 1）→ 保存（Task 2）→ パネル・`useNodes`（Task 4）→ Pixi・エクスポート（Task 5・6）。`replaceNodeIllustration`、`getNodeIllustrationRect`、`getNodeLabelCenterOffset`、`isIllustrationDataUrl`、`dismissGeneration`、`attachIllustration`、`illustrationTextures` の名前は、全タスクで同じ。
 - **既存の挙動を変えない点**: イラストが無いノードの描画・エクスポートの計算式は、`height / 2` と `node.y / 2 + nodeBottom / 2` の形を保つ。version 1・2 のデータは、そのまま読み込める。
 - **既知の制限（PR にも書く）**: 手動レイアウトでは、高さが伸びたノードが下のノードと重なりうる。マップ置き換えで不要になったテクスチャは、アンマウントまで残る。localStorage が一杯になると自動保存が失敗する（既存の通知が出る。1枚約10KB なので、数百枚まで）。縮小は Canvas に依存するので、Canvas が使えない環境では「画像を処理できませんでした」になる。
+
+実装後の変更: R1 レビューでデコード時のメモリ枯渇対策として、イラストは jpeg のみ許可し、デコード境界で縦横の寸法検証（`jpegDimensions.ts`、512px 以下）を追加した。
