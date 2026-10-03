@@ -12,14 +12,15 @@ export type IllustrationPanelView = {
 };
 
 export function getIllustrationPanelView(
-  selectedNode: Pick<Node, "id" | "illustration"> | null,
+  selectedNode: Pick<Node, "id" | "label" | "illustration"> | null,
   generation: IllustrationGenerationState,
 ): IllustrationPanelView {
   const forSelectedNode =
     selectedNode !== null && generation.status !== "idle" && generation.nodeId === selectedNode.id;
 
   let image: IllustrationPanelView["image"] = null;
-  if (forSelectedNode && generation.status === "succeeded") {
+  // 生成後にノードのテキストが変わったら、そのプレビューは今のテキストのものではないので出さない
+  if (forSelectedNode && generation.status === "succeeded" && generation.label === selectedNode.label) {
     image = { kind: "preview", dataUrl: generation.dataUrl };
   } else if (selectedNode?.illustration !== undefined) {
     image = { kind: "attached", dataUrl: selectedNode.illustration };

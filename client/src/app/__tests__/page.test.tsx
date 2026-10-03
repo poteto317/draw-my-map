@@ -433,7 +433,7 @@ describe("Home", () => {
       await user.click(screen.getByRole("button", { name: "テスト用ノード追加" }));
       await user.click(screen.getByRole("button", { name: "テスト用ノード選択" }));
       const nodeId = mockMapStageProps!.nodes[0].id;
-      mockGeneration = { status: "succeeded", nodeId, dataUrl: "data:image/jpeg;base64,AAAA" };
+      mockGeneration = { status: "succeeded", nodeId, label: mockMapStageProps!.nodes[0].label, dataUrl: "data:image/jpeg;base64,AAAA" };
       await user.click(screen.getByRole("button", { name: "テスト用ノード追加" })); // 再描画させ、モックの生成状態を反映する
 
       await user.click(screen.getByRole("button", { name: "ノードに設定" }));
@@ -511,7 +511,7 @@ describe("Home", () => {
       await user.click(screen.getByRole("button", { name: "テスト用ノード追加" }));
       await user.click(screen.getByRole("button", { name: "テスト用ノード選択" }));
       const nodeId = mockMapStageProps!.nodes[0].id;
-      mockGeneration = { status: "succeeded", nodeId, dataUrl: "data:image/jpeg;base64,AAA" };
+      mockGeneration = { status: "succeeded", nodeId, label: mockMapStageProps!.nodes[0].label, dataUrl: "data:image/jpeg;base64,AAA" };
       await user.click(screen.getByRole("button", { name: "テスト用中倍率" })); // 再描画を起こす
 
       expect(screen.getByRole("img")).toHaveAttribute("src", "data:image/jpeg;base64,AAA");

@@ -82,7 +82,7 @@ describe("IllustrationPanel", () => {
     render(
       <IllustrationPanel
         selectedNode={{ id: 1, label: "目標" }}
-        generation={{ status: "generating", nodeId: 1 }}
+        generation={{ status: "generating", nodeId: 1, label: "目標" }}
         onGenerate={jest.fn()} onAttach={jest.fn()}
       />,
     );
@@ -95,7 +95,7 @@ describe("IllustrationPanel", () => {
     render(
       <IllustrationPanel
         selectedNode={{ id: 2, label: "予算" }}
-        generation={{ status: "generating", nodeId: 1 }}
+        generation={{ status: "generating", nodeId: 1, label: "目標" }}
         onGenerate={jest.fn()} onAttach={jest.fn()}
       />,
     );
@@ -110,7 +110,7 @@ describe("IllustrationPanel", () => {
     render(
       <IllustrationPanel
         selectedNode={{ id: 1, label: "目標" }}
-        generation={{ status: "generating", nodeId: 1 }}
+        generation={{ status: "generating", nodeId: 1, label: "目標" }}
         onGenerate={onGenerate}
         onAttach={jest.fn()}
       />,
@@ -125,7 +125,7 @@ describe("IllustrationPanel", () => {
     render(
       <IllustrationPanel
         selectedNode={{ id: 1, label: "目標" }}
-        generation={{ status: "succeeded", nodeId: 1, dataUrl: "data:image/jpeg;base64,AAA" }}
+        generation={{ status: "succeeded", nodeId: 1, label: "目標", dataUrl: "data:image/jpeg;base64,AAA" }}
         onGenerate={jest.fn()} onAttach={jest.fn()}
       />,
     );
@@ -139,7 +139,7 @@ describe("IllustrationPanel", () => {
     render(
       <IllustrationPanel
         selectedNode={{ id: 1, label: "" }}
-        generation={{ status: "succeeded", nodeId: 1, dataUrl: "data:image/jpeg;base64,AAA" }}
+        generation={{ status: "succeeded", nodeId: 1, label: "", dataUrl: "data:image/jpeg;base64,AAA" }}
         onGenerate={jest.fn()} onAttach={jest.fn()}
       />,
     );
@@ -151,7 +151,7 @@ describe("IllustrationPanel", () => {
     render(
       <IllustrationPanel
         selectedNode={{ id: 2, label: "予算" }}
-        generation={{ status: "succeeded", nodeId: 1, dataUrl: "data:image/jpeg;base64,AAA" }}
+        generation={{ status: "succeeded", nodeId: 1, label: "目標", dataUrl: "data:image/jpeg;base64,AAA" }}
         onGenerate={jest.fn()} onAttach={jest.fn()}
       />,
     );
@@ -188,15 +188,23 @@ describe("IllustrationPanel", () => {
       const onAttach = jest.fn();
       render(<IllustrationPanel
         selectedNode={{ id: 3, label: "予算" }}
-        generation={{ status: "succeeded", nodeId: 3, dataUrl: "data:image/jpeg;base64,AAAA" }}
+        generation={{ status: "succeeded", nodeId: 3, label: "予算", dataUrl: "data:image/jpeg;base64,AAAA" }}
         onGenerate={jest.fn()} onAttach={onAttach} />);
       await userEvent.click(screen.getByRole("button", { name: "ノードに設定" }));
       expect(onAttach).toHaveBeenCalledWith(3, "data:image/jpeg;base64,AAAA");
     });
 
+    it("生成後にノードのテキストが変わったら、プレビューも「ノードに設定」も出さない", () => {
+      render(<IllustrationPanel selectedNode={{ id: 3, label: "予算（変更後）" }}
+        generation={{ status: "succeeded", nodeId: 3, label: "予算", dataUrl: "data:image/jpeg;base64,AAAA" }}
+        onGenerate={jest.fn()} onAttach={jest.fn()} />);
+      expect(screen.queryByRole("button", { name: "ノードに設定" })).toBeNull();
+      expect(screen.queryByRole("img")).toBeNull();
+    });
+
     it("別のノードの生成結果では、「ノードに設定」を出さない", () => {
       render(<IllustrationPanel selectedNode={{ id: 4, label: "x" }}
-        generation={{ status: "succeeded", nodeId: 3, dataUrl: "data:image/jpeg;base64,AAAA" }}
+        generation={{ status: "succeeded", nodeId: 3, label: "予算", dataUrl: "data:image/jpeg;base64,AAAA" }}
         onGenerate={jest.fn()} onAttach={jest.fn()} />);
       expect(screen.queryByRole("button", { name: "ノードに設定" })).toBeNull();
     });
@@ -210,7 +218,7 @@ describe("IllustrationPanel", () => {
 
     it("生成中・失敗のときは、「ノードに設定」を出さない", () => {
       const { rerender } = render(<IllustrationPanel selectedNode={{ id: 1, label: "a" }}
-        generation={{ status: "generating", nodeId: 1 }} onGenerate={jest.fn()} onAttach={jest.fn()} />);
+        generation={{ status: "generating", nodeId: 1, label: "a" }} onGenerate={jest.fn()} onAttach={jest.fn()} />);
       expect(screen.queryByRole("button", { name: "ノードに設定" })).toBeNull();
       rerender(<IllustrationPanel selectedNode={{ id: 1, label: "a" }}
         generation={{ status: "failed", nodeId: 1, message: "x" }} onGenerate={jest.fn()} onAttach={jest.fn()} />);

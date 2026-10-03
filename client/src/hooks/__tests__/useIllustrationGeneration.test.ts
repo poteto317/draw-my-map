@@ -55,15 +55,48 @@ describe("useIllustrationGeneration", () => {
     const { result } = renderHook(() => useIllustrationGeneration(nodes, 0));
 
     act(() => result.current.generateIllustration(1));
-    expect(result.current.generation).toEqual({ status: "generating", nodeId: 1 });
+    expect(result.current.generation).toEqual({ status: "generating", nodeId: 1, label: "目標" });
     expect(mockRequest).toHaveBeenCalledWith("目標", expect.objectContaining({ signal: expect.any(AbortSignal) }));
 
     await act(async () => pending.resolve({ dataUrl: "data:image/jpeg;base64,AAA" }));
     expect(result.current.generation).toEqual({
       status: "succeeded",
       nodeId: 1,
+      label: "目標",
       dataUrl: "thumb:data:image/jpeg;base64,AAA",
     });
+  });
+
+  it("生成時点のノードの生のテキスト（正規化前）を、generating と succeeded に保存する", async () => {
+    const padded = [createTestNode({ id: 5, label: "  猫  " })];
+    const pending = deferred<{ dataUrl: string }>();
+    mockRequest.mockReturnValue(pending.promise);
+    const { result } = renderHook(() => useIllustrationGeneration(padded, 0));
+
+    act(() => result.current.generateIllustration(5));
+    expect(result.current.generation).toEqual({ status: "generating", nodeId: 5, label: "  猫  " });
+
+    await act(async () => pending.resolve({ dataUrl: "d" }));
+    expect(result.current.generation).toEqual({
+      status: "succeeded",
+      nodeId: 5,
+      label: "  猫  ",
+      dataUrl: "thumb:d",
+    });
+  });
+
+  it("生成中にノードのテキストが変わっても、完了時の状態は生成開始時のテキストを持つ", async () => {
+    const pending = deferred<{ dataUrl: string }>();
+    mockRequest.mockReturnValue(pending.promise);
+    const { result, rerender } = renderHook(({ list }) => useIllustrationGeneration(list, 0), {
+      initialProps: { list: [createTestNode({ id: 1, label: "目標" })] },
+    });
+    act(() => result.current.generateIllustration(1));
+
+    rerender({ list: [createTestNode({ id: 1, label: "目標（変更後）" })] });
+    await act(async () => pending.resolve({ dataUrl: "d" }));
+
+    expect(result.current.generation).toMatchObject({ status: "succeeded", label: "目標" });
   });
 
   it("APIの失敗は failed で、種類に応じたメッセージを持つ", async () => {
@@ -114,7 +147,7 @@ describe("useIllustrationGeneration", () => {
     act(() => result.current.generateIllustration(2));
 
     expect(mockRequest).toHaveBeenCalledTimes(1);
-    expect(result.current.generation).toEqual({ status: "generating", nodeId: 1 });
+    expect(result.current.generation).toEqual({ status: "generating", nodeId: 1, label: "目標" });
     await act(async () => pending.resolve({ dataUrl: "d" }));
   });
 
@@ -126,7 +159,7 @@ describe("useIllustrationGeneration", () => {
     await act(async () => result.current.generateIllustration(2));
 
     expect(mockRequest).toHaveBeenNthCalledWith(2, "予算", expect.anything());
-    expect(result.current.generation).toEqual({ status: "succeeded", nodeId: 2, dataUrl: "thumb:second" });
+    expect(result.current.generation).toEqual({ status: "succeeded", nodeId: 2, label: "予算", dataUrl: "thumb:second" });
   });
 
   it("空白だけのラベルは、リクエストせずに failed にする", () => {
@@ -164,8 +197,8 @@ describe("useIllustrationGeneration", () => {
 
     expect(signal.aborted).toBe(true);
     // アンマウント後は、最後に描画された値が変わらない
-    expect(lastRendered).toEqual({ status: "generating", nodeId: 1 });
-    expect(result.current.generation).toEqual({ status: "generating", nodeId: 1 });
+    expect(lastRendered).toEqual({ status: "generating", nodeId: 1, label: "目標" });
+    expect(result.current.generation).toEqual({ status: "generating", nodeId: 1, label: "目標" });
   });
 
   it("成功時は、縮小した画像を state に持つ", async () => {
@@ -175,7 +208,7 @@ describe("useIllustrationGeneration", () => {
     await act(async () => result.current.generateIllustration(1));
 
     expect(mockThumbnail).toHaveBeenCalledWith("data:image/png;base64,RAW");
-    expect(result.current.generation).toEqual({ status: "succeeded", nodeId: 1, dataUrl: "thumb:data:image/png;base64,RAW" });
+    expect(result.current.generation).toEqual({ status: "succeeded", nodeId: 1, label: "目標", dataUrl: "thumb:data:image/png;base64,RAW" });
   });
 
   it("縮小に失敗したときは image-processing のメッセージで failed になる", async () => {
@@ -266,7 +299,7 @@ describe("useIllustrationGeneration", () => {
 
       rerender({ revision: 0 });
 
-      expect(result.current.generation).toEqual({ status: "succeeded", nodeId: 1, dataUrl: "thumb:kept" });
+      expect(result.current.generation).toEqual({ status: "succeeded", nodeId: 1, label: "目標", dataUrl: "thumb:kept" });
     });
 
     it("生成中に resetRevision が変わると、リクエストを中断して idle に戻し、遅れて届いた結果を無視する", async () => {
@@ -295,14 +328,14 @@ describe("useIllustrationGeneration", () => {
 
       act(() => result.current.generateIllustration(1));
       expect(mockRequest).toHaveBeenCalledTimes(2);
-      expect(result.current.generation).toEqual({ status: "generating", nodeId: 1 });
+      expect(result.current.generation).toEqual({ status: "generating", nodeId: 1, label: "目標" });
 
       await act(async () => first.resolve({ dataUrl: "old" }));
       act(() => result.current.generateIllustration(2));
       expect(mockRequest).toHaveBeenCalledTimes(2);
 
       await act(async () => second.resolve({ dataUrl: "new" }));
-      expect(result.current.generation).toEqual({ status: "succeeded", nodeId: 1, dataUrl: "thumb:new" });
+      expect(result.current.generation).toEqual({ status: "succeeded", nodeId: 1, label: "目標", dataUrl: "thumb:new" });
     });
   });
 });

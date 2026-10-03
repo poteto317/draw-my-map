@@ -48,12 +48,12 @@ export function useIllustrationGeneration(nodes: readonly Node[], resetRevision:
 
     const controller = new AbortController();
     controllerRef.current = controller;
-    setGeneration({ status: "generating", nodeId });
+    setGeneration({ status: "generating", nodeId, label: node.label });
 
     generateIllustrationThumbnail(validation.label, { signal: controller.signal })
       .then((dataUrl) => {
         if (controller.signal.aborted) return;
-        setGeneration({ status: "succeeded", nodeId, dataUrl });
+        setGeneration({ status: "succeeded", nodeId, label: node.label, dataUrl });
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
