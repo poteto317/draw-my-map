@@ -4,7 +4,8 @@ export type IllustrationErrorKind =
   | "quota-exceeded"
   | "upstream-error"
   | "content-rejected"
-  | "network";
+  | "network"
+  | "image-processing";
 
 export type IllustrationImage = { dataUrl: string };
 
@@ -25,6 +26,7 @@ const ERROR_MESSAGES: Record<IllustrationErrorKind, string> = {
   "upstream-error": "イラストの生成に失敗しました。時間をおいて、再度お試しください。",
   "content-rejected": "画像生成AIが、内容を不適切と判定しました（誤判定のことがあります）。もう一度お試しください。ノードのテキストを少し変えると、通ることもあります。",
   network: "通信に失敗しました。接続を確認して、再度お試しください。",
+  "image-processing": "生成した画像を処理できませんでした。もう一度お試しください。",
 };
 
 export function describeIllustrationError(kind: IllustrationErrorKind): string {

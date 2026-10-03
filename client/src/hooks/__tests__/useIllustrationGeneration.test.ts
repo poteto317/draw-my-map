@@ -5,6 +5,10 @@ import {
   describeIllustrationError,
   requestIllustration,
 } from "@/services/illustration/illustrationClient";
+import {
+  IllustrationThumbnailError,
+  createIllustrationThumbnail,
+} from "@/services/illustration/illustrationThumbnail";
 import { createTestNode } from "@/testing/createTestNode";
 
 jest.mock("@/services/illustration/illustrationClient", () => {
@@ -12,6 +16,12 @@ jest.mock("@/services/illustration/illustrationClient", () => {
   return { ...actual, requestIllustration: jest.fn() };
 });
 
+jest.mock("@/services/illustration/illustrationThumbnail", () => {
+  const actual = jest.requireActual("@/services/illustration/illustrationThumbnail");
+  return { ...actual, createIllustrationThumbnail: jest.fn() };
+});
+
+const mockThumbnail = createIllustrationThumbnail as jest.MockedFunction<typeof createIllustrationThumbnail>;
 const mockRequest = requestIllustration as jest.MockedFunction<typeof requestIllustration>;
 const nodes = [
   createTestNode({ id: 1, label: "目標" }),
@@ -27,7 +37,11 @@ function deferred<T>() {
 }
 
 describe("useIllustrationGeneration", () => {
-  beforeEach(() => mockRequest.mockReset());
+  beforeEach(() => {
+    mockRequest.mockReset();
+    mockThumbnail.mockReset();
+    mockThumbnail.mockImplementation(async (url) => `thumb:${url}`);
+  });
 
   it("初期状態は idle", () => {
     const { result } = renderHook(() => useIllustrationGeneration(nodes, 0));
@@ -48,7 +62,7 @@ describe("useIllustrationGeneration", () => {
     expect(result.current.generation).toEqual({
       status: "succeeded",
       nodeId: 1,
-      dataUrl: "data:image/jpeg;base64,AAA",
+      dataUrl: "thumb:data:image/jpeg;base64,AAA",
     });
   });
 
@@ -112,7 +126,7 @@ describe("useIllustrationGeneration", () => {
     await act(async () => result.current.generateIllustration(2));
 
     expect(mockRequest).toHaveBeenNthCalledWith(2, "予算", expect.anything());
-    expect(result.current.generation).toEqual({ status: "succeeded", nodeId: 2, dataUrl: "second" });
+    expect(result.current.generation).toEqual({ status: "succeeded", nodeId: 2, dataUrl: "thumb:second" });
   });
 
   it("空白だけのラベルは、リクエストせずに failed にする", () => {
@@ -152,6 +166,58 @@ describe("useIllustrationGeneration", () => {
     // アンマウント後は、最後に描画された値が変わらない
     expect(lastRendered).toEqual({ status: "generating", nodeId: 1 });
     expect(result.current.generation).toEqual({ status: "generating", nodeId: 1 });
+  });
+
+  it("成功時は、縮小した画像を state に持つ", async () => {
+    mockRequest.mockResolvedValue({ dataUrl: "data:image/png;base64,RAW" });
+    const { result } = renderHook(() => useIllustrationGeneration(nodes, 0));
+
+    await act(async () => result.current.generateIllustration(1));
+
+    expect(mockThumbnail).toHaveBeenCalledWith("data:image/png;base64,RAW");
+    expect(result.current.generation).toEqual({ status: "succeeded", nodeId: 1, dataUrl: "thumb:data:image/png;base64,RAW" });
+  });
+
+  it("縮小に失敗したときは image-processing のメッセージで failed になる", async () => {
+    mockRequest.mockResolvedValue({ dataUrl: "data:image/png;base64,RAW" });
+    mockThumbnail.mockRejectedValue(new IllustrationThumbnailError());
+    const { result } = renderHook(() => useIllustrationGeneration(nodes, 0));
+
+    await act(async () => result.current.generateIllustration(1));
+
+    expect(result.current.generation).toEqual({
+      status: "failed",
+      nodeId: 1,
+      message: describeIllustrationError("image-processing"),
+    });
+  });
+
+  it("dismissGeneration で idle に戻る", async () => {
+    mockRequest.mockResolvedValue({ dataUrl: "data:image/png;base64,RAW" });
+    const { result } = renderHook(() => useIllustrationGeneration(nodes, 0));
+    await act(async () => result.current.generateIllustration(1));
+    expect(result.current.generation).toMatchObject({ status: "succeeded" });
+
+    act(() => result.current.dismissGeneration());
+
+    expect(result.current.generation).toEqual({ status: "idle" });
+  });
+
+  it("縮小の途中でマップが置き換わったら、結果を捨てる", async () => {
+    const thumbnail = deferred<string>();
+    mockRequest.mockResolvedValue({ dataUrl: "data:image/png;base64,RAW" });
+    mockThumbnail.mockReturnValue(thumbnail.promise);
+    const { result, rerender } = renderHook(
+      ({ revision }: { revision: number }) => useIllustrationGeneration(nodes, revision),
+      { initialProps: { revision: 0 } },
+    );
+    await act(async () => result.current.generateIllustration(1));
+    expect(mockThumbnail).toHaveBeenCalledTimes(1);
+
+    rerender({ revision: 1 });
+    await act(async () => thumbnail.resolve("thumb:late"));
+
+    expect(result.current.generation).toEqual({ status: "idle" });
   });
 
   it("nodes が同じなら、同じ関数を返す", () => {
@@ -200,7 +266,7 @@ describe("useIllustrationGeneration", () => {
 
       rerender({ revision: 0 });
 
-      expect(result.current.generation).toEqual({ status: "succeeded", nodeId: 1, dataUrl: "kept" });
+      expect(result.current.generation).toEqual({ status: "succeeded", nodeId: 1, dataUrl: "thumb:kept" });
     });
 
     it("生成中に resetRevision が変わると、リクエストを中断して idle に戻し、遅れて届いた結果を無視する", async () => {
@@ -236,7 +302,7 @@ describe("useIllustrationGeneration", () => {
       expect(mockRequest).toHaveBeenCalledTimes(2);
 
       await act(async () => second.resolve({ dataUrl: "new" }));
-      expect(result.current.generation).toEqual({ status: "succeeded", nodeId: 1, dataUrl: "new" });
+      expect(result.current.generation).toEqual({ status: "succeeded", nodeId: 1, dataUrl: "thumb:new" });
     });
   });
 });

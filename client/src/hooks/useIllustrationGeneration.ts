@@ -5,6 +5,10 @@ import {
   describeIllustrationError,
   requestIllustration,
 } from "@/services/illustration/illustrationClient";
+import {
+  IllustrationThumbnailError,
+  createIllustrationThumbnail,
+} from "@/services/illustration/illustrationThumbnail";
 import type { Node } from "@/types/node";
 
 export type IllustrationGenerationState =
@@ -56,13 +60,18 @@ export function useIllustrationGeneration(nodes: readonly Node[], resetRevision:
     setGeneration({ status: "generating", nodeId });
 
     requestIllustration(validation.label, { signal: controller.signal })
-      .then((image) => {
+      .then((image) => createIllustrationThumbnail(image.dataUrl))
+      .then((dataUrl) => {
         if (controller.signal.aborted) return;
-        setGeneration({ status: "succeeded", nodeId, dataUrl: image.dataUrl });
+        setGeneration({ status: "succeeded", nodeId, dataUrl });
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        const kind = error instanceof IllustrationRequestError ? error.kind : "upstream-error";
+        const kind = error instanceof IllustrationRequestError
+          ? error.kind
+          : error instanceof IllustrationThumbnailError
+            ? "image-processing"
+            : "upstream-error";
         setGeneration({ status: "failed", nodeId, message: describeIllustrationError(kind) });
       })
       .finally(() => {
@@ -70,5 +79,7 @@ export function useIllustrationGeneration(nodes: readonly Node[], resetRevision:
       });
   }, [nodes, setGeneration]);
 
-  return { generation, generateIllustration };
+  const dismissGeneration = useCallback(() => setGeneration(IDLE), [setGeneration]);
+
+  return { generation, generateIllustration, dismissGeneration };
 }
