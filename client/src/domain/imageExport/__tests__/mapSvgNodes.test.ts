@@ -1,4 +1,5 @@
 import { createMapSvgNodes } from "@/domain/imageExport/mapSvgNodes";
+import { getMapExportTextLayout } from "@/domain/imageExport/mapExportText";
 import { createTestNode } from "@/testing/createTestNode";
 
 const measureText = (text: string) => Array.from(text).length * 10;
@@ -104,4 +105,31 @@ it("凍結された入力を変更しない", () => {
 
   expect(() => createMapSvgNodes(nodes, bounds, measureText)).not.toThrow();
   expect(nodes).toEqual([node]);
+});
+
+describe("イラスト付きノード", () => {
+  const IMAGE = "data:image/jpeg;base64,AAAA";
+  const illustrated = createTestNode({ x: 10, y: 20, width: 100, height: 116, label: "予算", illustration: IMAGE });
+  const bounds = { minX: 10, minY: 20, width: 164, height: 180, offsetX: 5, offsetY: 7 };
+
+  it("上部の中央に <image> を出す（オフセットを加える）", () => {
+    const { images } = createMapSvgNodes([illustrated], bounds, measureText);
+    expect(images).toBe(`<image href="${IMAGE}" x="${10 + 5 + 26}" y="${20 + 7 + 8}" width="48" height="48" />`);
+  });
+
+  it("イラストが無いノードは、images が空", () => {
+    const plain = createTestNode({ x: 10, y: 20 });
+    expect(createMapSvgNodes([plain], bounds, measureText).images).toBe("");
+  });
+
+  it("data URL として不正な illustration は、<image> を出さない", () => {
+    const evil = { ...illustrated, illustration: 'x" onload="alert(1)' };
+    expect(createMapSvgNodes([evil], bounds, measureText).images).toBe("");
+  });
+
+  it("テキストは、イラストの下の領域の中央に置く", () => {
+    const { labels } = createMapSvgNodes([illustrated], bounds, measureText);
+    const layout = getMapExportTextLayout("予算", 100 - 16, 20 + 7 + 86, measureText);
+    expect(labels).toContain(`<tspan x="${10 + 5 + 50}" y="${layout.firstBaseline}">予算</tspan>`);
+  });
 });

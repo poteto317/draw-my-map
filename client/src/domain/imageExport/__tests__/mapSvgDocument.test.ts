@@ -46,3 +46,14 @@ it("SVGの寸法と背景、辺、ノード、中央揃えラベルを描画順�
   expect(firstNodeIndex).toBeLessThan(lastNodeIndex);
   expect(lastNodeIndex).toBeLessThan(labelIndex);
 });
+
+it("イラストは、ノードの矩形の後、ラベルの前に描画する", () => {
+  const nodes = [createTestNode({ x: 0, y: 0, height: 116, label: "A", illustration: "data:image/jpeg;base64,AAAA" })];
+  const bounds = { minX: 0, minY: 0, width: 164, height: 180, offsetX: 32, offsetY: 32 };
+
+  const { svg } = createMapSvgDocument(nodes, bounds, measureText);
+
+  expect(svg.indexOf('<rect x="32"')).toBeGreaterThan(svg.indexOf('<rect width="164"'));
+  expect(svg.indexOf("<image ")).toBeGreaterThan(svg.indexOf('<rect x="32"'));
+  expect(svg.indexOf("<text ")).toBeGreaterThan(svg.indexOf("<image "));
+});

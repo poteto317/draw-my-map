@@ -3,6 +3,7 @@ import {
   MAP_EXPORT_HORIZONTAL_INSET,
   type MeasureMapText,
 } from "@/domain/imageExport/mapExportText";
+import { getNodeLabelCenterOffset } from "@/domain/nodes/nodeIllustration";
 import type { Node } from "@/types/node";
 
 export type MapExportBounds = {
@@ -60,10 +61,13 @@ function getNodeExportExtent(
   }
 
   const centerX = node.x / 2 + nodeRight / 2;
+  const centerY = node.illustration === undefined
+    ? node.y / 2 + nodeBottom / 2
+    : node.y + getNodeLabelCenterOffset(node);
   const layout = getMapExportTextLayout(
     node.label,
     node.width - MAP_EXPORT_HORIZONTAL_INSET * 2,
-    node.y / 2 + nodeBottom / 2,
+    centerY,
     measureText,
   );
 

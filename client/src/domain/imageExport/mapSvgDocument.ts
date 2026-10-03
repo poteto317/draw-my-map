@@ -17,10 +17,10 @@ export function createMapSvgDocument(
 ): MapSvgDocument {
   const background = `<rect width="${bounds.width}" height="${bounds.height}" fill="#ffffff" />`;
   const edges = createMapSvgEdges(nodes, bounds);
-  const { rectangles, labels } = createMapSvgNodes(nodes, bounds, measureText);
+  const { rectangles, images, labels } = createMapSvgNodes(nodes, bounds, measureText);
 
   return {
-    svg: `<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="${bounds.width}" height="${bounds.height}" viewBox="0 0 ${bounds.width} ${bounds.height}">${background}${edges}${rectangles}${labels}</svg>`,
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="${bounds.width}" height="${bounds.height}" viewBox="0 0 ${bounds.width} ${bounds.height}">${background}${edges}${rectangles}${images}${labels}</svg>`,
     width: bounds.width,
     height: bounds.height,
   };

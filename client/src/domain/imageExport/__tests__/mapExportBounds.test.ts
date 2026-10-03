@@ -192,3 +192,16 @@ it("凍結された入力配列を変更せずに範囲を計算する", () => {
     importance: "medium",
   });
 });
+
+it("イラストがあるノードのテキストは、ノード上端から86px下を中心に計算する", () => {
+  const nodes = [createTestNode({ x: 0, y: 0, width: 100, height: 116, label: "A", illustration: "data:image/jpeg;base64,AAAA" })];
+
+  expect(getMapExportBounds(nodes, measureText)).toEqual({
+    minX: 0,
+    minY: 0,
+    width: 164,
+    height: 180,
+    offsetX: 32,
+    offsetY: 32,
+  });
+});

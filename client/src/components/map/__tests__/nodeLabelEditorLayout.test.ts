@@ -26,4 +26,22 @@ describe("getNodeLabelEditorLayout", () => {
       fontSize: 28,
     });
   });
+
+  it("イラストがあるノードは、イラストの下の領域だけを編集欄にする（中心はテキストの中心）", () => {
+    const node: Node = createTestNode({
+      x: 10, y: 20, width: 100, height: 116, label: "node", illustration: "data:image/jpeg;base64,AAAA",
+    });
+
+    expect(getNodeLabelEditorLayout(
+      node,
+      { offsetX: 5, offsetY: -5, scale: 2 },
+    )).toEqual({
+      left: 25,
+      top: 35 + 56 * 2,
+      width: 200,
+      height: 60 * 2,
+      lineHeight: "120px",
+      fontSize: 28,
+    });
+  });
 });
