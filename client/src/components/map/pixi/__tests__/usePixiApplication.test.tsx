@@ -14,6 +14,8 @@ const mockApplications: MockApplication[] = [];
 const mockGraphics = jest.fn();
 const mockText = jest.fn();
 const mockContainer = jest.fn();
+const mockSprite = jest.fn();
+const mockTexture = { from: jest.fn() };
 
 jest.mock("pixi.js", () => ({
   Application: jest.fn().mockImplementation(() => {
@@ -28,6 +30,8 @@ jest.mock("pixi.js", () => ({
   Graphics: mockGraphics,
   Text: mockText,
   Container: mockContainer,
+  Sprite: mockSprite,
+  Texture: mockTexture,
 }));
 
 function PixiApplicationHarness({
@@ -93,6 +97,8 @@ describe("usePixiApplication", () => {
         Graphics: mockGraphics,
         Text: mockText,
         Container: mockContainer,
+        Sprite: mockSprite,
+        Texture: mockTexture,
       },
     });
   });

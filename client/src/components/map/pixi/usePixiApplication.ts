@@ -56,6 +56,8 @@ export function usePixiApplication(
           Graphics: pixi.Graphics,
           Text: pixi.Text,
           Container: pixi.Container,
+          Sprite: pixi.Sprite,
+          Texture: pixi.Texture,
         },
       });
     })();

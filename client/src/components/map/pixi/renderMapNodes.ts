@@ -3,8 +3,9 @@ import type { MapVisibilityTarget } from "@/components/map/pixi/mapVisibilityAni
 import { nodeVisibilityKey } from "@/components/map/pixi/mapVisibilityKeys";
 import { createNodeVisibilityTarget } from "@/components/map/pixi/pixiVisibilityTarget";
 import { getNodeDisplayLabel } from "@/domain/nodes/nodeDisplayLabel";
+import { getNodeIllustrationRect, getNodeLabelCenterOffset } from "@/domain/nodes/nodeIllustration";
 import type { Node } from "@/types/node";
-import type { Container, FederatedPointerEvent } from "pixi.js";
+import type { Container, FederatedPointerEvent, Texture } from "pixi.js";
 
 export type RenderMapNodesOptions = {
   nodes: readonly Node[];
@@ -13,6 +14,8 @@ export type RenderMapNodesOptions = {
   connectionTargetNodeId: number | null;
   onNodePointerDown: (nodeId: number, event: FederatedPointerEvent) => void;
   visibleKeys?: ReadonlySet<string>;
+  // キーは data URL
+  illustrationTextures?: ReadonlyMap<string, Texture>;
 };
 
 export function renderMapNodes(
@@ -45,6 +48,19 @@ export function renderMapNodes(
       });
     container.addChild(graphics);
 
+    const illustrationTexture = node.illustration === undefined
+      ? undefined
+      : options.illustrationTextures?.get(node.illustration);
+    if (illustrationTexture !== undefined) {
+      const rect = getNodeIllustrationRect(node);
+      const sprite = new constructors.Sprite(illustrationTexture);
+      sprite.x = rect.x;
+      sprite.y = rect.y;
+      sprite.width = rect.size;
+      sprite.height = rect.size;
+      container.addChild(sprite);
+    }
+
     if (!isEditing) {
       const text = new constructors.Text({
         text: getNodeDisplayLabel(node.label),
@@ -58,7 +74,7 @@ export function renderMapNodes(
       });
       text.anchor.set(0.5);
       text.x = node.x + node.width / 2;
-      text.y = node.y + node.height / 2;
+      text.y = node.y + getNodeLabelCenterOffset(node);
       container.addChild(text);
     }
 

@@ -23,6 +23,7 @@ import { useMapWheelZoom } from "@/components/map/useMapWheelZoom";
 import { useNodeEditing } from "@/components/map/useNodeEditing";
 import { useNodeKeyboardShortcuts } from "@/components/map/useNodeKeyboardShortcuts";
 import { useRenderedMapScene } from "@/components/map/useRenderedMapScene";
+import { useIllustrationTextures } from "@/components/map/useIllustrationTextures";
 import { useViewportScaleNotification } from "@/components/map/useViewportScaleNotification";
 import type { Node } from "@/types/node";
 
@@ -70,6 +71,7 @@ export function MapStage({
   const containerRef = useRef<HTMLDivElement>(null);
   const menuActivatedAtRef = useRef<number | null>(null);
   const runtime = usePixiApplication(containerRef);
+  const illustrationTextures = useIllustrationTextures(runtime, nodes);
   const editing = useNodeEditing(nodes, onUpdateLabel);
   const cancelEditing = editing.cancelEditing;
   const {
@@ -110,6 +112,7 @@ export function MapStage({
       connectionTargetNodeId,
       createNodePointerDownHandler,
       visibleNodeIds: effectiveVisibleNodeIds,
+      illustrationTextures,
     },
     viewport,
     viewportRef,

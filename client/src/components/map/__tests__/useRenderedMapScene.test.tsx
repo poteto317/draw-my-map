@@ -5,6 +5,7 @@ import { renderMapScene, type RenderMapSceneOptions } from "@/components/map/pix
 import type { PixiRuntime } from "@/components/map/pixi/pixiTypes";
 import { useRenderedMapScene } from "@/components/map/useRenderedMapScene";
 import { createTestNode } from "@/testing/createTestNode";
+import type { Texture } from "pixi.js";
 
 jest.mock("@/components/map/pixi/applyViewportTransform", () => ({
   applyViewportTransform: jest.fn(),
@@ -163,5 +164,30 @@ describe("useRenderedMapScene", () => {
     rerender({ currentRuntime: null });
 
     expect(result.current).toBeNull();
+  });
+
+  it("イラストのテクスチャが変わると、テクスチャを渡してsceneを再生成する", () => {
+    const viewportRef = { current: INITIAL_VIEWPORT };
+    const baseOptions = createOptions();
+    const textures = new Map([["data:image/jpeg;base64,AAAA", {} as Texture]]);
+    const { rerender } = renderHook(
+      ({ illustrationTextures }: { illustrationTextures: ReadonlyMap<string, Texture> }) =>
+        useRenderedMapScene({
+          runtime,
+          options: { ...baseOptions, illustrationTextures },
+          viewport: INITIAL_VIEWPORT,
+          viewportRef,
+        }),
+      { initialProps: { illustrationTextures: new Map() as ReadonlyMap<string, Texture> } },
+    );
+
+    rerender({ illustrationTextures: textures });
+
+    expect(mockedRenderMapScene).toHaveBeenCalledTimes(2);
+    expect(mockedRenderMapScene).toHaveBeenLastCalledWith(
+      runtime.app,
+      runtime.constructors,
+      expect.objectContaining({ illustrationTextures: textures }),
+    );
   });
 });

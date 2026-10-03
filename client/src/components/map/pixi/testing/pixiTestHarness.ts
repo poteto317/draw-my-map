@@ -33,6 +33,15 @@ export function createPixiTestHarness() {
     y: 0,
     destroy: jest.fn(),
   }));
+  const Sprite = jest.fn().mockImplementation((texture: unknown) => ({
+    texture,
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+    destroy: jest.fn(),
+  }));
+  const Texture = { from: jest.fn() };
   const Container = jest.fn().mockImplementation(() => {
     const handlers: Record<string, PointerHandler> = {};
     const container: MockContainer = {
@@ -57,7 +66,9 @@ export function createPixiTestHarness() {
     Graphics,
     Text,
     Container,
-    constructors: { Graphics, Text, Container },
+    Sprite,
+    Texture,
+    constructors: { Graphics, Text, Container, Sprite, Texture },
     app: { stage },
     containerHandlers,
     containers,

@@ -32,6 +32,7 @@ export function useRenderedMapScene({
     connectionTargetNodeId,
     createNodePointerDownHandler,
     visibleNodeIds,
+    illustrationTextures,
   } = options;
   const sceneRef = useRef<RenderedMapScene | null>(null);
   const appliedViewportRef = useRef<Viewport | null>(null);
@@ -47,6 +48,7 @@ export function useRenderedMapScene({
       editingNodeId,
       connectionTargetNodeId,
       visibleNodeIds,
+      illustrationTextures,
       onNodePointerDown: createNodePointerDownHandler(),
       viewport: renderedViewport,
     });
@@ -68,6 +70,7 @@ export function useRenderedMapScene({
     connectionTargetNodeId,
     createNodePointerDownHandler,
     visibleNodeIds,
+    illustrationTextures,
     viewportRef,
   ]);
 
