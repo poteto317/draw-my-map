@@ -1,4 +1,4 @@
-import { ILLUSTRATED_NODE_HEIGHT } from "@/config/shapes";
+import { ILLUSTRATED_NODE_HEIGHT, RECT_HEIGHT } from "@/config/shapes";
 import { clearNodeIllustration, replaceNodeIllustration } from "@/domain/nodes/nodeIllustrationUpdate";
 import type { Node } from "@/types/node";
 
@@ -45,6 +45,7 @@ describe("clearNodeIllustration", () => {
   it("対象のノードから illustration を外し、高さを RECT_HEIGHT に戻す", () => {
     const withImage = replaceNodeIllustration([node(1), node(2)], 2, URL1)!;
     const result = clearNodeIllustration(withImage, 2)!;
+    expect(result[1].height).toBe(RECT_HEIGHT);
     expect(result[1]).toEqual(node(2));
     expect("illustration" in result[1]).toBe(false);
     expect(result[0]).toEqual(node(1));

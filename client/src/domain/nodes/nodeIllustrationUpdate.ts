@@ -26,7 +26,7 @@ export function clearNodeIllustration(
 
   return nodes.map((node) => {
     if (node.id !== id) return node;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 分割代入で illustration を除外するため
     const { illustration: _removed, ...rest } = node;
     return { ...rest, height: RECT_HEIGHT };
   });

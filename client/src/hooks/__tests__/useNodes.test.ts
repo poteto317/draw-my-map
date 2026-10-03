@@ -741,16 +741,17 @@ describe("useNodes の removeIllustration", () => {
     expect(removed).toBe(false);
   });
 
-  it("自動レイアウトのとき、削除で縮んだ分、兄弟ノードが上へ再配置される", () => {
+  it("自動レイアウトのとき、削除で縮んだ分、兄弟ノードが設定前の位置へ戻る", () => {
     const { result } = renderHook(() => useNodes());
     act(() => { result.current.setLayoutMode("auto"); });
     let rootId!: number; let a!: number; let b!: number;
     act(() => { rootId = result.current.addNode(0, 0); });
     act(() => { a = result.current.addChildNode(rootId)!; });
     act(() => { b = result.current.addSiblingNode(a)!; });
+    const yBefore = result.current.nodes.find((n) => n.id === b)!.y;
     act(() => { result.current.attachIllustration(a, "data:image/jpeg;base64,AAAA"); });
-    const yWith = result.current.nodes.find((n) => n.id === b)!.y;
+    expect(result.current.nodes.find((n) => n.id === b)!.y).toBeGreaterThan(yBefore);
     act(() => { result.current.removeIllustration(a); });
-    expect(result.current.nodes.find((n) => n.id === b)!.y).toBeLessThan(yWith);
+    expect(result.current.nodes.find((n) => n.id === b)!.y).toBe(yBefore);
   });
 });

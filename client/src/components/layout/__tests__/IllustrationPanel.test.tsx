@@ -226,22 +226,22 @@ describe("IllustrationPanel", () => {
     });
   });
 
-  it("設定済みのイラストがあるとき、「イラストを削除」で、ノードの ID を渡す", async () => {
+  it("設定済みのイラストがあるとき、「設定済みのイラストを削除」で、ノードの ID を渡す", async () => {
     const onRemove = jest.fn();
     render(<IllustrationPanel
       selectedNode={{ id: 5, label: "予算", illustration: "data:image/jpeg;base64,AAAA" }}
       generation={{ status: "idle" }} onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={onRemove} />);
-    await userEvent.click(screen.getByRole("button", { name: "イラストを削除" }));
+    await userEvent.click(screen.getByRole("button", { name: "設定済みのイラストを削除" }));
     expect(onRemove).toHaveBeenCalledWith(5);
   });
 
-  it("イラストが無いとき、未選択のときは、「イラストを削除」を出さない", () => {
+  it("イラストが無いとき、未選択のときは、「設定済みのイラストを削除」を出さない", () => {
     const { rerender } = render(<IllustrationPanel selectedNode={{ id: 1, label: "a" }}
       generation={{ status: "idle" }} onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={jest.fn()} />);
-    expect(screen.queryByRole("button", { name: "イラストを削除" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "設定済みのイラストを削除" })).toBeNull();
     rerender(<IllustrationPanel selectedNode={null}
       generation={{ status: "idle" }} onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={jest.fn()} />);
-    expect(screen.queryByRole("button", { name: "イラストを削除" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "設定済みのイラストを削除" })).toBeNull();
   });
 
   it("イラストがあるノードでは、生成ボタンが「イラストを再生成」になり、押すと生成を呼ぶ", async () => {
@@ -259,5 +259,16 @@ describe("IllustrationPanel", () => {
       selectedNode={{ id: 5, label: "予算", illustration: "data:image/jpeg;base64,AAAA" }}
       generation={{ status: "generating", nodeId: 5, label: "予算" }} onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={jest.fn()} />);
     expect(screen.getByRole("button", { name: "生成中…" })).toBeDisabled();
+  });
+
+  it("プレビュー表示中でも、「設定済みのイラストを削除」が出て、押すとノードの ID を渡す", async () => {
+    const onRemove = jest.fn();
+    render(<IllustrationPanel
+      selectedNode={{ id: 1, label: "a", illustration: "data:image/jpeg;base64,AAAA" }}
+      generation={{ status: "succeeded", nodeId: 1, label: "a", dataUrl: "data:image/jpeg;base64,BBBB" }}
+      onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={onRemove} />);
+    expect(screen.getByRole("button", { name: "ノードに設定" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "設定済みのイラストを削除" }));
+    expect(onRemove).toHaveBeenCalledWith(1);
   });
 });

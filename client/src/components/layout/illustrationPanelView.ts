@@ -12,7 +12,7 @@ export type IllustrationPanelView = {
   errorMessage: string | null;
   // 生成ボタンのラベル。すでにイラストがあるノードでは「再生成」
   generateLabel: string;
-  // 「イラストを削除」を出すか（選択ノードにイラストがあるとき）
+  // 「設定済みのイラストを削除」を出すか（選択ノードにイラストがあるとき）
   canRemove: boolean;
 };
 

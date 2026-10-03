@@ -442,7 +442,7 @@ describe("Home", () => {
       expect(mockDismissGeneration).toHaveBeenCalledTimes(1);
     });
 
-    it("設定したあと「イラストを削除」を押すと、設定済みのイラストが消え、生成ボタンが「イラストを生成」に戻る", async () => {
+    it("設定したあと「設定済みのイラストを削除」を押すと、設定済みのイラストが消え、生成ボタンが「イラストを生成」に戻る", async () => {
       const user = userEvent.setup();
       render(<Home />);
       await user.click(screen.getByRole("button", { name: "テスト用ノード追加" }));
@@ -456,11 +456,11 @@ describe("Home", () => {
       expect(screen.getByText("設定済みのイラスト")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "イラストを再生成" })).toBeInTheDocument();
 
-      await user.click(screen.getByRole("button", { name: "イラストを削除" }));
+      await user.click(screen.getByRole("button", { name: "設定済みのイラストを削除" }));
 
       expect(mockMapStageProps!.nodes[0].illustration).toBeUndefined();
       expect(screen.queryByText("設定済みのイラスト")).toBeNull();
-      expect(screen.queryByRole("button", { name: "イラストを削除" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "設定済みのイラストを削除" })).toBeNull();
       expect(screen.getByRole("button", { name: "イラストを生成" })).toBeInTheDocument();
     });
 
