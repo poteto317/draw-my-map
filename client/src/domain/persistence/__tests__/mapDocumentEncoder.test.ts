@@ -19,7 +19,7 @@ function node(id: number, parentId: number | null, label = `node-${id}`): Node {
 }
 
 describe("MapDocument Encoder", () => {
-  it("V2ドキュメントを作成する", () => {
+  it("V3ドキュメントを作成する", () => {
     expect(createMapDocument([node(1, null)], "auto")).toEqual({
       version: 3,
       layoutMode: "auto",

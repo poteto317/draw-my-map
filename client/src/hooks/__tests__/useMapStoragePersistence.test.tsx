@@ -8,7 +8,7 @@ const emptyMapJson = `{
 }\n`;
 
 const nonCanonicalEmptyMapJson =
-  '{"nodes":[],"layoutMode":"manual","version":3}';
+  '{"nodes":[],"layoutMode":"manual","version":2}';
 
 const importedMapJson = `{
   "version": 1,
@@ -80,7 +80,7 @@ describe("useMapStoragePersistence", () => {
     expect(storage.setItem).not.toHaveBeenCalled();
   });
 
-  it("V1保存済みマップを復元して300ms後にV2で書き戻す", () => {
+  it("V1保存済みマップを復元して300ms後にV3で書き戻す", () => {
     const storage = storageDouble(importedMapJson);
     const replaceMap = jest.fn();
     const { rerender } = renderHook(
