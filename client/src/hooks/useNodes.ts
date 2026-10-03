@@ -14,6 +14,7 @@ import {
   type NodeIdAllocator,
 } from "@/domain/nodes/nodeIdAllocator";
 import { replaceNodeImportance } from "@/domain/nodes/nodeImportanceUpdate";
+import { replaceNodeIllustration } from "@/domain/nodes/nodeIllustrationUpdate";
 import { useNodeLayoutState } from "@/hooks/useNodeLayoutState";
 import type { Node } from "@/types/node";
 import type { NodeImportance } from "@/types/nodeImportance";
@@ -30,6 +31,7 @@ type UseNodesReturn = {
   selectNode: (id: number | null) => void;
   updateNodeLabel: (id: number, label: string) => void;
   updateNodeImportance: (id: number, importance: NodeImportance) => boolean;
+  attachIllustration: (id: number, dataUrl: string) => boolean;
   moveNode: (id: number, x: number, y: number) => void;
   connectNodes: (parentId: number, childId: number) => boolean;
   deleteNode: (id: number) => void;
@@ -118,6 +120,10 @@ export function useNodes(): UseNodesReturn {
     ))
   ), [applyNonStructuralChange]);
 
+  const attachIllustration = useCallback((id: number, dataUrl: string) => (
+    applyTreeChange((currentNodes) => replaceNodeIllustration(currentNodes, id, dataUrl))
+  ), [applyTreeChange]);
+
   const moveNode = useCallback((id: number, x: number, y: number) => {
     applyManualMove((currentNodes) => (
       moveNodeSubtree(currentNodes, id, x, y)
@@ -158,6 +164,7 @@ export function useNodes(): UseNodesReturn {
     selectNode,
     updateNodeLabel,
     updateNodeImportance,
+    attachIllustration,
     moveNode,
     connectNodes,
     deleteNode,

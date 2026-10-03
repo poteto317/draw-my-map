@@ -2,7 +2,7 @@ import { startTransition } from "react";
 import { flushSync } from "react-dom";
 import { renderHook, act } from "@testing-library/react";
 import { useNodes } from "@/hooks/useNodes";
-import { RECT_HEIGHT, RECT_WIDTH } from "@/config/shapes";
+import { ILLUSTRATED_NODE_HEIGHT, RECT_HEIGHT, RECT_WIDTH } from "@/config/shapes";
 import type { NodeMapState } from "@/types/nodeMapState";
 import { createTestNode } from "@/testing/createTestNode";
 
@@ -683,5 +683,36 @@ describe("useNodes", () => {
 
     expect(connected).toBe(true);
     expect(result.current.nodes[1].parentId).toBe(1);
+  });
+});
+
+describe("useNodes の attachIllustration", () => {
+  it("ノードにイラストを設定して、高さを伸ばす", () => {
+    const { result } = renderHook(() => useNodes());
+    let id!: number;
+    act(() => { id = result.current.addNode(100, 100); });
+    let attached = false;
+    act(() => { attached = result.current.attachIllustration(id, "data:image/jpeg;base64,AAAA"); });
+    expect(attached).toBe(true);
+    expect(result.current.nodes[0]).toMatchObject({ illustration: "data:image/jpeg;base64,AAAA", height: ILLUSTRATED_NODE_HEIGHT });
+  });
+
+  it("存在しないノードには設定できず、false を返す", () => {
+    const { result } = renderHook(() => useNodes());
+    let attached = true;
+    act(() => { attached = result.current.attachIllustration(99, "data:image/jpeg;base64,AAAA"); });
+    expect(attached).toBe(false);
+  });
+
+  it("自動レイアウトのとき、高さが伸びた分、兄弟ノードが下へ再配置される", () => {
+    const { result } = renderHook(() => useNodes());
+    act(() => { result.current.setLayoutMode("auto"); });
+    let rootId!: number; let a!: number; let b!: number;
+    act(() => { rootId = result.current.addNode(0, 0); });
+    act(() => { a = result.current.addChildNode(rootId)!; });
+    act(() => { b = result.current.addSiblingNode(a)!; });
+    const yBefore = result.current.nodes.find((n) => n.id === b)!.y;
+    act(() => { result.current.attachIllustration(a, "data:image/jpeg;base64,AAAA"); });
+    expect(result.current.nodes.find((n) => n.id === b)!.y).toBeGreaterThan(yBefore);
   });
 });

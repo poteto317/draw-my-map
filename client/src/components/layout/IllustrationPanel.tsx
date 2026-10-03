@@ -3,12 +3,13 @@ import type { IllustrationGenerationState } from "@/hooks/useIllustrationGenerat
 import type { Node } from "@/types/node";
 
 type IllustrationPanelProps = {
-  selectedNode: Pick<Node, "id" | "label"> | null;
+  selectedNode: Pick<Node, "id" | "label" | "illustration"> | null;
   generation: IllustrationGenerationState;
   onGenerate: (nodeId: number) => void;
+  onAttach: (nodeId: number, dataUrl: string) => void;
 };
 
-export function IllustrationPanel({ selectedNode, generation, onGenerate }: IllustrationPanelProps) {
+export function IllustrationPanel({ selectedNode, generation, onGenerate, onAttach }: IllustrationPanelProps) {
   // 生成は同時に1件までなので、どのノードの生成中でもボタンを無効にする
   const isGenerating = generation.status === "generating";
   const forSelectedNode =
@@ -35,13 +36,34 @@ export function IllustrationPanel({ selectedNode, generation, onGenerate }: Illu
       {forSelectedNode && generation.status === "generating" && (
         <p role="status" className="text-sm text-zinc-500 dark:text-zinc-400">生成中です</p>
       )}
-      {selectedNode !== null && forSelectedNode && generation.status === "succeeded" && (
-        // eslint-disable-next-line @next/next/no-img-element -- data URLのため、next/imageは使わない
-        <img
-          src={generation.dataUrl}
-          alt={`${getNodeDisplayLabel(selectedNode.label)}のイラスト`}
-          className="w-full rounded-md border border-zinc-200 dark:border-zinc-700"
-        />
+      {selectedNode !== null && forSelectedNode && generation.status === "succeeded" ? (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element -- data URLのため、next/imageは使わない */}
+          <img
+            src={generation.dataUrl}
+            alt={`${getNodeDisplayLabel(selectedNode.label)}のイラスト`}
+            className="w-full rounded-md border border-zinc-200 dark:border-zinc-700"
+          />
+          <button
+            type="button"
+            onClick={() => onAttach(selectedNode.id, generation.dataUrl)}
+            className="rounded-md border border-blue-600 px-3 py-2 text-sm text-blue-600 transition-colors hover:bg-blue-50 dark:border-blue-400 dark:text-blue-400 dark:hover:bg-zinc-700"
+          >
+            ノードに設定
+          </button>
+        </>
+      ) : (
+        selectedNode?.illustration !== undefined && (
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">設定済みのイラスト</span>
+            {/* eslint-disable-next-line @next/next/no-img-element -- data URLのため、next/imageは使わない */}
+            <img
+              src={selectedNode.illustration}
+              alt={`${getNodeDisplayLabel(selectedNode.label)}の設定済みイラスト`}
+              className="w-full rounded-md border border-zinc-200 dark:border-zinc-700"
+            />
+          </div>
+        )
       )}
       {forSelectedNode && generation.status === "failed" && (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">

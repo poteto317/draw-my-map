@@ -34,6 +34,7 @@ export default function Home() {
     deleteNode,
     setLayoutMode,
     replaceMap,
+    attachIllustration,
   } = useNodes();
   const [viewportScale, setViewportScale] = useState(1);
   const { replaceMapAndReset, resetRevision } = useResettingMapReplacement(replaceMap);
@@ -50,7 +51,7 @@ export default function Home() {
     replaceMap: replaceMapAndReset,
   });
   const imageExport = useMapImageExport({ nodes });
-  const { generation, generateIllustration } = useIllustrationGeneration(nodes, resetRevision);
+  const { generation, generateIllustration, dismissGeneration } = useIllustrationGeneration(nodes, resetRevision);
 
   return (
     <div className="flex h-dvh flex-col bg-zinc-50 dark:bg-zinc-900">
@@ -118,7 +119,16 @@ export default function Home() {
             resetRevision={resetRevision}
           />
         )}
-        sidePanel={<IllustrationPanel selectedNode={selectedNode} generation={generation} onGenerate={generateIllustration} />}
+        sidePanel={(
+          <IllustrationPanel
+            selectedNode={selectedNode}
+            generation={generation}
+            onGenerate={generateIllustration}
+            onAttach={(nodeId, dataUrl) => {
+              if (attachIllustration(nodeId, dataUrl)) dismissGeneration();
+            }}
+          />
+        )}
       />
     </div>
   );

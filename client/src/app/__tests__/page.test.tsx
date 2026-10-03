@@ -11,6 +11,7 @@ const mockExportPng = jest.fn();
 const mockExportSvg = jest.fn();
 const mockUseMapImageExport = jest.fn();
 const mockGenerateIllustration = jest.fn();
+const mockDismissGeneration = jest.fn();
 const mockUseIllustrationGeneration = jest.fn();
 let mockGeneration: IllustrationGenerationState = { status: "idle" };
 let mockImageExportNotice: OperationNotice | null = null;
@@ -25,7 +26,11 @@ let mockMapStageProps: {
 jest.mock("@/hooks/useIllustrationGeneration", () => ({
   useIllustrationGeneration: (nodes: readonly Node[], resetRevision: number) => {
     mockUseIllustrationGeneration(nodes, resetRevision);
-    return { generation: mockGeneration, generateIllustration: mockGenerateIllustration };
+    return {
+      generation: mockGeneration,
+      generateIllustration: mockGenerateIllustration,
+      dismissGeneration: mockDismissGeneration,
+    };
   },
 }));
 
@@ -161,6 +166,7 @@ describe("Home", () => {
     mockExportSvg.mockClear();
     mockUseMapImageExport.mockClear();
     mockGenerateIllustration.mockClear();
+    mockDismissGeneration.mockClear();
     mockUseIllustrationGeneration.mockClear();
     mockGeneration = { status: "idle" };
     mockImageExportNotice = null;
@@ -419,6 +425,21 @@ describe("Home", () => {
 
       expect(mockGenerateIllustration).toHaveBeenCalledTimes(1);
       expect(mockGenerateIllustration).toHaveBeenCalledWith(selectedId);
+    });
+
+    it("生成結果の「ノードに設定」で、ノードにイラストが入り、プレビューを破棄する", async () => {
+      const user = userEvent.setup();
+      render(<Home />);
+      await user.click(screen.getByRole("button", { name: "テスト用ノード追加" }));
+      await user.click(screen.getByRole("button", { name: "テスト用ノード選択" }));
+      const nodeId = mockMapStageProps!.nodes[0].id;
+      mockGeneration = { status: "succeeded", nodeId, dataUrl: "data:image/jpeg;base64,AAAA" };
+      await user.click(screen.getByRole("button", { name: "テスト用ノード追加" })); // 再描画させ、モックの生成状態を反映する
+
+      await user.click(screen.getByRole("button", { name: "ノードに設定" }));
+
+      expect(mockMapStageProps!.nodes[0].illustration).toBe("data:image/jpeg;base64,AAAA");
+      expect(mockDismissGeneration).toHaveBeenCalledTimes(1);
     });
 
     it("選択したノードが2番目でも、そのノードのIDを生成の入口へ渡す", async () => {
