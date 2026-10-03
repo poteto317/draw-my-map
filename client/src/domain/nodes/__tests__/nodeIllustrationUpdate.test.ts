@@ -1,5 +1,5 @@
 import { ILLUSTRATED_NODE_HEIGHT } from "@/config/shapes";
-import { replaceNodeIllustration } from "@/domain/nodes/nodeIllustrationUpdate";
+import { clearNodeIllustration, replaceNodeIllustration } from "@/domain/nodes/nodeIllustrationUpdate";
 import type { Node } from "@/types/node";
 
 const URL1 = "data:image/jpeg;base64,AAAA";
@@ -38,5 +38,34 @@ describe("replaceNodeIllustration", () => {
 
   it("対象のノードが無いときは null", () => {
     expect(replaceNodeIllustration([node(1)], 9, URL1)).toBeNull();
+  });
+});
+
+describe("clearNodeIllustration", () => {
+  it("対象のノードから illustration を外し、高さを RECT_HEIGHT に戻す", () => {
+    const withImage = replaceNodeIllustration([node(1), node(2)], 2, URL1)!;
+    const result = clearNodeIllustration(withImage, 2)!;
+    expect(result[1]).toEqual(node(2));
+    expect("illustration" in result[1]).toBe(false);
+    expect(result[0]).toEqual(node(1));
+  });
+
+  it("他のノードと、入力の配列を変更しない", () => {
+    const withImage = replaceNodeIllustration([node(1), node(2)], 2, URL1)!;
+    const snapshot = JSON.parse(JSON.stringify(withImage));
+    const result = clearNodeIllustration(withImage, 2)!;
+    expect(withImage).toEqual(snapshot);
+    expect(result[0]).toBe(withImage[0]);
+  });
+
+  it("対象のノードが無いとき、またはイラストが無いときは null", () => {
+    expect(clearNodeIllustration([node(1)], 9)).toBeNull();
+    expect(clearNodeIllustration([node(1)], 1)).toBeNull();
+  });
+
+  it("削除したあとにもう一度設定すると、元の状態に戻る（往復）", () => {
+    const withImage = replaceNodeIllustration([node(1)], 1, URL1)!;
+    const cleared = clearNodeIllustration(withImage, 1)!;
+    expect(replaceNodeIllustration(cleared, 1, URL1)).toEqual(withImage);
   });
 });
