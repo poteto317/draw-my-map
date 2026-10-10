@@ -1,6 +1,6 @@
 # Draw My Map — ロードマップ
 
-最終更新: 2026-10-03
+最終更新: 2026-10-10
 
 ## 現在地
 
@@ -9,6 +9,7 @@
 - Phase 5までが完了。JSONエクスポート / インポート、localStorageへの自動保存、PNG / SVG画像エクスポートができる。
 - Phase 6までが完了。重要度タグの編集、ズーム連動・手動の解像度フィルタリング、表示切り替え時のフェードが利用できる。重要度はV2形式のJSONとlocalStorageへ保存され、V1形式は中重要度として移行できる。
 - Phase 7（AIイラスト生成）までが完了。右パネルのボタンと右クリックメニューから、選択中のノードのテキストをもとにイラストを生成でき、結果は右パネルにプレビュー表示される（Cloudflare Workers AI。無料枠の範囲）。生成したイラストは、右パネルの「ノードに設定」でノードに紐付けられ、キャンバスに表示される。紐付けたイラストは128pxのJPEGに縮小され、V3形式のJSONとlocalStorageへ保存され、PNG / SVGのエクスポートにも含まれる。すでにイラストがあるノードでは「イラストを再生成」で置き換えられ、右パネルの「設定済みのイラストを削除」で外せる。ロードマップの未完了の項目は、現時点で残っていない。
+- Phase 0からPhase 7までの全実装に対応する包括的なドキュメント体系（`README.md`, `client/README.md`, `docs/README.md`, `docs/architecture/overview.md`, `docs/specifications/features.md`, `docs/specifications/data-model.md`, `docs/specifications/api.md`）が整備済み。
 
 ## ビジョン
 

@@ -1,0 +1,135 @@
+# Draw My Map
+
+Draw My Map は、**少ない操作で素早くマインドマップを作れる**ビジュアル思考ツールです。  
+Figma のような自由度の高い無限キャンバスと、マインドマップならではの素早いツリー構造化・操作性を融合し、シンプルさと快適な使い心地を両立しています。
+
+---
+
+## 主な特徴・差別化ポイント
+
+1. **解像度フィルタリング（Zoom-linked Resolution Filtering）**
+   - 各ノードに重要度タグ（高 / 中 / 低）を付与。
+   - ズームレベルに連動して自動で表示ノードをフィルタリング。ズームアウト時は重要な要点だけを俯瞰し、ズームインすると詳細なノードが現れます。
+   - ヒステリシス制御により境界付近でのチラつきを防止し、切り替え時には滑らかなフェードイン・フェードアウトアニメーションを適用。
+   - 画面上部の UI から手動での表示レベル絞り込みも可能です。
+
+2. **AI イラスト生成（Cloudflare Workers AI 連携）**
+   - ノードを選択し、右クリックコンテキストメニューまたは右サイドパネルから AI イラストを自動生成。
+   - Cloudflare Workers AI（FLUX.1 schnell）を採用。日本語のノードテキストも自動翻訳モデル（`@cf/meta/m2m100-1.2b`）を介して英語プロンプト化し、高品質なイラストを生成します。
+   - 生成画像は 128px JPEG に自動最適化され、ノードに紐付けられてキャンバス上に描画されます。
+   - イラストの再生成・削除にも対応し、画像エクスポートや永続化データにも含まれます。
+
+3. **快適なキーボード＆キャンバス操作**
+   - **素早いツリー入力**: `Tab` キーで選択ノードの子ノードを作成、`Enter` キーで兄弟ノードを作成。
+   - **直感的な接続**: ノード同士をドラッグ＆ドロップして接続可能（滑らかなベジェ曲線エッジの自動ルーティング）。
+   - **子孫連動移動**: 親ノードをドラッグすると、傘下の子孫ノードがまとまって移動。
+   - **スムーズなナビゲーション**: キャンバスのドラッグによるパン、マウスホイール / ピンチによるズーム、ノードへのフォーカス（中央表示）に対応。
+
+4. **ツリー自動レイアウト**
+   - ノードの重なりを検出し自動で回避するフォレスト / ツリー配置アルゴリズム。
+   - ノードの追加・削除・接続変更時に自動的にレイアウトを再計算。
+   - 自由な配置ができる「手動配置モード」と「自動レイアウトモード」をワンクリックで切り替え可能。
+
+5. **データ永続化と多彩なエクスポート**
+   - **ブラウザ自動保存**: `localStorage` へのリアルタイム自動保存により、作業の中断・再開がシームレス。
+   - **JSON インポート / エクスポート**: マップ全体の構造・重要度・イラストデータを JSON 形式で保存・復元（旧バージョン形式からの自動マイグレーション対応）。
+   - **画像エクスポート**: プレゼン資料や共有に便利な高解像度 PNG および ベクター SVG 形式での書き出しに対応。
+
+---
+
+## 技術スタック
+
+| 分類 | 技術 / ライブラリ | 用途・特徴 |
+|---|---|---|
+| **フロントエンド** | [Next.js](https://nextjs.org/) 16 (App Router) | アプリケーションフレームワーク、Route Handler |
+| **UI ライブラリ** | [React](https://react.dev/) 19 + React Compiler (`babel-plugin-react-compiler` / `reactCompiler: true`) | 宣言的 UI、自動メモ化最適化、状態管理、DOM オーバーレイ |
+| **グラフィックス** | [Pixi.js](https://pixijs.com/) 8 | 2D WebGL / Canvas レンダリングエンジン（高速なノード・エッジ描画） |
+| **スタイリング** | [Tailwind CSS](https://tailwindcss.com/) 4 | ユーティリティファースト CSS フレームワーク |
+| **言語** | [TypeScript](https://www.typescriptlang.org/) 5 | 型安全な開発環境 |
+| **AI 基盤** | [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/) | 画像生成 (`flux-1-schnell`)、機械翻訳 (`m2m100-1.2b`) |
+| **テスト / 品質** | [Jest](https://jestjs.io/) 30, [Testing Library](https://testing-library.com/) | ユニットテスト、コンポーネントテスト、結合テスト |
+
+---
+
+## クイックスタート
+
+### 前提条件
+
+- **Node.js**: 20.x 以上（推奨: 最新の LTS バージョン）
+- **npm**: 10.x 以上
+
+### 起動手順
+
+1. **リポジトリのクローンと移動**
+   ```bash
+   git clone https://github.com/poteto317/draw-my-map.git
+   cd draw-my-map/client
+   ```
+
+2. **依存パッケージのインストール**
+   ```bash
+   npm install
+   ```
+
+3. **開発サーバーの起動**
+   ```bash
+   npm run dev
+   ```
+   ブラウザで [http://localhost:3000](http://localhost:3000) を開くと、Draw My Map が利用できます。
+
+4. **テスト・型チェック・ビルドの検証**
+   ```bash
+   npm run verify
+   ```
+   Tailwind CSS スキャン、ESLint、TypeScript 型チェック、Jest テスト、Next.js プロダクションビルドを一括で実行します。
+
+### AI イラスト生成機能のセットアップ（任意）
+
+AI イラスト生成機能を利用するには、Cloudflare Workers AI のアカウント設定が必要です（無料枠の範囲で利用可能）。  
+詳細は [イラスト生成環境構築ガイド](docs/setup/illustration-generation-setup.md) を参照してください。
+
+```bash
+# client ディレクトリで設定ファイルを準備
+cp -n .env.example .env.local
+# .env.local に CLOUDFLARE_ACCOUNT_ID と CLOUDFLARE_API_TOKEN を設定
+```
+
+---
+
+## プロジェクト構成
+
+```text
+draw-my-map/
+├── client/                     # フロントエンド（Next.js アプリケーション）
+│   ├── src/
+│   │   ├── app/                # App Router ページ & API Route Handler
+│   │   │   ├── api/illustrations/ # イラスト生成エンドポイント
+│   │   │   ├── layout.tsx
+│   │   │   └── page.tsx
+│   │   ├── components/         # React UI コンポーネント（ヘッダー、パネル、メニュー等）
+│   │   ├── config/             # 設定値・定数定義
+│   │   ├── domain/             # 純粋ドメインロジック（ノード計算、レイアウト、画像変換等）
+│   │   ├── hooks/              # カスタムフック（状態管理、操作連携、Pixi 連携等）
+│   │   ├── server/             # サーバーサイド処理（Cloudflare AI連携、翻訳等）
+│   │   ├── services/           # アプリケーションサービス（永続化、エクスポート、イラスト通信等）
+│   │   ├── testing/            # 共通テストユーティリティ・フィクスチャ（createTestNode, jpegFixture）
+│   │   └── types/              # 型定義（MapDocument, Node, エッジ等）
+│   └── package.json
+├── docs/                       # 包括的プロジェクトドキュメント（下記参照）
+├── ROADMAP.md                  # 開発ロードマップ・各フェーズ進捗記録
+└── AGENTS.md                   # エージェント・開発運用共通ルール
+```
+
+---
+
+## ドキュメント一覧
+
+プロジェクトの詳細な仕様・アーキテクチャについては、[ドキュメントポータル（docs/README.md）](docs/README.md) をご覧ください。
+
+- **[システムアーキテクチャ概要](docs/architecture/overview.md)**: Pixi.js と React 19 の協調モデル、レイヤード設計
+- **[機能仕様・操作マニュアル](docs/specifications/features.md)**: 全機能仕様、キーボードショートカット一覧
+- **[データモデル・永続化仕様](docs/specifications/data-model.md)**: `MapDocument` JSON スキーマ（V1/V2/V3）、マイグレーション
+- **[イラスト生成 API 仕様](docs/specifications/api.md)**: `POST /api/illustrations` Route Handler 詳細
+- **[イラスト生成環境構築ガイド](docs/setup/illustration-generation-setup.md)**: Cloudflare Workers AI セットアップ手順
+- **[実ブラウザテストケース](docs/testing/browser-test-cases.md)**: ブラウザ手動検証項目一覧
+- **[開発ロードマップ](ROADMAP.md)**: フェーズ別開発進捗と完了状況

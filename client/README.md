@@ -1,88 +1,187 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Draw My Map クライアント (`client/`)
 
-## Getting Started
+Draw My Map の Web クライアントアプリケーションおよびバックエンド Route Handler です。  
+高速な 2D グラフィックス描画エンジン **Pixi.js 8** と、最新の **React 19**（React Compiler `reactCompiler: true` 有効）/ **Next.js 16 (App Router)** を組み合わせ、滑らかで直感的なマインドマップ作成体験を提供します。
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## クライアント概要
+
+Draw My Map のフロントエンドおよびエッジバックエンドの主要な責務は以下のとおりです。
+
+1. **キャンバス描画 (Pixi.js 8)**:
+   - WebGL / 2D Canvas によるノードおよび滑らかなベジェ曲線エッジの高速レンダリング。
+   - パン、ズーム、フォーカス（中央配置）、ノード同士のドラッグ＆ドロップ接続、子孫ノード連動ドラッグ移動。
+   - 解像度フィルタリング連動の滑らかなフェードイン・フェードアウト可視性アニメーション。
+2. **UI 操作・インタラクション (React 19 & Tailwind CSS 4)**:
+   - ツールバー、プロパティパネル、インラインテキスト編集、コンテキストメニューなどの DOM オーバーレイ UI。
+   - キーボードショートカット（`Tab` で子ノード作成、`Enter` で兄弟ノード作成、`Delete`/`Backspace` で削除など）。
+   - 重要度フィルタリングの手動切り替えやレイアウトモード切り替え（手動配置 / ツリー自動配置）。
+3. **データ永続化とエクスポート (Domain & Services)**:
+   - `localStorage` へのリアルタイム自動保存と復元。
+   - `MapDocument` JSON 形式でのインポート / エクスポート（旧バージョン互換性・自動マイグレーション対応）。
+   - 高解像度 PNG および ベクター SVG 形式での画像エクスポート。
+4. **AI イラスト生成 API (Next.js Route Handler)**:
+   - `POST /api/illustrations` エンドポイントによる Cloudflare Workers AI 連携。
+   - 日本語ノードテキストの自動英訳（`@cf/meta/m2m100-1.2b`）と画像生成（`@cf/black-forest-labs/flux-1-schnell`）。
+   - クライアント側での 128px JPEG 縮小とノードへの紐付け・再生成・削除。
+
+---
+
+## 利用可能な npm スクリプト一覧
+
+`package.json` に定義されている開発・ビルド・検証スクリプトの一覧です。
+
+| コマンド | 内容・目的 |
+|---|---|
+| `npm run dev` | Turbopack を使用して開発サーバーを起動します（デフォルト: `http://localhost:3000`）。ソースコード変更時の高速ホットリロードに対応しています。 |
+| `npm run build` | Next.js の本番向けプロダクションビルドを実行します。ページの静的最適化やサーバーサイドバンドルの生成を行います。 |
+| `npm start` | `npm run build` で作成された本番ビルドのサーバーを起動します。 |
+| `npm run lint` | ESLint によるコード静的解析を実行します。コードスタイルや潜在的なバグ、React ルールの違反を検出します。 |
+| `npm run typecheck` | TypeScript コンパイラ (`tsc --noEmit`) を実行し、コードをビルドせずにプロジェクト全体の型検査を行います。 |
+| `npm run tailwind:scan` | Tailwind CSS 4 CLI (`@tailwindcss/cli`) を使用して、`./src/app/globals.css` とテンプレートからユーティリティクラスをスキャン・抽出します。 |
+| `npm test` | Jest によるユニットテストおよびコンポーネントテストを実行します (`jest --passWithNoTests`)。テスト未定義時もエラーになりません。 |
+| `npm run verify` | CI / コミット前の一括検証スクリプトです。Tailwind スキャン → ESLint → 型検査 → Jest テスト (`--runInBand`) → 本番ビルド を順番に実行し、すべて成功するか検証します。 |
+
+---
+
+## ディレクトリ構成とレイヤードアーキテクチャ
+
+本クライアントは、**単一責任原則（SRP: Single Responsibility Principle）**に基づき、責務と依存関係を明確に分離したレイヤードアーキテクチャを採用しています。
+
+```text
+client/src/
+├── app/                  # Next.js App Router (ページ、レイアウト、Route Handler)
+├── components/           # React UI コンポーネント (DOM オーバーレイ & Pixi キャンバス)
+│   ├── layout/           # アプリケーション全体のレイアウト、ヘッダー、パネル、ダイアログ
+│   └── map/              # キャンバスコンテナ、Pixi シーンレンダラー、操作コーディネーター
+├── config/               # 定数設定 (ノード形状、初期値、スタイル、イラスト設定)
+├── domain/               # フレームワーク非依存の純粋ビジネスロジック (コアロジック)
+│   ├── illustration/     # イラストのトリミング、プロンプト加工、データ URL 処理
+│   ├── imageExport/      # PNG / SVG エクスポート用の境界計算、ベクター座標計算
+│   ├── nodes/            # ノードツリー操作、重なり判定、自動レイアウト、重要度判定
+│   └── persistence/      # MapDocument スキーマ定義、エンコード/デコード、移行処理
+├── hooks/                # React カスタムフック (状態管理、UIとドメインの仲介)
+├── server/               # サーバーサイド処理 (Route Handler から呼び出されるサービス)
+│   └── illustration/     # Cloudflare Workers AI クライアント、翻訳、プロンプト生成
+├── services/             # 外部環境との入出力・副作用アダプター (ブラウザ / Web API)
+│   ├── illustration/     # Route Handler クライアント、サムネイル縮小処理
+│   ├── imageExport/      # DOM Canvas / SVG のラスタライズとファイルダウンロード
+│   └── persistence/      # localStorage 読み書き、JSON ファイルリーダー/ダウンローダー
+├── testing/              # テスト用ヘルパー、モック、フィクスチャ (createTestNode, jpegFixture)
+└── types/                # アプリケーション共通の TypeScript 型定義
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 各レイヤーの責務と依存ルール
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Domain (`src/domain/`)**:
+  - React や DOM、Next.js などの外部フレームワークに一切依存しない純粋な TypeScript ロジックです。
+  - 状態変更関数や計算アルゴリズムはイミュータブルで副作用を持たず、高いテスト容易性を確保しています。
+- **Services (`src/services/`)**:
+  - ブラウザ API（`localStorage`, Canvas DOM, `Blob`, `URL.createObjectURL`, `File.text()` 等）やネットワーク通信などの副作用を抽象化するアダプター層です。
+- **Hooks (`src/hooks/`)**:
+  - React の状態（State）を管理し、Domain ロジックの呼び出しと Services の副作用をオーケストレーションします。
+  - 各フックは単一の関心事（ノード管理、永続化、エクスポート、フィルタリングなど）に分割されています。
+- **Components (`src/components/`)**:
+  - 表示とユーザー入力の受付を担当します。ビジネスロジックは Hooks や Domain に委譲し、コンポーネント自身はプレゼンテーションに専念します。
+- **Server (`src/server/`)**:
+  - Next.js Route Handler (`src/app/api/`) から呼び出されるサーバー専用の処理です。API キーなどの機密情報を安全に扱い、外部 AI サービスと通信します。
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## 環境変数の設定（AI イラスト生成）
 
-To learn more about Next.js, take a look at the following resources:
+ノードのイラスト自動生成機能は、Cloudflare Workers AI（FLUX.1 schnell）を利用します。  
+機能を利用するには、Cloudflare の認証情報の設定が必要です。
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 1. 設定手順
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. [Cloudflare](https://dash.cloudflare.com/sign-up) でアカウントを作成します（無料プランで利用可能です）。
+2. ダッシュボードで API トークンを作成します（権限: `Workers AI - Read` および `Workers AI - Edit` を含める）。
+3. Workers AI ページ等で「Account ID」を確認します。
+4. `client/.env.example` を `client/.env.local` にコピーし、値を入力します。
+   ```bash
+   cd client
+   cp -n .env.example .env.local
+   ```
+5. `.env.local` をエディタで開き、2つの変数を設定します:
+   ```env
+   CLOUDFLARE_ACCOUNT_ID=your_cloudflare_account_id
+   CLOUDFLARE_API_TOKEN=your_cloudflare_api_token
+   ```
+6. 開発サーバー（`npm run dev`）を再起動します（環境変数は起動時に読み込まれます）。
 
-## Deploy on Vercel
+※より詳細な画面キャプチャ付きの手順については、[イラスト生成環境構築ガイド](../docs/setup/illustration-generation-setup.md) を参照してください。
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 2. 無料枠について
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Cloudflare Workers AI の無料プランには、**1日あたり 10,000 Neurons** の上限があります（毎日 0:00 UTC / 日本時間 午前 9:00 にリセット）。上限超過時はエラーとなり、無料プランのままなら自動課金は発生しません。
+- FLUX.1 schnell（4 ステップ）の生成 1 枚あたりの消費量は約 172.8 Neurons（実測値）であり、**1 日あたり約 57 枚** の生成が可能です。
+- 日本語ノードテキストは Cloudflare の多言語翻訳モデル（`@cf/meta/m2m100-1.2b`）で自動英訳されてから画像生成されます。翻訳の消費量は 1 回あたり 0.3〜0.5 Neurons 程度と極めてわずかです。
+- NSFW フィルターの誤判定対策として最大 3 回（再試行 2 回）の自動リトライを行います。再試行が発生した場合はその分無料枠を消費します。最悪の場合、1 回の生成クリックで最大 3 回分の生成枠を消費する可能性があります。
+- 最新の料金や無料枠の詳細は、Cloudflare 公式の [料金ページ](https://developers.cloudflare.com/workers-ai/platform/pricing/) で確認してください。
 
-## イラスト生成の設定
+### 3. 公開時の注意
 
-詳しい手順は、`docs/setup/illustration-generation-setup.md` を見る。
+- 現状のイラスト生成 API ルート（`POST /api/illustrations`）には、認証・Origin チェック・レート制限が実装されていません。認証情報を設定したままパブリックなインターネット環境へデプロイすると、第三者によって 1 日の無料枠を消費される恐れがあります。本機能はローカル開発環境での利用を想定しています。
+- Cloudflare アカウントは **Workers Free プラン** を使用してください（Workers Paid プランでは無料枠を超過した分が Neuron 単位で従量課金されます）。
+- ブラウザがリクエストを中断しても、サーバー側の上流 API 呼び出し（翻訳および生成）は即座には中断されず、無料枠を消費する可能性があります。
+- 公開環境へのデプロイを検討する場合は、Origin チェック、ユーザー認証、リクエスト本文サイズ制限、レート制限の実装が必須となります。
 
-ノードのイラスト生成は、Cloudflare Workers AI（FLUX.1 schnell）を使う。生成を試すには、次の手順で認証情報を設定する。
+### 4. 生成したイラストの扱い
 
-1. [Cloudflare](https://dash.cloudflare.com/sign-up) でアカウントを作成する（無料プランで足りる）。
-2. ダッシュボードで API トークンを作成する。権限には「Workers AI - Read」と「Workers AI - Edit」の両方を含める。
-3. アカウント ID を確認する。ダッシュボードの Workers AI のページなどに表示される。
-4. `client/.env.example` を `client/.env.local` にコピーし、`CLOUDFLARE_ACCOUNT_ID` と `CLOUDFLARE_API_TOKEN` に値を設定する。
-5. 開発サーバー（`npm run dev`）を再起動する。環境変数は、起動時に読み込まれる。
+- 生成されたイラストは右パネルの「ノードに設定」で選択中のノードに紐付けられます。
+- 紐付けられたイラストは自動的に 128px の JPEG に縮小・最適化され、マップの保存データ（`localStorage` および JSON エクスポート `version: 3`）に埋め込まれます。
+- PNG および SVG の画像エクスポートにもイラストが含まれます。
+- すでにイラストがあるノードでは、右パネルのボタンが「イラストを再生成」に切り替わり、プレビュー確認後に置き換えが可能です。
+- 右パネルの「設定済みのイラストを削除」でノードからイラストを削除でき、ノードの高さは元に戻ります。
+- イラストデータ付加により `localStorage` の容量上限（通常約 5MB）に達した場合は、「ブラウザへ自動保存できませんでした。」と通知されます。その場合は「JSON書き出し」機能で手動バックアップを行ってください。
 
-```bash
-cd client
-cp -n .env.example .env.local
-# .env.local を編集して、2つの値を設定する
-npm run dev
-```
+### 5. 認証情報の扱い
 
-すでに `.env.local` がある場合は、`-n` によって上書きされない（トークンは作成時に 1 度しか表示されないため）。コピーは飛ばして、2 つの値が両方あることを確認する。
+- API トークンおよびアカウント ID はサーバー側（Next.js Route Handler）でのみ環境変数から読み込まれ、クライアント（ブラウザ）へは一切送信されません。
+- `client/.env.local` は `client/.gitignore` に指定されており、Git の追跡対象外となっています。認証情報を Git コミットに含めないようご注意ください。
 
-### 無料枠について
+---
 
-Cloudflare Workers AI の無料プランには、1 日あたりの利用上限（10,000 Neurons）がある。上限は毎日 0:00 UTC にリセットされる。超過すると、以降の生成はエラーになる。無料プランのままなら、自動では課金されない。
+## テストと検証方針
 
-実測では、FLUX.1 schnell（4 ステップ）の 1 枚の生成で、応答の `usage.neurons` が 172.8 Neurons だった（2026-10-03 に測定）。このため、1 日 10,000 Neurons の無料枠で生成できるのは、1 日あたり約 57 枚である。この値は、Cloudflare がモデルや料金を変更すると、変わりうる。
+Draw My Map では、コードの信頼性と保守性を維持するため、以下の開発方針を徹底しています。
 
-ノードのテキストは、FLUX が日本語を文字として描いてしまうため、先に Cloudflare の翻訳モデルで英語に翻訳してから、画像を生成する。翻訳 1 回の消費は 0.3〜0.5 Neurons 程度で、無視できる（これも実測（2026-10-03）の値で、変わりうる）。翻訳するのは、日本語の文字を含むノードのテキストだけである。また、NSFW フィルターの誤判定は、自動で再試行し、生成は最大 3 回まで試す（再試行は最大 2 回）。拒否されて再試行したリクエストも、無料枠を一部消費する可能性がある（拒否されたリクエストが課金対象かどうかは未確認）。最悪の場合、1 回のクリックで、生成 3 回分（最初の試行と、再試行 2 回）を消費しうる。
+### 1. 単一責任原則 (SRP) とモジュール分割
+- 1つの関数・フック・コンポーネント・ファイルに複数の責務を持たせず、関心事ごとに細かく分割します。
+- 状態管理、幾何計算、DOM イベントハンドリング、レンダリング、外部通信を別モジュールに分離することで、単体テストを容易にしています。
 
-無料枠の内容は、Cloudflare の都合で変更されうる。最新の内容は、公式の [料金ページ](https://developers.cloudflare.com/workers-ai/platform/pricing/) で確認する。
+### 2. テスト駆動開発 (TDD) とテストハーネス構成
+- 機能追加やバグ修正時は、実装コードを書く前に対応するテストケース（Jest + React Testing Library）を記述します。
+- 失敗するテスト（RED）を確認した後に実装を行い、テストがパスすること（GREEN）を確認してからリファクタリングを行います。
+- **Jest テスト環境 (`jest.config.ts` / `jest.setup.ts`)**:
+  - `next/jest` + `jest-environment-jsdom` 環境（パスエイリアス `@/*` 対応、`@testing-library/jest-dom` 読み込み）。
+- **共通テストフィクスチャ & Pixi テストハーネス**:
+  - `src/testing/createTestNode.ts` / `src/testing/jpegFixture.ts`: テスト用 `Node` ファクトリおよび有効な JPEG SOF0 バイナリ・Data URL フィクスチャ。
+  - `src/components/map/pixi/testing/pixiTestHarness.ts`: WebGL 非対応の JSDOM 上で Pixi.js シーン構築・ストローク・イベント発火を検証するフェイク Pixi ランタイム。
+  - `src/components/map/testing/mapStageTestRuntime.tsx` / `AutoLayoutMapStageHarness.tsx`: `MapStage` コンポーネント結合テスト用のランタイム注入・自動レイアウト検証ハーネス。
 
-### 公開時の注意
+### 3. 検証コマンドの一括実行 (`npm run verify`)
+- コードを変更した後は、必ず `client` ディレクトリで以下の検証コマンドを実行してください:
+  ```bash
+  npm run verify
+  ```
+- このコマンドにより以下の全工程が一括検証されます:
+  1. **Tailwind スキャン**: CSS クラスの構文と整合性を確認
+  2. **ESLint**: コーディング規約違反や潜在的バグを検出
+  3. **TypeScript 型チェック**: 型の整合性を厳格に検査
+  4. **Jest テスト**: ユニットテスト・結合テストを順次実行（全テストケース通過を確認）
+  5. **本番ビルド**: Next.js アプリケーションが正常にビルドできることを保証
 
-- イラスト生成の API ルートには、認証・Origin の確認・レート制限がまだない。これらの環境変数を設定したまま、公開環境にデプロイしてはいけない（誰でも 1 日の無料枠を使い切れてしまう）。想定する使い方は、ローカルでの 1 人での開発である。
-- Cloudflare のアカウントは、Workers Free プランのものを使う。Workers Paid プランでは、無料枠を超えた分が Neuron 単位で課金される（[料金ページ](https://developers.cloudflare.com/workers-ai/platform/pricing/)）。従量課金を避ける方針に反する。
-- ブラウザがリクエストを取り消しても、サーバーは上流への呼び出しを中断しない（翻訳と、最大 3 回の生成が、そのまま無料枠を消費しうる）。ローカルでの 1 人での利用なら、許容できる。
-- 公開する場合は、Origin の確認・認証・リクエスト本文のサイズ制限を追加することが前提になる。
+---
 
-### 生成したイラストの扱い
+## 関連ドキュメント
 
-- 生成したイラストは、右パネルの「ノードに設定」で、選択中のノードに紐付けられる。
-- 紐付けたイラストは、128px の JPEG に縮小される。縮小したイラストは、マップの保存データ（localStorage と JSON のエクスポート。version 3）に含まれる。
-- PNG と SVG のエクスポートにも、イラストが含まれる。
-- すでにイラストがあるノードでは、生成の操作が「イラストを再生成」になる。プレビューを確認して「ノードに設定」を押すと、イラストが置き換わる。
-- 右パネルの「設定済みのイラストを削除」で、ノードからイラストを外せる。ノードの高さは元に戻る。削除の取り消しと確認はない。
-- 自動保存が、localStorage の容量の上限で失敗したときは、「ブラウザへ自動保存できませんでした。」と表示される。JSON のエクスポートで、マップを残せる。
-
-### 認証情報の扱い
-
-- 認証情報は、サーバー側（Route Handler）だけが環境変数から読む。ブラウザには渡らない。
-- `client/.env.local` はコミットしない。`client/.gitignore` の `.env*` で、Git の管理対象から外れている。
+- [リポジトリ ルート README](../README.md): プロジェクト全体のビジョン・全体クイックスタート
+- [ドキュメントポータル](../docs/README.md): ドキュメント全体の目次・ガイド
+- [システムアーキテクチャ概要](../docs/architecture/overview.md): Pixi.js と React の協調モデル、設計原則
+- [機能仕様・操作マニュアル](../docs/specifications/features.md): ショートカット、ノード操作、フィルタリング仕様
+- [データモデル・永続化仕様](../docs/specifications/data-model.md): `MapDocument` JSON スキーマと保存仕様
+- [イラスト生成 API 仕様](../docs/specifications/api.md): Route Handler エンドポイント仕様
+- [イラスト生成環境構築ガイド](../docs/setup/illustration-generation-setup.md): Cloudflare 設定の詳細手順書
