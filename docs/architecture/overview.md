@@ -495,6 +495,8 @@ sequenceDiagram
 1. **`useNodes`**:
    - アプリケーションの基本データ構造であるノード配列（`Node[]`）、現在選択中のノード ID（`selectedNodeId`）、現在のレイアウトモード（`manual` / `auto`）を保持。
    - `useNodeLayoutState` を内部で利用し、非構造的変更（ラベル・重要度）と構造的変更（追加・削除・親子接続）を適切に分離して更新。
+   - 内部で `useMapHistory` を保持し、ノード編集・移動・レイアウトモード変更の履歴（最大100操作）と `undo` / `redo` / `canUndo` / `canRedo` を公開。履歴の所有者は `useNodes` で、画面側（ヘッダーのボタンとショートカット）は公開された関数を呼ぶだけ。
+   - `documentRevision` を保持し、成功した Undo / Redo と `replaceMap` で増加させる。
 2. **`useNodeLayoutState`**:
    - `layoutMode: "auto"` の場合、ノードの追加・削除・親子付け替え・イラスト追加などの構造変更時に、ドメイン関数の `layoutNodeForest(nodes)` を自動実行して全ノードの座標を再配置。
    - 手動レイアウト（`manual`）時は、自由なドラッグ移動を許可。
@@ -506,7 +508,16 @@ sequenceDiagram
    - JSON ファイルのエクスポート（ダウンロード）およびインポート（ファイル読み込み・スキーママイグレーション検証・マップ置換）を提供。
 5. **`useIllustrationGeneration`**:
    - ノードごとのイラスト生成状態（`idle` | `generating` | `succeeded` | `failed`）を管理。
-   - 生成中のキャンセル用 `AbortController` を保持し、マップ置換（リセット）時には進行中のリクエストを自動で abort。
+   - 生成中のキャンセル用 `AbortController` を保持し、マップ置換（リセット）時や Undo / Redo の成功時（`documentRevision` の増加時）には進行中のリクエストと既存のプレビューを失効させる。
+
+#### 編集履歴の所有とリビジョン
+
+- **所有者**: 編集履歴は `useNodes` 内の `useMapHistory`（純粋な遷移は `domain/history/mapHistory.ts`）が所有する。ref を正とし、同じ結果を React state へ反映するため、同一イベント内の連続操作（追加→削除→Undo など）でも最新の状態を使える。`NodeMapState`（`nodes` と `layoutMode`）だけを記録し、選択・viewport・表示フィルターは含めない。
+- **ドラッグのグループ**: Pixi 側はドラッグ開始前に `onBeginNodeMove` を呼んで履歴グループのリースを受け取り、移動のたびに有効かを確認する。ドラッグ全体が1操作になり、Undo / Redo / 別編集 / マップ置換でリースは失効し、遅れて届いた古い移動通知は無視される。
+- **二種類のリビジョン**:
+  - `resetRevision`: JSON 読み込みと初回復元による**マップ置換**で増加する。ステージの viewport 初期化、解像度フィルターのリセットなど、マップを開き直したときの初期化に使う。
+  - `documentRevision`: マップ置換に加えて、**成功した Undo / Redo** でも増加する。編集中の状態・ジェスチャー・コンテキストメニューを閉じ、進行中のイラスト生成と既存プレビューを失効させる。viewport と表示フィルターは維持する。
+- **保存**: 復元後のマップは通常の 300ms デバウンス自動保存に流れる。履歴は保存しない。
 
 ---
 

@@ -150,6 +150,14 @@ export type NodeMapState = {
 };
 ```
 
+#### 編集履歴（`client/src/domain/history/mapHistory.ts`）
+`NodeMapState` を1操作ぶんのスナップショットとして、過去・現在・未来の配列でメモリ上に保持します。
+
+- 上限は `MAP_HISTORY_LIMIT`（100操作）です。変更のないノードオブジェクトと画像文字列は履歴間で共有し、操作のたびに deep clone や JSON 化は行いません。
+- 復元対象は `nodes` と `layoutMode` です。選択、パン・ズーム、表示フィルター、イラスト生成のプレビューは含めません。
+- 履歴は保存も書き出しもしません。JSON と `localStorage` の Version 3 形式は変わりません。
+- 初回の保存データ復元と JSON 読み込みの成功は新しい起点となり、過去・未来・進行中のドラッグのグループを消去します。
+
 ### 2.2 レイアウト・解像度フィルタリング型
 
 #### `NodeLayoutMode` (`client/src/types/nodeLayout.ts`)
