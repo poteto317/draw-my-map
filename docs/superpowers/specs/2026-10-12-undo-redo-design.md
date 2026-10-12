@@ -73,6 +73,10 @@ Undoは進行中のグループを確定してから1操作戻す。ドラッグ
 
 ヘッダーのoperationControls内に `元に戻す` / `やり直す` の2ボタンを置く。実行できない側はHTMLのdisabledを使う。アイコンだけにせず、日本語ラベルとfocus-visible表示を持たせる。
 
+押したボタンがその操作で無効になったら、フォーカスをもう一方の有効なボタンへ移す（両方無効、またはフォーカスがボタン外なら動かさない）。ボタン上のEnterのキーリピートでは活性化しない（keydownでpreventDefault）。フォーカス移動と組み合わさってUndoとRedoが往復するのを防ぐためで、ショートカットと同じくリピートは処理しない。
+
+ショートカット:
+
 - Undo: Ctrl+Z または Meta+Z（Shiftなし）。
 - Redo: Ctrl+Shift+Z / Meta+Shift+Z、およびCtrl+Y（Shiftなし、Metaなし）。
 - Alt併用、CtrlとMetaの同時押し、IME変換中、キーリピート、defaultPrevented済みは処理しない。
