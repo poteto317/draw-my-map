@@ -37,6 +37,7 @@ export default function Home() {
     attachIllustration,
     removeIllustration,
     beginMoveHistory,
+    documentRevision,
   } = useNodes();
   const [viewportScale, setViewportScale] = useState(1);
   const { replaceMapAndReset, resetRevision } = useResettingMapReplacement(replaceMap);
@@ -120,6 +121,7 @@ export default function Home() {
             onDeleteNode={deleteNode}
             onGenerateIllustration={generateIllustration}
             resetRevision={resetRevision}
+            documentRevision={documentRevision}
           />
         )}
         sidePanel={(

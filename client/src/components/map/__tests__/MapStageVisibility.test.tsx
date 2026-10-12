@@ -29,6 +29,7 @@ const defaultProps = {
   onUpdateLabel: jest.fn(),
   onMoveNode: jest.fn(),
   onBeginNodeMove: () => ({ isActive: () => true, finish: () => {} }),
+  documentRevision: 0,
   onConnectNodes: jest.fn(),
   onDeleteNode: jest.fn(),
 };

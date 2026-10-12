@@ -16,6 +16,7 @@ export function AutoLayoutMapStageHarness() {
     connectNodes,
     deleteNode,
     setLayoutMode,
+    documentRevision,
   } = useNodes();
   const initializedRef = useRef(false);
 
@@ -42,6 +43,7 @@ export function AutoLayoutMapStageHarness() {
         onBeginNodeMove={beginMoveHistory}
         onConnectNodes={connectNodes}
         onDeleteNode={deleteNode}
+        documentRevision={documentRevision}
       />
       <output data-testid="node-state">{JSON.stringify(nodes)}</output>
       <output data-testid="selected-node-id">{selectedNodeId}</output>

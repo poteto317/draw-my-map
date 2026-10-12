@@ -42,6 +42,7 @@ const defaultProps = {
   onUpdateLabel: jest.fn(),
   onMoveNode: jest.fn(),
   onBeginNodeMove: () => ({ isActive: () => true, finish: () => {} }),
+  documentRevision: 0,
   onConnectNodes: jest.fn(),
   onDeleteNode: jest.fn(),
 };
@@ -64,6 +65,7 @@ function KeyboardCreationHarness({ initiallySelected = true }: { initiallySelect
     beginMoveHistory,
     connectNodes,
     deleteNode,
+    documentRevision,
   } = useNodes();
   const initializedRef = useRef(false);
 
@@ -88,6 +90,7 @@ function KeyboardCreationHarness({ initiallySelected = true }: { initiallySelect
         onBeginNodeMove={beginMoveHistory}
         onConnectNodes={connectNodes}
         onDeleteNode={deleteNode}
+        documentRevision={documentRevision}
       />
       <output data-testid="node-state">{JSON.stringify(nodes)}</output>
       <output data-testid="selected-node-id">{selectedNodeId}</output>
@@ -108,6 +111,7 @@ function MouseConnectionHarness() {
     beginMoveHistory,
     connectNodes,
     deleteNode,
+    documentRevision,
   } = useNodes();
   const initializedRef = useRef(false);
 
@@ -132,6 +136,7 @@ function MouseConnectionHarness() {
         onBeginNodeMove={beginMoveHistory}
         onConnectNodes={connectNodes}
         onDeleteNode={deleteNode}
+        documentRevision={documentRevision}
       />
       <output data-testid="node-state">{JSON.stringify(nodes)}</output>
       <output data-testid="selected-node-id">{selectedNodeId}</output>
@@ -152,6 +157,7 @@ function SubtreeMoveHarness() {
     beginMoveHistory,
     connectNodes,
     deleteNode,
+    documentRevision,
   } = useNodes();
   const initializedRef = useRef(false);
   useEffect(() => {
@@ -177,6 +183,7 @@ function SubtreeMoveHarness() {
         onBeginNodeMove={beginMoveHistory}
         onConnectNodes={connectNodes}
         onDeleteNode={deleteNode}
+        documentRevision={documentRevision}
       />
       <output data-testid="node-state">{JSON.stringify(nodes)}</output>
     </>

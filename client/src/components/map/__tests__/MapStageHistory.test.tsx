@@ -1,15 +1,18 @@
-import { act } from "@testing-library/react";
+import { act, fireEvent } from "@testing-library/react";
 import { useEffect, useLayoutEffect, useRef, type MutableRefObject } from "react";
 import { MapStage } from "@/components/map/MapStage";
 import {
+  lastWorldContainer,
   mockNodePointerHandlers,
   mockStage,
+  mockStageBounds,
   mockStageHandlers,
   pointer,
   renderReady,
   resetMapStageTestRuntime,
 } from "@/components/map/testing/mapStageTestRuntime";
 import { useNodes } from "@/hooks/useNodes";
+import { createTestNode } from "@/testing/createTestNode";
 import type { Node } from "@/types/node";
 
 jest.mock("pixi.js", () => {
@@ -58,6 +61,8 @@ function HistoryHarness({ apiRef, setup, visibleNodeIds }: HistoryHarnessProps) 
       onBeginNodeMove={api.beginMoveHistory}
       onConnectNodes={api.connectNodes}
       onDeleteNode={api.deleteNode}
+      onGenerateIllustration={() => {}}
+      documentRevision={api.documentRevision}
     />
   );
 }
@@ -318,5 +323,159 @@ describe("MapStageのドラッグ履歴", () => {
     });
     expect(positions(api().nodes)).toEqual(before);
     expect(api().nodes).toHaveLength(2);
+  });
+});
+
+// 親ノード(1)の中心はworld座標(100, 60)。viewportが初期値のときはclient座標も同じ
+function stageContainer() {
+  const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+  mockStageBounds(container);
+  return container;
+}
+
+function worldTransform() {
+  const world = lastWorldContainer();
+  return {
+    position: world?.position.set.mock.lastCall,
+    scale: world?.scale.set.mock.lastCall,
+  };
+}
+
+function panStage(from: { x: number; y: number }) {
+  act(() => {
+    mockStageHandlers.pointerdown?.(pointer(from.x, from.y, { target: mockStage }));
+  });
+  return {
+    moveTo(x: number, y: number) {
+      act(() => {
+        mockStageHandlers.pointermove?.(pointer(x, y));
+      });
+    },
+    release(x: number, y: number) {
+      act(() => {
+        mockStageHandlers.pointerup?.(pointer(x, y));
+      });
+    },
+  };
+}
+
+describe("MapStageの復元時の後始末", () => {
+  it("Undoで編集中のノードが残っても、ラベル入力を確定せずに閉じる", async () => {
+    const { api, rendered } = await renderHistoryHarness();
+    const originalLabel = nodeById(api().nodes, 1).label;
+    fireEvent.doubleClick(stageContainer(), { clientX: 100, clientY: 60 });
+    fireEvent.change(rendered.getByTestId("node-label-input"), { target: { value: "下書き" } });
+
+    act(() => {
+      expect(api().undo()).toBe(true);
+    });
+
+    expect(nodeById(api().nodes, 1)).toBeDefined();
+    expect(rendered.queryByTestId("node-label-input")).not.toBeInTheDocument();
+    expect(nodeById(api().nodes, 1).label).toBe(originalLabel);
+    act(() => {
+      expect(api().redo()).toBe(true);
+    });
+    expect(nodeById(api().nodes, 1).label).toBe(originalLabel);
+  });
+
+  it("Undoで対象ノードが残っても、コンテキストメニューを閉じる", async () => {
+    const { api, rendered } = await renderHistoryHarness();
+    fireEvent.contextMenu(stageContainer(), { clientX: 100, clientY: 60 });
+    expect(rendered.getByRole("menu")).toBeInTheDocument();
+
+    act(() => {
+      expect(api().undo()).toBe(true);
+    });
+
+    expect(nodeById(api().nodes, 1)).toBeDefined();
+    expect(rendered.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("Undo／Redoの前後で、パン・ズーム済みのviewportを維持する", async () => {
+    const { api } = await renderHistoryHarness();
+    const canvas = document.querySelector("canvas")!;
+    mockStageBounds(canvas);
+    await act(async () => {
+      canvas.dispatchEvent(new WheelEvent("wheel", {
+        clientX: 100,
+        clientY: 100,
+        deltaY: -100,
+        cancelable: true,
+      }));
+    });
+    const pan = panStage({ x: 0, y: 0 });
+    pan.moveTo(20, 10);
+    pan.release(20, 10);
+    const transformed = worldTransform();
+    expect(transformed.scale).toEqual([Math.exp(0.1)]);
+
+    act(() => {
+      expect(api().undo()).toBe(true);
+    });
+    expect(worldTransform()).toEqual(transformed);
+
+    act(() => {
+      expect(api().redo()).toBe(true);
+    });
+    expect(worldTransform()).toEqual(transformed);
+  });
+
+  it("パン中にUndoすると、以後の旧pointermoveでviewportを動かさない", async () => {
+    const { api } = await renderHistoryHarness();
+    const pan = panStage({ x: 0, y: 0 });
+    pan.moveTo(20, 10);
+    expect(worldTransform().position).toEqual([20, 10]);
+
+    act(() => {
+      expect(api().undo()).toBe(true);
+    });
+    pan.moveTo(80, 40);
+    pan.release(80, 40);
+
+    expect(worldTransform().position).toEqual([20, 10]);
+  });
+
+  it("ドラッグ中にUndoすると、以後の旧pointermove／pointerupで復元値を変えない", async () => {
+    const { api } = await renderHistoryHarness();
+    const before = positions(api().nodes);
+
+    const drag = startParentDrag();
+    drag.moveTo(130, 80);
+    drag.moveTo(140, 90);
+    const dragged = positions(api().nodes);
+    act(() => {
+      expect(api().undo()).toBe(true);
+    });
+    expect(positions(api().nodes)).toEqual(before);
+    drag.moveTo(200, 200);
+    drag.release(200, 200);
+
+    expect(positions(api().nodes)).toEqual(before);
+    expect(api().nodes).toHaveLength(2);
+    act(() => {
+      expect(api().redo()).toBe(true);
+    });
+    expect(positions(api().nodes)).toEqual(dragged);
+  });
+
+  it("ドラッグ中にreplaceMapすると、旧pointermove／pointerupでも読み込んだ状態と空履歴を保つ", async () => {
+    const { api } = await renderHistoryHarness();
+    const loaded = {
+      layoutMode: "manual" as const,
+      nodes: [createTestNode({ id: 1, x: 400, y: 300, label: "読込後" })],
+    };
+
+    const drag = startParentDrag();
+    drag.moveTo(130, 80);
+    act(() => {
+      api().replaceMap(loaded);
+    });
+    drag.moveTo(200, 200);
+    drag.release(200, 200);
+
+    expect(api().nodes).toEqual(loaded.nodes);
+    expect(api().canUndo).toBe(false);
+    expect(api().canRedo).toBe(false);
   });
 });

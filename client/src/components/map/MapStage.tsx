@@ -14,6 +14,7 @@ import { isDoubleClickFromMenuActivation } from "@/components/map/menuActivation
 import { resolveMapDoubleClickAction } from "@/components/map/mapDoubleClickAction";
 import { usePixiApplication } from "@/components/map/pixi/usePixiApplication";
 import { useHiddenNodeInteractionReset } from "@/components/map/useHiddenNodeInteractionReset";
+import { useMapHistoryRestore } from "@/components/map/useMapHistoryRestore";
 import { useMapStageInteractions } from "@/components/map/useMapStageInteractions";
 import { useMapVisibilityTransition } from "@/components/map/useMapVisibilityTransition";
 import { useMapStageReset } from "@/components/map/useMapStageReset";
@@ -33,6 +34,8 @@ type MapStageProps = {
   visibleNodeIds?: ReadonlySet<number>;
   onViewportScaleChange?: (scale: number) => void;
   resetRevision?: number;
+  // 成功したUndo／Redoとマップ置換で増える。復元前の編集・ジェスチャー・メニューを閉じる
+  documentRevision: number;
   selectedNodeId: number | null;
   onDoubleClick: (x: number, y: number) => void;
   onAddChildNode: (parentId: number) => number | null;
@@ -52,6 +55,7 @@ export function MapStage({
   visibleNodeIds,
   onViewportScaleChange,
   resetRevision = 0,
+  documentRevision,
   selectedNodeId,
   onDoubleClick,
   onAddChildNode,
@@ -134,6 +138,13 @@ export function MapStage({
     cancelEditing,
     cancelActiveGesture,
     setViewport,
+  });
+
+  useMapHistoryRestore({
+    documentRevision,
+    cancelEditing,
+    cancelActiveGesture,
+    closeContextMenu: contextMenu.close,
   });
 
   useHiddenNodeInteractionReset({

@@ -262,6 +262,47 @@ describe("useIllustrationGeneration", () => {
     expect(result.current.generateIllustration).toBe(first);
   });
 
+  describe("Undo／Redoによる復元（revision の変化）", () => {
+    function renderWithRevision() {
+      return renderHook(
+        ({ revision }: { revision: number }) => useIllustrationGeneration(nodes, revision),
+        { initialProps: { revision: 0 } },
+      );
+    }
+
+    it("Undo→Redoで同じIDとラベルに戻っても旧応答Aを捨ててidleを保ち、新しい生成Bは開始・成功できる", async () => {
+      const responseA = deferred<{ dataUrl: string }>();
+      const responseB = deferred<{ dataUrl: string }>();
+      mockRequest.mockReturnValueOnce(responseA.promise).mockReturnValueOnce(responseB.promise);
+      const { result, rerender } = renderWithRevision();
+      act(() => result.current.generateIllustration(1));
+
+      rerender({ revision: 1 });
+      rerender({ revision: 2 });
+      await act(async () => responseA.resolve({ dataUrl: "A" }));
+      expect(result.current.generation).toEqual({ status: "idle" });
+
+      act(() => result.current.generateIllustration(1));
+      expect(mockRequest).toHaveBeenCalledTimes(2);
+      expect(result.current.generation).toEqual({ status: "generating", nodeId: 1, label: "目標" });
+      await act(async () => responseB.resolve({ dataUrl: "B" }));
+      expect(result.current.generation).toEqual({ status: "succeeded", nodeId: 1, label: "目標", dataUrl: "thumb:B" });
+    });
+
+    it("成功済みのプレビューはrevisionの変化で消え、同じノードに戻っても復活しない", async () => {
+      mockRequest.mockResolvedValue({ dataUrl: "preview" });
+      const { result, rerender } = renderWithRevision();
+      await act(async () => result.current.generateIllustration(1));
+      expect(result.current.generation).toMatchObject({ status: "succeeded" });
+
+      rerender({ revision: 1 });
+      expect(result.current.generation).toEqual({ status: "idle" });
+
+      rerender({ revision: 2 });
+      expect(result.current.generation).toEqual({ status: "idle" });
+    });
+  });
+
   describe("マップの置き換え（resetRevision の変化）", () => {
     function renderWithRevision() {
       return renderHook(
