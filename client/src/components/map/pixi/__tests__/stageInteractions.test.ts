@@ -3,6 +3,7 @@ import type { Viewport } from "@/components/map/mapViewport";
 import { createStageInteractions } from "@/components/map/pixi/stageInteractions";
 import type { Node } from "@/types/node";
 import { createTestNode } from "@/testing/createTestNode";
+import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
 
 type PointerEvent = {
   globalX: number;
@@ -96,6 +97,7 @@ function createController(overrides: Partial<{
   viewport: Viewport;
   onSelectNode: (id: number | null) => void;
   onMoveNode: (id: number, x: number, y: number) => void;
+  onBeginNodeMove: () => MapHistoryGroupLease;
   onConnectNodes: (parentId: number, childId: number) => void;
   onConnectionTargetChange: (id: number | null) => void;
   dragThreshold: number;
@@ -107,6 +109,10 @@ function createController(overrides: Partial<{
   };
   const onSelectNodeRef = { current: overrides.onSelectNode ?? jest.fn() };
   const onMoveNodeRef = { current: overrides.onMoveNode ?? jest.fn() };
+  const onBeginNodeMoveRef = {
+    current: overrides.onBeginNodeMove
+      ?? jest.fn((): MapHistoryGroupLease => ({ isActive: () => true, finish: () => {} })),
+  };
   const onConnectNodesRef = {
     current: overrides.onConnectNodes ?? jest.fn<void, [number, number]>(),
   };
@@ -122,6 +128,7 @@ function createController(overrides: Partial<{
     viewportRef,
     onSelectNodeRef,
     onMoveNodeRef,
+    onBeginNodeMoveRef,
     onConnectNodesRef,
     onConnectionTargetChangeRef,
     onViewportChangeRef,
@@ -135,11 +142,18 @@ function createController(overrides: Partial<{
     viewportRef,
     onSelectNodeRef,
     onMoveNodeRef,
+    onBeginNodeMoveRef,
     onConnectNodesRef,
     onConnectionTargetChangeRef,
     onViewportChangeRef,
     visibleNodeIdsRef,
   };
+}
+
+function createMoveHistorySpy() {
+  const lease = { isActive: jest.fn(() => true), finish: jest.fn() };
+  const onBeginNodeMove = jest.fn(() => lease);
+  return { lease, onBeginNodeMove };
 }
 
 function nodePointerDown(
@@ -1198,4 +1212,120 @@ describe("createStageInteractions", () => {
     expect(onMoveNode).toHaveBeenCalledWith(1, 30, 50);
   });
 
+
+  describe("ノード移動の履歴グループ", () => {
+    it("ドラッグ全体で一度だけグループを開始し、pointerupで一度だけ終了する", () => {
+      const { stage, handlers } = createStage();
+      const { lease, onBeginNodeMove } = createMoveHistorySpy();
+      const { controller, onMoveNodeRef } = createController({ onBeginNodeMove });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 1, pointer(100, 60) as never);
+      for (let step = 1; step <= 10; step += 1) {
+        handlers.pointermove?.(pointer(100 + step * 5, 60));
+      }
+      handlers.pointerup?.(pointer(150, 60));
+
+      expect(onMoveNodeRef.current).toHaveBeenCalledTimes(10);
+      expect(onBeginNodeMove).toHaveBeenCalledTimes(1);
+      expect(lease.finish).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(["pointercancel", "pointerupoutside"] as const)(
+      "%sでもグループを一度だけ終了する",
+      (eventName) => {
+        const { stage, handlers } = createStage();
+        const { lease, onBeginNodeMove } = createMoveHistorySpy();
+        const { controller } = createController({ onBeginNodeMove });
+        controller.bind(stage as never);
+
+        nodePointerDown(controller, 1, pointer(100, 60) as never);
+        handlers.pointermove?.(pointer(120, 60));
+        handlers[eventName]?.(pointer(120, 60));
+        handlers.pointerup?.(pointer(120, 60));
+
+        expect(onBeginNodeMove).toHaveBeenCalledTimes(1);
+        expect(lease.finish).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it("ピンチへの切り替えでグループを一度だけ終了する", () => {
+      const { stage, handlers } = createStage();
+      const { lease, onBeginNodeMove } = createMoveHistorySpy();
+      const { controller } = createController({ onBeginNodeMove });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 1, pointer(100, 100, {
+        pointerId: 1,
+        pointerType: "touch",
+        path: [stage],
+      }) as never);
+      handlers.pointermove?.(pointer(120, 100, { pointerId: 1, pointerType: "touch" }));
+      handlers.pointerdown?.(pointer(200, 100, {
+        pointerId: 2,
+        pointerType: "touch",
+        target: stage,
+      }));
+      handlers.pointerup?.(pointer(120, 100, { pointerId: 1, pointerType: "touch" }));
+
+      expect(onBeginNodeMove).toHaveBeenCalledTimes(1);
+      expect(lease.finish).toHaveBeenCalledTimes(1);
+    });
+
+    it("cancelActiveGestureでグループを一度だけ終了する", () => {
+      const { stage, handlers } = createStage();
+      const { lease, onBeginNodeMove } = createMoveHistorySpy();
+      const { controller } = createController({ onBeginNodeMove });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 1, pointer(100, 60) as never);
+      handlers.pointermove?.(pointer(120, 60));
+      controller.cancelActiveGesture();
+      controller.cancelActiveGesture();
+
+      expect(lease.finish).toHaveBeenCalledTimes(1);
+    });
+
+    it("クリックだけではグループを開始しない", () => {
+      const { stage, handlers } = createStage();
+      const { lease, onBeginNodeMove } = createMoveHistorySpy();
+      const { controller } = createController({ onBeginNodeMove });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 1, pointer(100, 60) as never);
+      handlers.pointerup?.(pointer(100, 60));
+
+      expect(onBeginNodeMove).not.toHaveBeenCalled();
+      expect(lease.finish).not.toHaveBeenCalled();
+    });
+
+    it("Shiftの接続ドラッグではグループを開始しない", () => {
+      const { stage, handlers } = createStage();
+      const { onBeginNodeMove } = createMoveHistorySpy();
+      const { controller } = createController({
+        nodes: [node, targetNode],
+        onBeginNodeMove,
+      });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 1, pointer(100, 60, { shiftKey: true }) as never);
+      handlers.pointermove?.(pointer(220, 60));
+      handlers.pointerup?.(pointer(220, 60));
+
+      expect(onBeginNodeMove).not.toHaveBeenCalled();
+    });
+
+    it("最新のグループ開始callbackを使う", () => {
+      const { stage, handlers } = createStage();
+      const { controller, onBeginNodeMoveRef } = createController();
+      controller.bind(stage as never);
+      const latest = createMoveHistorySpy();
+      onBeginNodeMoveRef.current = latest.onBeginNodeMove;
+
+      nodePointerDown(controller, 1, pointer(100, 60) as never);
+      handlers.pointermove?.(pointer(120, 60));
+
+      expect(latest.onBeginNodeMove).toHaveBeenCalledTimes(1);
+    });
+  });
 });

@@ -9,6 +9,7 @@ import {
   toPointerSample,
 } from "@/components/map/pixi/pointerSample";
 import { createTouchGestureCoordinator } from "@/components/map/pixi/touchGestureCoordinator";
+import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
 import type { Node } from "@/types/node";
 import type { Container, FederatedPointerEvent } from "pixi.js";
 
@@ -20,6 +21,7 @@ type StageInteractionOptions = {
   viewportRef: LatestValue<Viewport>;
   onSelectNodeRef: LatestValue<(id: number | null) => void>;
   onMoveNodeRef: LatestValue<(id: number, x: number, y: number) => void>;
+  onBeginNodeMoveRef: LatestValue<() => MapHistoryGroupLease>;
   onConnectNodesRef: LatestValue<(parentId: number, childId: number) => void>;
   onConnectionTargetChangeRef: LatestValue<(id: number | null) => void>;
   onViewportChangeRef: LatestValue<(viewport: Viewport) => void>;
@@ -38,6 +40,7 @@ export function createStageInteractions({
   viewportRef,
   onSelectNodeRef,
   onMoveNodeRef,
+  onBeginNodeMoveRef,
   onConnectNodesRef,
   onConnectionTargetChangeRef,
   onViewportChangeRef,
@@ -109,6 +112,7 @@ export function createStageInteractions({
         startSample: sample,
         nodesRef,
         onMoveNodeRef,
+        onBeginNodeMoveRef,
         dragThreshold,
       });
     if (!gesture) return;

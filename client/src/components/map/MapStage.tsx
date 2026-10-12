@@ -25,6 +25,7 @@ import { useNodeKeyboardShortcuts } from "@/components/map/useNodeKeyboardShortc
 import { useRenderedMapScene } from "@/components/map/useRenderedMapScene";
 import { useIllustrationTextures } from "@/components/map/useIllustrationTextures";
 import { useViewportScaleNotification } from "@/components/map/useViewportScaleNotification";
+import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
 import type { Node } from "@/types/node";
 
 type MapStageProps = {
@@ -39,6 +40,8 @@ type MapStageProps = {
   onSelectNode: (id: number | null) => void;
   onUpdateLabel: (id: number, label: string) => void;
   onMoveNode: (id: number, x: number, y: number) => void;
+  // ドラッグの最初の有効な移動の直前に呼び、終了までの移動を1操作にまとめる
+  onBeginNodeMove: () => MapHistoryGroupLease;
   onConnectNodes: (parentId: number, childId: number) => void;
   onDeleteNode: (id: number) => void;
   onGenerateIllustration?: (nodeId: number) => void;
@@ -56,6 +59,7 @@ export function MapStage({
   onSelectNode,
   onUpdateLabel,
   onMoveNode,
+  onBeginNodeMove,
   onConnectNodes,
   onDeleteNode,
   onGenerateIllustration,
@@ -100,6 +104,7 @@ export function MapStage({
     onViewportChange: setViewport,
     onSelectNode,
     onMoveNode,
+    onBeginNodeMove,
     onConnectNodes,
   });
 

@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useRef } from "react";
 import type { Viewport } from "@/components/map/mapViewport";
+import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
 import type { Node } from "@/types/node";
 
 type UseStageInteractionValuesOptions = {
@@ -10,6 +11,7 @@ type UseStageInteractionValuesOptions = {
   onViewportChange: (viewport: Viewport) => void;
   onSelectNode: (id: number | null) => void;
   onMoveNode: (id: number, x: number, y: number) => void;
+  onBeginNodeMove: () => MapHistoryGroupLease;
   onConnectNodes: (parentId: number, childId: number) => void;
 };
 
@@ -26,6 +28,7 @@ export function useStageInteractionValues({
   onViewportChange,
   onSelectNode,
   onMoveNode,
+  onBeginNodeMove,
   onConnectNodes,
 }: UseStageInteractionValuesOptions) {
   const nodesRef = useRef<readonly Node[]>(nodes);
@@ -35,6 +38,7 @@ export function useStageInteractionValues({
   const onViewportChangeRef = useRef(onViewportChange);
   const onSelectNodeRef = useRef(onSelectNode);
   const onMoveNodeRef = useRef(onMoveNode);
+  const onBeginNodeMoveRef = useRef(onBeginNodeMove);
   const onConnectNodesRef = useRef(onConnectNodes);
 
   useLayoutEffect(() => {
@@ -43,8 +47,9 @@ export function useStageInteractionValues({
     onViewportChangeRef.current = onViewportChange;
     onSelectNodeRef.current = onSelectNode;
     onMoveNodeRef.current = onMoveNode;
+    onBeginNodeMoveRef.current = onBeginNodeMove;
     onConnectNodesRef.current = onConnectNodes;
-  }, [nodes, visibleNodeIds, onViewportChange, onSelectNode, onMoveNode, onConnectNodes]);
+  }, [nodes, visibleNodeIds, onViewportChange, onSelectNode, onMoveNode, onBeginNodeMove, onConnectNodes]);
 
   return {
     nodesRef,
@@ -52,6 +57,7 @@ export function useStageInteractionValues({
     onViewportChangeRef,
     onSelectNodeRef,
     onMoveNodeRef,
+    onBeginNodeMoveRef,
     onConnectNodesRef,
   };
 }

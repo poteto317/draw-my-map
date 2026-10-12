@@ -4,6 +4,7 @@ import { createStageInteractions } from "@/components/map/pixi/stageInteractions
 import type { LatestValue } from "@/components/map/pixi/pointerGesture";
 import type { PixiRuntime } from "@/components/map/pixi/pixiTypes";
 import { useStageInteractionValues } from "@/components/map/useStageInteractionValues";
+import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
 import type { Node } from "@/types/node";
 
 type UseMapStageInteractionsOptions = {
@@ -14,6 +15,7 @@ type UseMapStageInteractionsOptions = {
   onViewportChange: (viewport: Viewport) => void;
   onSelectNode: (id: number | null) => void;
   onMoveNode: (id: number, x: number, y: number) => void;
+  onBeginNodeMove: () => MapHistoryGroupLease;
   onConnectNodes: (parentId: number, childId: number) => void;
 };
 
@@ -25,6 +27,7 @@ export function useMapStageInteractions({
   onViewportChange,
   onSelectNode,
   onMoveNode,
+  onBeginNodeMove,
   onConnectNodes,
 }: UseMapStageInteractionsOptions) {
   const [connectionTargetNodeId, setConnectionTargetNodeId] = useState<number | null>(null);
@@ -34,6 +37,7 @@ export function useMapStageInteractions({
     visibleNodeIdsRef,
     onSelectNodeRef,
     onMoveNodeRef,
+    onBeginNodeMoveRef,
     onConnectNodesRef,
     onViewportChangeRef,
   } = useStageInteractionValues({
@@ -42,6 +46,7 @@ export function useMapStageInteractions({
     onViewportChange,
     onSelectNode,
     onMoveNode,
+    onBeginNodeMove,
     onConnectNodes,
   });
 
@@ -52,6 +57,7 @@ export function useMapStageInteractions({
     viewportRef,
     onSelectNodeRef,
     onMoveNodeRef,
+    onBeginNodeMoveRef,
     onConnectNodesRef,
     onConnectionTargetChangeRef,
     onViewportChangeRef,

@@ -41,6 +41,7 @@ const defaultProps = {
   onSelectNode: jest.fn(),
   onUpdateLabel: jest.fn(),
   onMoveNode: jest.fn(),
+  onBeginNodeMove: () => ({ isActive: () => true, finish: () => {} }),
   onConnectNodes: jest.fn(),
   onDeleteNode: jest.fn(),
 };
@@ -60,6 +61,7 @@ function KeyboardCreationHarness({ initiallySelected = true }: { initiallySelect
     selectNode,
     updateNodeLabel,
     moveNode,
+    beginMoveHistory,
     connectNodes,
     deleteNode,
   } = useNodes();
@@ -83,6 +85,7 @@ function KeyboardCreationHarness({ initiallySelected = true }: { initiallySelect
         onSelectNode={selectNode}
         onUpdateLabel={updateNodeLabel}
         onMoveNode={moveNode}
+        onBeginNodeMove={beginMoveHistory}
         onConnectNodes={connectNodes}
         onDeleteNode={deleteNode}
       />
@@ -102,6 +105,7 @@ function MouseConnectionHarness() {
     selectNode,
     updateNodeLabel,
     moveNode,
+    beginMoveHistory,
     connectNodes,
     deleteNode,
   } = useNodes();
@@ -125,6 +129,7 @@ function MouseConnectionHarness() {
         onSelectNode={selectNode}
         onUpdateLabel={updateNodeLabel}
         onMoveNode={moveNode}
+        onBeginNodeMove={beginMoveHistory}
         onConnectNodes={connectNodes}
         onDeleteNode={deleteNode}
       />
@@ -144,6 +149,7 @@ function SubtreeMoveHarness() {
     selectNode,
     updateNodeLabel,
     moveNode,
+    beginMoveHistory,
     connectNodes,
     deleteNode,
   } = useNodes();
@@ -168,6 +174,7 @@ function SubtreeMoveHarness() {
         onSelectNode={selectNode}
         onUpdateLabel={updateNodeLabel}
         onMoveNode={moveNode}
+        onBeginNodeMove={beginMoveHistory}
         onConnectNodes={connectNodes}
         onDeleteNode={deleteNode}
       />

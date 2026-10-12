@@ -1,6 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { INITIAL_VIEWPORT } from "@/components/map/mapViewport";
 import { useMapStageInteractions } from "@/components/map/useMapStageInteractions";
+import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
 import type { Node } from "@/types/node";
 import { createTestNode } from "@/testing/createTestNode";
 
@@ -63,6 +64,10 @@ function pointer(
   };
 }
 
+function createLease(): MapHistoryGroupLease {
+  return { isActive: () => true, finish: () => {} };
+}
+
 const nodes: Node[] = [
   createTestNode({ id: 1, x: 20, y: 40, label: "親" }),
   createTestNode({ id: 2, x: 200, y: 40, label: "子" }),
@@ -80,6 +85,7 @@ describe("useMapStageInteractions", () => {
         onViewportChange: jest.fn(),
         onSelectNode: jest.fn(),
         onMoveNode: jest.fn(),
+        onBeginNodeMove: createLease,
         onConnectNodes: jest.fn(),
       }),
     );
@@ -108,6 +114,7 @@ describe("useMapStageInteractions", () => {
         onViewportChange: jest.fn(),
         onSelectNode,
         onMoveNode,
+        onBeginNodeMove: createLease,
         onConnectNodes,
       }),
     );
@@ -136,6 +143,7 @@ describe("useMapStageInteractions", () => {
           onViewportChange: jest.fn(),
           onSelectNode: jest.fn(),
           onMoveNode,
+          onBeginNodeMove: createLease,
           onConnectNodes: jest.fn(),
         }),
       { initialProps: { visibleNodeIds: new Set([1, 2]) } },
@@ -165,6 +173,7 @@ describe("useMapStageInteractions", () => {
           onViewportChange: jest.fn(),
           onSelectNode: jest.fn(),
           onMoveNode: jest.fn(),
+          onBeginNodeMove: createLease,
           onConnectNodes,
         }),
       { initialProps: { visibleNodeIds: new Set([1, 2]) } },
@@ -197,6 +206,7 @@ describe("useMapStageInteractions", () => {
           onViewportChange: jest.fn(),
           onSelectNode: jest.fn(),
           onMoveNode: jest.fn(),
+          onBeginNodeMove: createLease,
           onConnectNodes,
         }),
       { initialProps: { visibleNodeIds: new Set([1, 2]) } },
@@ -230,6 +240,7 @@ describe("useMapStageInteractions", () => {
         onViewportChange: jest.fn(),
         onSelectNode: jest.fn(),
         onMoveNode: jest.fn(),
+        onBeginNodeMove: createLease,
         onConnectNodes,
       }),
     );
@@ -264,6 +275,7 @@ describe("useMapStageInteractions", () => {
           onViewportChange: jest.fn(),
           onSelectNode: jest.fn(),
           onMoveNode: jest.fn(),
+          onBeginNodeMove: createLease,
           onConnectNodes: jest.fn(),
         }),
       { initialProps: { runtime: null } },
@@ -292,6 +304,7 @@ describe("useMapStageInteractions", () => {
           onViewportChange: jest.fn(),
           onSelectNode: jest.fn(),
           onMoveNode: jest.fn(),
+          onBeginNodeMove: createLease,
           onConnectNodes: jest.fn(),
         }),
       { initialProps: { runtime: initial.runtime } },

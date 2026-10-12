@@ -96,7 +96,9 @@ export function createMockPixiModule() {
 export function pointer(
   globalX: number,
   globalY: number,
-  options: Pick<MockPointerEvent, "shiftKey" | "target"> & { path?: unknown[] } = {},
+  options: Pick<MockPointerEvent, "shiftKey" | "target">
+    & Partial<Pick<MockPointerEvent, "pointerId" | "pointerType">>
+    & { path?: unknown[] } = {},
 ): MockPointerEvent {
   const { path = [mockStage], ...eventOptions } = options;
   return {

@@ -4,6 +4,7 @@ import {
   useStageInteractionValues,
 } from "@/components/map/useStageInteractionValues";
 import type { Viewport } from "@/components/map/mapViewport";
+import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
 import { createTestNode } from "@/testing/createTestNode";
 import type { Node } from "@/types/node";
 
@@ -13,6 +14,7 @@ type HarnessProps = {
   onViewportChange: (viewport: Viewport) => void;
   onSelectNode: (id: number | null) => void;
   onMoveNode: (id: number, x: number, y: number) => void;
+  onBeginNodeMove: () => MapHistoryGroupLease;
   onConnectNodes: (parentId: number, childId: number) => void;
 };
 
@@ -39,6 +41,7 @@ describe("useStageInteractionValues", () => {
       onViewportChange: jest.fn(),
       onSelectNode: jest.fn(),
       onMoveNode: jest.fn(),
+      onBeginNodeMove: jest.fn(),
       onConnectNodes: jest.fn(),
     };
     const initialVisibleNodeIds = new Set([1]);
@@ -59,6 +62,7 @@ describe("useStageInteractionValues", () => {
     expect(initialRefs.onViewportChangeRef.current).toBe(initialCallbacks.onViewportChange);
     expect(initialRefs.onSelectNodeRef.current).toBe(initialCallbacks.onSelectNode);
     expect(initialRefs.onMoveNodeRef.current).toBe(initialCallbacks.onMoveNode);
+    expect(initialRefs.onBeginNodeMoveRef.current).toBe(initialCallbacks.onBeginNodeMove);
     expect(initialRefs.onConnectNodesRef.current).toBe(initialCallbacks.onConnectNodes);
 
     const nextNodes = [createTestNode({ id: 3, label: "次" })];
@@ -67,6 +71,7 @@ describe("useStageInteractionValues", () => {
       onViewportChange: jest.fn(),
       onSelectNode: jest.fn(),
       onMoveNode: jest.fn(),
+      onBeginNodeMove: jest.fn(),
       onConnectNodes: jest.fn(),
     };
     rerender({
@@ -80,12 +85,14 @@ describe("useStageInteractionValues", () => {
     expect(result.current.onViewportChangeRef).toBe(initialRefs.onViewportChangeRef);
     expect(result.current.onSelectNodeRef).toBe(initialRefs.onSelectNodeRef);
     expect(result.current.onMoveNodeRef).toBe(initialRefs.onMoveNodeRef);
+    expect(result.current.onBeginNodeMoveRef).toBe(initialRefs.onBeginNodeMoveRef);
     expect(result.current.onConnectNodesRef).toBe(initialRefs.onConnectNodesRef);
     expect(result.current.nodesRef.current).toBe(nextNodes);
     expect(result.current.visibleNodeIdsRef.current).toBe(nextVisibleNodeIds);
     expect(result.current.onViewportChangeRef.current).toBe(nextCallbacks.onViewportChange);
     expect(result.current.onSelectNodeRef.current).toBe(nextCallbacks.onSelectNode);
     expect(result.current.onMoveNodeRef.current).toBe(nextCallbacks.onMoveNode);
+    expect(result.current.onBeginNodeMoveRef.current).toBe(nextCallbacks.onBeginNodeMove);
     expect(result.current.onConnectNodesRef.current).toBe(nextCallbacks.onConnectNodes);
   });
 
@@ -94,6 +101,7 @@ describe("useStageInteractionValues", () => {
       onViewportChange: jest.fn(),
       onSelectNode: jest.fn(),
       onMoveNode: jest.fn(),
+      onBeginNodeMove: jest.fn(),
       onConnectNodes: jest.fn(),
     };
     const { result, rerender } = renderHook(

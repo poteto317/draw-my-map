@@ -12,6 +12,7 @@ export function AutoLayoutMapStageHarness() {
     selectNode,
     updateNodeLabel,
     moveNode,
+    beginMoveHistory,
     connectNodes,
     deleteNode,
     setLayoutMode,
@@ -38,6 +39,7 @@ export function AutoLayoutMapStageHarness() {
         onSelectNode={selectNode}
         onUpdateLabel={updateNodeLabel}
         onMoveNode={moveNode}
+        onBeginNodeMove={beginMoveHistory}
         onConnectNodes={connectNodes}
         onDeleteNode={deleteNode}
       />

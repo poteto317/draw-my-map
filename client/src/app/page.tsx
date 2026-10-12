@@ -36,6 +36,7 @@ export default function Home() {
     replaceMap,
     attachIllustration,
     removeIllustration,
+    beginMoveHistory,
   } = useNodes();
   const [viewportScale, setViewportScale] = useState(1);
   const { replaceMapAndReset, resetRevision } = useResettingMapReplacement(replaceMap);
@@ -114,6 +115,7 @@ export default function Home() {
             onSelectNode={selectNode}
             onUpdateLabel={updateNodeLabel}
             onMoveNode={moveNode}
+            onBeginNodeMove={beginMoveHistory}
             onConnectNodes={connectNodes}
             onDeleteNode={deleteNode}
             onGenerateIllustration={generateIllustration}
