@@ -291,19 +291,25 @@ describe("useIllustrationGeneration", () => {
 
     it("成功済みのプレビューはrevisionの変化で消え、同じノードに戻っても復活しない", async () => {
       mockRequest.mockResolvedValue({ dataUrl: "preview" });
-      const { result, rerender } = renderWithRevision();
+      const withoutTarget = nodes.filter((node) => node.id !== 1);
+      const { result, rerender } = renderHook(
+        ({ list, revision }: { list: typeof nodes; revision: number }) => useIllustrationGeneration(list, revision),
+        { initialProps: { list: nodes, revision: 0 } },
+      );
       await act(async () => result.current.generateIllustration(1));
       expect(result.current.generation).toMatchObject({ status: "succeeded" });
 
-      rerender({ revision: 1 });
+      // Undo で対象ノードがない状態へ戻る
+      rerender({ list: withoutTarget, revision: 1 });
       expect(result.current.generation).toEqual({ status: "idle" });
 
-      rerender({ revision: 2 });
+      // Redo で同じIDとラベルのノードへ戻る
+      rerender({ list: nodes, revision: 2 });
       expect(result.current.generation).toEqual({ status: "idle" });
     });
   });
 
-  describe("マップの置き換え（resetRevision の変化）", () => {
+  describe("マップの置き換え（documentRevision の変化）", () => {
     function renderWithRevision() {
       return renderHook(
         ({ revision }: { revision: number }) => useIllustrationGeneration(nodes, revision),
@@ -311,7 +317,7 @@ describe("useIllustrationGeneration", () => {
       );
     }
 
-    it("成功の状態は、resetRevision が変わると idle に戻る", async () => {
+    it("成功の状態は、documentRevision が変わると idle に戻る", async () => {
       mockRequest.mockResolvedValue({ dataUrl: "old" });
       const { result, rerender } = renderWithRevision();
       await act(async () => result.current.generateIllustration(1));
@@ -322,7 +328,7 @@ describe("useIllustrationGeneration", () => {
       expect(result.current.generation).toEqual({ status: "idle" });
     });
 
-    it("失敗の状態も、resetRevision が変わると idle に戻る", async () => {
+    it("失敗の状態も、documentRevision が変わると idle に戻る", async () => {
       mockRequest.mockRejectedValue(new IllustrationRequestError("quota-exceeded"));
       const { result, rerender } = renderWithRevision();
       await act(async () => result.current.generateIllustration(1));
@@ -333,7 +339,7 @@ describe("useIllustrationGeneration", () => {
       expect(result.current.generation).toEqual({ status: "idle" });
     });
 
-    it("resetRevision が同じなら、状態を保つ", async () => {
+    it("documentRevision が同じなら、状態を保つ", async () => {
       mockRequest.mockResolvedValue({ dataUrl: "kept" });
       const { result, rerender } = renderWithRevision();
       await act(async () => result.current.generateIllustration(1));
@@ -343,7 +349,7 @@ describe("useIllustrationGeneration", () => {
       expect(result.current.generation).toEqual({ status: "succeeded", nodeId: 1, label: "目標", dataUrl: "thumb:kept" });
     });
 
-    it("生成中に resetRevision が変わると、リクエストを中断して idle に戻し、遅れて届いた結果を無視する", async () => {
+    it("生成中に documentRevision が変わると、リクエストを中断して idle に戻し、遅れて届いた結果を無視する", async () => {
       const pending = deferred<{ dataUrl: string }>();
       mockRequest.mockReturnValue(pending.promise);
       const { result, rerender } = renderWithRevision();
