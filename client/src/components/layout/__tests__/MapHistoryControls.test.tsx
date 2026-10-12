@@ -67,4 +67,76 @@ describe("MapHistoryControls", () => {
     expect(pointerDown.defaultPrevented).toBe(false);
     expect(mouseDown.defaultPrevented).toBe(false);
   });
+  describe("押したボタンが無効になったときのフォーカス", () => {
+    function renderControls(canUndo: boolean, canRedo: boolean) {
+      return render(<MapHistoryControls canUndo={canUndo} canRedo={canRedo} onUndo={jest.fn()} onRedo={jest.fn()} />);
+    }
+
+    it("「元に戻す」が無効になったら、有効な「やり直す」へフォーカスを移す", () => {
+      const { rerender } = renderControls(true, false);
+      screen.getByRole("button", { name: "元に戻す" }).focus();
+
+      rerender(<MapHistoryControls canUndo={false} canRedo onUndo={jest.fn()} onRedo={jest.fn()} />);
+
+      expect(screen.getByRole("button", { name: "やり直す" })).toHaveFocus();
+    });
+
+    it("「やり直す」が無効になったら、有効な「元に戻す」へフォーカスを移す", () => {
+      const { rerender } = renderControls(false, true);
+      screen.getByRole("button", { name: "やり直す" }).focus();
+
+      rerender(<MapHistoryControls canUndo canRedo={false} onUndo={jest.fn()} onRedo={jest.fn()} />);
+
+      expect(screen.getByRole("button", { name: "元に戻す" })).toHaveFocus();
+    });
+
+    it("両方が無効になったときは、フォーカスを移さない", () => {
+      const { rerender } = renderControls(true, false);
+      const undoButton = screen.getByRole("button", { name: "元に戻す" });
+      undoButton.focus();
+
+      rerender(<MapHistoryControls canUndo={false} canRedo={false} onUndo={jest.fn()} onRedo={jest.fn()} />);
+
+      expect(screen.getByRole("button", { name: "やり直す" })).not.toHaveFocus();
+    });
+
+    it("フォーカスがボタンの外にあるときは、フォーカスを移さない", () => {
+      const { rerender } = render(
+        <>
+          <input aria-label="ラベル" />
+          <MapHistoryControls canUndo canRedo={false} onUndo={jest.fn()} onRedo={jest.fn()} />
+        </>,
+      );
+      screen.getByRole("button", { name: "元に戻す" }).focus();
+      const input = screen.getByRole("textbox", { name: "ラベル" });
+      input.focus();
+
+      rerender(
+        <>
+          <input aria-label="ラベル" />
+          <MapHistoryControls canUndo={false} canRedo onUndo={jest.fn()} onRedo={jest.fn()} />
+        </>,
+      );
+
+      expect(input).toHaveFocus();
+    });
+
+    it("ブラウザがフォーカスをbodyへ戻した後でも、もう一方のボタンへ移す", () => {
+      const { rerender } = renderControls(true, false);
+      const undoButton = screen.getByRole("button", { name: "元に戻す" });
+      undoButton.focus();
+      // 無効化した時点でbodyへフォーカスを戻すブラウザ（focus fixup）を再現する
+      const setAttribute = undoButton.setAttribute.bind(undoButton);
+      jest.spyOn(undoButton, "setAttribute").mockImplementation((name, value) => {
+        if (name === "disabled") undoButton.blur();
+        setAttribute(name, value);
+      });
+
+      rerender(<MapHistoryControls canUndo={false} canRedo onUndo={jest.fn()} onRedo={jest.fn()} />);
+
+      expect(undoButton.setAttribute).toHaveBeenCalledWith("disabled", "");
+      expect(undoButton).toBeDisabled();
+      expect(screen.getByRole("button", { name: "やり直す" })).toHaveFocus();
+    });
+  });
 });

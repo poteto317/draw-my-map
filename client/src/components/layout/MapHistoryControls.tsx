@@ -1,3 +1,5 @@
+import { useLayoutEffect, useRef, type FocusEvent } from "react";
+
 type MapHistoryControlsProps = {
   canUndo: boolean;
   canRedo: boolean;
@@ -13,13 +15,41 @@ export function MapHistoryControls({
   onUndo,
   onRedo,
 }: MapHistoryControlsProps) {
+  const undoButtonRef = useRef<HTMLButtonElement>(null);
+  const redoButtonRef = useRef<HTMLButtonElement>(null);
+  // 直前にフォーカスしていたボタン。無効化でbodyへフォーカスが戻るブラウザでも、どちらを押していたか分かるよう残す
+  const focusedButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useLayoutEffect(() => {
+    const focusedButton = focusedButtonRef.current;
+    if (!focusedButton?.disabled) return;
+    const activeElement = document.activeElement;
+    if (activeElement !== focusedButton && activeElement !== document.body && activeElement !== null) return;
+    const otherButton = focusedButton === undoButtonRef.current ? redoButtonRef.current : undoButtonRef.current;
+    if (!otherButton || otherButton.disabled) return;
+    // 押したボタンが無効になってもキーボードのフォーカスを失わないよう、もう一方の有効なボタンへ移す
+    otherButton.focus();
+  }, [canUndo, canRedo]);
+
+  function handleFocus(event: FocusEvent<HTMLButtonElement>) {
+    focusedButtonRef.current = event.currentTarget;
+  }
+
+  function handleBlur(event: FocusEvent<HTMLButtonElement>) {
+    // 無効化によるblurでは記録を残し、ほかの要素へ移ったときだけ消す
+    if (!event.currentTarget.disabled) focusedButtonRef.current = null;
+  }
+
   // pointerdownの既定動作は止めない。編集中のラベル入力をblurで確定してから履歴を操作させるため
   return (
     <div className="flex shrink-0 gap-2">
       <button
         type="button"
         className={buttonClassName}
+        ref={undoButtonRef}
         onClick={onUndo}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
         disabled={!canUndo}
       >
         元に戻す
@@ -27,7 +57,10 @@ export function MapHistoryControls({
       <button
         type="button"
         className={buttonClassName}
+        ref={redoButtonRef}
         onClick={onRedo}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
         disabled={!canRedo}
       >
         やり直す
