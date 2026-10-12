@@ -71,8 +71,10 @@ describe("resolveViewportFocusRequest", () => {
     expect(resolve(override)).toBeNull();
   });
 
-  it.each(["input", "textarea", "select"])("%sからの入力を拒否する", (tagName) => {
-    expect(resolve({ target: document.createElement(tagName) })).toBeNull();
+  // 入力先判定の詳細（textarea・select・contenteditableの各値）はeditableTarget.test.tsが担う。
+  // ここでは判定結果に応じて発動を止める連携だけを代表例で確認する
+  it("inputからの入力を拒否する", () => {
+    expect(resolve({ target: document.createElement("input") })).toBeNull();
   });
 
   it("contenteditable配下からの入力を拒否する", () => {
@@ -83,21 +85,7 @@ describe("resolveViewportFocusRequest", () => {
     expect(resolve({ target: child })).toBeNull();
   });
 
-  it.each(["", "plaintext-only"])("contenteditable=%s配下からの入力を拒否する", (value) => {
-    const editor = document.createElement("div");
-    editor.setAttribute("contenteditable", value);
-    const child = editor.appendChild(document.createElement("span"));
-
-    expect(resolve({ target: child })).toBeNull();
-  });
-
-  it("contenteditable=true配下でもfalseで上書きされた領域では発動する", () => {
-    const editor = document.createElement("div");
-    editor.setAttribute("contenteditable", "true");
-    const disabledArea = editor.appendChild(document.createElement("div"));
-    disabledArea.setAttribute("contenteditable", "false");
-    const child = disabledArea.appendChild(document.createElement("span"));
-
-    expect(resolve({ target: child })).toEqual({ node, screen });
+  it("入力先でない要素からの入力では発動する", () => {
+    expect(resolve({ target: document.createElement("button") })).toEqual({ node, screen });
   });
 });

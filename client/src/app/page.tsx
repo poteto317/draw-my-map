@@ -14,7 +14,7 @@ import { IllustrationPanel } from "@/components/layout/IllustrationPanel";
 import { MapStage } from "@/components/map/MapStage";
 import { INITIAL_VIEWPORT } from "@/components/map/mapViewport";
 import { useIllustrationGeneration } from "@/hooks/useIllustrationGeneration";
-import { useMapHistoryShortcuts } from "@/hooks/useMapHistoryShortcuts";
+import { useMapHistoryShortcuts } from "@/components/map/useMapHistoryShortcuts";
 import { useMapImageExport } from "@/hooks/useMapImageExport";
 import { useMapPersistence } from "@/hooks/useMapPersistence";
 import { useResettingMapReplacement } from "@/hooks/useResettingMapReplacement";

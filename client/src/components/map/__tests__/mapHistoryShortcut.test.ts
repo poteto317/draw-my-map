@@ -44,6 +44,8 @@ describe("resolveMapHistoryShortcut のキーの組み合わせ", () => {
     { key: "z", ctrlKey: true, metaKey: true, expected: null },
     { key: "Z", ctrlKey: true, metaKey: true, shiftKey: true, expected: null },
     { key: "y", ctrlKey: true, metaKey: true, expected: null },
+    { key: "z", ctrlKey: true, metaKey: true, altKey: true, expected: null },
+    { key: "z", altKey: true, expected: null },
   ] as const)("$key ctrl=$ctrlKey meta=$metaKey shift=$shiftKey alt=$altKey → $expected", ({ expected, ...init }) => {
     expect(resolve(init)).toBe(expected);
   });
@@ -60,6 +62,8 @@ describe("resolveMapHistoryShortcut のキーの組み合わせ", () => {
   });
 });
 
+// 編集先かどうかの詳細な判定（textarea・select・contenteditableの各値）は editableTarget.test.ts で検証する。
+// ここでは、判定結果に応じてショートカットを無効にすることを代表例で確認する
 describe("resolveMapHistoryShortcut の入力先ガード", () => {
   function mount(html: string, selector: string): HTMLElement {
     document.body.innerHTML = html;
@@ -68,11 +72,6 @@ describe("resolveMapHistoryShortcut の入力先ガード", () => {
 
   it.each([
     { name: "input", html: '<input id="t" />' },
-    { name: "textarea", html: '<textarea id="t"></textarea>' },
-    { name: "select", html: '<select id="t"><option>a</option></select>' },
-    { name: "contenteditable", html: '<div id="t" contenteditable></div>' },
-    { name: "contenteditable=true", html: '<div id="t" contenteditable="true"></div>' },
-    { name: "contenteditable=plaintext-only", html: '<div id="t" contenteditable="plaintext-only"></div>' },
     { name: "contenteditableの子要素", html: '<div contenteditable="true"><p><span id="t">x</span></p></div>' },
     { name: "ノード編集入力", html: '<input id="t" data-testid="node-label-input" type="text" />' },
   ])("$name内ではブラウザ側に任せる", ({ html }) => {
@@ -85,8 +84,6 @@ describe("resolveMapHistoryShortcut の入力先ガード", () => {
 
   it.each([
     { name: "ボタン", html: '<button id="t" type="button">元に戻す</button>' },
-    { name: "contenteditable=false", html: '<div id="t" contenteditable="false"></div>' },
-    { name: "編集領域内のcontenteditable=false", html: '<div contenteditable="true"><span id="t" contenteditable="false">x</span></div>' },
     { name: "通常のdiv", html: '<div id="t"></div>' },
   ])("$nameではマップの履歴操作として扱う", ({ html }) => {
     const target = mount(html, "#t");

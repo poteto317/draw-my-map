@@ -1,6 +1,6 @@
 import { render, renderHook, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useMapHistoryShortcuts } from "@/hooks/useMapHistoryShortcuts";
+import { useMapHistoryShortcuts } from "@/components/map/useMapHistoryShortcuts";
 
 function press(init: KeyboardEventInit, target: EventTarget = window) {
   const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
