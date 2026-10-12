@@ -10,7 +10,7 @@
 - Phase 6までが完了。重要度タグの編集、ズーム連動・手動の解像度フィルタリング、表示切り替え時のフェードが利用できる。重要度はV2形式のJSONとlocalStorageへ保存され、V1形式は中重要度として移行できる。
 - Phase 7（AIイラスト生成）までが完了。右パネルのボタンと右クリックメニューから、選択中のノードのテキストをもとにイラストを生成でき、結果は右パネルにプレビュー表示される（Cloudflare Workers AI。無料枠の範囲）。生成したイラストは、右パネルの「ノードに設定」でノードに紐付けられ、キャンバスに表示される。紐付けたイラストは128pxのJPEGに縮小され、V3形式のJSONとlocalStorageへ保存され、PNG / SVGのエクスポートにも含まれる。すでにイラストがあるノードでは「イラストを再生成」で置き換えられ、右パネルの「設定済みのイラストを削除」で外せる。ロードマップの未完了の項目は、現時点で残っていない。
 - Phase 8（編集履歴）が完了。ヘッダーの「元に戻す」「やり直す」ボタンと、Ctrl/Cmd+Z、Ctrl/Cmd+Shift+Z、Ctrl+Yのショートカットで、ノードの追加・削除・接続・ラベル・重要度・イラスト・移動・配置モードの変更を最大100操作まで戻せる。ドラッグは一連の移動を1操作として扱う。履歴はメモリ上のみで、JSONやlocalStorageのV3形式は変わらない。次に取り組む未完了の機能は未定。
-- Phase 0からPhase 7までの全実装に対応する包括的なドキュメント体系（`README.md`, `client/README.md`, `docs/README.md`, `docs/architecture/overview.md`, `docs/specifications/features.md`, `docs/specifications/data-model.md`, `docs/specifications/api.md`）が整備済み。
+- Phase 0からPhase 8までの全実装に対応する包括的なドキュメント体系（`README.md`, `client/README.md`, `docs/README.md`, `docs/architecture/overview.md`, `docs/specifications/features.md`, `docs/specifications/data-model.md`, `docs/specifications/api.md`）が整備済み。
 
 ## ビジョン
 
