@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef } from "react";
 
-type UseMapHistoryRestoreOptions = {
+type UseDocumentRestoreInteractionResetOptions = {
   documentRevision: number;
   cancelEditing: () => void;
   cancelActiveGesture: () => void;
@@ -10,12 +10,12 @@ type UseMapHistoryRestoreOptions = {
 // Undo／Redo・マップ置換でdocumentRevisionが進んだら、復元前の状態に基づく編集・ジェスチャー・メニューを閉じる。
 // viewportは維持する（読み込み時の初期化はuseMapStageResetが担う）。
 // callback参照の変更だけでは閉じないよう、revisionの変化だけを検出する。
-export function useMapHistoryRestore({
+export function useDocumentRestoreInteractionReset({
   documentRevision,
   cancelEditing,
   cancelActiveGesture,
   closeContextMenu,
-}: UseMapHistoryRestoreOptions): void {
+}: UseDocumentRestoreInteractionResetOptions): void {
   const callbacksRef = useRef({ cancelEditing, cancelActiveGesture, closeContextMenu });
   useLayoutEffect(() => {
     callbacksRef.current = { cancelEditing, cancelActiveGesture, closeContextMenu };

@@ -76,7 +76,7 @@ describe("useMapHistory", () => {
     expect(result.current.present).toEqual(a);
   });
 
-  it("reset後・undo後・次グループ中の古いleaseのfinishは何も変えない", () => {
+  it("reset後の古いleaseのfinishは何も変えない", () => {
     const { result } = renderHook(() => useMapHistory(a));
 
     act(() => {
@@ -88,6 +88,10 @@ describe("useMapHistory", () => {
     });
     expect(result.current.present).toEqual(c);
     expect(result.current.canUndo).toBe(false);
+  });
+
+  it("undo後の古いleaseのfinishは何も変えない", () => {
+    const { result } = renderHook(() => useMapHistory(c));
 
     act(() => {
       const lease = result.current.beginGroup();
@@ -98,6 +102,10 @@ describe("useMapHistory", () => {
     });
     expect(result.current.present).toEqual(c);
     expect(result.current.canRedo).toBe(true);
+  });
+
+  it("次グループ中の古いleaseのfinishは進行中のグループを閉じない", () => {
+    const { result } = renderHook(() => useMapHistory(c));
 
     act(() => {
       const old = result.current.beginGroup();
@@ -131,6 +139,91 @@ describe("useMapHistory", () => {
       result.current.commit(c);
       expect(lease.isActive()).toBe(false);
     });
+    act(() => {
+      result.current.undo();
+    });
+    expect(result.current.present).toEqual(b);
+  });
+
+  it("redoは進行中グループを閉じてleaseを失効させる", () => {
+    const { result } = renderHook(() => useMapHistory(a));
+
+    act(() => {
+      result.current.commit(b);
+      result.current.undo();
+      const lease = result.current.beginGroup();
+      expect(result.current.redo()).toBe(true);
+      expect(lease.isActive()).toBe(false);
+      lease.finish();
+    });
+    expect(result.current.present).toEqual(b);
+    expect(result.current.canRedo).toBe(false);
+  });
+
+  it("グループ内のpreviewはleaseを失効させない", () => {
+    const { result } = renderHook(() => useMapHistory(a));
+
+    act(() => {
+      const lease = result.current.beginGroup();
+      result.current.preview(b);
+      result.current.preview(a);
+      expect(lease.isActive()).toBe(true);
+      lease.finish();
+    });
+    expect(result.current.canUndo).toBe(false);
+  });
+
+  it.each<[string, (history: ReturnType<typeof useMapHistory>) => void]>([
+    ["変化のないグループ中", () => {}],
+    ["previewで元に戻したグループ中", (history) => {
+      history.preview(b);
+      history.preview(a);
+    }],
+  ])("%sの同値commitは履歴を変えずにleaseを失効させる", (_, setup) => {
+    const { result } = renderHook(() => useMapHistory(a));
+
+    act(() => {
+      const lease = result.current.beginGroup();
+      setup(result.current);
+      expect(result.current.commit(a)).toBe(false);
+      expect(lease.isActive()).toBe(false);
+      result.current.preview(b);
+      lease.finish();
+    });
+    expect(result.current.present).toEqual(b);
+    expect(result.current.canUndo).toBe(true);
+    act(() => {
+      result.current.undo();
+    });
+    expect(result.current.present).toEqual(a);
+    expect(result.current.canUndo).toBe(false);
+  });
+
+  it("redoがfalseでも進行中グループのleaseは失効する", () => {
+    const { result } = renderHook(() => useMapHistory(a));
+
+    act(() => {
+      const lease = result.current.beginGroup();
+      expect(result.current.redo()).toBe(false);
+      expect(lease.isActive()).toBe(false);
+    });
+  });
+
+  it("finishは冪等で、2回目以降は後続のグループを閉じない", () => {
+    const { result } = renderHook(() => useMapHistory(a));
+
+    act(() => {
+      const lease = result.current.beginGroup();
+      result.current.preview(b);
+      lease.finish();
+      lease.finish();
+      const next = result.current.beginGroup();
+      result.current.preview(c);
+      lease.finish();
+      expect(next.isActive()).toBe(true);
+      next.finish();
+    });
+    expect(result.current.present).toEqual(c);
     act(() => {
       result.current.undo();
     });

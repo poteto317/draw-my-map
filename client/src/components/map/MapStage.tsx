@@ -14,7 +14,7 @@ import { isDoubleClickFromMenuActivation } from "@/components/map/menuActivation
 import { resolveMapDoubleClickAction } from "@/components/map/mapDoubleClickAction";
 import { usePixiApplication } from "@/components/map/pixi/usePixiApplication";
 import { useHiddenNodeInteractionReset } from "@/components/map/useHiddenNodeInteractionReset";
-import { useMapHistoryRestore } from "@/components/map/useMapHistoryRestore";
+import { useDocumentRestoreInteractionReset } from "@/components/map/useDocumentRestoreInteractionReset";
 import { useMapStageInteractions } from "@/components/map/useMapStageInteractions";
 import { useMapVisibilityTransition } from "@/components/map/useMapVisibilityTransition";
 import { useMapStageReset } from "@/components/map/useMapStageReset";
@@ -140,7 +140,7 @@ export function MapStage({
     setViewport,
   });
 
-  useMapHistoryRestore({
+  useDocumentRestoreInteractionReset({
     documentRevision,
     cancelEditing,
     cancelActiveGesture,

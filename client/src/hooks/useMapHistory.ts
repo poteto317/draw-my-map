@@ -19,20 +19,21 @@ export function useMapHistory(initial: NodeMapState) {
   const [history, setHistory] = useState(() => createMapHistory(initial));
   // イベント内の連続操作でも最新を参照できるよう、refを正としてstateへ同じ結果を渡す
   const historyRef = useRef(history);
-  // 現在有効なグループのトークン。null ならグループなし
+  // 現在有効なグループのトークン。グループの有無の正は history.groupStart で、
+  // groupStart が閉じたら apply が失効させる（ここ以外でnullにしない）
   const activeTokenRef = useRef<number | null>(null);
   const nextTokenRef = useRef(0);
 
   const apply = useCallback((next: MapHistoryState) => {
     historyRef.current = next;
+    if (next.groupStart === null) activeTokenRef.current = null;
     setHistory(next);
   }, []);
 
   const transition = useCallback(
-    (step: (current: MapHistoryState) => MapHistoryState, invalidateGroup: boolean): boolean => {
+    (step: (current: MapHistoryState) => MapHistoryState): boolean => {
       const before = historyRef.current;
       const after = step(before);
-      if (invalidateGroup) activeTokenRef.current = null;
       if (after !== before) apply(after);
       return !areMapStatesEqual(before.present, after.present);
     },
@@ -41,21 +42,18 @@ export function useMapHistory(initial: NodeMapState) {
 
   const getPresent = useCallback(() => historyRef.current.present, []);
   const commit = useCallback(
-    (next: NodeMapState) => transition((h) => commitMapHistory(h, next), true),
+    (next: NodeMapState) => transition((h) => commitMapHistory(h, next)),
     [transition],
   );
   const preview = useCallback(
-    (next: NodeMapState) => transition((h) => previewMapHistory(h, next), false),
+    (next: NodeMapState) => transition((h) => previewMapHistory(h, next)),
     [transition],
   );
-  const undo = useCallback(() => transition(undoMapHistory, true), [transition]);
-  const redo = useCallback(() => transition(redoMapHistory, true), [transition]);
+  const undo = useCallback(() => transition(undoMapHistory), [transition]);
+  const redo = useCallback(() => transition(redoMapHistory), [transition]);
 
   const reset = useCallback(
-    (next: NodeMapState) => {
-      activeTokenRef.current = null;
-      apply(createMapHistory(next));
-    },
+    (next: NodeMapState) => apply(createMapHistory(next)),
     [apply],
   );
 
@@ -69,7 +67,6 @@ export function useMapHistory(initial: NodeMapState) {
       isActive,
       finish: () => {
         if (!isActive()) return;
-        activeTokenRef.current = null;
         apply(finishMapHistoryGroup(historyRef.current));
       },
     };

@@ -1,5 +1,5 @@
 import { renderHook } from "@testing-library/react";
-import { useMapHistoryRestore } from "@/components/map/useMapHistoryRestore";
+import { useDocumentRestoreInteractionReset } from "@/components/map/useDocumentRestoreInteractionReset";
 
 type Callbacks = {
   cancelEditing: jest.Mock;
@@ -17,7 +17,7 @@ function createCallbacks(): Callbacks {
 
 function renderRestore(initial: { documentRevision: number; callbacks: Callbacks }) {
   return renderHook(
-    ({ documentRevision, callbacks }) => useMapHistoryRestore({ documentRevision, ...callbacks }),
+    ({ documentRevision, callbacks }) => useDocumentRestoreInteractionReset({ documentRevision, ...callbacks }),
     { initialProps: initial },
   );
 }
@@ -28,7 +28,7 @@ function expectCalledTimes(callbacks: Callbacks, times: number) {
   expect(callbacks.closeContextMenu).toHaveBeenCalledTimes(times);
 }
 
-describe("useMapHistoryRestore", () => {
+describe("useDocumentRestoreInteractionReset", () => {
   it("初回マウントでは編集・ジェスチャー・メニューを閉じない", () => {
     const callbacks = createCallbacks();
 
