@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MapHistoryControls } from "@/components/layout/MapHistoryControls";
 
@@ -67,6 +67,23 @@ describe("MapHistoryControls", () => {
     expect(pointerDown.defaultPrevented).toBe(false);
     expect(mouseDown.defaultPrevented).toBe(false);
   });
+  describe("Enterの押し続け（キーリピート）", () => {
+    it.each(["元に戻す", "やり直す"])("「%s」はEnterのリピートを既定動作ごと止める", (name) => {
+      render(<MapHistoryControls canUndo canRedo onUndo={jest.fn()} onRedo={jest.fn()} />);
+      const button = screen.getByRole("button", { name });
+
+      expect(fireEvent.keyDown(button, { key: "Enter", repeat: true })).toBe(false);
+    });
+
+    it.each(["元に戻す", "やり直す"])("「%s」は単発のEnterとSpaceのリピートは止めない", (name) => {
+      render(<MapHistoryControls canUndo canRedo onUndo={jest.fn()} onRedo={jest.fn()} />);
+      const button = screen.getByRole("button", { name });
+
+      expect(fireEvent.keyDown(button, { key: "Enter", repeat: false })).toBe(true);
+      expect(fireEvent.keyDown(button, { key: " ", repeat: true })).toBe(true);
+    });
+  });
+
   describe("押したボタンが無効になったときのフォーカス", () => {
     function renderControls(canUndo: boolean, canRedo: boolean) {
       return render(<MapHistoryControls canUndo={canUndo} canRedo={canRedo} onUndo={jest.fn()} onRedo={jest.fn()} />);

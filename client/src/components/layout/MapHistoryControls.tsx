@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type FocusEvent } from "react";
+import { useLayoutEffect, useRef, type FocusEvent, type KeyboardEvent } from "react";
 
 type MapHistoryControlsProps = {
   canUndo: boolean;
@@ -40,6 +40,11 @@ export function MapHistoryControls({
     if (!event.currentTarget.disabled) focusedButtonRef.current = null;
   }
 
+  function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    // Enterの押し続けで履歴が連続して進み、フォーカス移動後にUndoとRedoが往復しないよう、リピートのclick合成を止める
+    if (event.key === "Enter" && event.repeat) event.preventDefault();
+  }
+
   // pointerdownの既定動作は止めない。編集中のラベル入力をblurで確定してから履歴を操作させるため
   return (
     <div className="flex shrink-0 gap-2">
@@ -50,6 +55,7 @@ export function MapHistoryControls({
         onClick={onUndo}
         onFocus={handleFocus}
         onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
         disabled={!canUndo}
       >
         元に戻す
@@ -61,6 +67,7 @@ export function MapHistoryControls({
         onClick={onRedo}
         onFocus={handleFocus}
         onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
         disabled={!canRedo}
       >
         やり直す
