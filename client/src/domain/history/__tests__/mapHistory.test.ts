@@ -101,6 +101,15 @@ describe("mapHistory", () => {
     expect(canRedoMapHistory(h)).toBe(true);
   });
 
+  it("pastが空でも、グループ内に実変更があればUndoでき、変更がなければUndoできない", () => {
+    let h = beginMapHistoryGroup(createMapHistory(a));
+    expect(canUndoMapHistory(h)).toBe(false);
+    h = previewMapHistory(h, b);
+    expect(canUndoMapHistory(h)).toBe(true);
+    h = previewMapHistory(h, a);
+    expect(canUndoMapHistory(h)).toBe(false);
+  });
+
   it("グループなしのpreviewは単独編集になる", () => {
     const h = previewMapHistory(createMapHistory(a), b);
 

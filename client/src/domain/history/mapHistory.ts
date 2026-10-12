@@ -99,10 +99,16 @@ export function redoMapHistory(history: MapHistoryState): MapHistoryState {
   };
 }
 
+// 操作グループ中に実変更があるか。グループを閉じると past へ積まれ、future は捨てられる
+function hasPendingGroupChange(history: MapHistoryState): boolean {
+  return history.groupStart !== null && !areMapStatesEqual(history.groupStart, history.present);
+}
+
+// finishMapHistoryGroup と同じ結果を、配列を作らずに判定する
 export function canUndoMapHistory(history: MapHistoryState): boolean {
-  return finishMapHistoryGroup(history).past.length > 0;
+  return history.past.length > 0 || hasPendingGroupChange(history);
 }
 
 export function canRedoMapHistory(history: MapHistoryState): boolean {
-  return finishMapHistoryGroup(history).future.length > 0;
+  return !hasPendingGroupChange(history) && history.future.length > 0;
 }
