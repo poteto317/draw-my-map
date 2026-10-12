@@ -271,6 +271,8 @@ describe("useNodes の履歴", () => {
 
   it("Undo後の分岐で追加したノードのIDは既存ノードやUndoしたIDと衝突しない", () => {
     const { result } = renderNodes(baseMap("manual"));
+    // 時刻を固定し、ID allocatorの単調増加だけで衝突を避けていることを確かめる（Undoでresetすると同じIDが再発行される）
+    jest.spyOn(Date, "now").mockReturnValue(1000);
     let firstId!: number;
     let secondId!: number;
     act(() => { firstId = result.current.addNode(10, 20); });
