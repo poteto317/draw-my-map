@@ -98,7 +98,7 @@ client/src/
 ├── server/          # 6. Server Layer (サーバーサイド API 処理・Cloudflare Workers AI 連携)
 ├── config/          # 7. Config & Constants Layer (アプリケーション共通定数)
 ├── types/           # 8. Shared Types & Interfaces (TypeScript 型定義)
-└── testing/         # 共通テストヘルパー・フィクスチャ (createTestNode, jpegFixture)
+└── testing/         # 共通テストヘルパー・フィクスチャ (createTestNode, createTestMapHistoryLease, jpegFixture)
 ```
 
 ### 2.1 各レイヤーの責務と構成
@@ -116,10 +116,11 @@ client/src/
 #### 2. UI Layer (Components) (`src/components/layout/`, `src/components/map/`)
 - **責務**: ユーザーに対するプレゼンテーション、DOM イベントの捕捉、および Pixi.js Canvas ステージと DOM オーバーレイの統合。
 - **構成モジュール**:
-  - **レイアウト UI (`src/components/layout/` 全 12 ファイル)**:
-    - `AppHeader.tsx`: タイトル、レイアウトモード切替、操作ヒント、重要度・解像度フィルタ切替、JSON/画像エクスポートボタン、操作通知バーを統合するヘッダー。
+  - **レイアウト UI (`src/components/layout/` 全 13 ファイル)**:
+    - `AppHeader.tsx`: タイトル、レイアウトモード切替、操作ヒント、重要度・解像度フィルタ切替、元に戻す／やり直すボタン、JSON/画像エクスポートボタン、操作通知バーを統合するヘッダー。
     - `AppWorkspace.tsx`: ヘッダー下の 2 カラム（メインキャンバス領域 + 右サイドパネル）レイアウト。
     - `LayoutModeSelector.tsx`: `手動配置` / `自動配置` 切り替えボタングループ（`role="group"`, `aria-label="レイアウトモード"`）。
+    - `MapHistoryControls.tsx`: ヘッダーの `元に戻す` / `やり直す` ボタン（履歴の有無に応じて `disabled`）。
     - `LayoutModeOperationHint.tsx`: 現在の `layoutMode` に応じた操作ガイド文字列の表示。
     - `NodeImportanceSelector.tsx`: 選択中ノードの重要度（`高` / `中` / `低`）切り替えボタングループ（`role="group"`, `aria-label="重要度"`）。
     - `ResolutionFilterSelector.tsx`: 表示フィルタ（`自動` / `高のみ` / `中以上` / `すべて`）切り替えボタングループ（`role="group"`, `aria-label="表示"`）および自動時の現在レベル表示。
@@ -127,11 +128,11 @@ client/src/
     - `MapImageExportControls.tsx`: `PNG書き出し`（変換中 `disabled` 制御付き） / `SVG書き出し` ボタン。
     - `MapOperationNotice.tsx`: 操作結果・警告・エラー通知を表示するアクセシブルな通知コンポーネント（`role="status"` / `role="alert"`）。
     - `IllustrationPanel.tsx`, `illustrationPanelView.ts`, `IllustrationImage.tsx`: 右サイドパネル UI（`<aside aria-label="イラスト">`）、パネル表示状態導出ロジック（`getIllustrationPanelView`）、および Data URL 用ネイティブ `<img>` ラッパー。
-  - **マップステージ・DOM オーバーレイ・座標/イベント補助 (`src/components/map/` コンポーネント 3 ファイル + 補助モジュール 15 ファイル)**:
+  - **マップステージ・DOM オーバーレイ・座標/イベント補助 (`src/components/map/` コンポーネント 3 ファイル + 補助モジュール 17 ファイル)**:
     - `MapStage.tsx`: Pixi.js キャンバス要素と DOM オーバーレイ（`NodeLabelEditor`, `NodeContextMenu`）を統合するステージ親コンポーネント。
     - `NodeLabelEditor.tsx`, `nodeLabelEditorLayout.ts`: ノードテキストインライン編集用 `<input>` DOM オーバーレイと、ビューポート倍率およびイラスト有無（`topInset`）に応じた配置矩形算出。
     - `NodeContextMenu.tsx`, `nodeContextMenuLayout.ts`, `nodeContextMenuDom.ts`, `nodeContextMenuStaleness.ts`, `nodeContextMenuTarget.ts`, `mapContextMenuAction.ts`, `menuActivationDoubleClick.ts`: 右クリックコンテキストメニュー DOM オーバーレイ、176×44px クランプ配置、メニュー内外 DOM 判定、失効（Stale）判定、右クリック時のアクション解決、メニュー項目実行後 500ms 以内のダブルクリック誤発火防止。
-    - `mapViewport.ts`, `mapGeometry.ts`, `mapDoubleClickAction.ts`, `nodeViewportFocus.ts`, `viewportFocusShortcut.ts`, `wheelZoom.ts`, `textEntryTarget.ts`, `browserMapVisibilityEnvironment.ts`: ビューポート座標変換・クランプ、ノードヒットテスト（`findNodeAtPoint`）、ダブルクリックアクション分岐、ノード中央フォーカス計算、ホイールズームデルタ正規化、テキスト入力要素判定、`requestAnimationFrame` / `prefers-reduced-motion` ブラウザ環境アダプタ。
+    - `mapViewport.ts`, `mapGeometry.ts`, `mapDoubleClickAction.ts`, `nodeViewportFocus.ts`, `viewportFocusShortcut.ts`, `wheelZoom.ts`, `textEntryTarget.ts`, `editableTarget.ts`, `mapHistoryShortcut.ts`, `browserMapVisibilityEnvironment.ts`: ビューポート座標変換・クランプ、ノードヒットテスト（`findNodeAtPoint`）、ダブルクリックアクション分岐、ノード中央フォーカス計算、ホイールズームデルタ正規化、テキスト入力要素判定（`textEntryTarget.ts`）、編集可能要素（input・textarea・select・contenteditable）の判定（`editableTarget.ts`）、元に戻す・やり直すのショートカットの判定（`mapHistoryShortcut.ts`）、`requestAnimationFrame` / `prefers-reduced-motion` ブラウザ環境アダプタ。
   - **Pixi.js 描画・ジェスチャーエンジン (`src/components/map/pixi/` 全 23 ファイル — うち `usePixiApplication.ts` は Hooks としても機能)**:
     - シーン描画: `renderMapScene.ts`, `renderMapNodes.ts`, `renderMapEdges.ts`, `clearMapScene.ts`, `applyViewportTransform.ts`, `illustrationTextureLoader.ts`, `pixiTypes.ts`。
     - 可視性トランジション: `mapVisibilityAnimator.ts`, `mapVisibilityTween.ts`, `mapVisibilityKeys.ts`, `pixiVisibilityTarget.ts`。
@@ -141,14 +142,15 @@ client/src/
 #### 3. Application State & Coordination Layer (Hooks) (`src/hooks/`, `src/components/map/use*.ts`)
 - **責務**: アプリケーション状態の保持（React State / Ref / Reducer）、ライフサイクル制御、および Domain / Services 層の呼び出し調停。
 - **構成モジュール**:
-  - **アプリケーション状態フック (`src/hooks/` 全 16 ファイル)**:
+  - **アプリケーション状態フック (`src/hooks/` 全 17 ファイル)**:
     - `useNodes.ts`, `useNodeLayoutState.ts`: ノードツリーの CRUD・選択・重要度・イラスト更新と、手動/自動レイアウトモードの状態管理・ツリー変更時の `layoutNodeForest` 自動整列トリガー。
     - `useMapResolutionFilter.ts`, `mapResolutionFilterState.ts`: ズーム倍率・ヒステリシス・手動/自動モード遷移・マップ置換時の `pendingResetScale` 同期に基づく可視ノードフィルタリング状態管理。
     - `useMapPersistence.ts`, `useMapStoragePersistence.ts`, `useMapStorageRestoration.ts`, `useMapStorageAutoSave.ts`, `useMapFilePersistence.ts`, `useMapJsonExport.ts`, `useMapJsonImport.ts`: `localStorage` からの初期復元・300ms デバウンス自動保存、および JSON ファイルのエクスポート/インポート調停。
     - `useMapImageExport.ts`, `useMapPngExport.ts`, `useMapSvgExport.ts`: PNG / SVG 画像エクスポート処理、空マップ警告、PNG 書き出し中フラグ（`isExportingPng`）と通知状態管理。
     - `useIllustrationGeneration.ts`: 非同期 AI イラスト生成のステートマシン管理（`idle` / `generating` / `succeeded` / `failed`）、同時 1 件制限、および `AbortController` による中断制御。
-    - `useResettingMapReplacement.ts`: マップ置換時に `resetRevision` をインクリメントし、ステージ・コンテキストメニュー・解像度フィルタ・イラスト生成の 4 系統を同期リセットするフック。
-  - **マップステージ制御フック (`src/components/map/use*.ts` 15 ファイル + `pixi/usePixiApplication.ts`)**:
+    - `useMapHistory.ts`: 編集履歴（Undo / Redo）の ref 管理と React state への反映。`useNodeLayoutState` から呼ばれる。
+    - `useResettingMapReplacement.ts`: マップ置換時に `resetRevision` をインクリメントし、ステージ・コンテキストメニュー・解像度フィルタを同期リセットするフック（イラスト生成は `documentRevision` で失効する）。
+  - **マップステージ制御フック (`src/components/map/use*.ts` 17 ファイル + `pixi/usePixiApplication.ts`)**:
     - `pixi/usePixiApplication.ts`: Pixi.js `Application` の非同期初期化・リサイズ追従・アンマウント時破棄。
     - `useRenderedMapScene.ts`, `useIllustrationTextures.ts`, `useMapVisibilityTransition.ts`: React 状態から Pixi シーンへの差分描画同期、`PixiRuntime` ごとのイラスト `Texture` セッションキャッシュと `destroy(true)` 解放、160ms フェード Tween 調停。
     - `useMapViewport.ts`, `useViewportScaleNotification.ts`, `useMapWheelZoom.ts`, `useMapViewportShortcut.ts`: ビューポート状態管理、親への `scale` 変更通知、ホイールズーム登録、`F` キー中央フォーカスショートカット。
@@ -156,6 +158,8 @@ client/src/
     - `useNodeEditing.ts`, `useNodeKeyboardShortcuts.ts`: インラインラベル編集状態（開始・確定・キャンセル）と、`Tab` / `Enter` / `Delete` / `Backspace` キーボードショートカット。
     - `useNodeContextMenu.ts`, `useNodeContextMenuDismissal.ts`: コンテキストメニューの開閉・Stale 自動クローズ・外部操作による Dismiss 制御。
     - `useHiddenNodeInteractionReset.ts`, `useMapStageReset.ts`: 非表示化したノードの選択・編集・ジェスチャー強制リセット、および `resetRevision` 更新時のステージ状態一括初期化。
+    - `useDocumentRestoreInteractionReset.ts`: `documentRevision`（マップ置換・成功した Undo / Redo）の更新時に、編集中のラベル・進行中のジェスチャー・コンテキストメニューを閉じる（viewport は維持）。
+    - `useMapHistoryShortcuts.ts`: Undo / Redo のキーボードショートカット登録。
 - **依存可能レイヤー**: Services, Domain, Config, Types
 
 #### 4. Application Services Layer (`src/services/`)
@@ -177,7 +181,7 @@ client/src/
 
 #### 5. Domain Layer (`src/domain/`)
 - **責務**: システムの中核となる純粋なビジネスルール、数学・幾何計算、ツリー操作アルゴリズム、データ検証・変換。**React や Pixi.js、DOM、ブラウザ固有 API（window, document, localStorage 等）には一切依存しない純粋関数群**。
-- **構成サブパッケージ（全 41 ファイル）**:
+- **構成サブパッケージ（全 42 ファイル）**:
   - `domain/nodes/` (22 ファイル):
     - `nodeAutoLayout.ts`, `nodeLayoutForest.ts`, `nodeLayoutForestRelations.ts`, `nodeLayoutForestTraversal.ts`, `nodeLayoutGeometry.ts`, `nodeLayoutMetrics.ts`, `nodeLayoutPlacement.ts`, `nodeLayoutSpacing.ts`, `nodeLayoutArithmetic.ts`: 木構造・森構造の幾何配置計算（親子関係とルート抽出 `buildNodeForestRelations`、非再帰トラバーサルとサイクル検出 `traverseNodeForest`、フォレストインデックス化 `indexNodeForest`、座標展開 `calculateNodePositions`、深さ別列 X 座標とサブツリー垂直スパン計測 `calculateNodeLayoutMetrics`、双方向垂直中央揃え配置 `placeNodeForest`、数値オーバーフロー・浮動小数点 ULP 精度劣化防御および最小間隔判定 `checkedAdd`/`checkedSubtract`/`checkedMultiply`/`calculateRoundingTolerance`/`hasSufficientGap`、垂直間隔検証 `hasValidVerticalSpacing`）。
     - `nodeTree.ts`: ノード親子付け替え（`connectNodeTree`）、**自己接続・存在しないノード・循環参照検出（`canConnectNodes`）**、部分木 ID 収集（`collectSubtreeIds`）、部分木連動移動（`moveNodeSubtree`）。
@@ -188,6 +192,8 @@ client/src/
     - `nodeImportance.ts`, `nodeImportanceUpdate.ts`: 重要度（`"high" | "medium" | "low"`, デフォルト `"medium"`）のドメインルールと更新（`replaceNodeImportance`）。
     - `nodeResolution.ts`, `nodeResolutionLevel.ts`, `nodeVisibility.ts`: 表示レベルに応じた重要度判定（`isNodeVisibleAtLevel`）、ヒステリシス付き自動解像度レベル判定（`resolveAutomaticResolutionLevel`, `resolveResolutionLevel`）、および祖先ノードの可視維持を含む可視ノード ID 収集（`collectVisibleNodeIds`）。
     - `nodeEdgeCurve.ts`: ノード間を結ぶ三次ベジェ曲線（親の右端中央 → 子の左端中央、`controlX = start.x / 2 + end.x / 2`）の制御点幾何計算（`getNodeEdgeCurve`）。
+  - `domain/history/` (1 ファイル):
+    - `mapHistory.ts`: 編集履歴の純粋な遷移（記録・Undo・Redo・同値判定・最大100操作の上限）。
   - `domain/illustration/` (5 ファイル):
     - `illustrationPrompt.ts`: 入力ラベルの検証（`validateIllustrationLabel`: トリム後 1〜200 文字）、日本語文字判定（`needsTranslation`）、FLUX.1 用英語プロンプト合成（`buildIllustrationPrompt`）。
     - `illustrationActionLabel.ts`: イラスト有無に応じたアクション文言（`"イラストを生成"` / `"イラストを再生成"`）の解決（`getIllustrationActionLabel`）。
@@ -495,7 +501,7 @@ sequenceDiagram
 1. **`useNodes`**:
    - アプリケーションの基本データ構造であるノード配列（`Node[]`）、現在選択中のノード ID（`selectedNodeId`）、現在のレイアウトモード（`manual` / `auto`）を保持。
    - `useNodeLayoutState` を内部で利用し、非構造的変更（ラベル・重要度）と構造的変更（追加・削除・親子接続）を適切に分離して更新。
-   - 内部で `useMapHistory` を保持し、ノード編集・移動・レイアウトモード変更の履歴（最大100操作）と `undo` / `redo` / `canUndo` / `canRedo` を公開。履歴の所有者は `useNodes` で、画面側（ヘッダーのボタンとショートカット）は公開された関数を呼ぶだけ。
+   - `useNodeLayoutState` 経由で `useMapHistory` を保持し、ノード編集・移動・レイアウトモード変更の履歴（最大100操作）と `undo` / `redo` / `canUndo` / `canRedo` を `useNodes` が公開。履歴の呼び出し元は `useNodeLayoutState` で、画面側（ヘッダーのボタンとショートカット）は公開された関数を呼ぶだけ。
    - `documentRevision` を保持し、成功した Undo / Redo と `replaceMap` で増加させる。
 2. **`useNodeLayoutState`**:
    - `layoutMode: "auto"` の場合、ノードの追加・削除・親子付け替え・イラスト追加などの構造変更時に、ドメイン関数の `layoutNodeForest(nodes)` を自動実行して全ノードの座標を再配置。
@@ -512,7 +518,7 @@ sequenceDiagram
 
 #### 編集履歴の所有とリビジョン
 
-- **所有者**: 編集履歴は `useNodes` 内の `useMapHistory`（純粋な遷移は `domain/history/mapHistory.ts`）が所有する。ref を正とし、同じ結果を React state へ反映するため、同一イベント内の連続操作（追加→削除→Undo など）でも最新の状態を使える。`NodeMapState`（`nodes` と `layoutMode`）だけを記録し、選択・viewport・表示フィルターは含めない。
+- **所有者**: 編集履歴は `useNodeLayoutState` が呼ぶ `useMapHistory`（純粋な遷移は `domain/history/mapHistory.ts`）が所有する。ref を正とし、同じ結果を React state へ反映するため、同一イベント内の連続操作（追加→削除→Undo など）でも最新の状態を使える。`NodeMapState`（`nodes` と `layoutMode`）だけを記録し、選択・viewport・表示フィルターは含めない。
 - **ドラッグのグループ**: Pixi 側はドラッグの閾値を越えた最初の有効な移動を通知する直前に `onBeginNodeMove` を呼んで履歴グループのリースを受け取り（クリックだけでは履歴を開始しない）、移動のたびに有効かを確認する。ドラッグ全体が1操作になり、Undo / Redo / 別編集 / マップ置換でリースは失効し、遅れて届いた古い移動通知は無視される。
 - **二種類のリビジョン**:
   - `resetRevision`: JSON 読み込みと初回復元による**マップ置換**で増加する。ステージの viewport 初期化、解像度フィルターのリセットなど、マップを開き直したときの初期化に使う。
@@ -628,6 +634,7 @@ Pixi.js は WebGL / Canvas コンテキストを必要とするため、通常�
 
 #### 4. アプリケーション共通テストヘルパー (`src/testing/`)
 - `src/testing/createTestNode.ts` (`createTestNode`): デフォルト値（`id: 1, parentId: null, x: 0, y: 0, width: 100, height: 60, label: "", importance: "medium"`）を持ち、任意のフィールドを `Partial<Node>` でオーバーライドできるテスト用ノード生成ファクトリ。
+- `src/testing/createTestMapHistoryLease.ts` (`createTestMapHistoryLease`, `createMapHistoryLeaseSpy`): 常に有効な `MapHistoryGroupLease` と、開始・終了・失効を記録する spy を生成する。`onBeginNodeMove` 用の lease が必要なテストで共通に使う。
 - `src/testing/jpegFixture.ts` (`createJpegBytes`, `bytesToJpegDataUrl`, `createJpegDataUrl`): 指定した幅・高さと SOF マーカー（デフォルト `0xc0`）を持つ最小構成の JPEG バイナリ配列（SOI + APP0 + SOF + EOI）および `data:image/jpeg;base64,...` Data URL を生成するフィクスチャ。JPEG 寸法解析や Data URL バリデーションの境界値テストで使用されます。
 
 ---

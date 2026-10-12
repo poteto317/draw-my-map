@@ -50,7 +50,7 @@ Draw My Map の設計・仕様・環境構築・テスト・開発運用に関�
 ### 5. プロジェクト管理・開発履歴
 
 - **[開発ロードマップ](../ROADMAP.md)** (`ROADMAP.md`)
-  - プロジェクトのビジョン、差別化ポイント、各フェーズ（Phase 0〜7）の実装完了状況。
+  - プロジェクトのビジョン、差別化ポイント、各フェーズ（Phase 0〜8）の実装完了状況。
 - **[エージェント・開発ルール](../AGENTS.md)** (`AGENTS.md`)
   - サブエージェント駆動開発（Subagent-Driven Development）、二段階レビュー運用、PR運用ルール。
 - **[レビュー指摘の記録](review-findings/)** (`docs/review-findings/`)
