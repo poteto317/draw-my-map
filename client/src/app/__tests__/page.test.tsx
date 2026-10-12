@@ -24,8 +24,8 @@ let mockMapStageProps: {
 } | null = null;
 
 jest.mock("@/hooks/useIllustrationGeneration", () => ({
-  useIllustrationGeneration: (nodes: readonly Node[], resetRevision: number) => {
-    mockUseIllustrationGeneration(nodes, resetRevision);
+  useIllustrationGeneration: (nodes: readonly Node[], documentRevision: number) => {
+    mockUseIllustrationGeneration(nodes, documentRevision);
     return {
       generation: mockGeneration,
       generateIllustration: mockGenerateIllustration,
@@ -513,7 +513,7 @@ describe("Home", () => {
       expect(mockUseIllustrationGeneration).toHaveBeenLastCalledWith(mockMapStageProps!.nodes, expect.any(Number));
     });
 
-    it("マップを読み込むと、増えた resetRevision を生成の入口へ渡す", async () => {
+    it("マップを読み込むと、増えた documentRevision を生成の入口へ渡す", async () => {
       const user = userEvent.setup();
       const { container } = render(<Home />);
       expect(mockUseIllustrationGeneration).toHaveBeenLastCalledWith(expect.anything(), 0);

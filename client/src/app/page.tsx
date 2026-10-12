@@ -7,12 +7,14 @@ import { AppWorkspace } from "@/components/layout/AppWorkspace";
 import { NodeImportanceSelector } from "@/components/layout/NodeImportanceSelector";
 import { ResolutionFilterSelector } from "@/components/layout/ResolutionFilterSelector";
 import { MapImageExportControls } from "@/components/layout/MapImageExportControls";
+import { MapHistoryControls } from "@/components/layout/MapHistoryControls";
 import { MapPersistenceControls } from "@/components/layout/MapPersistenceControls";
 import { MapOperationNotice } from "@/components/layout/MapOperationNotice";
 import { IllustrationPanel } from "@/components/layout/IllustrationPanel";
 import { MapStage } from "@/components/map/MapStage";
 import { INITIAL_VIEWPORT } from "@/components/map/mapViewport";
 import { useIllustrationGeneration } from "@/hooks/useIllustrationGeneration";
+import { useMapHistoryShortcuts } from "@/hooks/useMapHistoryShortcuts";
 import { useMapImageExport } from "@/hooks/useMapImageExport";
 import { useMapPersistence } from "@/hooks/useMapPersistence";
 import { useResettingMapReplacement } from "@/hooks/useResettingMapReplacement";
@@ -38,6 +40,10 @@ export default function Home() {
     removeIllustration,
     beginMoveHistory,
     documentRevision,
+    canUndo,
+    canRedo,
+    undo,
+    redo,
   } = useNodes();
   const [viewportScale, setViewportScale] = useState(1);
   const { replaceMapAndReset, resetRevision } = useResettingMapReplacement(replaceMap);
@@ -54,7 +60,8 @@ export default function Home() {
     replaceMap: replaceMapAndReset,
   });
   const imageExport = useMapImageExport({ nodes });
-  const { generation, generateIllustration, dismissGeneration } = useIllustrationGeneration(nodes, resetRevision);
+  const { generation, generateIllustration, dismissGeneration } = useIllustrationGeneration(nodes, documentRevision);
+  useMapHistoryShortcuts({ undo, redo });
 
   return (
     <div className="flex h-dvh flex-col bg-zinc-50 dark:bg-zinc-900">
@@ -79,6 +86,12 @@ export default function Home() {
         )}
         operationControls={(
           <>
+            <MapHistoryControls
+              canUndo={canUndo}
+              canRedo={canRedo}
+              onUndo={undo}
+              onRedo={redo}
+            />
             <MapPersistenceControls
               onExport={persistence.exportJson}
               onImport={persistence.importJsonFile}
