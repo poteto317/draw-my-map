@@ -1,9 +1,9 @@
 import { act, renderHook } from "@testing-library/react";
 import { INITIAL_VIEWPORT } from "@/components/map/mapViewport";
 import { useMapStageInteractions } from "@/components/map/useMapStageInteractions";
-import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
 import type { Node } from "@/types/node";
 import { createTestNode } from "@/testing/createTestNode";
+import { createTestMapHistoryLease as createLease } from "@/testing/createTestMapHistoryLease";
 
 type StageEvent = "pointerdown" | "pointermove" | "pointerup" | "pointerupoutside" | "pointercancel";
 type PointerEvent = {
@@ -62,10 +62,6 @@ function pointer(
     composedPath: () => path,
     ...eventOptions,
   };
-}
-
-function createLease(): MapHistoryGroupLease {
-  return { isActive: () => true, finish: () => {} };
 }
 
 const nodes: Node[] = [

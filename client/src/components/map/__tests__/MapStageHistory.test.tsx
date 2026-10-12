@@ -67,9 +67,16 @@ function HistoryHarness({ apiRef, setup, visibleNodeIds }: HistoryHarnessProps) 
   );
 }
 
+// 親ノード(1)の中心はworld座標(100, 60)。viewportが初期値のときはclient座標も同じ
+function stageContainer() {
+  return document.querySelector(".cursor-crosshair") as HTMLElement;
+}
+
+// 描画後にステージの表示領域を固定し、client座標とworld座標を一致させる
 async function renderHistoryHarness(setup?: (api: NodesApi) => void) {
   const apiRef: MutableRefObject<NodesApi | null> = { current: null };
   const rendered = await renderReady(<HistoryHarness apiRef={apiRef} setup={setup} />);
+  mockStageBounds(stageContainer());
   const api = () => apiRef.current!;
   return { apiRef, api, rendered };
 }
@@ -226,9 +233,7 @@ describe("MapStageのドラッグ履歴", () => {
   });
 
   it("ドラッグ中のノード非表示化で中断しても移動済み分を1操作として残す", async () => {
-    const apiRef: MutableRefObject<NodesApi | null> = { current: null };
-    const rendered = await renderReady(<HistoryHarness apiRef={apiRef} />);
-    const api = () => apiRef.current!;
+    const { apiRef, api, rendered } = await renderHistoryHarness();
     const before = positions(api().nodes);
 
     const drag = startParentDrag();
@@ -325,13 +330,6 @@ describe("MapStageのドラッグ履歴", () => {
     expect(api().nodes).toHaveLength(2);
   });
 });
-
-// 親ノード(1)の中心はworld座標(100, 60)。viewportが初期値のときはclient座標も同じ
-function stageContainer() {
-  const container = document.querySelector(".cursor-crosshair") as HTMLElement;
-  mockStageBounds(container);
-  return container;
-}
 
 function worldTransform() {
   const world = lastWorldContainer();

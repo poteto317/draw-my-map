@@ -24,6 +24,7 @@ import { CHILD_HORIZONTAL_GAP } from "@/config/shapes";
 import { useNodes } from "@/hooks/useNodes";
 import type { Node } from "@/types/node";
 import { createTestNode } from "@/testing/createTestNode";
+import { createTestMapHistoryLease } from "@/testing/createTestMapHistoryLease";
 
 jest.mock("pixi.js", () => {
   const runtime = jest.requireActual<typeof import("@/components/map/testing/mapStageTestRuntime")>(
@@ -41,7 +42,7 @@ const defaultProps = {
   onSelectNode: jest.fn(),
   onUpdateLabel: jest.fn(),
   onMoveNode: jest.fn(),
-  onBeginNodeMove: () => ({ isActive: () => true, finish: () => {} }),
+  onBeginNodeMove: createTestMapHistoryLease,
   documentRevision: 0,
   onConnectNodes: jest.fn(),
   onDeleteNode: jest.fn(),

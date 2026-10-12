@@ -43,10 +43,15 @@ describe("mapHistory", () => {
     expect(canRedoMapHistory(h)).toBe(false);
   });
 
-  it("同値のcommitは同じhistoryを返し、実変更はfutureを消す", () => {
+  it("同値のcommitは同じhistoryを返す", () => {
     const undone = undoMapHistory(commitMapHistory(createMapHistory(a), b));
 
     expect(commitMapHistory(undone, { ...a, nodes: a.nodes.map((n) => ({ ...n })) })).toBe(undone);
+  });
+
+  it("実変更のcommitはfutureを消す", () => {
+    const undone = undoMapHistory(commitMapHistory(createMapHistory(a), b));
+
     expect(commitMapHistory(undone, c).future).toEqual([]);
   });
 
@@ -166,18 +171,15 @@ describe("mapHistory", () => {
       expect(areMapStatesEqual(make({}), make(override))).toBe(false);
     });
 
-    it("配列順序とlayoutModeの違いを検出する", () => {
-      const n1 = createTestNode({ id: 1 });
-      const n2 = createTestNode({ id: 2 });
-      expect(
-        areMapStatesEqual({ layoutMode: "manual", nodes: [n1, n2] }, { layoutMode: "manual", nodes: [n2, n1] }),
-      ).toBe(false);
-      expect(
-        areMapStatesEqual({ layoutMode: "manual", nodes: [n1] }, { layoutMode: "auto", nodes: [n1] }),
-      ).toBe(false);
-      expect(
-        areMapStatesEqual({ layoutMode: "manual", nodes: [n1] }, { layoutMode: "manual", nodes: [n1, n2] }),
-      ).toBe(false);
+    const n1 = createTestNode({ id: 1 });
+    const n2 = createTestNode({ id: 2 });
+
+    it.each<[string, NodeMapState, NodeMapState]>([
+      ["配列順序", { layoutMode: "manual", nodes: [n1, n2] }, { layoutMode: "manual", nodes: [n2, n1] }],
+      ["layoutMode", { layoutMode: "manual", nodes: [n1] }, { layoutMode: "auto", nodes: [n1] }],
+      ["ノード数", { layoutMode: "manual", nodes: [n1] }, { layoutMode: "manual", nodes: [n1, n2] }],
+    ])("%sの違いを検出する", (_name, left, right) => {
+      expect(areMapStatesEqual(left, right)).toBe(false);
     });
 
     it("同内容なら参照が違っても等しい", () => {

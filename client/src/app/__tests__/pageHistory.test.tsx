@@ -197,7 +197,7 @@ afterEach(() => {
 });
 
 describe("ページの元に戻す・やり直す", () => {
-  it("ノード作成をボタンで戻し、ショートカットで同じIDのまま戻す", async () => {
+  it("ノード作成をボタンで戻し、やり直すと同じIDのまま戻る", async () => {
     const user = userEvent.setup();
     await renderPage();
     expect(undoButton()).toBeDisabled();
@@ -213,21 +213,41 @@ describe("ページの元に戻す・やり直す", () => {
     expect(undoButton()).toBeDisabled();
     expect(redoButton()).toBeEnabled();
 
-    await user.keyboard("{Control>}y{/Control}");
+    await user.click(redoButton());
     expect(exportedMap().nodes).toEqual([created]);
     expect(undoButton()).toBeEnabled();
     expect(redoButton()).toBeDisabled();
+  });
 
-    await user.keyboard("{Meta>}z{/Meta}");
+  // キーの組み合わせの網羅は mapHistoryShortcut.test.ts が担う。ここではページへの配線だけを確認する
+  it.each([
+    { name: "Ctrl+Z", keys: "{Control>}z{/Control}" },
+    { name: "Cmd+Z", keys: "{Meta>}z{/Meta}" },
+  ])("$nameでノード作成を戻す", async ({ keys }) => {
+    const user = userEvent.setup();
+    await renderPage();
+    addNodeAt(300, 200);
+
+    await user.keyboard(keys);
+
     expect(exportedMap().nodes).toEqual([]);
+    expect(redoButton()).toBeEnabled();
+  });
 
-    await user.click(redoButton());
-    expect(exportedMap().nodes).toEqual([created]);
+  it.each([
+    { name: "Ctrl+Y", keys: "{Control>}y{/Control}" },
+    { name: "Ctrl+Shift+Z", keys: "{Control>}{Shift>}Z{/Shift}{/Control}" },
+  ])("$nameで戻したノード作成を同じIDのままやり直す", async ({ keys }) => {
+    const user = userEvent.setup();
+    await renderPage();
+    addNodeAt(300, 200);
+    const [created] = exportedMap().nodes;
+    await user.click(undoButton());
 
-    await user.keyboard("{Control>}z{/Control}");
-    expect(exportedMap().nodes).toEqual([]);
-    await user.keyboard("{Control>}{Shift>}Z{/Shift}{/Control}");
+    await user.keyboard(keys);
+
     expect(exportedMap().nodes).toEqual([created]);
+    expect(redoButton()).toBeDisabled();
   });
 
   it("ヘッダーのボタンにフォーカスがあってもショートカットでUndoできる", async () => {

@@ -4,6 +4,10 @@ import { createStageInteractions } from "@/components/map/pixi/stageInteractions
 import type { Node } from "@/types/node";
 import { createTestNode } from "@/testing/createTestNode";
 import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
+import {
+  createMapHistoryLeaseSpy as createMoveHistorySpy,
+  createTestMapHistoryLease,
+} from "@/testing/createTestMapHistoryLease";
 
 type PointerEvent = {
   globalX: number;
@@ -111,7 +115,7 @@ function createController(overrides: Partial<{
   const onMoveNodeRef = { current: overrides.onMoveNode ?? jest.fn() };
   const onBeginNodeMoveRef = {
     current: overrides.onBeginNodeMove
-      ?? jest.fn((): MapHistoryGroupLease => ({ isActive: () => true, finish: () => {} })),
+      ?? jest.fn(createTestMapHistoryLease),
   };
   const onConnectNodesRef = {
     current: overrides.onConnectNodes ?? jest.fn<void, [number, number]>(),
@@ -148,12 +152,6 @@ function createController(overrides: Partial<{
     onViewportChangeRef,
     visibleNodeIdsRef,
   };
-}
-
-function createMoveHistorySpy() {
-  const lease = { isActive: jest.fn(() => true), finish: jest.fn() };
-  const onBeginNodeMove = jest.fn(() => lease);
-  return { lease, onBeginNodeMove };
 }
 
 function nodePointerDown(

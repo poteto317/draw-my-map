@@ -1,7 +1,10 @@
 import { createNodeMoveGesture } from "@/components/map/pixi/nodeMoveGesture";
 import type { Node } from "@/types/node";
 import { createTestNode } from "@/testing/createTestNode";
-import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
+import {
+  createMapHistoryLeaseSpy,
+  createTestMapHistoryLease as createLease,
+} from "@/testing/createTestMapHistoryLease";
 
 const node: Node = createTestNode({
   id: 1,
@@ -25,29 +28,9 @@ const pointer = (
   world: { x: worldX, y: worldY },
 });
 
-function createLease(): MapHistoryGroupLease {
-  return { isActive: () => true, finish: () => {} };
-}
-
-function createHistorySpy() {
-  let active = true;
-  const lease = {
-    isActive: jest.fn(() => active),
-    finish: jest.fn(),
-  };
-  const onBeginNodeMove = jest.fn(() => lease);
-  return {
-    lease,
-    onBeginNodeMove,
-    expire: () => {
-      active = false;
-    },
-  };
-}
-
 function createGestureWithHistory(startSample = pointer(100, 60), nodes: readonly Node[] = [node]) {
   const onMoveNode = jest.fn();
-  const history = createHistorySpy();
+  const history = createMapHistoryLeaseSpy();
   const gesture = createNodeMoveGesture({
     nodeId: 1,
     startSample,
