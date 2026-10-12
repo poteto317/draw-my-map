@@ -412,6 +412,7 @@ describe("保存・出力と履歴", () => {
   it("復元前の保存待ちが、Undo後の値を上書きしない", async () => {
     jest.useFakeTimers();
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    const setItem = jest.spyOn(Storage.prototype, "setItem");
     await renderPage();
     addNodeAt(300, 200);
     act(() => {
@@ -423,6 +424,10 @@ describe("保存・出力と履歴", () => {
     });
 
     expect(storedMap()?.nodes ?? []).toEqual([]);
+    const writtenNodeCounts = setItem.mock.calls
+      .filter(([key]) => key === STORAGE_KEY)
+      .map(([, value]) => (JSON.parse(String(value)) as ExportedMap).nodes.length);
+    expect(writtenNodeCounts).not.toContain(1);
   });
 
   it("JSON・画像出力はUndo後の現在値を使い、履歴を出力しない", async () => {
