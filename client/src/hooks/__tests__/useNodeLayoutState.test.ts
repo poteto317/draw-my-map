@@ -239,4 +239,130 @@ describe("useNodeLayoutState", () => {
     expect(result.current.applyTreeChange).toBe(callbacks.applyTreeChange);
     expect(result.current.setLayoutMode).toBe(callbacks.setLayoutMode);
   });
+  describe("履歴", () => {
+    it("非構造変更・ツリー変更・モード変更をそれぞれ1操作として戻し、やり直す", () => {
+      const { result } = renderHook(() => useNodeLayoutState());
+      const first = [node(1, null, 50, 70)];
+      const second = [node(1, null, 50, 70), node(2, null, 500, 300)];
+
+      act(() => { result.current.applyNonStructuralChange(() => first); });
+      act(() => { result.current.applyTreeChange(() => second); });
+      act(() => result.current.setLayoutMode("auto"));
+      const auto = result.current.nodes;
+
+      let undone!: boolean;
+      act(() => { undone = result.current.undo(); });
+      expect(undone).toBe(true);
+      expect(result.current.layoutMode).toBe("manual");
+      expect(result.current.nodes).toBe(second);
+
+      act(() => { result.current.undo(); });
+      expect(result.current.nodes).toBe(first);
+      act(() => { result.current.undo(); });
+      expect(result.current.nodes).toEqual([]);
+      expect(result.current.canUndo).toBe(false);
+      expect(result.current.canRedo).toBe(true);
+
+      act(() => {
+        result.current.redo();
+        result.current.redo();
+        result.current.redo();
+      });
+      expect(result.current.layoutMode).toBe("auto");
+      expect(result.current.nodes).toBe(auto);
+      expect(result.current.canRedo).toBe(false);
+    });
+
+    it("空履歴のUndo・Redoはfalseを返す", () => {
+      const { result } = renderHook(() => useNodeLayoutState());
+      let undone!: boolean;
+      let redone!: boolean;
+
+      act(() => {
+        undone = result.current.undo();
+        redone = result.current.redo();
+      });
+
+      expect(undone).toBe(false);
+      expect(redone).toBe(false);
+    });
+
+    it("同値の有効候補はtrueを返しつつ履歴とRedoを維持する", () => {
+      const { result } = renderHook(() => useNodeLayoutState());
+      act(() => { result.current.applyNonStructuralChange(() => [node(1, null, 50, 70)]); });
+      act(() => { result.current.applyNonStructuralChange((current) => current.map((item) => ({ ...item, label: "a" }))); });
+      act(() => { result.current.undo(); });
+      const results: boolean[] = [];
+
+      act(() => {
+        results.push(result.current.applyNonStructuralChange((current) => current.map((item) => ({ ...item }))));
+        results.push(result.current.applyManualMove((current) => [...current]));
+        results.push(result.current.applyTreeChange((current) => [...current]));
+      });
+
+      expect(results).toEqual([true, true, true]);
+      expect(result.current.canUndo).toBe(true);
+      expect(result.current.canRedo).toBe(true);
+    });
+
+    it("null候補・自動配置中の手動移動・配置失敗はfalseを返しRedoを維持する", () => {
+      const { result } = renderHook(() => useNodeLayoutState());
+      act(() => result.current.replaceLayoutState([node(1, null, 50, 70)], "auto"));
+      act(() => { result.current.applyNonStructuralChange((current) => current.map((item) => ({ ...item, label: "a" }))); });
+      act(() => { result.current.undo(); });
+      const results: boolean[] = [];
+
+      act(() => {
+        results.push(result.current.applyNonStructuralChange(() => null));
+        results.push(result.current.applyManualMove(() => [node(1, null, 900, 900)]));
+        results.push(result.current.applyTreeChange(() => [node(1, null, Number.NaN, 70)]));
+      });
+
+      expect(results).toEqual([false, false, false]);
+      expect(result.current.canUndo).toBe(false);
+      expect(result.current.canRedo).toBe(true);
+    });
+
+    it("置き換えると過去と未来の履歴を消す", () => {
+      const { result } = renderHook(() => useNodeLayoutState());
+      act(() => { result.current.applyNonStructuralChange(() => [node(1, null, 50, 70)]); });
+      act(() => { result.current.applyNonStructuralChange(() => [node(1, null, 60, 70)]); });
+      act(() => { result.current.undo(); });
+
+      act(() => result.current.replaceLayoutState([node(5, null, 0, 0)], "manual"));
+
+      expect(result.current.canUndo).toBe(false);
+      expect(result.current.canRedo).toBe(false);
+    });
+
+    it("移動グループ中の手動移動は終了時に1操作として記録する", () => {
+      const { result } = renderHook(() => useNodeLayoutState());
+      const start = [node(1, null, 50, 70)];
+      act(() => { result.current.applyNonStructuralChange(() => start); });
+
+      act(() => {
+        const lease = result.current.beginMoveHistory();
+        result.current.applyManualMove(() => [node(1, null, 60, 70)]);
+        result.current.applyManualMove(() => [node(1, null, 80, 90)]);
+        lease.finish();
+      });
+      expect(result.current.nodes[0]).toMatchObject({ x: 80, y: 90 });
+
+      act(() => { result.current.undo(); });
+      expect(result.current.nodes).toBe(start);
+    });
+
+    it("履歴操作の関数参照は更新後も安定している", () => {
+      const { result } = renderHook(() => useNodeLayoutState());
+      const { undo, redo, beginMoveHistory, replaceLayoutState } = result.current;
+
+      act(() => { result.current.applyNonStructuralChange(() => [node(1, null, 50, 70)]); });
+      act(() => { result.current.undo(); });
+
+      expect(result.current.undo).toBe(undo);
+      expect(result.current.redo).toBe(redo);
+      expect(result.current.beginMoveHistory).toBe(beginMoveHistory);
+      expect(result.current.replaceLayoutState).toBe(replaceLayoutState);
+    });
+  });
 });

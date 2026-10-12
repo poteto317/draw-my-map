@@ -1,84 +1,106 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback } from "react";
+import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
 import { layoutNodeForest } from "@/domain/nodes/nodeAutoLayout";
+import { useMapHistory } from "@/hooks/useMapHistory";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
+import type { NodeMapState } from "@/types/nodeMapState";
 
 type UseNodeLayoutStateReturn = {
   nodes: Node[];
   layoutMode: NodeLayoutMode;
+  canUndo: boolean;
+  canRedo: boolean;
   applyNonStructuralChange: (update: NodeChange) => boolean;
   applyManualMove: (update: NodeChange) => boolean;
   applyTreeChange: (update: NodeChange) => boolean;
   setLayoutMode: (mode: NodeLayoutMode) => void;
   replaceLayoutState: (nodes: Node[], mode: NodeLayoutMode) => void;
+  undo: () => boolean;
+  redo: () => boolean;
+  beginMoveHistory: () => MapHistoryGroupLease;
 };
 
 type NodeChange = (currentNodes: readonly Node[]) => Node[] | null;
 
-export function useNodeLayoutState(): UseNodeLayoutStateReturn {
-  const [nodes, setNodes] = useState<Node[]>([]);
-  const [layoutMode, setLayoutModeState] = useState<NodeLayoutMode>("manual");
-  const nodesRef = useRef<readonly Node[]>(nodes);
-  const layoutModeRef = useRef<NodeLayoutMode>(layoutMode);
+const EMPTY_MAP_STATE: NodeMapState = { layoutMode: "manual", nodes: [] };
 
-  const commitNodes = useCallback((nextNodes: Node[]) => {
-    nodesRef.current = nextNodes;
-    setNodes(nextNodes);
-  }, []);
+// ノード配列と配置モードの単一所有者は履歴。返すbooleanは候補を受理したかを表し、
+// 同値で履歴が変わらなくても受理した候補ならtrueを返す
+export function useNodeLayoutState(): UseNodeLayoutStateReturn {
+  const {
+    present,
+    canUndo,
+    canRedo,
+    getPresent,
+    commit,
+    preview,
+    beginGroup,
+    reset,
+    undo,
+    redo,
+  } = useMapHistory(EMPTY_MAP_STATE);
 
   const replaceLayoutState = useCallback((nextNodes: Node[], mode: NodeLayoutMode) => {
-    nodesRef.current = nextNodes;
-    layoutModeRef.current = mode;
-    setNodes(nextNodes);
-    setLayoutModeState(mode);
-  }, []);
+    reset({ layoutMode: mode, nodes: nextNodes });
+  }, [reset]);
 
   const applyNonStructuralChange = useCallback((update: NodeChange): boolean => {
-    const nextNodes = update(nodesRef.current);
+    const current = getPresent();
+    const nextNodes = update(current.nodes);
     if (!nextNodes) return false;
 
-    commitNodes(nextNodes);
+    commit({ layoutMode: current.layoutMode, nodes: nextNodes });
     return true;
-  }, [commitNodes]);
+  }, [getPresent, commit]);
 
+  // 移動グループ中は表示上の現在値だけを更新し、グループ外では1操作として確定する
   const applyManualMove = useCallback((update: NodeChange): boolean => {
-    if (layoutModeRef.current === "auto") return false;
-    return applyNonStructuralChange(update);
-  }, [applyNonStructuralChange]);
+    const current = getPresent();
+    if (current.layoutMode === "auto") return false;
+    const nextNodes = update(current.nodes);
+    if (!nextNodes) return false;
+
+    preview({ layoutMode: current.layoutMode, nodes: nextNodes });
+    return true;
+  }, [getPresent, preview]);
 
   const applyTreeChange = useCallback((update: NodeChange): boolean => {
-    const candidateNodes = update(nodesRef.current);
+    const current = getPresent();
+    const candidateNodes = update(current.nodes);
     if (!candidateNodes) return false;
 
-    const nextNodes = layoutModeRef.current === "auto"
+    const nextNodes = current.layoutMode === "auto"
       ? layoutNodeForest(candidateNodes)
       : candidateNodes;
     if (!nextNodes) return false;
 
-    commitNodes(nextNodes);
+    commit({ layoutMode: current.layoutMode, nodes: nextNodes });
     return true;
-  }, [commitNodes]);
+  }, [getPresent, commit]);
 
   const setLayoutMode = useCallback((mode: NodeLayoutMode) => {
-    if (mode === layoutModeRef.current) return;
+    const current = getPresent();
+    if (mode === current.layoutMode) return;
 
-    if (mode === "auto") {
-      const nextNodes = layoutNodeForest(nodesRef.current);
-      if (!nextNodes) return;
-      commitNodes(nextNodes);
-    }
+    const nextNodes = mode === "auto" ? layoutNodeForest(current.nodes) : current.nodes;
+    if (!nextNodes) return;
 
-    layoutModeRef.current = mode;
-    setLayoutModeState(mode);
-  }, [commitNodes]);
+    commit({ layoutMode: mode, nodes: nextNodes });
+  }, [getPresent, commit]);
 
   return {
-    nodes,
-    layoutMode,
+    nodes: present.nodes,
+    layoutMode: present.layoutMode,
+    canUndo,
+    canRedo,
     applyNonStructuralChange,
     applyManualMove,
     applyTreeChange,
     setLayoutMode,
     replaceLayoutState,
+    undo,
+    redo,
+    beginMoveHistory: beginGroup,
   };
 }
