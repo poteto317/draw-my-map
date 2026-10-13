@@ -13,6 +13,7 @@ import {
   createNodeIdAllocator,
   type NodeIdAllocator,
 } from "@/domain/nodes/nodeIdAllocator";
+import { duplicateNodeSubtree } from "@/domain/nodes/nodeSubtreeDuplication";
 import { replaceNodeImportance } from "@/domain/nodes/nodeImportanceUpdate";
 import { clearNodeIllustration, replaceNodeIllustration } from "@/domain/nodes/nodeIllustrationUpdate";
 import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
@@ -36,6 +37,8 @@ type UseNodesReturn = {
   removeIllustration: (id: number) => boolean;
   moveNode: (id: number, x: number, y: number) => void;
   connectNodes: (parentId: number, childId: number) => boolean;
+  // 成功時は複製根のIDを返して選択する。対象不在・配置不能・自動配置失敗ではnullを返し何も変えない
+  duplicateSubtree: (sourceId: number) => number | null;
   deleteNode: (id: number) => void;
   setLayoutMode: (mode: NodeLayoutMode) => void;
   replaceMap: (state: NodeMapState) => void;
@@ -178,6 +181,27 @@ export function useNodes(): UseNodesReturn {
     return true;
   }, [applyTreeChange]);
 
+  // 採番済みで確定しなかったIDは欠番のままにし、allocatorを巻き戻さない
+  const duplicateSubtree = useCallback((sourceId: number) => {
+    let copiedRootId: number | null = null;
+    const applied = applyTreeChange((currentNodes, mode) => {
+      const duplicated = duplicateNodeSubtree(
+        currentNodes,
+        sourceId,
+        mode,
+        (occupied, count) => nodeIdAllocatorRef.current!.nextAvailableIds(occupied, count),
+      );
+      if (!duplicated) return null;
+
+      copiedRootId = duplicated.rootId;
+      return duplicated.nodes;
+    });
+    if (!applied || copiedRootId === null) return null;
+
+    setSelectedNodeId(copiedRootId);
+    return copiedRootId;
+  }, [applyTreeChange]);
+
   const deleteNode = useCallback((id: number) => {
     let subtreeIds = new Set<number>();
     const applied = applyTreeChange((currentNodes) => {
@@ -206,6 +230,7 @@ export function useNodes(): UseNodesReturn {
     removeIllustration,
     moveNode,
     connectNodes,
+    duplicateSubtree,
     deleteNode,
     setLayoutMode,
     replaceMap,

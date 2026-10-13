@@ -2,6 +2,7 @@ import { renderHook, act } from "@testing-library/react";
 import { RECT_HEIGHT, RECT_WIDTH } from "@/config/shapes";
 import { useNodeLayoutState } from "@/hooks/useNodeLayoutState";
 import type { Node } from "@/types/node";
+import type { NodeLayoutMode } from "@/types/nodeLayout";
 import { createTestNode } from "@/testing/createTestNode";
 
 function node(
@@ -239,6 +240,45 @@ describe("useNodeLayoutState", () => {
     expect(result.current.applyTreeChange).toBe(callbacks.applyTreeChange);
     expect(result.current.setLayoutMode).toBe(callbacks.setLayoutMode);
   });
+
+  it("ツリー変更の候補生成へ同じbatchで切り替えた最新の配置モードを渡す", () => {
+    const { result } = renderHook(() => useNodeLayoutState());
+    const { applyTreeChange, setLayoutMode } = result.current;
+    const observedModes: NodeLayoutMode[] = [];
+
+    act(() => {
+      applyTreeChange((current, mode) => {
+        observedModes.push(mode);
+        return [...current, node(1, null, 50, 70)];
+      });
+      setLayoutMode("auto");
+      applyTreeChange((current, mode) => {
+        observedModes.push(mode);
+        return [...current];
+      });
+      setLayoutMode("manual");
+      applyTreeChange((current, mode) => {
+        observedModes.push(mode);
+        return [...current];
+      });
+    });
+
+    expect(observedModes).toEqual(["manual", "auto", "manual"]);
+  });
+
+  it("引数を1つだけ受け取るツリー変更の候補生成もそのまま使える", () => {
+    const { result } = renderHook(() => useNodeLayoutState());
+    const candidate = [node(1, null, 50, 70)];
+    const createCandidate = jest.fn((current: readonly Node[]) => [...current, ...candidate]);
+    let applied!: boolean;
+
+    act(() => { applied = result.current.applyTreeChange(createCandidate); });
+
+    expect(applied).toBe(true);
+    expect(createCandidate).toHaveBeenCalledTimes(1);
+    expect(result.current.nodes).toEqual(candidate);
+  });
+
   describe("履歴", () => {
     it("非構造変更・ツリー変更・モード変更をそれぞれ1操作として戻し、やり直す", () => {
       const { result } = renderHook(() => useNodeLayoutState());

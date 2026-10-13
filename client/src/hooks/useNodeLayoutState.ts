@@ -13,7 +13,7 @@ type UseNodeLayoutStateReturn = {
   canRedo: boolean;
   applyNonStructuralChange: (update: NodeChange) => boolean;
   applyManualMove: (update: NodeChange) => boolean;
-  applyTreeChange: (update: NodeChange) => boolean;
+  applyTreeChange: (update: TreeChange) => boolean;
   setLayoutMode: (mode: NodeLayoutMode) => void;
   replaceLayoutState: (nodes: Node[], mode: NodeLayoutMode) => void;
   undo: () => boolean;
@@ -22,6 +22,8 @@ type UseNodeLayoutStateReturn = {
 };
 
 type NodeChange = (currentNodes: readonly Node[]) => Node[] | null;
+// 候補生成は確定時点の最新の配置モードを受け取る。1引数の候補生成もそのまま渡せる
+type TreeChange = (currentNodes: readonly Node[], mode: NodeLayoutMode) => Node[] | null;
 
 const EMPTY_MAP_STATE: NodeMapState = { layoutMode: "manual", nodes: [] };
 
@@ -65,9 +67,9 @@ export function useNodeLayoutState(): UseNodeLayoutStateReturn {
     return true;
   }, [getPresent, preview]);
 
-  const applyTreeChange = useCallback((update: NodeChange): boolean => {
+  const applyTreeChange = useCallback((update: TreeChange): boolean => {
     const current = getPresent();
-    const candidateNodes = update(current.nodes);
+    const candidateNodes = update(current.nodes, current.layoutMode);
     if (!candidateNodes) return false;
 
     const nextNodes = current.layoutMode === "auto"
