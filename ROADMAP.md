@@ -10,7 +10,7 @@
 - Phase 6までが完了。重要度タグの編集、ズーム連動・手動の解像度フィルタリング、表示切り替え時のフェードが利用できる。重要度はV2形式のJSONとlocalStorageへ保存され、V1形式は中重要度として移行できる。
 - Phase 7（AIイラスト生成）までが完了。右パネルのボタンと右クリックメニューから、選択中のノードのテキストをもとにイラストを生成でき、結果は右パネルにプレビュー表示される（Cloudflare Workers AI。無料枠の範囲）。生成したイラストは、右パネルの「ノードに設定」でノードに紐付けられ、キャンバスに表示される。紐付けたイラストは128pxのJPEGに縮小され、V3形式のJSONとlocalStorageへ保存され、PNG / SVGのエクスポートにも含まれる。すでにイラストがあるノードでは「イラストを再生成」で置き換えられ、右パネルの「設定済みのイラストを削除」で外せる。
 - Phase 8（編集履歴）が完了。ヘッダーの「元に戻す」「やり直す」ボタンと、Ctrl/Cmd+Z、Ctrl/Cmd+Shift+Z、Ctrl+Yのショートカットで、ノードの追加・削除・接続・ラベル・重要度・イラスト・移動・配置モードの変更を最大100操作まで戻せる。ドラッグは一連の移動を1操作として扱う。履歴はメモリ上のみで、JSONやlocalStorageのV3形式は変わらない。
-- Phase 0からPhase 8までの全実装に対応する包括的なドキュメント体系（`README.md`, `client/README.md`, `docs/README.md`, `docs/architecture/overview.md`, `docs/specifications/features.md`, `docs/specifications/data-model.md`, `docs/specifications/api.md`）が整備済み。
+- Phase 0からPhase 9の枝の複製（クリップボード対応を除く）までの全実装に対応する包括的なドキュメント体系（`README.md`, `client/README.md`, `docs/README.md`, `docs/architecture/overview.md`, `docs/specifications/features.md`, `docs/specifications/data-model.md`, `docs/specifications/api.md`）が整備済み。
 - Phase 9（枝の複製・コピー＆ペースト）が進行中。ヘッダーの「枝を複製」ボタンで、選択ノードと全子孫をアプリ内で複製できる（新しいノードIDの再発行、ラベル・重要度・イラストの引き継ぎ、手動配置・自動配置に応じた配置、複製全体を1操作としたUndo／Redoに対応）。次に取り組む項目は、クリップボード経由のコピー＆ペースト。
 - Phase 10〜13は未着手。
 
