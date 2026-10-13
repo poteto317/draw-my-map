@@ -1,17 +1,22 @@
 import type { Node } from "@/types/node";
 
+// 根は配列に無くても含める。親子関係が循環した不正な配列でも各ノードを一度だけ訪れて停止する
 export function collectSubtreeIds(nodes: readonly Node[], rootId: number): Set<number> {
+  const childIdsByParentId = new Map<number, number[]>();
+  for (const node of nodes) {
+    if (node.parentId === null) continue;
+    const childIds = childIdsByParentId.get(node.parentId);
+    if (childIds) childIds.push(node.id);
+    else childIdsByParentId.set(node.parentId, [node.id]);
+  }
+
   const ids = new Set<number>([rootId]);
-  let changed = true;
-
-  while (changed) {
-    changed = false;
-
-    for (const node of nodes) {
-      if (node.parentId !== null && ids.has(node.parentId) && !ids.has(node.id)) {
-        ids.add(node.id);
-        changed = true;
-      }
+  const queue = [rootId];
+  for (let index = 0; index < queue.length; index += 1) {
+    for (const childId of childIdsByParentId.get(queue[index]) ?? []) {
+      if (ids.has(childId)) continue;
+      ids.add(childId);
+      queue.push(childId);
     }
   }
 

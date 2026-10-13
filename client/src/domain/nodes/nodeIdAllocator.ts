@@ -19,22 +19,24 @@ export function createNodeIdAllocator(
 ): NodeIdAllocator {
   let generateNodeId = createGenerator();
 
+  // 既存ノードと、同じ呼び出しで採番済みのIDとは衝突させない。単数・複数の採番で同じ規則を使う
+  function nextAvailableIds(nodes: readonly Node[], count: number): number[] {
+    const occupiedIds = new Set(nodes.map((node) => node.id));
+    const ids: number[] = [];
+    while (ids.length < count) {
+      const id = generateNodeId();
+      if (occupiedIds.has(id)) continue;
+      occupiedIds.add(id);
+      ids.push(id);
+    }
+    return ids;
+  }
+
   return {
     nextAvailableId(nodes) {
-      const occupiedIds = new Set(nodes.map((node) => node.id));
-      let id = generateNodeId();
-      while (occupiedIds.has(id)) id = generateNodeId();
-      return id;
+      return nextAvailableIds(nodes, 1)[0];
     },
-    nextAvailableIds(nodes, count) {
-      const occupiedIds = new Set(nodes.map((node) => node.id));
-      const ids: number[] = [];
-      while (ids.length < count) {
-        const id = generateNodeId();
-        if (!occupiedIds.has(id)) ids.push(id);
-      }
-      return ids;
-    },
+    nextAvailableIds,
     reset() {
       generateNodeId = createGenerator();
     },

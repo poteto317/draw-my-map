@@ -198,7 +198,26 @@ describe("duplicateNodeSubtree", () => {
     expect(allocateIds).not.toHaveBeenCalled();
   });
 
-  it("1万段の枝も再帰エラーなしで実物のallocatorを使って複製できる", () => {
+  it("親子関係が循環した不正な配列でも停止し、到達できるノードを一度ずつ複製する", () => {
+    const originalNodes = deepFreeze([
+      createTestNode({ id: 1, parentId: 3 }),
+      createTestNode({ id: 2, parentId: 1 }),
+      createTestNode({ id: 3, parentId: 2 }),
+    ]);
+    const allocateIds = idsFrom([10, 11, 12]);
+
+    const result = duplicateNodeSubtree(originalNodes, 1, "auto", allocateIds);
+
+    expect(allocateIds).toHaveBeenCalledWith(originalNodes, 3);
+    expect(result!.rootId).toBe(10);
+    expect(result!.nodes.slice(3).map(({ id, parentId }) => ({ id, parentId }))).toEqual([
+      { id: 10, parentId: 3 },
+      { id: 11, parentId: 10 },
+      { id: 12, parentId: 11 },
+    ]);
+  });
+
+  it("1万段の枝も再帰エラーなしで実物のallocatorを使って複製でき、親子関係が保たれる", () => {
     const depth = 10_000;
     const originalNodes = deepFreeze(Array.from({ length: depth }, (_, index) => (
       createTestNode({

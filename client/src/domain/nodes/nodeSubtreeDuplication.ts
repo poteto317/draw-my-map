@@ -1,31 +1,12 @@
 import { SIBLING_VERTICAL_GAP } from "@/config/shapes";
 import { hasSufficientGap } from "@/domain/nodes/nodeLayoutArithmetic";
+import { collectSubtreeIds } from "@/domain/nodes/nodeTree";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 
 export type DuplicateSubtreeResult = { nodes: Node[]; rootId: number };
 
 type AllocateNodeIds = (occupied: readonly Node[], count: number) => number[];
-
-function collectSubtreeIds(nodes: readonly Node[], sourceId: number): Set<number> {
-  const childIdsByParentId = new Map<number, number[]>();
-  for (const node of nodes) {
-    if (node.parentId === null) continue;
-    const childIds = childIdsByParentId.get(node.parentId);
-    if (childIds) childIds.push(node.id);
-    else childIdsByParentId.set(node.parentId, [node.id]);
-  }
-
-  const subtreeIds = new Set([sourceId]);
-  const queue = [sourceId];
-  for (let index = 0; index < queue.length; index += 1) {
-    for (const childId of childIdsByParentId.get(queue[index]) ?? []) {
-      subtreeIds.add(childId);
-      queue.push(childId);
-    }
-  }
-  return subtreeIds;
-}
 
 // 手動配置では、マップ全体の下端からSIBLING_VERTICAL_GAPだけ空けた位置へ枝を平行移動する。
 // 非有限値になる場合や、丸めで間隔を確保できない場合はnullを返す。

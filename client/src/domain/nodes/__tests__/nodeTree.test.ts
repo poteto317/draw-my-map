@@ -43,12 +43,52 @@ describe("collectSubtreeIds", () => {
     ], 1)).toEqual(new Set([1, 2]));
   });
 
+  it("collects descendants listed before their ancestors", () => {
+    expect(collectSubtreeIds([
+      node(4, 3),
+      node(3, 2),
+      node(2, 1),
+      node(1, null),
+      node(5, null),
+    ], 1)).toEqual(new Set([1, 2, 3, 4]));
+  });
+
+  it("collects a subtree rooted at a non-root node", () => {
+    expect(collectSubtreeIds([
+      node(1, null),
+      node(2, 1),
+      node(3, 2),
+      node(4, 1),
+    ], 2)).toEqual(new Set([2, 3]));
+  });
+
   it("terminates and collects every reachable node in a malformed cycle", () => {
     expect(collectSubtreeIds([
       node(1, 3),
       node(2, 1),
       node(3, 2),
     ], 1)).toEqual(new Set([1, 2, 3]));
+  });
+
+  it("reads each node a constant number of times even when children precede parents", () => {
+    const depth = 2000;
+    // 子が親より前に並ぶ逆順の鎖。全ノードを繰り返し走査する実装では読み取りが O(n * depth) になる
+    const nodes = Array.from({ length: depth }, (_, index) => {
+      const id = depth - index;
+      return node(id, id === 1 ? null : id - 1);
+    });
+    let elementReads = 0;
+    const countedNodes = new Proxy(nodes, {
+      get(target, property, receiver) {
+        if (typeof property === "string" && /^\d+$/.test(property)) elementReads += 1;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    const ids = collectSubtreeIds(countedNodes, 1);
+
+    expect(ids.size).toBe(depth);
+    expect(elementReads).toBeLessThanOrEqual(depth * 3);
   });
 });
 

@@ -57,6 +57,12 @@ describe("createNodeIdAllocator", () => {
     expect(nodes).toEqual(before);
   });
 
+  it("生成器が同じ値を返しても一括採番のID同士は重ならない", () => {
+    const allocator = createNodeIdAllocator(() => generatorFrom([5, 5, 6]));
+
+    expect(allocator.nextAvailableIds([], 2)).toEqual([5, 6]);
+  });
+
   it("countが0なら生成器を進めず空配列を返す", () => {
     const allocator = createNodeIdAllocator(() => generatorFrom([1_000]));
 
@@ -76,19 +82,37 @@ describe("createNodeIdAllocator", () => {
     expect(nextId).toBe(1_003);
   });
 
-  it("1万件以上の既存ノードから1万個を一括採番しても既定のタイムアウト内に終わる（1件ずつ採番するO(n²)への退行を検出する）", () => {
+  it("一括採番は既存ノード配列をcountに比例して繰り返し走査しない（1件ずつ採番するO(n·count)への退行を検出する）", () => {
     let current = 0;
     const allocator = createNodeIdAllocator(() => () => {
       current += 1;
       return current;
     });
-    const nodes = Array.from({ length: 12_000 }, (_, index) => node(index * 2 + 1));
+    const nodeCount = 2_000;
+    const count = 1_000;
+    const nodes = Array.from({ length: nodeCount }, (_, index) => node(index * 2 + 1));
+    let elementReads = 0;
+    let idReads = 0;
+    const observedElements = nodes.map((target) => new Proxy(target, {
+      get(innerTarget, property, receiver) {
+        if (property === "id") idReads += 1;
+        return Reflect.get(innerTarget, property, receiver);
+      },
+    }));
+    const observedNodes = new Proxy(observedElements, {
+      get(target, property, receiver) {
+        if (typeof property === "string" && /^\d+$/.test(property)) elementReads += 1;
+        return Reflect.get(target, property, receiver);
+      },
+    });
 
-    const ids = allocator.nextAvailableIds(nodes, 10_000);
+    const ids = allocator.nextAvailableIds(observedNodes, count);
 
-    expect(ids).toHaveLength(10_000);
-    expect(new Set(ids).size).toBe(10_000);
+    expect(ids).toHaveLength(count);
+    expect(new Set(ids).size).toBe(count);
     const occupiedIds = new Set(nodes.map((existing) => existing.id));
     expect(ids.some((id) => occupiedIds.has(id))).toBe(false);
+    expect(elementReads).toBeLessThanOrEqual(nodeCount * 2);
+    expect(idReads).toBeLessThanOrEqual(nodeCount * 2);
   });
 });
