@@ -50,6 +50,7 @@ function calculateManualOffsetY(
   return offsetY;
 }
 
+// 有限性の検査は防御として残す。offsetYがhasSufficientGapを通ると、通常はここで失敗しない
 function moveVertically(node: Node, offsetY: number): number | null {
   const y = node.y + offsetY;
   if (!Number.isFinite(y) || !Number.isFinite(y + node.height)) return null;
@@ -66,13 +67,14 @@ export function duplicateNodeSubtree(
 
   const subtreeIds = collectSubtreeIds(nodes, sourceId);
   const sources = nodes.filter((node) => subtreeIds.has(node.id));
+  // 配置できない複製で採番しないよう、手動配置の可否は採番より先に確かめる
+  const offsetY = mode === "manual" ? calculateManualOffsetY(nodes, sources) : 0;
+  if (offsetY === null) return null;
+
   const ids = allocateIds(nodes, sources.length);
   const copiedIdBySourceId = new Map(
     sources.map((node, index) => [node.id, ids[index]]),
   );
-
-  const offsetY = mode === "manual" ? calculateManualOffsetY(nodes, sources) : 0;
-  if (offsetY === null) return null;
 
   const copies: Node[] = [];
   for (const source of sources) {
