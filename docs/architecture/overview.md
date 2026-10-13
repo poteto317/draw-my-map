@@ -117,7 +117,7 @@ client/src/
 - **責務**: ユーザーに対するプレゼンテーション、DOM イベントの捕捉、および Pixi.js Canvas ステージと DOM オーバーレイの統合。
 - **構成モジュール**:
   - **レイアウト UI (`src/components/layout/` 全 14 ファイル)**:
-    - `AppHeader.tsx`: タイトル、レイアウトモード切替、操作ヒント、重要度・解像度フィルタ切替、元に戻す／やり直すボタン、JSON/画像エクスポートボタン、操作通知バーを統合するヘッダー。
+    - `AppHeader.tsx`: タイトル、レイアウトモード切替、操作ヒント、重要度・解像度フィルタ切替、元に戻す／やり直すボタン、枝を複製ボタン、JSON/画像エクスポートボタン、操作通知バーを統合するヘッダー。
     - `AppWorkspace.tsx`: ヘッダー下の 2 カラム（メインキャンバス領域 + 右サイドパネル）レイアウト。
     - `LayoutModeSelector.tsx`: `手動配置` / `自動配置` 切り替えボタングループ（`role="group"`, `aria-label="レイアウトモード"`）。
     - `MapHistoryControls.tsx`: ヘッダーの `元に戻す` / `やり直す` ボタン（履歴の有無に応じて `disabled`）。
@@ -186,10 +186,10 @@ client/src/
 - **構成サブパッケージ（全 43 ファイル）**:
   - `domain/nodes/` (23 ファイル):
     - `nodeAutoLayout.ts`, `nodeLayoutForest.ts`, `nodeLayoutForestRelations.ts`, `nodeLayoutForestTraversal.ts`, `nodeLayoutGeometry.ts`, `nodeLayoutMetrics.ts`, `nodeLayoutPlacement.ts`, `nodeLayoutSpacing.ts`, `nodeLayoutArithmetic.ts`: 木構造・森構造の幾何配置計算（親子関係とルート抽出 `buildNodeForestRelations`、非再帰トラバーサルとサイクル検出 `traverseNodeForest`、フォレストインデックス化 `indexNodeForest`、座標展開 `calculateNodePositions`、深さ別列 X 座標とサブツリー垂直スパン計測 `calculateNodeLayoutMetrics`、双方向垂直中央揃え配置 `placeNodeForest`、数値オーバーフロー・浮動小数点 ULP 精度劣化防御および最小間隔判定 `checkedAdd`/`checkedSubtract`/`checkedMultiply`/`calculateRoundingTolerance`/`hasSufficientGap`、垂直間隔検証 `hasValidVerticalSpacing`）。
-    - `nodeTree.ts`: ノード親子付け替え（`connectNodeTree`）、**自己接続・存在しないノード・循環参照検出（`canConnectNodes`）**、部分木 ID 収集（`collectSubtreeIds`）、部分木連動移動（`moveNodeSubtree`）。
+    - `nodeTree.ts`: ノード親子付け替え（`connectNodeTree`）、**自己接続・存在しないノード・循環参照検出（`canConnectNodes`）**、部分木 ID 収集（`collectSubtreeIds`。親子の隣接表と queue による非再帰・線形の走査で、親子が循環した入力でも停止する）、部分木連動移動（`moveNodeSubtree`）。
     - `nodePlacement.ts`: 新規ルートノード（`createRootNode`）、子ノード（`createChildNode`）、兄弟ノード（`createSiblingNode`）の初期座標算出。
     - `nodeIdGenerator.ts`, `nodeIdAllocator.ts`: 単調増加 ID 生成（`createMonotonicIdGenerator`）および既存ノード ID との衝突を回避する空きノード ID 採番（`createNodeIdAllocator`。1 件ずつの `nextAvailableId` と、複製用に占有集合を 1 回だけ作る一括採番 `nextAvailableIds`）。
-    - `nodeSubtreeDuplication.ts`: 選択ノードと全子孫の複製候補を生成する純粋関数（`duplicateNodeSubtree`）。ID 対応表による親子の付け替え、手動配置での真下への平行移動（`SIBLING_VERTICAL_GAP` の間隔確保）、非有限値・丸めによる配置不能時の `null` 返却を担う。再帰を使わず、隣接表と queue で走査する。
+    - `nodeSubtreeDuplication.ts`: 選択ノードと全子孫の複製候補を生成する純粋関数（`duplicateNodeSubtree`）。ID 対応表による親子の付け替え、手動配置での真下への平行移動（`SIBLING_VERTICAL_GAP` の間隔確保）、非有限値・丸めによる配置不能時の `null` 返却を担う。部分木の走査は `nodeTree.collectSubtreeIds` に委ね、ID は `NodeIdAllocator.nextAvailableIds` で一括採番する。
     - `nodeDisplayLabel.ts`: 空文字ラベル時に `FALLBACK_NODE_LABEL`（`"新しいノード"`）を返す表示用ラベル解決（`getNodeDisplayLabel`）。
     - `nodeIllustration.ts`, `nodeIllustrationUpdate.ts`: イラスト描画矩形（`getNodeIllustrationRect`）、ラベル中心Yオフセット（`getNodeLabelCenterOffset`）、イラスト付きノードの最小高さ保証（`getIllustratedNodeMinHeight`）およびイラストの紐付け・解除更新（`replaceNodeIllustration`, `clearNodeIllustration`）。
     - `nodeImportance.ts`, `nodeImportanceUpdate.ts`: 重要度（`"high" | "medium" | "low"`, デフォルト `"medium"`）のドメインルールと更新（`replaceNodeImportance`）。
@@ -503,7 +503,7 @@ sequenceDiagram
 
 1. **`useNodes`**:
    - アプリケーションの基本データ構造であるノード配列（`Node[]`）、現在選択中のノード ID（`selectedNodeId`）、現在のレイアウトモード（`manual` / `auto`）を保持。
-   - `useNodeLayoutState` を内部で利用し、非構造的変更（ラベル・重要度）と構造的変更（追加・削除・親子接続）を適切に分離して更新。
+   - `useNodeLayoutState` を内部で利用し、非構造的変更（ラベル・重要度）と構造的変更（追加・削除・親子接続・枝の複製）を適切に分離して更新。
    - `useNodeLayoutState` 経由で `useMapHistory` を保持し、ノード編集・移動・レイアウトモード変更の履歴（最大100操作）と `undo` / `redo` / `canUndo` / `canRedo` を `useNodes` が公開。履歴の呼び出し元は `useNodeLayoutState` で、画面側（ヘッダーのボタンとショートカット）は公開された関数を呼ぶだけ。
    - `documentRevision` を保持し、成功した Undo / Redo と `replaceMap` で増加させる。
 2. **`useNodeLayoutState`**:
@@ -518,6 +518,8 @@ sequenceDiagram
 5. **`useIllustrationGeneration`**:
    - ノードごとのイラスト生成状態（`idle` | `generating` | `succeeded` | `failed`）を管理。
    - 生成中のキャンセル用 `AbortController` を保持し、マップ置換（リセット）時や Undo / Redo の成功時（`documentRevision` の増加時）には進行中のリクエストと既存のプレビューを失効させる。
+6. **`useNodeDuplicationAction`**:
+   - 選択ノードの枝の複製と、結果の通知を保持。`documentRevision` が変わると古い通知を隠す。
 
 #### 編集履歴の所有とリビジョン
 
@@ -525,7 +527,7 @@ sequenceDiagram
 - **ドラッグのグループ**: Pixi 側はドラッグの閾値を越えた最初の有効な移動を通知する直前に `onBeginNodeMove` を呼んで履歴グループのリースを受け取り（クリックだけでは履歴を開始しない）、移動のたびに有効かを確認する。ドラッグ全体が1操作になり、Undo / Redo / 別編集 / マップ置換でリースは失効し、遅れて届いた古い移動通知は無視される。
 - **二種類のリビジョン**:
   - `resetRevision`: JSON 読み込みと初回復元による**マップ置換**で増加する。ステージの viewport 初期化、解像度フィルターのリセットなど、マップを開き直したときの初期化に使う。
-  - `documentRevision`: マップ置換に加えて、**成功した Undo / Redo** でも増加する。編集中の状態・ジェスチャー・コンテキストメニューを閉じ、進行中のイラスト生成と既存プレビューを失効させる。viewport と表示フィルターは維持する。
+  - `documentRevision`: マップ置換に加えて、**成功した Undo / Redo** でも増加する。編集中の状態・ジェスチャー・コンテキストメニューを閉じ、進行中のイラスト生成と既存プレビュー、枝の複製の通知を失効させる。viewport と表示フィルターは維持する。
 - **保存**: 復元後のマップは通常の 300ms デバウンス自動保存に流れる。履歴は保存しない。
 
 #### 枝の複製の流れ
@@ -660,5 +662,5 @@ cd client && npm run verify
 1. `npm run tailwind:scan`: Tailwind CSS v4 のクラススキャン検証。
 2. `npm run lint`: ESLint による静的構文解析とルールチェック。
 3. `npm run typecheck`: TypeScript コンパイラ（`tsc --noEmit`）による厳格な型整合性チェック。
-4. `npm test -- --runInBand`: Jest による全ユニット・統合テストの実行（約 140 テストファイル、数千アサーション）。
+4. `npm test -- --runInBand`: Jest による全ユニット・統合テストの実行（約 160 テストファイル、数千アサーション）。
 5. `npm run build`: Next.js 本番ビルドの成否確認（SSR・バンドル最適化エラーの早期検出）。
