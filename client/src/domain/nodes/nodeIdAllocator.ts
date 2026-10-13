@@ -6,6 +6,7 @@ type NodeIdGeneratorFactory = () => NodeIdGenerator;
 
 export type NodeIdAllocator = {
   nextAvailableId: (nodes: readonly Node[]) => number;
+  nextAvailableIds: (nodes: readonly Node[], count: number) => number[];
   reset: () => void;
 };
 
@@ -24,6 +25,15 @@ export function createNodeIdAllocator(
       let id = generateNodeId();
       while (occupiedIds.has(id)) id = generateNodeId();
       return id;
+    },
+    nextAvailableIds(nodes, count) {
+      const occupiedIds = new Set(nodes.map((node) => node.id));
+      const ids: number[] = [];
+      while (ids.length < count) {
+        const id = generateNodeId();
+        if (!occupiedIds.has(id)) ids.push(id);
+      }
+      return ids;
     },
     reset() {
       generateNodeId = createGenerator();
