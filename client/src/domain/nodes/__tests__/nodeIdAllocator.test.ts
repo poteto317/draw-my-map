@@ -76,7 +76,7 @@ describe("createNodeIdAllocator", () => {
     expect(nextId).toBe(1_003);
   });
 
-  it("1万件以上の既存ノードから1万個を一括採番しても線形時間で終わる", () => {
+  it("1万件以上の既存ノードから1万個を一括採番しても既定のタイムアウト内に終わる（1件ずつ採番するO(n²)への退行を検出する）", () => {
     let current = 0;
     const allocator = createNodeIdAllocator(() => () => {
       current += 1;

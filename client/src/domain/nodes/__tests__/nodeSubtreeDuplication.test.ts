@@ -164,12 +164,12 @@ describe("duplicateNodeSubtree", () => {
       createTestNode({ id: 1, y: Number.MAX_VALUE, height: 0 }),
       createTestNode({ id: 2, parentId: 1, x: 200, y: -Number.MAX_VALUE }),
     ]],
-    ["複製後の座標が非有限値になる", [
+    ["子孫の座標が巨大で丸めにより40の間隔を確保できない", [
       createTestNode({ id: 1, y: 0, height: 0 }),
       createTestNode({ id: 2, parentId: 1, x: 200, y: 0, height: 0 }),
       createTestNode({ id: 3, parentId: 2, x: 400, y: Number.MAX_VALUE * 0.6, height: 0 }),
     ]],
-    ["複製後の下端が非有限値になる", [
+    ["高さが巨大で丸めにより40の間隔を確保できない", [
       createTestNode({ id: 1, y: 0, height: 0 }),
       createTestNode({ id: 2, parentId: 1, x: 200, y: 0, height: Number.MAX_VALUE * 0.6 }),
     ]],
@@ -185,6 +185,17 @@ describe("duplicateNodeSubtree", () => {
       .toBeNull();
     expect(duplicateNodeSubtree(originalNodes, sourceId, "auto", idsFrom([10, 11])))
       .not.toBeNull();
+  });
+
+  it("手動配置で配置できないときはIDを採番しない", () => {
+    const originalNodes = deepFreeze([
+      createTestNode({ id: 1, y: 2 ** 60, height: 256 }),
+      createTestNode({ id: 2, parentId: 1, x: 200, y: 0 }),
+    ]);
+    const allocateIds = idsFrom([10, 11]);
+
+    expect(duplicateNodeSubtree(originalNodes, 2, "manual", allocateIds)).toBeNull();
+    expect(allocateIds).not.toHaveBeenCalled();
   });
 
   it("1万段の枝も再帰エラーなしで実物のallocatorを使って複製できる", () => {
