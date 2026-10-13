@@ -8,6 +8,7 @@ import { NodeImportanceSelector } from "@/components/layout/NodeImportanceSelect
 import { ResolutionFilterSelector } from "@/components/layout/ResolutionFilterSelector";
 import { MapImageExportControls } from "@/components/layout/MapImageExportControls";
 import { MapHistoryControls } from "@/components/layout/MapHistoryControls";
+import { NodeDuplicateControl } from "@/components/layout/NodeDuplicateControl";
 import { MapPersistenceControls } from "@/components/layout/MapPersistenceControls";
 import { MapOperationNotice } from "@/components/layout/MapOperationNotice";
 import { IllustrationPanel } from "@/components/layout/IllustrationPanel";
@@ -17,6 +18,7 @@ import { useIllustrationGeneration } from "@/hooks/useIllustrationGeneration";
 import { useMapHistoryShortcuts } from "@/components/map/useMapHistoryShortcuts";
 import { useMapImageExport } from "@/hooks/useMapImageExport";
 import { useMapPersistence } from "@/hooks/useMapPersistence";
+import { useNodeDuplicationAction } from "@/hooks/useNodeDuplicationAction";
 import { useResettingMapReplacement } from "@/hooks/useResettingMapReplacement";
 import { useMapResolutionFilter } from "@/hooks/useMapResolutionFilter";
 
@@ -33,6 +35,7 @@ export default function Home() {
     updateNodeImportance,
     moveNode,
     connectNodes,
+    duplicateSubtree,
     deleteNode,
     setLayoutMode,
     replaceMap,
@@ -61,6 +64,11 @@ export default function Home() {
   });
   const imageExport = useMapImageExport({ nodes });
   const { generation, generateIllustration, dismissGeneration } = useIllustrationGeneration(nodes, documentRevision);
+  const duplication = useNodeDuplicationAction({
+    selectedNodeId: selectedNode?.id ?? null,
+    documentRevision,
+    duplicateSubtree,
+  });
   useMapHistoryShortcuts({ undo, redo });
 
   return (
@@ -92,6 +100,10 @@ export default function Home() {
               onUndo={undo}
               onRedo={redo}
             />
+            <NodeDuplicateControl
+              disabled={selectedNode === null}
+              onDuplicate={duplication.duplicateSelected}
+            />
             <MapPersistenceControls
               onExport={persistence.exportJson}
               onImport={persistence.importJsonFile}
@@ -103,7 +115,9 @@ export default function Home() {
             />
           </>
         )}
-        operationNotices={persistence.notice === null && imageExport.notice === null
+        operationNotices={persistence.notice === null
+          && imageExport.notice === null
+          && duplication.notice === null
           ? null
           : (
             <>
@@ -112,6 +126,9 @@ export default function Home() {
               )}
               {imageExport.notice !== null && (
                 <MapOperationNotice notice={imageExport.notice} />
+              )}
+              {duplication.notice !== null && (
+                <MapOperationNotice notice={duplication.notice} />
               )}
             </>
           )}
