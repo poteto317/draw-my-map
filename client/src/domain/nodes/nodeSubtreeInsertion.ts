@@ -5,7 +5,7 @@ import type { NodeLayoutMode } from "@/types/nodeLayout";
 
 export type SubtreeInsertionResult = { nodes: Node[]; rootId: number };
 
-// duplicate: 既存の複製と同じ検査だけを行う。paste: 外部から来た枝なので右端・下端などの有限性も検査する
+// duplicate: 既存の複製と同じ検査だけを行う。paste: 手動配置では右端（x+width）とxの有限性も追加で検査する（下端はduplicateと共通で検査する）
 export type SubtreeGeometryPolicy = "duplicate" | "paste";
 
 export type AllocateNodeIds = (occupied: readonly Node[], count: number) => number[];
