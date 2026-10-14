@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { useNodes } from "@/hooks/useNodes";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { AppWorkspace } from "@/components/layout/AppWorkspace";
@@ -21,10 +21,7 @@ import { useMapPersistence } from "@/hooks/useMapPersistence";
 import { useNodeDuplicationAction } from "@/hooks/useNodeDuplicationAction";
 import { useResettingMapReplacement } from "@/hooks/useResettingMapReplacement";
 import { useMapResolutionFilter } from "@/hooks/useMapResolutionFilter";
-import type { OperationNotice } from "@/types/operationNotice";
-
-// 通知を出した時点の documentRevision を添えて持つ（マップの置き換え・Undo/Redo の後に、古い通知を見分けるため）
-type StoredClipboardNotice = { notice: OperationNotice; revision: number };
+import { useRevisionScopedNotice } from "@/hooks/useRevisionScopedNotice";
 
 const CLIPBOARD_OPERATION_HINT = "枝をコピー: Ctrl/Cmd+C ／ 貼り付け: Ctrl/Cmd+V（新しいルートとして追加）";
 
@@ -77,13 +74,10 @@ export default function Home() {
     documentRevision,
     duplicateSubtree,
   });
-  const [storedClipboardNotice, setStoredClipboardNotice] = useState<StoredClipboardNotice | null>(null);
-  const clipboardNotice = storedClipboardNotice !== null && storedClipboardNotice.revision === documentRevision
-    ? storedClipboardNotice.notice
-    : null;
-  const publishClipboardNotice = useCallback((notice: OperationNotice) => {
-    setStoredClipboardNotice({ notice, revision: documentRevision });
-  }, [documentRevision]);
+  const {
+    notice: clipboardNotice,
+    publishNotice: publishClipboardNotice,
+  } = useRevisionScopedNotice(documentRevision);
   useMapHistoryShortcuts({ undo, redo });
 
   return (

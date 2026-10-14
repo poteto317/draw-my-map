@@ -1,4 +1,5 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
+import { useRevisionScopedNotice } from "@/hooks/useRevisionScopedNotice";
 import type { OperationNotice } from "@/types/operationNotice";
 
 type UseNodeDuplicationActionOptions = {
@@ -6,9 +7,6 @@ type UseNodeDuplicationActionOptions = {
   documentRevision: number;
   duplicateSubtree: (sourceId: number) => number | null;
 };
-
-// 通知を出した時点の documentRevision を添えて持つ（マップの置き換え・Undo/Redo の後に、古い通知を見分けるため）
-type StoredNotice = { notice: OperationNotice; revision: number };
 
 const SUCCESS_NOTICE: OperationNotice = {
   kind: "status",
@@ -26,19 +24,13 @@ export function useNodeDuplicationAction({
   documentRevision,
   duplicateSubtree,
 }: UseNodeDuplicationActionOptions) {
-  const [stored, setStored] = useState<StoredNotice | null>(null);
-
-  // 保存時の revision が現在と違う通知は古いので、描画時に隠す
-  const notice = stored !== null && stored.revision === documentRevision ? stored.notice : null;
+  const { notice, publishNotice } = useRevisionScopedNotice(documentRevision);
 
   const duplicateSelected = useCallback(() => {
     if (selectedNodeId === null) return;
     const copiedRootId = duplicateSubtree(selectedNodeId);
-    setStored({
-      notice: copiedRootId === null ? FAILURE_NOTICE : SUCCESS_NOTICE,
-      revision: documentRevision,
-    });
-  }, [selectedNodeId, documentRevision, duplicateSubtree]);
+    publishNotice(copiedRootId === null ? FAILURE_NOTICE : SUCCESS_NOTICE);
+  }, [selectedNodeId, duplicateSubtree, publishNotice]);
 
   return { duplicateSelected, notice };
 }

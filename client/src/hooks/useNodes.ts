@@ -14,7 +14,11 @@ import {
   type NodeIdAllocator,
 } from "@/domain/nodes/nodeIdAllocator";
 import { duplicateNodeSubtree } from "@/domain/nodes/nodeSubtreeDuplication";
-import { insertNodeSubtree } from "@/domain/nodes/nodeSubtreeInsertion";
+import {
+  type AllocateNodeIds,
+  insertNodeSubtree,
+  type SubtreeInsertionResult,
+} from "@/domain/nodes/nodeSubtreeInsertion";
 import {
   encodeSubtreeClipboard,
   type SubtreeClipboardData,
@@ -193,54 +197,48 @@ export function useNodes(): UseNodesReturn {
     return true;
   }, [applyTreeChange]);
 
+  // 枝を挿入する1回の構造変更を適用し、成功時は新しい根を選択してそのIDを返す。
   // 採番済みで確定しなかったIDは欠番のままにし、allocatorを巻き戻さない
-  const duplicateSubtree = useCallback((sourceId: number) => {
-    let copiedRootId: number | null = null;
+  const applySubtreeInsertion = useCallback((
+    insert: (
+      currentNodes: readonly Node[],
+      mode: NodeLayoutMode,
+      allocateIds: AllocateNodeIds,
+    ) => SubtreeInsertionResult | null,
+  ) => {
+    let insertedRootId: number | null = null;
     const applied = applyTreeChange((currentNodes, mode) => {
-      const duplicated = duplicateNodeSubtree(
+      const inserted = insert(
         currentNodes,
-        sourceId,
         mode,
         (occupied, count) => nodeIdAllocatorRef.current!.nextAvailableIds(occupied, count),
       );
-      if (!duplicated) return null;
+      if (!inserted) return null;
 
-      copiedRootId = duplicated.rootId;
-      return duplicated.nodes;
+      insertedRootId = inserted.rootId;
+      return inserted.nodes;
     });
-    if (!applied || copiedRootId === null) return null;
+    if (!applied || insertedRootId === null) return null;
 
-    setSelectedNodeId(copiedRootId);
-    return copiedRootId;
+    setSelectedNodeId(insertedRootId);
+    return insertedRootId;
   }, [applyTreeChange]);
+
+  const duplicateSubtree = useCallback((sourceId: number) => (
+    applySubtreeInsertion((currentNodes, mode, allocateIds) => (
+      duplicateNodeSubtree(currentNodes, sourceId, mode, allocateIds)
+    ))
+  ), [applySubtreeInsertion]);
 
   const copySubtree = useCallback((sourceId: number) => (
     encodeSubtreeClipboard(getCurrentState().nodes, sourceId)
   ), [getCurrentState]);
 
-  // 採番済みで確定しなかったIDは欠番のままにし、allocatorを巻き戻さない
-  const pasteSubtree = useCallback((data: SubtreeClipboardData) => {
-    let pastedRootId: number | null = null;
-    const applied = applyTreeChange((currentNodes, mode) => {
-      const inserted = insertNodeSubtree(
-        currentNodes,
-        data.nodes,
-        data.rootId,
-        null,
-        mode,
-        (occupied, count) => nodeIdAllocatorRef.current!.nextAvailableIds(occupied, count),
-        "paste",
-      );
-      if (!inserted) return null;
-
-      pastedRootId = inserted.rootId;
-      return inserted.nodes;
-    });
-    if (!applied || pastedRootId === null) return null;
-
-    setSelectedNodeId(pastedRootId);
-    return pastedRootId;
-  }, [applyTreeChange]);
+  const pasteSubtree = useCallback((data: SubtreeClipboardData) => (
+    applySubtreeInsertion((currentNodes, mode, allocateIds) => (
+      insertNodeSubtree(currentNodes, data.nodes, data.rootId, null, mode, allocateIds, "paste")
+    ))
+  ), [applySubtreeInsertion]);
 
   const deleteNode = useCallback((id: number) => {
     let subtreeIds = new Set<number>();
