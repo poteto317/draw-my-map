@@ -70,12 +70,12 @@ DOM範囲選択をコピーしたい場合を優先するため、マップ操�
 
 ## 通知・文言
 
-責務の境界: MapStageが呼ぶhookは、対象判定（編集可能要素、DOM選択範囲、ラベル編集中、ジェスチャー中、defaultPrevented）、clipboardDataの読み書き、codecによる検証だけを担う。コピーのスナップショット生成と貼り付けの挿入はMapStageの必須props `onCopySubtree(sourceId): SubtreeClipboardResult<string>`・`onPasteSubtree(data): number | null`（Homeで`useNodes`の`copySubtree`・`pasteSubtree`を渡す）を呼び、結果の通知は必須props `onClipboardNotice(notice)`でHomeへ返す。通知のstateとdocumentRevisionによる失効はHomeが`{ notice, revision }`として持つ（`useNodeDuplicationAction`と同じ方式）。
+責務の境界: MapStageが呼ぶhookは、対象判定（編集可能要素、DOM選択範囲、ラベル編集中、ジェスチャー中、defaultPrevented）、clipboardDataの読み書き、codecによる検証だけを担う。コピーのスナップショット生成と貼り付けの挿入はMapStageの必須props `onCopySubtree(sourceId): SubtreeClipboardResult<string>`・`onPasteSubtree(data): number | null`（Homeで`useNodes`の`copySubtree`・`pasteSubtree`を渡す）を呼び、結果の通知は必須props `onClipboardNotice(notice)`でHomeへ返す。通知のstateとdocumentRevisionによる失効はHomeが持つ。実装では、`{ notice, revision }`として保持し古い通知を隠す処理を共通hook `useRevisionScopedNotice`に切り出し、Homeのコピー／貼り付けの通知と`useNodeDuplicationAction`の複製の通知の両方で使う。
 
 既存MapOperationNoticeへ通知を追加する。次の対象コピー／貼り付け要求で通知を更新し、documentRevision変更で隠す。対象外イベントは通知を変更しない。コピー／貼り付けの通知は、枝の複製の通知とは独立した枠として表示し、互いに消さない（永続化・画像出力・複製の通知と同じ慣行）。
 
 - コピー成功: 「枝をコピーしました。」
-- 貼り付け成功: 「枝を貼り付けました。見えない場合は表示を『すべて』に切り替えてください。」
+- 貼り付け成功: 「枝を貼り付けました。Fキーで選択ノードへ移動できます。見えない場合は表示を『すべて』に切り替えてください。」
 - コピー失敗: 「枝をコピーできませんでした。」
 - 非対応／不正な貼り付け: 「貼り付ける枝データが無効です。」
 - 上限超過（両操作）: 「枝データが大きすぎます（10,000ノード・5,000,000文字以内）。」
@@ -98,5 +98,6 @@ codecのdecode・単一ルート判定と挿入は、上限10,000ノードに対
 - Ctrl/Cmd+Vの押し続けによる連続貼り付けは許す（各回がUndoの1操作）。
 - コピー／貼り付けの通知は複製の通知と独立して表示する。
 - manualの検査を採番より前に済ませ、一括採番を1回だけ行う。
+- 貼り付け成功の通知にFキーの案内を追加した（設計レビュー後、利用者の判断。手動配置では枝が画面外に置かれ表示位置も動かないため。枝の複製の通知と揃える）。
 
 ClipboardEventでの同期setData/getDataとpreventDefaultは、[MDN copyイベント](https://developer.mozilla.org/en-US/docs/Web/API/Element/copy_event)・[MDN pasteイベント](https://developer.mozilla.org/en-US/docs/Web/API/Element/paste_event)に基づく。

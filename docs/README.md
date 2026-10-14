@@ -30,6 +30,7 @@ Draw My Map の設計・仕様・環境構築・テスト・開発運用に関�
   - `MapDocument` JSON スキーマ（Version 1, 2, 3 の詳細定義と差分）。
   - 後方互換性と正規化マイグレーション仕様（旧バージョンからの安全な復元）。
   - `localStorage` 保存仕様（保存キー、更新トリガー、クォータ超過時のフォールバック）。
+  - 枝のクリップボード形式（5.6）。
 
 - **[イラスト生成 API 仕様](specifications/api.md)** (`docs/specifications/api.md`)
   - Route Handler: `POST /api/illustrations` のリクエスト / レスポンス JSON スキーマ。
