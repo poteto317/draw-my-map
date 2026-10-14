@@ -15,6 +15,8 @@ export function AutoLayoutMapStageHarness() {
     beginMoveHistory,
     connectNodes,
     deleteNode,
+    copySubtree,
+    pasteSubtree,
     setLayoutMode,
     documentRevision,
   } = useNodes();
@@ -43,6 +45,9 @@ export function AutoLayoutMapStageHarness() {
         onBeginNodeMove={beginMoveHistory}
         onConnectNodes={connectNodes}
         onDeleteNode={deleteNode}
+        onCopySubtree={copySubtree}
+        onPasteSubtree={pasteSubtree}
+        onClipboardNotice={() => {}}
         documentRevision={documentRevision}
       />
       <output data-testid="node-state">{JSON.stringify(nodes)}</output>

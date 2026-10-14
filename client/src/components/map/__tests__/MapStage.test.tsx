@@ -46,6 +46,9 @@ const defaultProps = {
   documentRevision: 0,
   onConnectNodes: jest.fn(),
   onDeleteNode: jest.fn(),
+  onCopySubtree: jest.fn(() => ({ ok: false, reason: "invalid" }) as const),
+  onPasteSubtree: jest.fn(() => null),
+  onClipboardNotice: jest.fn(),
 };
 
 const sampleNodes: Node[] = [
@@ -66,6 +69,8 @@ function KeyboardCreationHarness({ initiallySelected = true }: { initiallySelect
     beginMoveHistory,
     connectNodes,
     deleteNode,
+    copySubtree,
+    pasteSubtree,
     documentRevision,
   } = useNodes();
   const initializedRef = useRef(false);
@@ -91,6 +96,9 @@ function KeyboardCreationHarness({ initiallySelected = true }: { initiallySelect
         onBeginNodeMove={beginMoveHistory}
         onConnectNodes={connectNodes}
         onDeleteNode={deleteNode}
+        onCopySubtree={copySubtree}
+        onPasteSubtree={pasteSubtree}
+        onClipboardNotice={() => {}}
         documentRevision={documentRevision}
       />
       <output data-testid="node-state">{JSON.stringify(nodes)}</output>
@@ -112,6 +120,8 @@ function MouseConnectionHarness() {
     beginMoveHistory,
     connectNodes,
     deleteNode,
+    copySubtree,
+    pasteSubtree,
     documentRevision,
   } = useNodes();
   const initializedRef = useRef(false);
@@ -137,6 +147,9 @@ function MouseConnectionHarness() {
         onBeginNodeMove={beginMoveHistory}
         onConnectNodes={connectNodes}
         onDeleteNode={deleteNode}
+        onCopySubtree={copySubtree}
+        onPasteSubtree={pasteSubtree}
+        onClipboardNotice={() => {}}
         documentRevision={documentRevision}
       />
       <output data-testid="node-state">{JSON.stringify(nodes)}</output>
@@ -158,6 +171,8 @@ function SubtreeMoveHarness() {
     beginMoveHistory,
     connectNodes,
     deleteNode,
+    copySubtree,
+    pasteSubtree,
     documentRevision,
   } = useNodes();
   const initializedRef = useRef(false);
@@ -184,6 +199,9 @@ function SubtreeMoveHarness() {
         onBeginNodeMove={beginMoveHistory}
         onConnectNodes={connectNodes}
         onDeleteNode={deleteNode}
+        onCopySubtree={copySubtree}
+        onPasteSubtree={pasteSubtree}
+        onClipboardNotice={() => {}}
         documentRevision={documentRevision}
       />
       <output data-testid="node-state">{JSON.stringify(nodes)}</output>

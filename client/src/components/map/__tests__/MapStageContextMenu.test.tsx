@@ -33,6 +33,9 @@ const defaultProps = {
   documentRevision: 0,
   onConnectNodes: jest.fn(),
   onDeleteNode: jest.fn(),
+  onCopySubtree: jest.fn(() => ({ ok: false, reason: "invalid" }) as const),
+  onPasteSubtree: jest.fn(() => null),
+  onClipboardNotice: jest.fn(),
 };
 
 const sampleNodes: Node[] = [

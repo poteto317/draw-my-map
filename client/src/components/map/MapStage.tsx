@@ -15,6 +15,7 @@ import { resolveMapDoubleClickAction } from "@/components/map/mapDoubleClickActi
 import { usePixiApplication } from "@/components/map/pixi/usePixiApplication";
 import { useHiddenNodeInteractionReset } from "@/components/map/useHiddenNodeInteractionReset";
 import { useDocumentRestoreInteractionReset } from "@/components/map/useDocumentRestoreInteractionReset";
+import { useMapClipboardEvents } from "@/components/map/useMapClipboardEvents";
 import { useMapStageInteractions } from "@/components/map/useMapStageInteractions";
 import { useMapVisibilityTransition } from "@/components/map/useMapVisibilityTransition";
 import { useMapStageReset } from "@/components/map/useMapStageReset";
@@ -27,7 +28,12 @@ import { useRenderedMapScene } from "@/components/map/useRenderedMapScene";
 import { useIllustrationTextures } from "@/components/map/useIllustrationTextures";
 import { useViewportScaleNotification } from "@/components/map/useViewportScaleNotification";
 import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
+import type {
+  SubtreeClipboardData,
+  SubtreeClipboardResult,
+} from "@/domain/clipboard/subtreeClipboardCodec";
 import type { Node } from "@/types/node";
+import type { OperationNotice } from "@/types/operationNotice";
 
 type MapStageProps = {
   nodes: Node[];
@@ -47,6 +53,10 @@ type MapStageProps = {
   onBeginNodeMove: () => MapHistoryGroupLease;
   onConnectNodes: (parentId: number, childId: number) => void;
   onDeleteNode: (id: number) => void;
+  // copy/pasteイベントで呼ぶ。枝データの生成と挿入はHome側、結果の通知もHomeへ返す
+  onCopySubtree: (sourceId: number) => SubtreeClipboardResult<string>;
+  onPasteSubtree: (data: SubtreeClipboardData) => number | null;
+  onClipboardNotice: (notice: OperationNotice) => void;
   onGenerateIllustration?: (nodeId: number) => void;
 };
 
@@ -66,6 +76,9 @@ export function MapStage({
   onBeginNodeMove,
   onConnectNodes,
   onDeleteNode,
+  onCopySubtree,
+  onPasteSubtree,
+  onClipboardNotice,
   onGenerateIllustration,
 }: MapStageProps) {
   const effectiveVisibleNodeIds = useMemo(
@@ -181,6 +194,15 @@ export function MapStage({
     onAddSiblingNode,
     onDeleteNode,
     onStartEditing: editing.startEditing,
+  });
+
+  useMapClipboardEvents({
+    selectedNodeId,
+    isEditing: editing.editingNodeId !== null,
+    hasActiveGesture,
+    copySubtree: onCopySubtree,
+    pasteSubtree: onPasteSubtree,
+    publishNotice: onClipboardNotice,
   });
 
   const handleDoubleClick = (event: MouseEvent<HTMLDivElement>) => {

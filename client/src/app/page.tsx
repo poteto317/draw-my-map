@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useNodes } from "@/hooks/useNodes";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { AppWorkspace } from "@/components/layout/AppWorkspace";
@@ -21,6 +21,12 @@ import { useMapPersistence } from "@/hooks/useMapPersistence";
 import { useNodeDuplicationAction } from "@/hooks/useNodeDuplicationAction";
 import { useResettingMapReplacement } from "@/hooks/useResettingMapReplacement";
 import { useMapResolutionFilter } from "@/hooks/useMapResolutionFilter";
+import type { OperationNotice } from "@/types/operationNotice";
+
+// 通知を出した時点の documentRevision を添えて持つ（マップの置き換え・Undo/Redo の後に、古い通知を見分けるため）
+type StoredClipboardNotice = { notice: OperationNotice; revision: number };
+
+const CLIPBOARD_OPERATION_HINT = "枝をコピー: Ctrl/Cmd+C ／ 貼り付け: Ctrl/Cmd+V（新しいルートとして追加）";
 
 export default function Home() {
   const {
@@ -36,6 +42,8 @@ export default function Home() {
     moveNode,
     connectNodes,
     duplicateSubtree,
+    copySubtree,
+    pasteSubtree,
     deleteNode,
     setLayoutMode,
     replaceMap,
@@ -69,6 +77,13 @@ export default function Home() {
     documentRevision,
     duplicateSubtree,
   });
+  const [storedClipboardNotice, setStoredClipboardNotice] = useState<StoredClipboardNotice | null>(null);
+  const clipboardNotice = storedClipboardNotice !== null && storedClipboardNotice.revision === documentRevision
+    ? storedClipboardNotice.notice
+    : null;
+  const publishClipboardNotice = useCallback((notice: OperationNotice) => {
+    setStoredClipboardNotice({ notice, revision: documentRevision });
+  }, [documentRevision]);
   useMapHistoryShortcuts({ undo, redo });
 
   return (
@@ -104,6 +119,9 @@ export default function Home() {
               disabled={selectedNode === null}
               onDuplicate={duplication.duplicateSelected}
             />
+            <span className="text-sm text-zinc-600 dark:text-zinc-400">
+              {CLIPBOARD_OPERATION_HINT}
+            </span>
             <MapPersistenceControls
               onExport={persistence.exportJson}
               onImport={persistence.importJsonFile}
@@ -118,6 +136,7 @@ export default function Home() {
         operationNotices={persistence.notice === null
           && imageExport.notice === null
           && duplication.notice === null
+          && clipboardNotice === null
           ? null
           : (
             <>
@@ -129,6 +148,9 @@ export default function Home() {
               )}
               {duplication.notice !== null && (
                 <MapOperationNotice notice={duplication.notice} />
+              )}
+              {clipboardNotice !== null && (
+                <MapOperationNotice notice={clipboardNotice} />
               )}
             </>
           )}
@@ -149,6 +171,9 @@ export default function Home() {
             onBeginNodeMove={beginMoveHistory}
             onConnectNodes={connectNodes}
             onDeleteNode={deleteNode}
+            onCopySubtree={copySubtree}
+            onPasteSubtree={pasteSubtree}
+            onClipboardNotice={publishClipboardNotice}
             onGenerateIllustration={generateIllustration}
             resetRevision={resetRevision}
             documentRevision={documentRevision}

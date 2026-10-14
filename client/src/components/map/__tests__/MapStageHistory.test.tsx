@@ -61,6 +61,9 @@ function HistoryHarness({ apiRef, setup, visibleNodeIds }: HistoryHarnessProps) 
       onBeginNodeMove={api.beginMoveHistory}
       onConnectNodes={api.connectNodes}
       onDeleteNode={api.deleteNode}
+      onCopySubtree={api.copySubtree}
+      onPasteSubtree={api.pasteSubtree}
+      onClipboardNotice={() => {}}
       onGenerateIllustration={() => {}}
       documentRevision={api.documentRevision}
     />
