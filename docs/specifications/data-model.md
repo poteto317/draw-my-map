@@ -33,6 +33,7 @@
    - 5.3 [初期ロード・復元ライフサイクル（useMapStorageRestoration）](#53-初期ロード復元ライフサイクルusemapstoragerestoration)
    - 5.4 [ストレージ容量ハンドリングと防御機構](#54-ストレージ容量ハンドリングと防御機構)
    - 5.5 [JSON ファイル エクスポート／インポート仕様](#55-json-ファイル-エクスポートインポート仕様)
+   - 5.6 [枝のクリップボード形式](#56-枝のクリップボード形式)
 
 ---
 
@@ -730,3 +731,39 @@ sequenceDiagram
 | **JSON 検証エラー**<br/>(`useMapJsonImport.ts`) | `error` | `${parsed.error}現在のマップは変更されていません。` | 4.6節の各バリデーションエラー文言の末尾に `現在のマップは変更されていません。`（`IMPORT_PRESERVED_MESSAGE`）を連結して通知 |
 
 *(※ なお、`readStoredMapJson` 内部では `getItem` 例外時に `error: "ブラウザの保存データを読み取れませんでした。"` を返しますが、呼び出し元の `useMapStorageRestoration` では上記の `RESTORE_WARNING` に統一してユーザーへ通知します。)*
+
+### 5.6 枝のクリップボード形式
+
+選択ノードと全子孫のコピー＆ペースト（`Ctrl`/`Cmd`+`C`・`V`）が、OS のクリップボードの `text/plain` で受け渡す専用形式です（`domain/clipboard/subtreeClipboardCodec.ts`）。マップの保存形式（`MapDocument` の Version 1, 2, 3）とは別で、V3 の保存形式、`localStorage`、JSON ファイルの書き出し・読み込みは変わりません。貼り付けたノードは、貼り付け後のマップの一部として通常の V3 形式で保存されます。
+
+```json
+{"type":"draw-my-map/subtree","version":1,"nodes":[{"id":1,"parentId":null,"x":0,"y":0,"width":100,"height":60,"label":"例","importance":"medium"}]}
+```
+
+| 項目 | 仕様 |
+| :--- | :--- |
+| `type` | 文字列 `"draw-my-map/subtree"` のみ受け付ける |
+| `version` | 数値 `1` のみ受け付ける |
+| `nodes` | 空でない配列。各要素は V3 のノード（`id`, `parentId`, `x`, `y`, `width`, `height`, `label`, `importance`, 任意の `illustration`）。配列の順序を保つ |
+| 根 | `parentId: null` のノードがちょうど 1 つ。`rootId` は形式に含めず、読み取り時にこのノードから求める。コピー時は選択ノードの `parentId` を `null` にして書き出す |
+| 保存しないもの | 元のマップの配置モード、生成中の画像、プレビュー、選択、viewport |
+| 上限 | 文字数 5,000,000（UTF-16 コード単位。`string.length`）、ノード数 10,000。コピーと貼り付けに同じ上限を適用する。文字数は `JSON.parse` の前に、ノード数は各ノードの検証の前に判定する |
+
+- **検証**: 貼り付けの入力は信用せず、`type` / `version`、非空の `nodes`、単一の根を確認します。各ノードは V3 の `normalizeMapDocumentNode(..., 3)` で検証し、既知の項目だけで作り直します（イラストは Data URL・寸法の検証と高さ補正を V3 と同じ規則で適用）。グラフは `validateMapDocumentGraph` で検証し、重複 ID・循環・存在しない親・複数の根を拒否します。普通のテキストや `MapDocument` の JSON は枝形式として受け付けません。
+- **計算量**: デコードと単一の根の判定は、10,000 ノードに対して線形で終わります（逆順に並んだ深い鎖や、全件が衝突する ID でも、配列要素と `id` の読み取り回数がノード数の定数倍以内）。
+- **貼り付け時の ID**: 形式の中の ID は貼り付け先の ID と対応付けるための仮のものです。貼り付けでは全ノードに未使用の新しい ID を一括で発行し（`nextAvailableIds`）、根の `parentId` は `null`、子孫の `parentId` は新しい ID へ付け替えます。元の ID は引き継ぎません。
+
+#### 枝のコピー＆ペーストの操作通知メッセージ (`OperationNotice`) 一覧
+
+`useMapClipboardEvents.ts` が発行し、`page.tsx` が `documentRevision` と組にして保持します。枝の複製の通知とは独立した枠で表示します。
+
+| 操作・発生箇所 | 種別 (`kind`) | 通知メッセージ (`message`) | 発生条件・備考 |
+| :--- | :---: | :--- | :--- |
+| **コピー成功** | `status` | `枝をコピーしました。` | 専用形式の文字列を `clipboardData.setData` で書き込めた時 |
+| **貼り付け成功** | `status` | `枝を貼り付けました。見えない場合は表示を『すべて』に切り替えてください。` | 検証済みの枝を 1 回で挿入できた時 |
+| **コピー失敗** | `error` | `枝をコピーできませんでした。` | スナップショット生成の失敗、`clipboardData` の欠落、`setData` の例外（`preventDefault` はしない） |
+| **非対応・不正な貼り付け** | `error` | `貼り付ける枝データが無効です。` | 専用形式でない、または検証に失敗した時 |
+| **上限超過**（コピー・貼り付け共通） | `error` | `枝データが大きすぎます（10,000ノード・5,000,000文字以内）。` | 文字数またはノード数が上限を超えた時 |
+| **取得・配置の失敗** | `error` | `枝を貼り付けできませんでした。` | `clipboardData` の欠落、`getData` の例外、手動配置で座標を表現できない／自動配置で並べられない時 |
+
+入力欄・文字選択中・ラベル編集中・ジェスチャー中など、対象外のイベントでは通知を変更しません。
