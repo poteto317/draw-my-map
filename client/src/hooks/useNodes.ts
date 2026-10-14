@@ -14,6 +14,12 @@ import {
   type NodeIdAllocator,
 } from "@/domain/nodes/nodeIdAllocator";
 import { duplicateNodeSubtree } from "@/domain/nodes/nodeSubtreeDuplication";
+import { insertNodeSubtree } from "@/domain/nodes/nodeSubtreeInsertion";
+import {
+  encodeSubtreeClipboard,
+  type SubtreeClipboardData,
+  type SubtreeClipboardResult,
+} from "@/domain/clipboard/subtreeClipboardCodec";
 import { replaceNodeImportance } from "@/domain/nodes/nodeImportanceUpdate";
 import { clearNodeIllustration, replaceNodeIllustration } from "@/domain/nodes/nodeIllustrationUpdate";
 import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
@@ -39,6 +45,11 @@ type UseNodesReturn = {
   connectNodes: (parentId: number, childId: number) => boolean;
   // 成功時は複製根のIDを返して選択する。対象不在・配置不能・自動配置失敗ではnullを返し何も変えない
   duplicateSubtree: (sourceId: number) => number | null;
+  // 最新の状態から枝を専用形式の文字列にする。ノード・選択・履歴は変えない
+  copySubtree: (sourceId: number) => SubtreeClipboardResult<string>;
+  // dataはdecodeSubtreeClipboardの成功値。選択に依存せず独立した枝として追加し、成功時は新しい根のIDを返して選択する。
+  // 配置不能・自動配置失敗ではnullを返し何も変えない
+  pasteSubtree: (data: SubtreeClipboardData) => number | null;
   deleteNode: (id: number) => void;
   setLayoutMode: (mode: NodeLayoutMode) => void;
   replaceMap: (state: NodeMapState) => void;
@@ -59,6 +70,7 @@ export function useNodes(): UseNodesReturn {
   const {
     nodes,
     layoutMode,
+    getCurrentState,
     applyNonStructuralChange,
     applyManualMove,
     applyTreeChange,
@@ -202,6 +214,34 @@ export function useNodes(): UseNodesReturn {
     return copiedRootId;
   }, [applyTreeChange]);
 
+  const copySubtree = useCallback((sourceId: number) => (
+    encodeSubtreeClipboard(getCurrentState().nodes, sourceId)
+  ), [getCurrentState]);
+
+  // 採番済みで確定しなかったIDは欠番のままにし、allocatorを巻き戻さない
+  const pasteSubtree = useCallback((data: SubtreeClipboardData) => {
+    let pastedRootId: number | null = null;
+    const applied = applyTreeChange((currentNodes, mode) => {
+      const inserted = insertNodeSubtree(
+        currentNodes,
+        data.nodes,
+        data.rootId,
+        null,
+        mode,
+        (occupied, count) => nodeIdAllocatorRef.current!.nextAvailableIds(occupied, count),
+        "paste",
+      );
+      if (!inserted) return null;
+
+      pastedRootId = inserted.rootId;
+      return inserted.nodes;
+    });
+    if (!applied || pastedRootId === null) return null;
+
+    setSelectedNodeId(pastedRootId);
+    return pastedRootId;
+  }, [applyTreeChange]);
+
   const deleteNode = useCallback((id: number) => {
     let subtreeIds = new Set<number>();
     const applied = applyTreeChange((currentNodes) => {
@@ -231,6 +271,8 @@ export function useNodes(): UseNodesReturn {
     moveNode,
     connectNodes,
     duplicateSubtree,
+    copySubtree,
+    pasteSubtree,
     deleteNode,
     setLayoutMode,
     replaceMap,

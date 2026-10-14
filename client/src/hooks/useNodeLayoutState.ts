@@ -11,6 +11,8 @@ type UseNodeLayoutStateReturn = {
   layoutMode: NodeLayoutMode;
   canUndo: boolean;
   canRedo: boolean;
+  // 同じイベント内の直前の変更も含めた最新の状態を読み取る。状態と履歴は変えない
+  getCurrentState: () => NodeMapState;
   applyNonStructuralChange: (update: NodeChange) => boolean;
   applyManualMove: (update: NodeChange) => boolean;
   applyTreeChange: (update: TreeChange) => boolean;
@@ -96,6 +98,7 @@ export function useNodeLayoutState(): UseNodeLayoutStateReturn {
     layoutMode: present.layoutMode,
     canUndo,
     canRedo,
+    getCurrentState: getPresent,
     applyNonStructuralChange,
     applyManualMove,
     applyTreeChange,
