@@ -61,7 +61,7 @@ jest.mock("@/services/imageExport/mapPngRasterizer", () => ({
 const STORAGE_KEY = "draw-my-map.map.v1";
 const IMAGE = createJpegDataUrl(128, 128);
 const COPY_MESSAGE = "枝をコピーしました。";
-const PASTE_MESSAGE = "枝を貼り付けました。見えない場合は表示を『すべて』に切り替えてください。";
+const PASTE_MESSAGE = "枝を貼り付けました。Fキーで選択ノードへ移動できます。見えない場合は表示を『すべて』に切り替えてください。";
 const INVALID_MESSAGE = "貼り付ける枝データが無効です。";
 const DUPLICATE_MESSAGE = "枝を複製しました。Fキーで選択ノードへ移動できます。";
 const HINT = "枝をコピー: Ctrl/Cmd+C ／ 貼り付け: Ctrl/Cmd+V（新しいルートとして追加）";
@@ -460,7 +460,7 @@ describe("ページの枝のコピーと貼り付けの通知", () => {
     expect(screen.queryByText(COPY_MESSAGE)).not.toBeInTheDocument();
   });
 
-  it("Undoで、貼り付けより前のコピーの通知も消す", async () => {
+  it("Undoで、履歴に残らないコピーの通知も消す", async () => {
     const user = userEvent.setup();
     const clipboard = createClipboard();
     storeParentAndChild();

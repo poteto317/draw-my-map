@@ -2,6 +2,7 @@ import { renderHook } from "@testing-library/react";
 import { useMapClipboardEvents } from "@/components/map/useMapClipboardEvents";
 import {
   MAX_SUBTREE_CLIPBOARD_LENGTH,
+  MAX_SUBTREE_CLIPBOARD_NODES,
   decodeSubtreeClipboard,
   encodeSubtreeClipboard,
   type SubtreeClipboardData,
@@ -13,7 +14,7 @@ import type { OperationNotice } from "@/types/operationNotice";
 const COPY_SUCCESS: OperationNotice = { kind: "status", message: "枝をコピーしました。" };
 const PASTE_SUCCESS: OperationNotice = {
   kind: "status",
-  message: "枝を貼り付けました。見えない場合は表示を『すべて』に切り替えてください。",
+  message: "枝を貼り付けました。Fキーで選択ノードへ移動できます。見えない場合は表示を『すべて』に切り替えてください。",
 };
 const COPY_FAILURE: OperationNotice = { kind: "error", message: "枝をコピーできませんでした。" };
 const PASTE_INVALID: OperationNotice = { kind: "error", message: "貼り付ける枝データが無効です。" };
@@ -132,6 +133,13 @@ describe("useMapClipboardEvents のコピー", () => {
     expect(event.defaultPrevented).toBe(false);
     expect(options.publishNotice).toHaveBeenCalledTimes(1);
     expect(options.publishNotice).toHaveBeenCalledWith(TOO_LARGE);
+  });
+
+  it("上限の文言はcodecの上限値と一致する", () => {
+    const format = (value: number) => value.toLocaleString("en-US");
+    expect(TOO_LARGE.message).toBe(
+      `枝データが大きすぎます（${format(MAX_SUBTREE_CLIPBOARD_NODES)}ノード・${format(MAX_SUBTREE_CLIPBOARD_LENGTH)}文字以内）。`,
+    );
   });
 
   it("枝データを作れなければ setData せず、既定動作を止めずにコピー失敗を通知する", () => {

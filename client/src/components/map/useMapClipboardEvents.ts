@@ -3,6 +3,8 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { isEditableTarget } from "@/components/map/editableTarget";
 import {
+  MAX_SUBTREE_CLIPBOARD_LENGTH,
+  MAX_SUBTREE_CLIPBOARD_NODES,
   decodeSubtreeClipboard,
   type SubtreeClipboardData,
   type SubtreeClipboardResult,
@@ -23,13 +25,15 @@ const CLIPBOARD_FORMAT = "text/plain";
 const COPY_SUCCESS: OperationNotice = { kind: "status", message: "枝をコピーしました。" };
 const PASTE_SUCCESS: OperationNotice = {
   kind: "status",
-  message: "枝を貼り付けました。見えない場合は表示を『すべて』に切り替えてください。",
+  message: "枝を貼り付けました。Fキーで選択ノードへ移動できます。見えない場合は表示を『すべて』に切り替えてください。",
 };
 const COPY_FAILURE: OperationNotice = { kind: "error", message: "枝をコピーできませんでした。" };
 const PASTE_INVALID: OperationNotice = { kind: "error", message: "貼り付ける枝データが無効です。" };
+// 上限の数値はcodecの定数から作る。上限を変えたときに文言だけが古いまま残らないようにする
+const formatLimit = (value: number) => value.toLocaleString("en-US");
 const TOO_LARGE: OperationNotice = {
   kind: "error",
-  message: "枝データが大きすぎます（10,000ノード・5,000,000文字以内）。",
+  message: `枝データが大きすぎます（${formatLimit(MAX_SUBTREE_CLIPBOARD_NODES)}ノード・${formatLimit(MAX_SUBTREE_CLIPBOARD_LENGTH)}文字以内）。`,
 };
 const PASTE_FAILURE: OperationNotice = { kind: "error", message: "枝を貼り付けできませんでした。" };
 
