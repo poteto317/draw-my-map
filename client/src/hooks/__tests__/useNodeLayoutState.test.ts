@@ -279,7 +279,7 @@ describe("useNodeLayoutState", () => {
     expect(result.current.nodes).toEqual(candidate);
   });
 
-  it("getCurrentStateは同じbatchの最新のノードとモードを返し、状態と履歴を変えない", () => {
+  it("getCurrentStateは同じbatchの最新のノードとモードを返す", () => {
     const { result } = renderHook(() => useNodeLayoutState());
     const { getCurrentState, applyTreeChange, setLayoutMode } = result.current;
     const candidate = [node(1, null, 50, 70)];
@@ -293,13 +293,29 @@ describe("useNodeLayoutState", () => {
 
     expect(observed).toEqual({ layoutMode: "auto", nodes: result.current.nodes });
     expect(observed.nodes).toBe(result.current.nodes);
+  });
+
+  it("getCurrentStateは状態と履歴を変えない", () => {
+    const { result } = renderHook(() => useNodeLayoutState());
+    act(() => { result.current.applyTreeChange(() => [node(1, null, 50, 70)]); });
     const before = { nodes: result.current.nodes, canUndo: result.current.canUndo, canRedo: result.current.canRedo };
 
-    act(() => { getCurrentState(); });
+    act(() => { result.current.getCurrentState(); });
 
     expect(result.current.nodes).toBe(before.nodes);
     expect(result.current.canUndo).toBe(before.canUndo);
     expect(result.current.canRedo).toBe(before.canRedo);
+  });
+
+  it("getCurrentStateの関数参照は更新後も安定している", () => {
+    const { result } = renderHook(() => useNodeLayoutState());
+    const { getCurrentState } = result.current;
+
+    act(() => {
+      result.current.applyTreeChange(() => [node(1, null, 50, 70)]);
+      result.current.setLayoutMode("auto");
+    });
+
     expect(result.current.getCurrentState).toBe(getCurrentState);
   });
 

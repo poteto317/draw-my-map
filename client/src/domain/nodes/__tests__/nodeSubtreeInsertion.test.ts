@@ -74,7 +74,7 @@ describe("insertNodeSubtree", () => {
     expect(allocateIds).toHaveBeenCalledWith(current, 3);
   });
 
-  it("複製では根の元の親を維持する", () => {
+  it("根をtargetParentIdへつなぐ（複製では元の親を渡す）", () => {
     const current = deepFreeze([
       createTestNode({ id: 1, y: 0, height: 60 }),
       createTestNode({ id: 2, parentId: 1, x: 200, y: 0, height: 60 }),
@@ -87,7 +87,7 @@ describe("insertNodeSubtree", () => {
     expect(findNode(result!.nodes, 10)).toMatchObject({ parentId: 1, x: 200, y: 100 });
   });
 
-  it("貼り付けでは根のparentIdがnull以外でもnullにする", () => {
+  it("根のparentIdがnull以外でも、targetParentIdがnullなら独立したルートにする", () => {
     const sources = deepFreeze([createTestNode({ id: 5, parentId: 4 })]);
 
     const result = insertNodeSubtree([], sources, 5, null, "auto", idsFrom([1]), "paste");
