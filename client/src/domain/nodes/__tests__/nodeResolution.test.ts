@@ -1,4 +1,7 @@
-import { isNodeVisibleAtLevel } from "@/domain/nodes/nodeResolution";
+import {
+  isNodeVisibleAtLevel,
+  resolveMinimumVisibleLevel,
+} from "@/domain/nodes/nodeResolution";
 
 describe("node resolution", () => {
   it.each([
@@ -14,4 +17,21 @@ describe("node resolution", () => {
   ] as const)("%sを%sで表示する=%s", (importance, level, expected) => {
     expect(isNodeVisibleAtLevel(importance, level)).toBe(expected);
   });
+
+  it.each([
+    ["high", "high", null],
+    ["medium", "medium", "high"],
+    ["low", "all", "medium"],
+  ] as const)(
+    "%sのノードが見える最も狭い段階は%sである",
+    (importance, expectedLevel, narrowerLevel) => {
+      const level = resolveMinimumVisibleLevel(importance);
+
+      expect(level).toBe(expectedLevel);
+      expect(isNodeVisibleAtLevel(importance, level)).toBe(true);
+      if (narrowerLevel !== null) {
+        expect(isNodeVisibleAtLevel(importance, narrowerLevel)).toBe(false);
+      }
+    },
+  );
 });

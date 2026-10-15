@@ -2,6 +2,7 @@ import type {
   ResolutionFilterMode,
   ResolutionLevel,
 } from "@/types/nodeResolution";
+import { RESOLUTION_LEVEL_LABELS } from "@/config/resolutionLevelLabels";
 
 type ResolutionFilterSelectorProps = {
   mode: ResolutionFilterMode;
@@ -14,16 +15,10 @@ const resolutionOptions: ReadonlyArray<{
   label: string;
 }> = [
   { mode: "auto", label: "自動" },
-  { mode: "high", label: "高のみ" },
-  { mode: "medium", label: "中以上" },
-  { mode: "all", label: "すべて" },
+  { mode: "high", label: RESOLUTION_LEVEL_LABELS.high },
+  { mode: "medium", label: RESOLUTION_LEVEL_LABELS.medium },
+  { mode: "all", label: RESOLUTION_LEVEL_LABELS.all },
 ];
-
-const levelLabels: Record<ResolutionLevel, string> = {
-  high: "高のみ",
-  medium: "中以上",
-  all: "すべて",
-};
 
 const baseButtonClassName = "px-3 py-1 text-sm transition-colors";
 const selectedButtonClassName = "bg-blue-600 text-white";
@@ -62,7 +57,7 @@ export function ResolutionFilterSelector({
       </div>
       {mode === "auto" && (
         <span className="text-sm text-zinc-600 dark:text-zinc-400">
-          現在: {levelLabels[level]}
+          現在: {RESOLUTION_LEVEL_LABELS[level]}
         </span>
       )}
     </div>

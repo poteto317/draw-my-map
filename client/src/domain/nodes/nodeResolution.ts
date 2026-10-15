@@ -13,6 +13,18 @@ const minimumVisibleRank: Record<ResolutionLevel, number> = {
   all: 0,
 };
 
+const minimumVisibleLevel: Record<NodeImportance, ResolutionLevel> = {
+  high: "high",
+  medium: "medium",
+  low: "all",
+};
+
+export function resolveMinimumVisibleLevel(
+  importance: NodeImportance,
+): ResolutionLevel {
+  return minimumVisibleLevel[importance];
+}
+
 export function isNodeVisibleAtLevel(
   importance: NodeImportance,
   level: ResolutionLevel,
