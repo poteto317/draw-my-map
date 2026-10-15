@@ -50,6 +50,7 @@ function HistoryHarness({ apiRef, setup, visibleNodeIds }: HistoryHarnessProps) 
   return (
     <MapStage
       nodes={api.nodes}
+      focusRequest={null}
       visibleNodeIds={visibleNodeIds}
       selectedNodeId={api.selectedNodeId}
       onDoubleClick={api.addNode}

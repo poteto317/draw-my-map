@@ -153,6 +153,7 @@ export default function Home() {
         canvas={(
           <MapStage
             nodes={nodes}
+            focusRequest={null}
             visibleNodeIds={resolutionFilter.visibleNodeIds}
             onViewportScaleChange={setViewportScale}
             selectedNodeId={selectedNodeId}

@@ -24,6 +24,7 @@ import { useMapViewportShortcut } from "@/components/map/useMapViewportShortcut"
 import { useMapWheelZoom } from "@/components/map/useMapWheelZoom";
 import { useNodeEditing } from "@/components/map/useNodeEditing";
 import { useNodeKeyboardShortcuts } from "@/components/map/useNodeKeyboardShortcuts";
+import { useNodeFocusRequest } from "@/components/map/useNodeFocusRequest";
 import { useRenderedMapScene } from "@/components/map/useRenderedMapScene";
 import { useIllustrationTextures } from "@/components/map/useIllustrationTextures";
 import { useViewportScaleNotification } from "@/components/map/useViewportScaleNotification";
@@ -34,9 +35,11 @@ import type {
 } from "@/domain/clipboard/subtreeClipboardCodec";
 import type { Node } from "@/types/node";
 import type { OperationNotice } from "@/types/operationNotice";
+import type { NodeFocusRequest } from "@/types/nodeFocusRequest";
 
 type MapStageProps = {
   nodes: Node[];
+  focusRequest: NodeFocusRequest | null;
   visibleNodeIds?: ReadonlySet<number>;
   onViewportScaleChange?: (scale: number) => void;
   resetRevision?: number;
@@ -62,6 +65,7 @@ type MapStageProps = {
 
 export function MapStage({
   nodes,
+  focusRequest,
   visibleNodeIds,
   onViewportScaleChange,
   resetRevision = 0,
@@ -182,6 +186,16 @@ export function MapStage({
     isEditing: editing.editingNodeId !== null,
     screen: runtime ? runtime.app.screen : null,
     hasActiveGesture,
+    onFocusNode: focusNode,
+  });
+
+  useNodeFocusRequest({
+    request: focusRequest,
+    documentRevision,
+    nodes,
+    screen: runtime ? runtime.app.screen : null,
+    hasActiveGesture,
+    cancelActiveGesture,
     onFocusNode: focusNode,
   });
 

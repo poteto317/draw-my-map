@@ -35,6 +35,7 @@ export function AutoLayoutMapStageHarness() {
     <>
       <MapStage
         nodes={nodes}
+        focusRequest={null}
         selectedNodeId={selectedNodeId}
         onDoubleClick={addNode}
         onAddChildNode={addChildNode}

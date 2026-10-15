@@ -22,6 +22,7 @@ jest.mock("pixi.js", () => {
 
 const defaultProps = {
   nodes: [] as Node[],
+  focusRequest: null,
   selectedNodeId: null as number | null,
   onDoubleClick: jest.fn(),
   onAddChildNode: jest.fn(() => null),

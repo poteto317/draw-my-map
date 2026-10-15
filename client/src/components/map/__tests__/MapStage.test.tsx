@@ -35,6 +35,7 @@ jest.mock("pixi.js", () => {
 
 const defaultProps = {
   nodes: [] as Node[],
+  focusRequest: null,
   selectedNodeId: null as number | null,
   onDoubleClick: jest.fn(),
   onAddChildNode: jest.fn(() => null),
@@ -86,6 +87,7 @@ function KeyboardCreationHarness({ initiallySelected = true }: { initiallySelect
     <>
       <MapStage
         nodes={nodes}
+        focusRequest={null}
         selectedNodeId={selectedNodeId}
         onDoubleClick={addNode}
         onAddChildNode={addChildNode}
@@ -137,6 +139,7 @@ function MouseConnectionHarness() {
     <>
       <MapStage
         nodes={nodes}
+        focusRequest={null}
         selectedNodeId={selectedNodeId}
         onDoubleClick={addNode}
         onAddChildNode={addChildNode}
@@ -189,6 +192,7 @@ function SubtreeMoveHarness() {
     <>
       <MapStage
         nodes={nodes}
+        focusRequest={null}
         selectedNodeId={selectedNodeId}
         onDoubleClick={addNode}
         onAddChildNode={addChildNode}
@@ -569,6 +573,26 @@ describe("MapStage boundary", () => {
 
     expect(lastWorldContainer()?.position.set).toHaveBeenCalledWith(300, 240);
     expect(lastWorldContainer()?.scale.set).toHaveBeenCalledWith(1);
+  });
+
+  it("外部focus要求で倍率を保ちノードを中央へ1回だけ移す", async () => {
+    const { rerender } = await renderReady(<MapStage {...defaultProps} nodes={sampleNodes} />);
+    const request = { nodeId: 1, sequence: 1, documentRevision: 0 };
+
+    rerender(<MapStage {...defaultProps} nodes={sampleNodes} focusRequest={request} />);
+
+    const worldContainer = lastWorldContainer();
+    expect(worldContainer?.position.set).toHaveBeenLastCalledWith(300, 240);
+    expect(worldContainer?.scale.set).toHaveBeenLastCalledWith(1);
+
+    act(() => {
+      mockStageHandlers.pointerdown?.(pointer(0, 0, { target: mockStage }));
+      mockStageHandlers.pointermove?.(pointer(20, 10));
+      mockStageHandlers.pointerup?.(pointer(20, 10));
+    });
+    rerender(<MapStage {...defaultProps} nodes={[...sampleNodes]} focusRequest={request} />);
+
+    expect(worldContainer?.position.set).toHaveBeenLastCalledWith(320, 250);
   });
 
   it("gesture中のFキーではviewportを変更しない", async () => {
