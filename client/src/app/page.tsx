@@ -11,6 +11,7 @@ import { MapHistoryControls } from "@/components/layout/MapHistoryControls";
 import { NodeDuplicateControl } from "@/components/layout/NodeDuplicateControl";
 import { MapPersistenceControls } from "@/components/layout/MapPersistenceControls";
 import { MapOperationNotice } from "@/components/layout/MapOperationNotice";
+import { NodeSearchBox } from "@/components/layout/NodeSearchBox";
 import { IllustrationPanel } from "@/components/layout/IllustrationPanel";
 import { MapStage } from "@/components/map/MapStage";
 import { INITIAL_VIEWPORT } from "@/components/map/mapViewport";
@@ -22,6 +23,8 @@ import { useNodeDuplicationAction } from "@/hooks/useNodeDuplicationAction";
 import { useResettingMapReplacement } from "@/hooks/useResettingMapReplacement";
 import { useMapResolutionFilter } from "@/hooks/useMapResolutionFilter";
 import { useRevisionScopedNotice } from "@/hooks/useRevisionScopedNotice";
+import { useNodeLabelSearch } from "@/hooks/useNodeLabelSearch";
+import { useNodeSearchNavigation } from "@/hooks/useNodeSearchNavigation";
 
 const CLIPBOARD_OPERATION_HINT = "枝をコピー: Ctrl/Cmd+C ／ 貼り付け: Ctrl/Cmd+V（新しいルートとして追加）";
 
@@ -62,6 +65,17 @@ export default function Home() {
     resetScale: INITIAL_VIEWPORT.scale,
   });
   const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? null;
+  const nodeSearch = useNodeLabelSearch({
+    nodes,
+    visibleNodeIds: resolutionFilter.visibleNodeIds,
+  });
+  const nodeSearchNavigation = useNodeSearchNavigation({
+    nodes,
+    visibleNodeIds: resolutionFilter.visibleNodeIds,
+    documentRevision,
+    setResolutionMode: resolutionFilter.setMode,
+    selectNode,
+  });
   const persistence = useMapPersistence({
     nodes,
     layoutMode,
@@ -85,6 +99,16 @@ export default function Home() {
       <AppHeader
         layoutMode={layoutMode}
         onLayoutModeChange={setLayoutMode}
+        searchControls={(
+          <NodeSearchBox
+            query={nodeSearch.query}
+            onQueryChange={nodeSearch.setQuery}
+            hasQuery={nodeSearch.hasQuery}
+            matches={nodeSearch.matches}
+            total={nodeSearch.total}
+            onSelectResult={nodeSearchNavigation.navigateToNode}
+          />
+        )}
         importanceControls={(
           <NodeImportanceSelector
             importance={selectedNode?.importance ?? null}
@@ -131,6 +155,7 @@ export default function Home() {
           && imageExport.notice === null
           && duplication.notice === null
           && clipboardNotice === null
+          && nodeSearchNavigation.notice === null
           ? null
           : (
             <>
@@ -146,6 +171,9 @@ export default function Home() {
               {clipboardNotice !== null && (
                 <MapOperationNotice notice={clipboardNotice} />
               )}
+              {nodeSearchNavigation.notice !== null && (
+                <MapOperationNotice notice={nodeSearchNavigation.notice} />
+              )}
             </>
           )}
       />
@@ -153,7 +181,7 @@ export default function Home() {
         canvas={(
           <MapStage
             nodes={nodes}
-            focusRequest={null}
+            focusRequest={nodeSearchNavigation.focusRequest}
             visibleNodeIds={resolutionFilter.visibleNodeIds}
             onViewportScaleChange={setViewportScale}
             selectedNodeId={selectedNodeId}
