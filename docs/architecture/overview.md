@@ -561,6 +561,7 @@ sequenceDiagram
 #### ノード検索と移動の流れ
 
 - `NodeSearchBox` の入力を `useNodeLabelSearch` が受け、`domain/search/nodeLabelSearch.ts` で正規化済み索引を同期走査する。表示候補は現在の `nodes` 配列順の先頭50件で、総一致数は別に保持する。
+- 検索候補の共有契約 `NodeSearchListItem` は `types/nodeSearch.ts` が所有し、検索結果の `NodeSearchMatch` に現在の表示状態 `hidden` を加えた型として、生成hookとUIの双方が依存する。
 - 候補はノードIDで識別する。クリックまたは Enter の時点で `useNodeSearchNavigation` が最新の `nodes` を再検索し、削除済みならエラー通知を出して終了する。
 - 対象が解像度フィルターで隠れていれば、重要度を表示できる最小レベルへ切り替える。その後、ノードを選択し、`documentRevision` 付きの `NodeFocusRequest` を `MapStage` へ渡して現在倍率のまま中央へ移動する。
 - 検索状態とviewportは永続化対象ではなく、検索の一連の処理は `NodeMapState` を変更しない。したがって編集履歴、V3 JSON、`localStorage` の形式に影響しない。

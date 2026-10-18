@@ -1,10 +1,7 @@
 import { useMemo, useState } from "react";
 import * as nodeLabelSearch from "@/domain/search/nodeLabelSearch";
 import type { Node } from "@/types/node";
-
-export type NodeSearchListItem = nodeLabelSearch.NodeSearchMatch & {
-  hidden: boolean;
-};
+import type { NodeSearchListItem } from "@/types/nodeSearch";
 
 type UseNodeLabelSearchOptions = {
   nodes: readonly Node[];

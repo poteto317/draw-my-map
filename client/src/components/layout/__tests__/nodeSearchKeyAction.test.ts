@@ -60,4 +60,20 @@ describe("resolveNodeSearchKeyAction", () => {
     expect(resolveNodeSearchKeyAction({ ...baseInput, key: "Enter", metaKey: true })).toBeNull();
     expect(resolveNodeSearchKeyAction({ ...baseInput, key: "Enter", altKey: true })).toBeNull();
   });
+
+  it.each(["ArrowUp", "ArrowDown", "Escape"])(
+    "修飾キー付き%sを扱わない",
+    (key) => {
+      for (const modifier of ["ctrlKey", "metaKey", "altKey"] as const) {
+        expect(resolveNodeSearchKeyAction({
+          ...baseInput,
+          key,
+          isOpen: true,
+          hasQuery: true,
+          hasResults: true,
+          [modifier]: true,
+        })).toBeNull();
+      }
+    },
+  );
 });

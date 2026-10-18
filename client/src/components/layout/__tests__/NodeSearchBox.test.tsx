@@ -2,7 +2,7 @@ import { useState } from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NodeSearchBox } from "@/components/layout/NodeSearchBox";
-import type { NodeSearchListItem } from "@/hooks/useNodeLabelSearch";
+import type { NodeSearchListItem } from "@/types/nodeSearch";
 
 const matches: readonly NodeSearchListItem[] = [
   { nodeId: 10, label: "親あり", parentLabel: "親ノード", hidden: false },
@@ -192,6 +192,32 @@ describe("NodeSearchBox", () => {
 
     rerender(<NodeSearchBox query="検索" onQueryChange={jest.fn()} hasQuery matches={[matches[2], matches[0]]} total={2} onSelectResult={onSelectResult} />);
     expect(screen.getByRole("option", { name: "ルート（ルート）" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("候補とcallbackの更新後も現在のIDを最新callbackへ渡し、候補消失後は先頭IDへ戻る", () => {
+    const firstOnSelectResult = jest.fn();
+    const latestOnSelectResult = jest.fn();
+    const fallbackOnSelectResult = jest.fn();
+    const { rerender } = render(
+      <NodeSearchBox query="検索" onQueryChange={jest.fn()} hasQuery matches={matches} total={5} onSelectResult={firstOnSelectResult} />,
+    );
+    const input = screen.getByRole("combobox");
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+
+    rerender(
+      <NodeSearchBox query="検索" onQueryChange={jest.fn()} hasQuery matches={[matches[2], matches[1]]} total={2} onSelectResult={latestOnSelectResult} />,
+    );
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(firstOnSelectResult).not.toHaveBeenCalled();
+    expect(latestOnSelectResult).toHaveBeenCalledWith(20);
+
+    rerender(
+      <NodeSearchBox query="検索" onQueryChange={jest.fn()} hasQuery matches={[matches[2], matches[0]]} total={2} onSelectResult={fallbackOnSelectResult} />,
+    );
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(fallbackOnSelectResult).toHaveBeenCalledWith(30);
   });
 
   it("マウス選択でフォーカスと一覧を保ち、ダブルクリックを2回の選択として扱う", async () => {

@@ -68,6 +68,34 @@ describe("useNodeLabelSearch", () => {
     expect(result.current.matches[0]).toMatchObject({ nodeId: 1, hidden: false });
   });
 
+  it("検索語を保持したままnodesとvisibleNodeIdsを同時に差し替えると最新候補と表示状態を返す", () => {
+    const firstNodes = [createTestNode({ id: 1, label: "target old" })];
+    const { result, rerender } = renderHook(
+      ({ nodes, visibleNodeIds }) => useNodeLabelSearch({ nodes, visibleNodeIds }),
+      {
+        initialProps: {
+          nodes: firstNodes,
+          visibleNodeIds: new Set([1]),
+        },
+      },
+    );
+    act(() => result.current.setQuery("target"));
+
+    rerender({
+      nodes: [
+        createTestNode({ id: 2, label: "target visible" }),
+        createTestNode({ id: 3, label: "target hidden" }),
+      ],
+      visibleNodeIds: new Set([2]),
+    });
+
+    expect(result.current.query).toBe("target");
+    expect(result.current.matches).toEqual([
+      { nodeId: 2, label: "target visible", parentLabel: null, hidden: false },
+      { nodeId: 3, label: "target hidden", parentLabel: null, hidden: true },
+    ]);
+  });
+
   it("空白だけの検索語では検索中にせず結果を返さない", () => {
     const nodes = [createTestNode({ id: 1, label: "target" })];
     const { result } = renderHook(() =>

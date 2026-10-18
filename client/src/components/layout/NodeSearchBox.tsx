@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { KeyboardEvent, MouseEvent } from "react";
 import { resolveNodeSearchKeyAction } from "@/components/layout/nodeSearchKeyAction";
-import type { NodeSearchListItem } from "@/hooks/useNodeLabelSearch";
+import type { NodeSearchListItem } from "@/types/nodeSearch";
 
 type NodeSearchBoxProps = {
   query: string;
