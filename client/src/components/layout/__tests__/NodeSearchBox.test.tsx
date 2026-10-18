@@ -194,6 +194,52 @@ describe("NodeSearchBox", () => {
     expect(screen.getByRole("option", { name: "ルート（ルート）" })).toHaveAttribute("aria-selected", "true");
   });
 
+  it("候補追加や並べ替えで選択IDが後方へ移ったら同じ候補へ再スクロールする", () => {
+    const onSelectResult = jest.fn();
+    const { rerender } = render(
+      <Harness initialQuery="検索" resultMatches={matches.slice(0, 2)} onSelectResult={onSelectResult} />,
+    );
+    const input = screen.getByRole("combobox");
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    const selectedOption = screen.getAllByRole("option")[1];
+    const addedMatches = Array.from({ length: 39 }, (_, index) => ({
+      nodeId: 100 + index,
+      label: `追加候補${index}`,
+      parentLabel: null,
+      hidden: false,
+    }));
+    scrollIntoView.mockClear();
+
+    rerender(
+      <Harness initialQuery="検索" resultMatches={[matches[0], ...addedMatches, matches[1]]} onSelectResult={onSelectResult} />,
+    );
+
+    expect(screen.getAllByRole("option")[40]).toBe(selectedOption);
+    expect(input).toHaveAttribute("aria-activedescendant", selectedOption.id);
+    expect(selectedOption).toHaveAttribute("aria-selected", "true");
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView).toHaveBeenLastCalledWith({ block: "nearest" });
+    expect(scrollIntoView.mock.contexts[0]).toBe(selectedOption);
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onSelectResult).toHaveBeenLastCalledWith(20);
+  });
+
+  it.each(["閉じた一覧", "空一覧"])("%sへの候補更新ではスクロールしない", (state) => {
+    const { rerender } = render(<Harness initialQuery="検索" />);
+    const input = screen.getByRole("combobox");
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    if (state === "閉じた一覧") fireEvent.keyDown(input, { key: "Escape" });
+    scrollIntoView.mockClear();
+
+    rerender(
+      <Harness initialQuery="検索" resultMatches={state === "閉じた一覧" ? [matches[2], matches[1]] : []} />,
+    );
+
+    expect(input).not.toHaveAttribute("aria-activedescendant");
+    expect(screen.queryAllByRole("option")).toHaveLength(0);
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+
   it("候補とcallbackの更新後も現在のIDを最新callbackへ渡し、候補消失後は先頭IDへ戻る", () => {
     const firstOnSelectResult = jest.fn();
     const latestOnSelectResult = jest.fn();

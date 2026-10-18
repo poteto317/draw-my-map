@@ -43,7 +43,7 @@ export function NodeSearchBox({
     if (!activeDescendant) return;
     const selectedElement = document.getElementById(activeDescendant);
     selectedElement?.scrollIntoView?.({ block: "nearest" });
-  }, [activeDescendant]);
+  }, [activeDescendant, matches]);
 
   const moveSelection = (offset: number) => {
     const currentIndex = matches.findIndex(
