@@ -76,3 +76,7 @@
 - 自動配置で折りたたむと空白を詰めるが、JSON・localStorage・履歴の正本座標と全件数が変わらない。展開・検索移動・手動切替がそれぞれ規定座標を使う。
 - 閉じた親へ子追加、非表示子孫込みコピー/複製/削除、Undo/Redo、同じIDを含むimportを結合テストで確認。
 - 10,000ノードの深い木でstack overflowせず、可視・件数計算の線形性を確認。domain（索引・可視・祖先・検索の祖先展開）に加え、hook（useBranchCollapse・useMapDisplayState）と表示用の配置計算（projectCollapsedLayout）まで通す。Homeから実MapStageまで通す経路は、jsdomで10,000ノードを描画・再描画すると1ケース約7.5秒かかり既定のタイムアウトを超えるため、深い木では行わず、Homeの結合テストは小さな木で同じ経路を確認する。
+
+## 今後の改善候補
+
+- 検索フック（useNodeSearchNavigation）は、折りたたみ索引の NodeCollapseIndex（nodesById・parentById）と閉ID集合に直接依存しており、引数が8個ある。次のフェーズ以降で、useBranchCollapse に `collapsedAncestorsOf(nodeId)` を追加し、索引の公開をやめる。あわせて、`nodes.find` と索引による存在確認の二重化も整理する。
