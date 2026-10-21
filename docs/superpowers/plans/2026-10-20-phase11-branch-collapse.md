@@ -46,7 +46,7 @@
 - `toggleCollapsedNode(index, current: ReadonlySet<number>, nodeId: number): ReadonlySet<number>`、`expandCollapsedNodes(current: ReadonlySet<number>, nodeIds: readonly number[]): ReadonlySet<number>`。入力不変、無効toggleは変更なし。
 
 - [x] A→B→C/A→Dの入れ子、外側展開、葉/不在toggle、配列順、入力凍結のテストを追加。
-- [x] 深さ10,000の木、広い木で件数と可視性を検証。索引へのアクセスをProxy/Map計測で測りO(N)の読み取り上限を固定。単なる結果一致だけで二乗実装を見逃さない。
+- [x] 深さ10,000の木と、孫を持つ子を含む広い木で、子孫数・件数・可視集合を具体的な期待値で検証。4,000ノードの広い木と深い鎖で、索引へのアクセスをProxy/Map計測で測りO(N)の読み取り上限を固定。単なる結果一致だけで二乗実装を見逃さない。
 - [x] `npm test -- --runInBand nodeCollapse.test.ts` でRED確認。
 - [x] indexNodeForestの後順を使って子孫数、明示stackで祖先の折りたたみ状態を伝播。各ノードから全子孫を再探索しない。
 - [x] 対象GREENとverify。Interfacesと検証結果を報告。
@@ -154,5 +154,5 @@
 
 - [x] 表示専用状態、非表示件数の定義、auto表示座標と保存座標、検索による祖先展開、復元時全展開、画像出力全件の仕様を記録。
 - [x] 実装済みのPhase 11の5項目だけを完了にし、現在地・次のPhase 12最初の項目・更新日を変更。未完了/未検証がある場合は正確に残す。
-- [x] `cd client && npm run verify`と`git diff --check`を実行。全体レビューと修正の検証を完了。2026-10-21: 178 suites / 1,936 tests、lint・typecheck・build成功。
+- [x] `cd client && npm run verify`と`git diff --check`を実行。全体レビューと修正の検証を完了。実装完了時点（2026-10-21、9990343）: 178 suites / 1,936 tests。PRレビュー対応後（2026-10-21）: 178 suites / 1,966 tests。いずれもlint・typecheck・build成功。
 - [x] ブランチとworktreeを保持。コミット・push・PRは明示依頼がなければ行わない。検証結果と残事項を報告。
