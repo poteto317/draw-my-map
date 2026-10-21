@@ -153,6 +153,23 @@ it("auto投影の座標で編集・F移動し、R変更だけでは動かずmanu
   expect(positions()[3]).toEqual([250, 500]);
 });
 
+it("折りたたみ中にmanualからautoへ切り替えると投影が始まり、元に戻すと全展開のmanual正本に戻る", async () => {
+  await start(); select(1); toggle();
+  expect(positions()).toEqual([[40, 80], [250, 80], [460, 80], [250, 500]]);
+  fireEvent.click(screen.getByRole("button", { name: "自動配置" }));
+  const projected = positions();
+  expect([projected[0], projected[1], projected[3]]).toEqual([[40, 80], [260, 30], [260, 130]]);
+  expect(visible()).toEqual([true, true, false, true]);
+  expect(screen.getByRole("button", { name: "枝を展開" })).toBeEnabled();
+  expect(screen.getByText("折りたたみで非表示: 1件")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "元に戻す" }));
+  expect(visible()).toEqual([true, true, true, true]);
+  expect(positions()).toEqual([[40, 80], [250, 80], [460, 80], [250, 500]]);
+  select(1);
+  expect(screen.getByRole("button", { name: "枝を折りたたむ" })).toBeEnabled();
+  expect(screen.getByText("折りたたみで非表示: 0件")).toBeInTheDocument();
+});
+
 it("検索で閉祖先を展開した最新座標へfocusし編集位置も追従する", async () => {
   await start("auto"); select(1); toggle(); select(0); toggle(); await search("C");
   expect(visible()).toEqual([true, true, true, true]);
