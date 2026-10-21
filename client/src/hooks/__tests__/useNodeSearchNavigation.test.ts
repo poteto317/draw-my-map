@@ -18,12 +18,13 @@ function renderNavigation({
 }) {
   const setResolutionMode = jest.fn();
   const selectNode = jest.fn();
+  const expandNodes = jest.fn();
   const hook = renderHook(
     (props: { nodes: readonly Node[]; resolutionVisibleNodeIds: ReadonlySet<number>; documentRevision: number }) =>
-      useNodeSearchNavigation({ ...props, collapseIndex: createNodeCollapseIndex(props.nodes), collapsedNodeIds: new Set(), expandNodes: jest.fn(), setResolutionMode, selectNode }),
+      useNodeSearchNavigation({ ...props, collapseIndex: createNodeCollapseIndex(props.nodes), collapsedNodeIds: new Set(), expandNodes, setResolutionMode, selectNode }),
     { initialProps: { nodes, resolutionVisibleNodeIds, documentRevision } },
   );
-  return { ...hook, setResolutionMode, selectNode };
+  return { ...hook, setResolutionMode, selectNode, expandNodes };
 }
 
 describe("useNodeSearchNavigation", () => {
@@ -88,6 +89,21 @@ describe("useNodeSearchNavigation", () => {
     expect(result.current.notice).toEqual({ kind: "error", message: "ノードが見つかりませんでした。" });
   });
 
+  it("nodesに対象があっても折りたたみ索引を作れない不正なforestでは状態を変えずエラーを通知する", () => {
+    const orphan = createTestNode({ id: 2, parentId: 99, importance: "low" });
+    const { result, selectNode, setResolutionMode, expandNodes } = renderNavigation({ nodes: [orphan] });
+
+    let navigationResult: string | undefined;
+    act(() => { navigationResult = result.current.navigateToNode(2); });
+
+    expect(navigationResult).toBe("missing");
+    expect(result.current.notice).toEqual({ kind: "error", message: "ノードが見つかりませんでした。" });
+    expect(selectNode).not.toHaveBeenCalled();
+    expect(setResolutionMode).not.toHaveBeenCalled();
+    expect(expandNodes).not.toHaveBeenCalled();
+    expect(result.current.focusRequest).toBeNull();
+  });
+
   it("文書の世代が変わると古い通知と移動要求を隠し、次の要求は連番を保つ", () => {
     const firstNode = createTestNode({ id: 4, importance: "low" });
     const { result, rerender } = renderNavigation({ nodes: [firstNode], documentRevision: 1 });
@@ -145,5 +161,6 @@ describe("祖先展開の検索連携", () => {
     expect(result.current.mode).toBe("auto");
     expect(result.current.selected).toBeNull();
     expect(result.current.focusRequest).toBeNull();
+    expect(result.current.notice).toEqual({ kind: "error", message: "ノードが見つかりませんでした。" });
   });
 });

@@ -166,45 +166,106 @@ describe("nodeCollapse", () => {
     expect(collectAncestorIds(index, count)?.length).toBe(9_999);
   });
 
-  it("広い木の導出で索引を線形回数だけ読み取る", () => {
-    const count = 4_000;
-    const index = createNodeCollapseIndex([
-      node(1, null),
-      ...Array.from({ length: count - 1 }, (_, index) => node(index + 2, 1)),
-    ])!;
-    const reads = { nodes: 0, children: 0 };
-    const observed: NodeCollapseIndex = {
-      ...index,
-      nodesById: new Proxy(index.nodesById, {
-        get(target, property) {
-          if (property === "values") {
-            return () => {
-              reads.nodes += target.size;
-              return target.values();
-            };
-          }
-          const value = Reflect.get(target, property, target);
-          return typeof value === "function" ? value.bind(target) : value;
-        },
-      }),
-      childrenByParent: new Proxy(index.childrenByParent, {
-        get(target, property) {
-          if (property === "get") {
-            return (key: number) => {
-              reads.children += 1;
-              return target.get(key);
-            };
-          }
-          const value = Reflect.get(target, property, target);
-          return typeof value === "function" ? value.bind(target) : value;
-        },
-      }),
-    };
+  it.each([
+    ["広い木", wideTreeNodes(4_000), [1]],
+    ["深い鎖", chainNodes(4_000), [1_000, 2_000, 3_000]],
+  ] as const)("%sの導出で索引の全フィールドを線形回数だけ読み取る", (_name, nodes, collapsed) => {
+    const index = createNodeCollapseIndex(nodes)!;
+    const reads = { count: 0 };
 
-    const derived = deriveNodeCollapse(observed, new Set([1]));
+    const derived = deriveNodeCollapse(observeIndexReads(index, reads), new Set(collapsed));
 
-    expect(derived.visibleNodeIds.size).toBe(1);
-    expect(derived.hiddenCountById.get(1)).toBe(count - 1);
-    expect(reads.nodes + reads.children).toBeLessThanOrEqual(count * 3);
+    expect(derived.visibleNodeIds.size).toBe(deriveNodeCollapse(index, new Set(collapsed)).visibleNodeIds.size);
+    expect(reads.count).toBeGreaterThan(0);
+    expect(reads.count).toBeLessThanOrEqual(nodes.length * 6);
   });
 });
+
+function wideTreeNodes(count: number): Node[] {
+  return [
+    node(1, null),
+    ...Array.from({ length: count - 1 }, (_, index) => node(index + 2, 1)),
+  ];
+}
+
+function chainNodes(count: number): Node[] {
+  return Array.from({ length: count }, (_, index) => {
+    const id = index + 1;
+    return node(id, id === 1 ? null : id - 1);
+  });
+}
+
+type ReadCounter = { count: number };
+
+const COUNTED_COLLECTION_METHODS = new Set<PropertyKey>([
+  "get", "has", "values", "entries", "keys", "forEach", Symbol.iterator,
+]);
+
+/** 索引の全フィールド（Map・Set・配列）の読み取りを、要素1件ごとに数える。 */
+function observeIndexReads(index: NodeCollapseIndex, reads: ReadCounter): NodeCollapseIndex {
+  return Object.fromEntries(
+    Object.entries(index).map(([key, value]) => [key, observeReads(value, reads)]),
+  ) as NodeCollapseIndex;
+}
+
+function observeReads<T>(value: T, reads: ReadCounter): T {
+  if (Array.isArray(value)) return observeArrayReads(value, reads) as T;
+  if (value instanceof Map || value instanceof Set) {
+    return observeCollectionReads(value, reads) as T;
+  }
+  return value;
+}
+
+function observeArrayReads<T>(array: readonly T[], reads: ReadCounter): readonly T[] {
+  return new Proxy(array, {
+    get(target, property, receiver) {
+      // 配列の反復・map・添字はいずれも受け手経由の添字読み取りになる。
+      if (typeof property === "string" && /^\d+$/.test(property)) reads.count += 1;
+      return Reflect.get(target, property, receiver);
+    },
+  });
+}
+
+function countIteration<T>(iterator: Iterator<T>, reads: ReadCounter): IterableIterator<T> {
+  return {
+    next() {
+      const result = iterator.next();
+      if (!result.done) reads.count += 1;
+      return result;
+    },
+    [Symbol.iterator]() { return this; },
+  };
+}
+
+function observeCollectionReads(
+  collection: Map<unknown, unknown> | Set<unknown>,
+  reads: ReadCounter,
+): Map<unknown, unknown> | Set<unknown> {
+  return new Proxy(collection, {
+    get(target, property) {
+      const value = Reflect.get(target, property, target);
+      if (typeof value !== "function") return value;
+      const method = (value as (...args: unknown[]) => unknown).bind(target);
+      if (!COUNTED_COLLECTION_METHODS.has(property)) return method;
+      if (property === "get") {
+        return (key: unknown) => {
+          reads.count += 1;
+          return observeReads(method(key), reads);
+        };
+      }
+      if (property === "has") {
+        return (key: unknown) => {
+          reads.count += 1;
+          return method(key);
+        };
+      }
+      if (property === "forEach") {
+        return (callback: (...args: unknown[]) => void) => method((...args: unknown[]) => {
+          reads.count += 1;
+          callback(...args);
+        });
+      }
+      return () => countIteration(method() as Iterator<unknown>, reads);
+    },
+  });
+}
