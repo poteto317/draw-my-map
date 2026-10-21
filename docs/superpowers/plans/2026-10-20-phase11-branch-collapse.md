@@ -23,7 +23,7 @@
 
 - 低重要度の折りたたみ根と高重要度の孫: 解像度集合を全nodesから計算し、根を残して孫を隠す（Task 1/3/6）。
 - 同じIDのimportとUndo/Redo: 初回描画で旧折りたたみが消え、古いfocus要求も復活しない（Task 2/6）。
-- 自動配置表示と正本の混同: fit/focus/editorは投影座標、JSON/画像/複製/履歴は正本（Task 3/6）。
+- 自動配置表示と正本の混同: focus（`F`キー・検索の中央移動）/editorは投影座標、JSON/画像/複製/履歴は正本（Task 3/6）。
 - 折りたたんだ親へのTab追加: 成功時だけ展開し新規編集対象を隠さない。失敗時は維持（Task 6）。
 - 葉になったIDと入れ子: 無効指定の復活を防ぎ、外側展開で内側の指定を失わない（Task 1/2/6）。
 
@@ -99,7 +99,7 @@
 
 - [x] 未選択/葉のdisabledとcallback不実行、親のtoggle ID、閉状態の文言/件数/aria、更新後IDを扱うテスト。
 - [x] `npm test -- --runInBand NodeCollapseControl.test.tsx` RED→実装→GREEN、verify。
-- [x] ボタン内に検索やlayout計算を持ち込まない。独自keydownを追加せずnative buttonを使用。
+- [x] ボタン内に検索やlayout計算を持ち込まない。native buttonを使い、Enterの押し続けによる連続切り替えだけを`keydown`の`repeat`で止める（枝の複製ボタンと同じ方式、L-408）。
 
 ### Task 5: 検索結果からの祖先展開
 
@@ -138,7 +138,7 @@
 - 子追加adapter: `addChildNode(parentId)`の戻り値が非nullなら`expandNodes([parentId])`、戻り値はそのままMapStageへ返す。失敗時に展開しない。履歴操作を追加しない。
 - layoutFailed時に設計のstatus文言をMapOperationNoticeで表示。復帰したら消す。noticeは保存しない。
 
-- [x] 実Home/useNodes/MapStageを使い、Pixi・生成API・downloadなど外部境界のみモック。A/B/C/Dで入れ子維持、非表示件数、Vでhit test/fit/編集取消・選択解除が一致することを検証。
+- [x] 実Home/useNodes/MapStageを使い、Pixi・生成API・downloadなど外部境界のみモック。A/B/C/Dで入れ子維持、非表示件数、Vでhit test・メニュー・編集取消・選択解除が一致（fitに当たる機能はなく、`F`キー・検索の中央移動はVを使わず表示用座標を使う）することを検証。
 - [x] auto折りたたみで表示座標が変わり、検索展開後のfocus・編集位置が最新display座標になることを実world transformとeditor位置で検証。R変更だけでは座標不変、auto→manualでは正本へ戻る。
 - [x] 折畳前後のJSON・localStorage・画像出力対象が全nodesで一致し、Undo一回が直前の編集を戻す（折畳は履歴に入らない）ことを確認。
 - [x] 閉親Tab子追加の成功/失敗、非表示子孫込みコピー・複製・削除、Undo/Redo、同ID import、screen準備前に検索展開→importをテスト。
