@@ -135,6 +135,16 @@ it("件数は閉じた親だけ全子孫数を示し、開いた親・葉・未�
   expect(screen.getByRole("button", { name: "枝を折りたたむ" })).toBeDisabled();
 });
 
+it("折りたたみで隠れた子孫の位置を右クリックしてもメニューを開かず、表示中の親では開く", async () => {
+  await start(); select(1); toggle();
+  fireEvent.contextMenu(stage(), { clientX: 500, clientY: 200 });
+  expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "枝を展開" })).toBeEnabled();
+  fireEvent.contextMenu(stage(), { clientX: 300, clientY: 110 });
+  expect(screen.getByRole("menu")).toHaveStyle({ left: "300px", top: "110px" });
+  expect(screen.getByRole("button", { name: "枝を展開" })).toBeEnabled();
+});
+
 it("auto投影の座標で編集・F移動し、R変更だけでは動かずmanualで正本に戻る", async () => {
   await start("auto"); select(1); toggle();
   const projected = positions();
