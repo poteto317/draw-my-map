@@ -166,16 +166,50 @@ describe("nodeCollapse", () => {
     expect(collectAncestorIds(index, count)?.length).toBe(9_999);
   });
 
+  it("広い木で子孫数と可視集合・件数を導出する", () => {
+    // 根1の下に子2〜1,001。子100,200,…,1,000がそれぞれ孫を2つ持つ（k番目の親の孫は1,000+2k と 1,001+2k）。
+    const nodes = wideTreeWithGrandchildrenNodes();
+    const index = createNodeCollapseIndex(nodes)!;
+
+    expect(nodes).toHaveLength(1_021);
+    expect(index.descendantCountById.get(1)).toBe(1_020);
+    expect(index.descendantCountById.get(100)).toBe(2);
+    expect(index.descendantCountById.get(1_000)).toBe(2);
+    expect(index.descendantCountById.get(2)).toBe(0);
+    expect(index.descendantCountById.get(1_001)).toBe(0);
+    expect(index.descendantCountById.get(1_002)).toBe(0);
+
+    const derived = deriveNodeCollapse(index, new Set([100, 500, 2]));
+
+    expect(ids(derived.collapsedNodeIds)).toEqual([100, 500]);
+    expect([...derived.hiddenCountById]).toEqual([[100, 2], [500, 2]]);
+    expect(derived.visibleNodeIds.size).toBe(1_017);
+    for (const visibleId of [1, 2, 100, 500, 1_001, 1_004, 1_005, 1_020, 1_021]) {
+      expect(derived.visibleNodeIds.has(visibleId)).toBe(true);
+    }
+    for (const hiddenId of [1_002, 1_003, 1_010, 1_011]) {
+      expect(derived.visibleNodeIds.has(hiddenId)).toBe(false);
+    }
+
+    const rootCollapsed = deriveNodeCollapse(index, new Set([1, 100]));
+
+    expect(ids(rootCollapsed.visibleNodeIds)).toEqual([1]);
+    expect([...rootCollapsed.hiddenCountById]).toEqual([[1, 1_020], [100, 2]]);
+  });
+
   it.each([
-    ["広い木", wideTreeNodes(4_000), [1]],
-    ["深い鎖", chainNodes(4_000), [1_000, 2_000, 3_000]],
-  ] as const)("%sの導出で索引の全フィールドを線形回数だけ読み取る", (_name, nodes, collapsed) => {
+    ["広い木", wideTreeNodes(4_000), [1], [[1, 3_999]], 1],
+    ["深い鎖", chainNodes(4_000), [1_000, 2_000, 3_000], [[1_000, 3_000], [2_000, 2_000], [3_000, 1_000]], 1_000],
+  ] as const)("%sの導出で索引の全フィールドを線形回数だけ読み取る", (_name, nodes, collapsed, hiddenCounts, visibleCount) => {
     const index = createNodeCollapseIndex(nodes)!;
     const reads = { count: 0 };
 
     const derived = deriveNodeCollapse(observeIndexReads(index, reads), new Set(collapsed));
 
-    expect(derived.visibleNodeIds.size).toBe(deriveNodeCollapse(index, new Set(collapsed)).visibleNodeIds.size);
+    expect([...derived.hiddenCountById]).toEqual(hiddenCounts);
+    expect(derived.visibleNodeIds.size).toBe(visibleCount);
+    expect(derived.visibleNodeIds.has(collapsed[0])).toBe(true);
+    expect(derived.visibleNodeIds.has(collapsed[0] + 1)).toBe(false);
     expect(reads.count).toBeGreaterThan(0);
     expect(reads.count).toBeLessThanOrEqual(nodes.length * 6);
   });
@@ -186,6 +220,14 @@ function wideTreeNodes(count: number): Node[] {
     node(1, null),
     ...Array.from({ length: count - 1 }, (_, index) => node(index + 2, 1)),
   ];
+}
+
+function wideTreeWithGrandchildrenNodes(): Node[] {
+  const grandchildren = Array.from({ length: 10 }, (_, offset) => {
+    const k = offset + 1;
+    return [node(1_000 + 2 * k, k * 100), node(1_001 + 2 * k, k * 100)];
+  }).flat();
+  return [...wideTreeNodes(1_001), ...grandchildren];
 }
 
 function chainNodes(count: number): Node[] {
