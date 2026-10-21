@@ -116,11 +116,12 @@ client/src/
 #### 2. UI Layer (Components) (`src/components/layout/`, `src/components/map/`)
 - **責務**: ユーザーに対するプレゼンテーション、DOM イベントの捕捉、および Pixi.js Canvas ステージと DOM オーバーレイの統合。
 - **構成モジュール**:
-  - **レイアウト UI (`src/components/layout/` 全 16 ファイル)**:
-    - `AppHeader.tsx`: タイトル、ノード検索、レイアウトモード切替、操作ヒント、重要度・解像度フィルタ切替、元に戻す／やり直すボタン、枝を複製ボタン、枝のコピー＆ペーストの常設案内、JSON/画像エクスポートボタン、操作通知バーを統合するヘッダー。
+  - **レイアウト UI (`src/components/layout/` 全 17 ファイル)**:
+    - `AppHeader.tsx`: タイトル、ノード検索、レイアウトモード切替、操作ヒント、重要度・解像度フィルタ切替、枝の折りたたみ・展開ボタンと非表示件数（`NodeCollapseControl`）、元に戻す／やり直すボタン、枝を複製ボタン、枝のコピー＆ペーストの常設案内、JSON/画像エクスポートボタン、操作通知バーを統合するヘッダー。
     - `NodeSearchBox.tsx`, `nodeSearchKeyAction.ts`: ARIA combobox/listbox による検索欄と最大50件の候補一覧、および矢印・Enter・Escape・IME変換中のキー判定。
     - `AppWorkspace.tsx`: ヘッダー下の 2 カラム（メインキャンバス領域 + 右サイドパネル）レイアウト。
     - `LayoutModeSelector.tsx`: `手動配置` / `自動配置` 切り替えボタングループ（`role="group"`, `aria-label="レイアウトモード"`）。
+    - `NodeCollapseControl.tsx`: 選択中の親ノードの枝を折りたたみ・展開するボタン、非表示件数（選択中の親が閉じている間はその全子孫数。未選択・葉・展開中は 0件）、保存・画像出力と表示用配置の説明を表示する。
     - `MapHistoryControls.tsx`: ヘッダーの `元に戻す` / `やり直す` ボタン（履歴の有無に応じて `disabled`）。
     - `NodeDuplicateControl.tsx`: ヘッダーの `枝を複製` ボタン（ノード未選択時は `disabled`）。クリックごとに 1 回複製し、押したあともフォーカスを移さない。`Enter` の押し続け（`repeat`）だけ `preventDefault()` で抑止する。
     - `LayoutModeOperationHint.tsx`: 現在の `layoutMode` に応じた操作ガイド文字列の表示。
@@ -144,7 +145,7 @@ client/src/
 #### 3. Application State & Coordination Layer (Hooks) (`src/hooks/`, `src/components/map/use*.ts`)
 - **責務**: アプリケーション状態の保持（React State / Ref / Reducer）、ライフサイクル制御、および Domain / Services 層の呼び出し調停。
 - **構成モジュール**:
-  - **アプリケーション状態フック (`src/hooks/` 全 19 ファイル)**:
+  - **アプリケーション状態フック (`src/hooks/` 全 23 ファイル)**:
     - `useNodes.ts`, `useNodeLayoutState.ts`: ノードツリーの CRUD・選択・重要度・イラスト更新・枝の複製（`duplicateSubtree`）・枝のコピー（`copySubtree`）と貼り付け（`pasteSubtree`）と、手動/自動レイアウトモードの状態管理（複製と貼り付けの挿入処理は内部関数 `applySubtreeInsertion` を共有する）・ツリー変更時の `layoutNodeForest` 自動整列トリガー。
     - `useMapResolutionFilter.ts`, `mapResolutionFilterState.ts`: ズーム倍率・ヒステリシス・手動/自動モード遷移・マップ置換時の `pendingResetScale` 同期に基づく可視ノードフィルタリング状態管理。
     - `useMapPersistence.ts`, `useMapStoragePersistence.ts`, `useMapStorageRestoration.ts`, `useMapStorageAutoSave.ts`, `useMapFilePersistence.ts`, `useMapJsonExport.ts`, `useMapJsonImport.ts`: `localStorage` からの初期復元・300ms デバウンス自動保存、および JSON ファイルのエクスポート/インポート調停。
@@ -153,10 +154,12 @@ client/src/
     - `useNodeDuplicationAction.ts`: 選択ノードの枝を `useNodes.duplicateSubtree` で複製し、成功 / 失敗の通知を `useRevisionScopedNotice` へ渡す。
     - `useRevisionScopedNotice.ts`: 操作結果の通知を、次の通知か `documentRevision` の変化まで残す。通知を出した時点の `documentRevision` と組にして保持し、現在の値と違う通知を隠す。`useNodeDuplicationAction.ts`（複製の通知）と `page.tsx`（コピー／貼り付けの通知）がそれぞれ別の枠として呼ぶ。
     - `useNodeLabelSearch.ts`: `nodes` の参照が変わったときに検索索引を作り直し、入力ごとに同期検索して可視性を付加した候補を返す。
-    - `useNodeSearchNavigation.ts`: 選択時にノードIDの実在を再確認し、隠れている場合は必要な解像度表示へ切り替えて通知し、選択と中央移動要求を発行する。検索操作では `documentRevision` を増やさない。
+    - `useNodeSearchNavigation.ts`: 選択時にノードIDの実在を再確認し、隠れている場合は閉じた祖先の展開（`expandNodes`）と必要な解像度表示への切り替えを行って通知し（両方のときは通知文を半角空白で連結）、選択と中央移動要求を発行する。検索操作では `documentRevision` を増やさない。
+    - `useBranchCollapse.ts`: `documentRevision` とノードIDで表示専用の折りたたみ集合を管理する。文書世代が変わると全展開へ戻し、削除や葉化で無効になった指定は `normalizeCollapsedNodeIds` で描画時点から除外する。ヘッダーのボタンの可否は `canToggle`（`canCollapse` による子の有無の判定）で返し、`toggle` と検索用の `expandNodes` で集合を更新する。
+    - `useMapDisplayState.ts`: 折りたたみ可視集合と解像度可視集合を統合し、自動配置時の表示用投影座標を返す。正本 `nodes` は変更しない。
     - `useMapHistory.ts`: 編集履歴（Undo / Redo）の ref 管理と React state への反映。`useNodeLayoutState` から呼ばれる。
     - `useResettingMapReplacement.ts`: マップ置換時に `resetRevision` をインクリメントし、ステージ・コンテキストメニュー・解像度フィルタを同期リセットするフック（イラスト生成は `documentRevision` で失効する）。
-  - **マップステージ制御フック (`src/components/map/use*.ts` 18 ファイル + `pixi/usePixiApplication.ts`)**:
+  - **マップステージ制御フック (`src/components/map/use*.ts` 19 ファイル + `pixi/usePixiApplication.ts`)**:
     - `pixi/usePixiApplication.ts`: Pixi.js `Application` の非同期初期化・リサイズ追従・アンマウント時破棄。
     - `useRenderedMapScene.ts`, `useIllustrationTextures.ts`, `useMapVisibilityTransition.ts`: React 状態から Pixi シーンへの差分描画同期、`PixiRuntime` ごとのイラスト `Texture` セッションキャッシュと `destroy(true)` 解放、160ms フェード Tween 調停。
     - `useMapViewport.ts`, `useViewportScaleNotification.ts`, `useMapWheelZoom.ts`, `useMapViewportShortcut.ts`: ビューポート状態管理、親への `scale` 変更通知、ホイールズーム登録、`F` キー中央フォーカスショートカット。
@@ -166,6 +169,7 @@ client/src/
     - `useHiddenNodeInteractionReset.ts`, `useMapStageReset.ts`: 非表示化したノードの選択・編集・ジェスチャー強制リセット、および `resetRevision` 更新時のステージ状態一括初期化。
     - `useDocumentRestoreInteractionReset.ts`: `documentRevision`（マップ置換・成功した Undo / Redo）の更新時に、編集中のラベル・進行中のジェスチャー・コンテキストメニューを閉じる（viewport は維持）。
     - `useMapHistoryShortcuts.ts`: Undo / Redo のキーボードショートカット登録。
+    - `useNodeFocusRequest.ts`: 検索から渡された `NodeFocusRequest` を、`documentRevision` が一致し、対象が描画中の `nodes`（自動配置の折りたたみ中は表示用座標）に存在し、screen が準備できたときに 1 回だけ中央移動へ反映する。進行中のジェスチャーは先に中断する。
     - `useMapClipboardEvents.ts`: `window` の `copy` / `paste` イベントを 1 回だけ登録し、選択ノードの枝のコピーとクリップボードの枝の貼り付けを仲介する。対象判定（イベント対象とフォーカス要素が編集可能、DOM の範囲選択、ラベル編集中、ジェスチャー中、`defaultPrevented` のときはブラウザに任せる）、`clipboardData` の読み書き、`subtreeClipboardCodec` による検証、通知の生成だけを担い、スナップショット生成と挿入は `MapStage` の props（`onCopySubtree` / `onPasteSubtree`）に委ねる。コピー失敗時は `preventDefault` しない。最新の props を ref 経由で使い、アンマウント時にリスナーを解除する。
 - **依存可能レイヤー**: Services, Domain, Config, Types
 
@@ -188,8 +192,8 @@ client/src/
 
 #### 5. Domain Layer (`src/domain/`)
 - **責務**: システムの中核となる純粋なビジネスルール、数学・幾何計算、ツリー操作アルゴリズム、データ検証・変換。**React や Pixi.js、DOM、ブラウザ固有 API（window, document, localStorage 等）には一切依存しない純粋関数群**。
-- **構成サブパッケージ（全 45 ファイル）**:
-  - `domain/nodes/` (24 ファイル):
+- **構成サブパッケージ（全 49 ファイル）**:
+  - `domain/nodes/` (26 ファイル):
     - `nodeAutoLayout.ts`, `nodeLayoutForest.ts`, `nodeLayoutForestRelations.ts`, `nodeLayoutForestTraversal.ts`, `nodeLayoutGeometry.ts`, `nodeLayoutMetrics.ts`, `nodeLayoutPlacement.ts`, `nodeLayoutSpacing.ts`, `nodeLayoutArithmetic.ts`: 木構造・森構造の幾何配置計算（親子関係とルート抽出 `buildNodeForestRelations`、非再帰トラバーサルとサイクル検出 `traverseNodeForest`、フォレストインデックス化 `indexNodeForest`、座標展開 `calculateNodePositions`、深さ別列 X 座標とサブツリー垂直スパン計測 `calculateNodeLayoutMetrics`、双方向垂直中央揃え配置 `placeNodeForest`、数値オーバーフロー・浮動小数点 ULP 精度劣化防御および最小間隔判定 `checkedAdd`/`checkedSubtract`/`checkedMultiply`/`calculateRoundingTolerance`/`hasSufficientGap`、垂直間隔検証 `hasValidVerticalSpacing`）。
     - `nodeTree.ts`: ノード親子付け替え（`connectNodeTree`）、**自己接続・存在しないノード・循環参照検出（`canConnectNodes`）**、部分木 ID 収集（`collectSubtreeIds`。親子の隣接表と queue による非再帰・線形の走査で、親子が循環した入力でも停止する）、部分木連動移動（`moveNodeSubtree`）。
     - `nodePlacement.ts`: 新規ルートノード（`createRootNode`）、子ノード（`createChildNode`）、兄弟ノード（`createSiblingNode`）の初期座標算出。
@@ -200,13 +204,16 @@ client/src/
     - `nodeIllustration.ts`, `nodeIllustrationUpdate.ts`: イラスト描画矩形（`getNodeIllustrationRect`）、ラベル中心Yオフセット（`getNodeLabelCenterOffset`）、イラスト付きノードの最小高さ保証（`getIllustratedNodeMinHeight`）およびイラストの紐付け・解除更新（`replaceNodeIllustration`, `clearNodeIllustration`）。
     - `nodeImportance.ts`, `nodeImportanceUpdate.ts`: 重要度（`"high" | "medium" | "low"`, デフォルト `"medium"`）のドメインルールと更新（`replaceNodeImportance`）。
     - `nodeResolution.ts`, `nodeResolutionLevel.ts`, `nodeVisibility.ts`: 表示レベルに応じた重要度判定（`isNodeVisibleAtLevel`）、ヒステリシス付き自動解像度レベル判定（`resolveAutomaticResolutionLevel`, `resolveResolutionLevel`）、および祖先ノードの可視維持を含む可視ノード ID 収集（`collectVisibleNodeIds`）。
+    - `nodeCollapse.ts`: 非再帰の索引化（`createNodeCollapseIndex`）、全子孫数、折りたたみ可否の判定（`canCollapse`）、不在IDと葉の指定の除外（`normalizeCollapsedNodeIds`）、入れ子の折りたたみ指定の切り替えと展開（`toggleCollapsedNode`, `expandCollapsedNodes`）、折りたたみによる可視集合（`deriveNodeCollapse`）、祖先IDの算出（`collectAncestorIds`）を担う。
+    - `nodeCollapseLayout.ts`: 自動配置時だけ（`projectCollapsedLayout`）、折りたたみで表示されるノードを再配置して同じIDへ座標を合成する。非表示ノードと正本座標を維持し、配置不能時は正本座標へ戻す。
     - `nodeEdgeCurve.ts`: ノード間を結ぶ三次ベジェ曲線（親の右端中央 → 子の左端中央、`controlX = start.x / 2 + end.x / 2`）の制御点幾何計算（`getNodeEdgeCurve`）。
   - `domain/clipboard/` (1 ファイル):
     - `subtreeClipboardCodec.ts`: 枝のクリップボード専用形式（`{"type":"draw-my-map/subtree","version":1,"nodes":[...]}`）の書き出し（`encodeSubtreeClipboard`。選択根の `parentId` を `null` に切り離し、上限と貼り付け可能性を確認）と、読み取り・検証（`decodeSubtreeClipboard`。文字数 5,000,000・ノード数 10,000 の上限、`type` / `version`、V3 のノード検証 `normalizeMapDocumentNode(..., 3)`、単一の根、`validateMapDocumentGraph`）。判定は線形で、結果は `{ ok: true, value } | { ok: false, reason: "invalid" | "too-large" }`。
   - `domain/history/` (1 ファイル):
     - `mapHistory.ts`: 編集履歴の純粋な遷移（記録・Undo・Redo・同値判定・最大100操作の上限）。
-  - `domain/search/` (1 ファイル):
+  - `domain/search/` (2 ファイル):
     - `nodeLabelSearch.ts`: ラベルと検索語のNFKC正規化・小文字化、現在のノード配列順を保つ索引作成、部分一致検索、最大50件への表示制限と一致総数の集計。空ラベルの代替表示は検索対象にしない。
+    - `nodeSearchReveal.ts`: `resolveNodeSearchReveal` で、検索対象の閉じた祖先と解像度表示変更の要否を純粋計算し、無関係な枝と対象自身の折りたたみを維持する。
   - `domain/illustration/` (5 ファイル):
     - `illustrationPrompt.ts`: 入力ラベルの検証（`validateIllustrationLabel`: トリム後 1〜200 文字）、日本語文字判定（`needsTranslation`）、FLUX.1 用英語プロンプト合成（`buildIllustrationPrompt`）。
     - `illustrationActionLabel.ts`: イラスト有無に応じたアクション文言（`"イラストを生成"` / `"イラストを再生成"`）の解決（`getIllustrationActionLabel`）。
@@ -233,15 +240,16 @@ client/src/
 
 #### 7. Config & Constants Layer (`src/config/`)
 - **責務**: アプリケーション全体で共有される静的定数、寸法、スタイル定義。
-- **構成ファイル（全 3 ファイル）**:
+- **構成ファイル（全 4 ファイル）**:
   - `config/shapes.ts`: ノード矩形サイズ（`RECT_WIDTH = 100`, `RECT_HEIGHT = 60`）、ノード配置間隔（`CHILD_HORIZONTAL_GAP = 120`, `SIBLING_VERTICAL_GAP = 40`, `TREE_VERTICAL_GAP = 80`）、およびイラスト配置寸法（`ILLUSTRATION_SIZE = 48`, `ILLUSTRATION_TOP_PADDING = 8`, `ILLUSTRATION_AREA_HEIGHT = 56`, `ILLUSTRATED_NODE_HEIGHT = 116`）。
   - `config/nodeLabel.ts`: 空ラベル時のフォールバックノードラベル定義（`FALLBACK_NODE_LABEL = "新しいノード"`）。
+  - `config/resolutionLevelLabels.ts`: 表示レベルの表示名（`RESOLUTION_LEVEL_LABELS`: `高のみ` / `中以上` / `すべて`）。検索で表示を切り替えたときの通知文に使う。
   - `config/illustration.ts`: 保存・縮小用サムネイル解像度と品質（`ILLUSTRATION_THUMBNAIL_SIZE = 128`, `ILLUSTRATION_THUMBNAIL_QUALITY = 0.85`）、`localStorage` 容量制限用上限値（`MAX_ILLUSTRATION_DATA_URL_LENGTH = 100_000`）、画像デコード時の保護上限値（`MAX_ILLUSTRATION_IMAGE_DIMENSION = 512`）。
 - **依存可能レイヤー**: Types
 
 #### 8. Types Layer (`src/types/`)
 - **責務**: アプリケーション横断で共有される TypeScript 型定義、インターフェース、ユニオン型。
-- **構成ファイル（全 9 ファイル完全網羅）**:
+- **構成ファイル（全 11 ファイル完全網羅）**:
   - `types/node.ts`: `Node`（`id`, `parentId`, `x`, `y`, `width`, `height`, `label`, `importance`, `illustration?`）。
   - `types/nodeImportance.ts`: `NodeImportance`（`"high" | "medium" | "low"`）。
   - `types/nodeLayout.ts`: `NodeLayoutMode`（`"manual" | "auto"`）。
@@ -251,7 +259,9 @@ client/src/
   - `types/mapImageExport.ts`: 画像エクスポート関数シグネチャ型（`CreateSvgExport`, `DownloadImage`, `RasterizePng`）。※戻り値型参照のため `domain/imageExport/mapSvgDocument` の `MapSvgDocument` 型のみを `import type`（コンパイル時のみの型参照・実行時依存ゼロ）しています。
   - `types/illustrationGeneration.ts`: `IllustrationGenerationState`（`idle` / `generating` / `succeeded` / `failed` の判別共用体）。
   - `types/operationNotice.ts`: `OperationNotice`（`kind: "status" | "warning" | "error"`, `message: string`）。
-- **依存可能レイヤー**: なし（最下位層。ただし `types/mapImageExport.ts` から `domain/imageExport/mapSvgDocument` への `import type` のみ例外的に許容）
+  - `types/nodeSearch.ts`: `NodeSearchListItem`（検索の一致結果 `NodeSearchMatch` に、現在の表示で隠れているかを示す `hidden` を加えた候補）。※`domain/search/nodeLabelSearch` の `NodeSearchMatch` 型のみを `import type` しています。
+  - `types/nodeFocusRequest.ts`: `NodeFocusRequest`（`nodeId`, `sequence`, `documentRevision`）。検索からの中央移動要求。
+- **依存可能レイヤー**: なし（最下位層。ただし `types/mapImageExport.ts` から `domain/imageExport/mapSvgDocument` への `import type`、`types/nodeSearch.ts` から `domain/search/nodeLabelSearch` への `import type` のみ例外的に許容）
 
 ---
 
@@ -416,7 +426,7 @@ $$
 
 ### 3.5 可視性トランジション (Tween アニメーション)
 
-解像度フィルタリング（ズーム連動または手動フィルタ）によるノードの表示/非表示の切り替え時、瞬時にノードが消失・出現すると視覚的な認知負荷が高まります。そのため、`src/components/map/pixi/mapVisibilityAnimator.ts` および `src/components/map/pixi/mapVisibilityTween.ts` によるスムーズなフェードイン/フェードアウトアニメーション（標準 `DEFAULT_DURATION_MS = 160`、160ms）が適用されます。
+解像度フィルタリング（ズーム連動または手動フィルタ）や枝の折りたたみ・展開によるノードの表示/非表示の切り替え時、瞬時にノードが消失・出現すると視覚的な認知負荷が高まります。そのため、`src/components/map/pixi/mapVisibilityAnimator.ts` および `src/components/map/pixi/mapVisibilityTween.ts` によるスムーズなフェードイン/フェードアウトアニメーション（標準 `DEFAULT_DURATION_MS = 160`、160ms）が適用されます。
 
 - **Tween 状態機械**:
   - 各ノードおよび接続線に対して `MapVisibilityTarget` インターフェース（`setOpacity`, `setInteractive`, `setRendered`）を生成。
@@ -501,7 +511,7 @@ sequenceDiagram
   - `onMouseDown={(e) => e.preventDefault()}`、`onContextMenu={(e) => e.preventDefault()}`、`onDoubleClick={(e) => e.stopPropagation()}` を設定。メニューアイテムのクリック時にキャンバスの選択解除（`onSelectNode(null)`）や新規ノード生成が誤ってトリガーされるのを完全に防止。
   - メニュー項目をクリックしてメニューが閉じた直後、素早い 2 回目のクリックが背面キャンバスに到達して `dblclick`（新規ノード生成や編集開始）が誤発火するのを防ぐため、`menuActivationDoubleClick.ts` によりメニュー実行後 **500ms 以内**（`MENU_ACTIVATION_DOUBLE_CLICK_WINDOW_MS = 500`）のダブルクリックを無視します。
 - **非表示化時のインタラクション即時リセット (`useHiddenNodeInteractionReset.ts`)**:
-  - 解像度フィルタの切り替えやズームアウトによって、現在選択中（`selectedNodeId`）またはインライン編集中（`editingNodeId`）のノードが `visibleNodeIds` から外れて非表示になった場合、`useHiddenNodeInteractionReset` が `useLayoutEffect` で即座に選択解除（`onSelectNode(null)`）、インライン編集のキャンセル（`cancelEditing()`）、および進行中ジェスチャーの強制解除（`cancelActiveGesture()`）を実行し、非表示ノードに対するゴースト操作を防ぎます。
+  - 解像度フィルタの切り替え、ズームアウト、枝の折りたたみ、接続の付け替えなどの構造変更によって、現在選択中（`selectedNodeId`）またはインライン編集中（`editingNodeId`）のノードが `visibleNodeIds`（折りたたみと解像度フィルターの積集合）から外れて非表示になった場合、`useHiddenNodeInteractionReset` が `useLayoutEffect` で即座に選択解除（`onSelectNode(null)`）、インライン編集のキャンセル（`cancelEditing()`）、および進行中ジェスチャーの強制解除（`cancelActiveGesture()`）を実行し、非表示ノードに対するゴースト操作を防ぎます。
 
 ---
 
@@ -520,7 +530,7 @@ sequenceDiagram
    - `layoutMode: "auto"` の場合、ノードの追加・削除・親子付け替え・イラスト追加などの構造変更時に、ドメイン関数の `layoutNodeForest(nodes)` を自動実行して全ノードの座標を再配置。
    - 手動レイアウト（`manual`）時は、自由なドラッグ移動を許可。
 3. **`useMapResolutionFilter`**:
-   - ビューポートの `scale` に連動して、表示すべきノード ID のセット（`visibleNodeIds`）を算出。
+   - ビューポートの `scale` に連動して、解像度フィルターで表示すべきノード ID のセット（`visibleNodeIds`。全 `nodes` に適用した解像度可視集合 R）を算出。MapStage へ渡す最終的な可視集合は、9 番の `useMapDisplayState` が折りたたみと統合して作る。
    - 閾値付近での微小なズーム往復によるノードのチラつきを防ぐヒステリシス制御ロジックを内包。
 4. **`useMapPersistence`**:
    - マップ状態の変更を検知し、`localStorage` へのデバウンス自動保存を実施。
@@ -533,8 +543,11 @@ sequenceDiagram
 7. **`useRevisionScopedNotice`**:
    - 操作結果の通知を、通知を出した時点の `documentRevision` と組にして保持し、`documentRevision` が変わると古い通知を隠す。`useNodeDuplicationAction` が複製の通知に、`page.tsx` が `MapStage` の `useMapClipboardEvents` からのコピー／貼り付けの通知に、それぞれ別の枠として使う。
 8. **`useNodeLabelSearch` / `useNodeSearchNavigation`**:
-   - `nodes` から作った索引を入力のたびに同期検索し、現在の可視ノードIDと合わせて候補を構成する。
-   - 候補選択時はノードIDの実在を確認し、必要なら表示モードを切り替えてから選択と `NodeFocusRequest` を発行する。検索、表示切り替え、選択、viewport移動は編集履歴へ記録せず、`documentRevision` も増やさない。
+   - `nodes` から作った索引を入力のたびに同期検索し、最終可視集合（折りたたみと解像度フィルターの積集合）と合わせて候補を構成する。
+   - 候補選択時はノードIDの実在を確認し、閉じた祖先だけを展開し、必要なら表示モードを切り替えてから選択と `NodeFocusRequest` を発行する。検索、祖先の展開、表示切り替え、選択、viewport移動は編集履歴へ記録せず、`documentRevision` も増やさない。
+9. **`useBranchCollapse` / `useMapDisplayState`**:
+   - `useBranchCollapse` は表示専用の折りたたみ集合を `documentRevision` と組にして保持し、折りたたみによる可視集合 C、閉じたノードごとの全子孫数、`toggle` / `expandNodes` を返す。`documentRevision` が変わると全展開へ戻す。閉じた親へ `Tab` で子を追加できたときは、`page.tsx` が `expandNodes` でその親を展開する。
+   - `useMapDisplayState` は C と 3 番の解像度可視集合 R から最終可視集合 V = C ∩ R を作り、自動配置で折りたたみ中だけ表示用座標の `displayNodes` を返す。MapStage はこの `displayNodes` と V を受け取る。正本 `nodes` は変更しない。
 
 #### 編集履歴の所有とリビジョン
 
@@ -542,7 +555,7 @@ sequenceDiagram
 - **ドラッグのグループ**: Pixi 側はドラッグの閾値を越えた最初の有効な移動を通知する直前に `onBeginNodeMove` を呼んで履歴グループのリースを受け取り（クリックだけでは履歴を開始しない）、移動のたびに有効かを確認する。ドラッグ全体が1操作になり、Undo / Redo / 別編集 / マップ置換でリースは失効し、遅れて届いた古い移動通知は無視される。
 - **二種類のリビジョン**:
   - `resetRevision`: JSON 読み込みと初回復元による**マップ置換**で増加する。ステージの viewport 初期化、解像度フィルターのリセットなど、マップを開き直したときの初期化に使う。
-  - `documentRevision`: マップ置換に加えて、**成功した Undo / Redo** でも増加する。編集中の状態・ジェスチャー・コンテキストメニューを閉じ、進行中のイラスト生成と既存プレビュー、枝の複製の通知、枝のコピー／貼り付けの通知を失効させる。viewport と表示フィルターは維持する。
+  - `documentRevision`: マップ置換に加えて、**成功した Undo / Redo** でも増加する。編集中の状態・ジェスチャー・コンテキストメニューを閉じ、進行中のイラスト生成と既存プレビュー、枝の複製の通知、枝のコピー／貼り付けの通知、ノード検索の通知と中央移動要求を失効させ、枝の折りたたみを全展開へ戻す。viewport と表示フィルターは維持する。
 - **保存**: 復元後のマップは通常の 300ms デバウンス自動保存に流れる。履歴は保存しない。
 
 #### 枝の複製の流れ
@@ -563,8 +576,18 @@ sequenceDiagram
 - `NodeSearchBox` の入力を `useNodeLabelSearch` が受け、`domain/search/nodeLabelSearch.ts` で正規化済み索引を同期走査する。表示候補は現在の `nodes` 配列順の先頭50件で、総一致数は別に保持する。
 - 検索候補の共有契約 `NodeSearchListItem` は `types/nodeSearch.ts` が所有し、検索結果の `NodeSearchMatch` に現在の表示状態 `hidden` を加えた型として、生成hookとUIの双方が依存する。
 - 候補はノードIDで識別する。クリックまたは Enter の時点で `useNodeSearchNavigation` が最新の `nodes` を再検索し、削除済みならエラー通知を出して終了する。
-- 対象が解像度フィルターで隠れていれば、重要度を表示できる最小レベルへ切り替える。その後、ノードを選択し、`documentRevision` 付きの `NodeFocusRequest` を `MapStage` へ渡して現在倍率のまま中央へ移動する。
+- 対象の祖先に閉じた枝があれば、閉じた祖先だけを展開する（詳細は次の「枝の折りたたみと表示座標の流れ」）。対象が解像度フィルターで隠れていれば、重要度を表示できる最小レベルへ切り替える。両方を行ったときは通知文を半角空白で連結する。その後、ノードを選択し、`documentRevision` 付きの `NodeFocusRequest` を `MapStage` へ渡して、その描画の表示用座標で現在倍率のまま中央へ移動する。
 - 検索状態とviewportは永続化対象ではなく、検索の一連の処理は `NodeMapState` を変更しない。したがって編集履歴、V3 JSON、`localStorage` の形式に影響しない。
+
+#### 枝の折りたたみと表示座標の流れ
+
+- `useBranchCollapse` は正本の全 `nodes` を一度索引化し、子を持つ実在ノードの折りたたみ指定と各ノードの全子孫数を管理する。ヘッダーの件数は、選択中の親が閉じている間はその全子孫数（解像度フィルターで既に非表示の子孫も含む）で、未選択・葉・展開中は 0件。折りたたみ集合は `NodeMapState` に含めず、操作によって `documentRevision` や履歴を変更しない。
+- 折りたたみによる集合を C、全 `nodes` から計算した解像度可視集合を R とし、MapStage、接続線、hit test、編集、選択解除、fit は V = C ∩ R を共通利用する。高重要度の子孫も閉じた祖先を越えて表示されない。
+- 自動配置では `nodeCollapseLayout` が C のノードだけを配置して表示用 `displayNodes` へ座標を合成する。保存、コピー、複製、削除、イラスト生成、JSON、`localStorage`、PNG / SVG は正本 `nodes` を使うため、全件と元座標を保つ。手動配置では正本座標をそのまま表示する。
+- 検索結果を選ぶと `useNodeSearchNavigation` が対象の厳密な祖先だけを展開し、必要な場合だけ解像度表示も変更する。その描画の最新 `displayNodes` 座標へフォーカスする。無関係な閉じた枝と対象自身の指定は維持する。
+- 閉じた親へ `Tab` で子を追加できたときだけ、`page.tsx` がその親を展開し、新規ノードの編集が見える状態にする。閉じた親への接続では折りたたみ指定を変えないため、接続した子は V から外れる。
+- 手動配置で閉じた親をドラッグすると、`moveNodeSubtree` が正本 `nodes` の部分木全体を動かすため、隠れた子孫も同じ量だけ移動する。複製・貼り付けで発行した新しいIDは折りたたみ集合に含まれないため、新しい枝は展開した状態で表示され、元の枝の指定は維持される。各操作の利用者向けの説明は features.md の 10.4 節にまとめる。折りたたみや構造変更で選択中・編集中のノードが V から外れた場合は、`useHiddenNodeInteractionReset` が選択解除・編集取消・ジェスチャー取消を行う。
+- import、自動復元、成功した Undo / Redo で文書世代が変わると全展開へ戻る。同じIDが再利用されても旧指定や旧フォーカス要求を持ち越さない。
 
 ---
 
