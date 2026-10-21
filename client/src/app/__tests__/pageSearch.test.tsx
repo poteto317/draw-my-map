@@ -260,3 +260,18 @@ it("初期化前の検索移動要求を同じIDのJSON読み込み後に失効�
   expect(lastWorldContainer()?.position.set).toHaveBeenLastCalledWith(0, 0);
   expect(lastWorldContainer()?.scale.set).toHaveBeenLastCalledWith(1);
 });
+
+it("折りたたみだけで隠れた検索結果も非表示と表示し、選択で祖先を展開する", async () => {
+  const user = userEvent.setup();
+  await renderReady(<Home />);
+  mockStageBounds(document.querySelector<HTMLElement>(".cursor-crosshair")!);
+  const input = screen.getByRole("combobox", { name: "ノードを検索" });
+  await user.type(input, "親ノード");
+  await user.click(screen.getByRole("option", { name: "親ノード（ルート）" }));
+  await user.click(screen.getByRole("button", { name: "枝を折りたたむ" }));
+  await user.clear(input); await user.type(input, "検索対象");
+  await user.click(screen.getByRole("option", { name: "検索対象（親: 親ノード、非表示）" }));
+  expect(screen.getByRole("button", { name: "表示 自動" })).toHaveAttribute("aria-pressed", "true");
+  expect(lastWorldContainer()?.position.set).toHaveBeenLastCalledWith(-50, 0);
+  expect(screen.getByTestId("operation-notices")).toHaveTextContent("祖先の枝を展開しました");
+});

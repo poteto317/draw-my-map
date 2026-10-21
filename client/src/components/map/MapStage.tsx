@@ -38,7 +38,7 @@ import type { OperationNotice } from "@/types/operationNotice";
 import type { NodeFocusRequest } from "@/types/nodeFocusRequest";
 
 type MapStageProps = {
-  nodes: Node[];
+  nodes: readonly Node[];
   focusRequest: NodeFocusRequest | null;
   visibleNodeIds?: ReadonlySet<number>;
   onViewportScaleChange?: (scale: number) => void;

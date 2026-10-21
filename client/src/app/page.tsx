@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useNodes } from "@/hooks/useNodes";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { AppWorkspace } from "@/components/layout/AppWorkspace";
@@ -8,6 +8,7 @@ import { NodeImportanceSelector } from "@/components/layout/NodeImportanceSelect
 import { ResolutionFilterSelector } from "@/components/layout/ResolutionFilterSelector";
 import { MapImageExportControls } from "@/components/layout/MapImageExportControls";
 import { MapHistoryControls } from "@/components/layout/MapHistoryControls";
+import { NodeCollapseControl } from "@/components/layout/NodeCollapseControl";
 import { NodeDuplicateControl } from "@/components/layout/NodeDuplicateControl";
 import { MapPersistenceControls } from "@/components/layout/MapPersistenceControls";
 import { MapOperationNotice } from "@/components/layout/MapOperationNotice";
@@ -24,6 +25,8 @@ import { useResettingMapReplacement } from "@/hooks/useResettingMapReplacement";
 import { useMapResolutionFilter } from "@/hooks/useMapResolutionFilter";
 import { useRevisionScopedNotice } from "@/hooks/useRevisionScopedNotice";
 import { useNodeLabelSearch } from "@/hooks/useNodeLabelSearch";
+import { useMapDisplayState } from "@/hooks/useMapDisplayState";
+import { useBranchCollapse } from "@/hooks/useBranchCollapse";
 import { useNodeSearchNavigation } from "@/hooks/useNodeSearchNavigation";
 
 const CLIPBOARD_OPERATION_HINT = "枝をコピー: Ctrl/Cmd+C ／ 貼り付け: Ctrl/Cmd+V（新しいルートとして追加）";
@@ -65,13 +68,33 @@ export default function Home() {
     resetScale: INITIAL_VIEWPORT.scale,
   });
   const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? null;
+  const branchCollapse = useBranchCollapse({ nodes, documentRevision });
+  const { expandNodes } = branchCollapse;
+  const expandNodesRef = useRef(expandNodes);
+  useLayoutEffect(() => {
+    expandNodesRef.current = expandNodes;
+  }, [expandNodes]);
+  const addChildNodeExpanding = useCallback((parentId: number) => {
+    const createdId = addChildNode(parentId);
+    if (createdId !== null) expandNodesRef.current([parentId]);
+    return createdId;
+  }, [addChildNode]);
+  const displayState = useMapDisplayState({
+    nodes,
+    layoutMode,
+    collapseVisibleNodeIds: branchCollapse.collapseVisibleNodeIds,
+    resolutionVisibleNodeIds: resolutionFilter.visibleNodeIds,
+  });
   const nodeSearch = useNodeLabelSearch({
     nodes,
-    visibleNodeIds: resolutionFilter.visibleNodeIds,
+    visibleNodeIds: displayState.visibleNodeIds,
   });
   const nodeSearchNavigation = useNodeSearchNavigation({
     nodes,
-    visibleNodeIds: resolutionFilter.visibleNodeIds,
+    resolutionVisibleNodeIds: resolutionFilter.visibleNodeIds,
+    collapseIndex: branchCollapse.index,
+    collapsedNodeIds: branchCollapse.collapsedNodeIds,
+    expandNodes: branchCollapse.expandNodes,
     documentRevision,
     setResolutionMode: resolutionFilter.setMode,
     selectNode,
@@ -133,6 +156,13 @@ export default function Home() {
               onUndo={undo}
               onRedo={redo}
             />
+            <NodeCollapseControl
+              selectedNodeId={selectedNodeId}
+              canToggle={selectedNodeId !== null && branchCollapse.canToggle(selectedNodeId)}
+              collapsed={selectedNodeId !== null && branchCollapse.collapsedNodeIds.has(selectedNodeId)}
+              hiddenCount={selectedNodeId === null ? 0 : branchCollapse.hiddenCountById.get(selectedNodeId) ?? 0}
+              onToggle={branchCollapse.toggle}
+            />
             <NodeDuplicateControl
               disabled={selectedNode === null}
               onDuplicate={duplication.duplicateSelected}
@@ -156,9 +186,16 @@ export default function Home() {
           && duplication.notice === null
           && clipboardNotice === null
           && nodeSearchNavigation.notice === null
+          && !displayState.layoutFailed
           ? null
           : (
             <>
+              {displayState.layoutFailed && (
+                <MapOperationNotice notice={{
+                  kind: "status",
+                  message: "表示用の自動配置ができないため、元の位置で表示しています。",
+                }} />
+              )}
               {persistence.notice !== null && (
                 <MapOperationNotice notice={persistence.notice} />
               )}
@@ -180,13 +217,13 @@ export default function Home() {
       <AppWorkspace
         canvas={(
           <MapStage
-            nodes={nodes}
+            nodes={displayState.displayNodes}
             focusRequest={nodeSearchNavigation.focusRequest}
-            visibleNodeIds={resolutionFilter.visibleNodeIds}
+            visibleNodeIds={displayState.visibleNodeIds}
             onViewportScaleChange={setViewportScale}
             selectedNodeId={selectedNodeId}
             onDoubleClick={addNode}
-            onAddChildNode={addChildNode}
+            onAddChildNode={addChildNodeExpanding}
             onAddSiblingNode={addSiblingNode}
             onSelectNode={selectNode}
             onUpdateLabel={updateNodeLabel}
