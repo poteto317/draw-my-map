@@ -6,6 +6,7 @@ import { LayoutModeSelector } from "@/components/layout/LayoutModeSelector";
 type AppHeaderProps = {
   layoutMode: NodeLayoutMode;
   onLayoutModeChange: (mode: NodeLayoutMode) => void;
+  mapControls: ReactNode;
   searchControls: ReactNode;
   importanceControls?: ReactNode;
   resolutionControls?: ReactNode;
@@ -16,6 +17,7 @@ type AppHeaderProps = {
 export function AppHeader({
   layoutMode,
   onLayoutModeChange,
+  mapControls,
   searchControls,
   importanceControls,
   resolutionControls,
@@ -27,6 +29,7 @@ export function AppHeader({
       <h1 className="shrink-0 text-lg font-semibold text-zinc-800 dark:text-zinc-100">
         Draw My Map
       </h1>
+      {mapControls}
       {searchControls}
       <LayoutModeSelector
         layoutMode={layoutMode}

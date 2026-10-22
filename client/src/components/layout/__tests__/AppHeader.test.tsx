@@ -8,6 +8,7 @@ describe("AppHeader", () => {
         layoutMode="manual"
         onLayoutModeChange={jest.fn()}
         searchControls={null}
+        mapControls={null}
       />,
     );
 
@@ -20,6 +21,7 @@ describe("AppHeader", () => {
         layoutMode="manual"
         onLayoutModeChange={jest.fn()}
         searchControls={null}
+        mapControls={null}
       />,
     );
 
@@ -33,6 +35,7 @@ describe("AppHeader", () => {
         layoutMode="manual"
         onLayoutModeChange={onLayoutModeChange}
         searchControls={null}
+        mapControls={null}
       />,
     );
 
@@ -51,6 +54,7 @@ describe("AppHeader", () => {
         layoutMode={layoutMode}
         onLayoutModeChange={jest.fn()}
         searchControls={null}
+        mapControls={null}
       />,
     );
 
@@ -64,6 +68,7 @@ describe("AppHeader", () => {
         layoutMode="manual"
         onLayoutModeChange={jest.fn()}
         searchControls={null}
+        mapControls={null}
         operationControls={<button type="button">保存操作</button>}
         operationNotices={<p role="status">保存通知</p>}
       />,
@@ -81,6 +86,7 @@ describe("AppHeader", () => {
         layoutMode="manual"
         onLayoutModeChange={jest.fn()}
         searchControls={<div data-testid="search-controls">検索</div>}
+        mapControls={null}
         importanceControls={<div data-testid="importance-controls">重要度操作</div>}
         resolutionControls={<div data-testid="resolution-controls">表示操作</div>}
         operationControls={<button type="button">保存操作</button>}
@@ -104,5 +110,19 @@ describe("AppHeader", () => {
       .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(resolutionControls.compareDocumentPosition(operationControls))
       .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it("マップ操作をh1の直後に描画する", () => {
+    render(
+      <AppHeader
+        layoutMode="manual"
+        onLayoutModeChange={jest.fn()}
+        searchControls={<div data-testid="search-controls">検索</div>}
+        mapControls={<div data-testid="map-controls">マップ操作</div>}
+      />,
+    );
+
+    const title = screen.getByRole("heading", { name: "Draw My Map" });
+    expect(title.nextElementSibling).toBe(screen.getByTestId("map-controls"));
   });
 });

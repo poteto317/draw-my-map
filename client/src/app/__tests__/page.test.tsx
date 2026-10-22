@@ -1,7 +1,10 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import Home from "@/app/page";
 import { FALLBACK_NODE_LABEL } from "@/config/nodeLabel";
+import { DEFAULT_MAP_NAME } from "@/domain/mapLibrary/mapName";
+import { MAP_STORAGE_KEY } from "@/services/persistence/mapStorage";
+import { readActiveMapJson, readMapIndex } from "@/testing/mapLibraryTestStorage";
 import type { IllustrationGenerationState } from "@/types/illustrationGeneration";
 import type { Node } from "@/types/node";
 import type { OperationNotice } from "@/types/operationNotice";
@@ -50,7 +53,7 @@ jest.mock("@/services/persistence/mapJsonDownload", () => {
   const actual = jest.requireActual("@/services/persistence/mapJsonDownload");
   return {
     ...actual,
-    downloadMapJson: (json: string) => mockDownloadMapJson(json),
+    downloadMapJson: (json: string, mapName: string) => mockDownloadMapJson(json, mapName),
   };
 });
 
@@ -232,7 +235,7 @@ describe("Home", () => {
   "version": 3,
   "layoutMode": "manual",
   "nodes": []
-}\n`);
+}\n`, "無題のマップ");
       const persistenceNotice = screen.getByText("JSONファイルを書き出しました。");
       expect(persistenceNotice).toBeInTheDocument();
       expect(queryOperationNoticeWrapper()).toContainElement(persistenceNotice);
@@ -295,7 +298,7 @@ describe("Home", () => {
 
       await user.upload(input, jsonFile("{broken"));
 
-      await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(
+      await waitFor(() => expect(within(screen.getByRole("banner")).getByRole("alert")).toHaveTextContent(
         "現在のマップは変更されていません。",
       ));
       expect(screen.getByTestId("node-state")).toHaveTextContent(before ?? "");
@@ -308,9 +311,12 @@ describe("Home", () => {
       render(<Home />);
 
       await user.click(screen.getByRole("button", { name: "テスト用ノード追加" }));
-      jest.advanceTimersByTime(300);
+      // 保存の成功でインデックスの更新日時が変わり、Home の状態が更新される
+      act(() => {
+        jest.advanceTimersByTime(300);
+      });
 
-      const stored = window.localStorage.getItem("draw-my-map.map.v1");
+      const stored = readActiveMapJson(window.localStorage);
       expect(stored).not.toBeNull();
       expect(JSON.parse(stored!)).toMatchObject({
         version: 3,
@@ -329,12 +335,16 @@ describe("Home", () => {
       const user = userEvent.setup();
       render(<Home />);
 
-      expect(mockUseMapImageExport).toHaveBeenLastCalledWith({ nodes: [] });
+      expect(mockUseMapImageExport).toHaveBeenLastCalledWith({
+        nodes: [],
+        mapName: DEFAULT_MAP_NAME,
+      });
 
       await user.click(screen.getByRole("button", { name: "テスト用ノード追加" }));
 
       expect(mockUseMapImageExport).toHaveBeenLastCalledWith({
         nodes: [expect.objectContaining({ x: -40, y: -10 })],
+        mapName: DEFAULT_MAP_NAME,
       });
     });
 
@@ -387,8 +397,11 @@ describe("Home", () => {
     it("可変高headerを除いたviewport内の残領域をmapへ割り当てる", () => {
       render(<Home />);
       const main = screen.getByTestId("map-stage").closest("main")!;
-      const shell = main.parentElement!;
+      const editor = main.parentElement!;
+      const shell = editor.parentElement!;
 
+      expect(editor).toHaveClass("flex", "min-h-0", "flex-1", "flex-col");
+      expect(editor).not.toHaveClass("overflow-hidden");
       expect(shell).toHaveClass("h-dvh");
       expect(shell).not.toHaveClass("overflow-hidden");
       expect(main).toHaveClass("min-h-0", "flex-1", "overflow-hidden");
@@ -557,6 +570,55 @@ describe("Home", () => {
       expect(main).toContainElement(screen.getByTestId("map-stage"));
       const panel = screen.getByRole("complementary", { name: "イラスト" });
       expect(main).toContainElement(panel);
+    });
+  });
+
+  describe("旧キーからの移行", () => {
+    const LEGACY_CORRUPT_WARNING =
+      "以前の保存データを読み込めなかったため、空のマップで開始します。以前の保存データは消さずに残しています。";
+    const legacyV3Json = `${JSON.stringify({
+      version: 3,
+      layoutMode: "manual",
+      nodes: [{
+        id: 5, parentId: null, x: 10, y: 20, width: 100, height: 60, label: "旧キーのノード", importance: "medium",
+      }],
+    }, null, 2)}\n`;
+
+    it("旧キーだけがあると内容を表示し、インデックス（P: true）と本体を作り、旧キーを残す", async () => {
+      window.localStorage.setItem(MAP_STORAGE_KEY, legacyV3Json);
+
+      render(<Home />);
+
+      await waitFor(() => expect(screen.getByTestId("node-state")).toHaveTextContent("旧キーのノード"));
+      expect(readMapIndex(window.localStorage)?.legacyCleanupPending).toBe(true);
+      expect(readActiveMapJson(window.localStorage)).toBe(legacyV3Json);
+      expect(window.localStorage.getItem(MAP_STORAGE_KEY)).toBe(legacyV3Json);
+    });
+
+    it("アンマウントして2回目に描画すると旧キーが消え、インデックスが P: false になる", async () => {
+      window.localStorage.setItem(MAP_STORAGE_KEY, legacyV3Json);
+      const first = render(<Home />);
+      await waitFor(() => expect(screen.getByTestId("node-state")).toHaveTextContent("旧キーのノード"));
+      first.unmount();
+
+      render(<Home />);
+
+      await waitFor(() => expect(window.localStorage.getItem(MAP_STORAGE_KEY)).toBeNull());
+      expect(readMapIndex(window.localStorage)?.legacyCleanupPending).toBe(false);
+      expect(screen.getByTestId("node-state")).toHaveTextContent("旧キーのノード");
+      expect(readActiveMapJson(window.localStorage)).toBe(legacyV3Json);
+    });
+
+    it("旧キーが壊れていると旧キーを残し、空の無題のマップで warning の起動時の通知を出す", async () => {
+      window.localStorage.setItem(MAP_STORAGE_KEY, "{");
+
+      render(<Home />);
+
+      const notices = within(screen.getByTestId("map-library-notices"));
+      await waitFor(() => expect(notices.getByRole("alert")).toHaveTextContent(LEGACY_CORRUPT_WARNING));
+      expect(window.localStorage.getItem(MAP_STORAGE_KEY)).toBe("{");
+      expect(screen.getByText(`マップ: ${DEFAULT_MAP_NAME}`)).toBeInTheDocument();
+      expect(JSON.parse(screen.getByTestId("node-state").textContent!)).toEqual([]);
     });
   });
 });

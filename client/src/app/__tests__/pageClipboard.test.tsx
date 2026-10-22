@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import Home from "@/app/page";
 import {
@@ -12,6 +12,7 @@ import {
 } from "@/components/map/testing/mapStageTestRuntime";
 import { ILLUSTRATED_NODE_HEIGHT, SIBLING_VERTICAL_GAP } from "@/config/shapes";
 import { createJpegDataUrl } from "@/testing/jpegFixture";
+import { activeMapBodyKey, readActiveMapJson, seedMapLibrary } from "@/testing/mapLibraryTestStorage";
 
 // Pixiだけを差し替え、MapStage・useMapClipboardEvents・codec・useNodes・履歴・保存hookは本物を通す
 jest.mock("pixi.js", () => {
@@ -37,7 +38,7 @@ jest.mock("@/services/persistence/mapJsonDownload", () => {
   const actual = jest.requireActual("@/services/persistence/mapJsonDownload");
   return {
     ...actual,
-    downloadMapJson: (json: string) => mockDownloadMapJson(json),
+    downloadMapJson: (json: string, mapName: string) => mockDownloadMapJson(json, mapName),
   };
 });
 
@@ -58,7 +59,6 @@ jest.mock("@/services/imageExport/mapPngRasterizer", () => ({
   ),
 }));
 
-const STORAGE_KEY = "draw-my-map.map.v1";
 const IMAGE = createJpegDataUrl(128, 128);
 const COPY_MESSAGE = "枝をコピーしました。";
 const PASTE_MESSAGE = "枝を貼り付けました。Fキーで選択ノードへ移動できます。見えない場合は表示を『すべて』に切り替えてください。";
@@ -98,10 +98,10 @@ function v3Json(nodes: Array<Partial<ExportedNode> & { id: number }>): string {
 
 // 親（画面上の中心300,200）と子（中心450,200）の2ノード
 function storeParentAndChild(overrides: { parent?: Partial<ExportedNode>; child?: Partial<ExportedNode> } = {}) {
-  window.localStorage.setItem(STORAGE_KEY, v3Json([
+  seedMapLibrary(window.localStorage, [{ json: v3Json([
     { id: 1, label: "親", importance: "high", ...overrides.parent },
     { id: 2, parentId: 1, label: "子", importance: "low", x: 400, ...overrides.child },
-  ]));
+  ]) }]);
 }
 
 function jsonFile(text: string): File {
@@ -183,7 +183,7 @@ function exportedMap(): ExportedMap {
 }
 
 function storedMap(): ExportedMap | null {
-  const stored = window.localStorage.getItem(STORAGE_KEY);
+  const stored = readActiveMapJson(window.localStorage);
   return stored === null ? null : JSON.parse(stored) as ExportedMap;
 }
 
@@ -313,11 +313,11 @@ describe("ページの枝のコピーと貼り付け", () => {
 
     unmount();
     resetMapStageTestRuntime();
-    // 同じIDを持つ別のマップ
-    window.localStorage.setItem(STORAGE_KEY, v3Json([
+    // 同じIDを持つ別のマップへ入れ替える
+    seedMapLibrary(window.localStorage, [{ json: v3Json([
       { id: 1, label: "別1" },
       { id: 2, label: "別2", x: 400 },
-    ]));
+    ]) }]);
     await renderPage();
     paste(clipboard, document.body);
 
@@ -428,7 +428,7 @@ describe("ページの枝のコピーと貼り付けの通知", () => {
     const before = exportedMap();
     const invalid = createClipboard("ただの文章");
     expect(paste(invalid, document.body)).toBe(false);
-    expect(screen.getByRole("alert")).toHaveTextContent(INVALID_MESSAGE);
+    expect(within(screen.getByRole("banner")).getByRole("alert")).toHaveTextContent(INVALID_MESSAGE);
     expect(screen.queryByText(COPY_MESSAGE)).not.toBeInTheDocument();
     expect(exportedMap()).toEqual(before);
     expect(undoButton()).toBeDisabled();
@@ -438,7 +438,7 @@ describe("ページの枝のコピーと貼り付けの通知", () => {
     await user.click(input);
     expect(paste(clipboard, input)).toBe(true);
     expect(copy(clipboard, input)).toBe(true);
-    expect(screen.getByRole("alert")).toHaveTextContent(INVALID_MESSAGE);
+    expect(within(screen.getByRole("banner")).getByRole("alert")).toHaveTextContent(INVALID_MESSAGE);
     expect(clipboard.data.getData).not.toHaveBeenCalled();
   });
 
@@ -560,14 +560,14 @@ describe("ページの貼り付けた枝の保存", () => {
       jest.advanceTimersByTime(1000);
     });
     // コピーはマップを変えないため保存しない
-    expect(setItem.mock.calls.filter(([key]) => key === STORAGE_KEY)).toHaveLength(0);
+    expect(setItem.mock.calls.filter(([key]) => key === activeMapBodyKey(window.localStorage))).toHaveLength(0);
 
     paste(clipboard);
     act(() => {
       jest.advanceTimersByTime(300);
     });
 
-    const writes = setItem.mock.calls.filter(([key]) => key === STORAGE_KEY);
+    const writes = setItem.mock.calls.filter(([key]) => key === activeMapBodyKey(window.localStorage));
     expect(writes).toHaveLength(1);
     const written = JSON.parse(String(writes[0][1])) as ExportedMap;
     expect(Object.keys(written).sort()).toEqual(["layoutMode", "nodes", "version"]);

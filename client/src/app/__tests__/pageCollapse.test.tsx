@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import Home from "@/app/page";
 import {
@@ -12,6 +12,7 @@ import {
   renderReady,
   resetMapStageTestRuntime,
 } from "@/components/map/testing/mapStageTestRuntime";
+import { readActiveMapJson, seedMapLibrary } from "@/testing/mapLibraryTestStorage";
 
 const mockPixiInit = jest.fn<Promise<void>, []>();
 jest.mock("pixi.js", () => {
@@ -33,7 +34,7 @@ jest.mock("@/services/illustration/illustrationGeneration", () => ({
 }));
 const mockDownloadMapJson = jest.fn();
 jest.mock("@/services/persistence/mapJsonDownload", () => ({
-  downloadMapJson: (json: string) => mockDownloadMapJson(json),
+  downloadMapJson: (json: string, mapName: string) => mockDownloadMapJson(json, mapName),
 }));
 jest.mock("@/services/imageExport/mapTextMeasurement", () => ({
   createMapTextMeasurer: () => (text: string) => text.length * 8,
@@ -43,7 +44,6 @@ jest.mock("@/services/imageExport/mapImageDownload", () => ({ downloadMapImage: 
 const mockRasterizePng = jest.fn();
 jest.mock("@/services/imageExport/mapPngRasterizer", () => ({ rasterizeMapSvgToPng: (...args: unknown[]) => mockRasterizePng(...args) }));
 
-const STORAGE_KEY = "draw-my-map.map.v1";
 const tree = [
   { id: 1, parentId: null, label: "A", importance: "low", x: 40, y: 80, width: 100, height: 60 },
   { id: 2, parentId: 1, label: "B", importance: "high", x: 250, y: 80, width: 100, height: 60 },
@@ -77,7 +77,7 @@ async function importMap(text: string) {
   await act(async () => fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files: [file] } }));
 }
 async function start(layoutMode = "manual", nodes = tree) {
-  window.localStorage.setItem(STORAGE_KEY, mapJson(layoutMode, nodes));
+  seedMapLibrary(window.localStorage, [{ json: mapJson(layoutMode, nodes) }]);
   await renderReady(<Home />);
   mockStageBounds(stage());
 }
@@ -193,13 +193,13 @@ it("検索で閉祖先を展開した最新座標へfocusし編集位置も追�
 
 it("折畳前後でJSON・localStorage・SVG・PNG全件と座標を維持する", async () => {
   await start("auto"); const before = exported();
-  await waitFor(() => expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY)!)).toEqual(JSON.parse(before)));
+  await waitFor(() => expect(JSON.parse(readActiveMapJson(window.localStorage)!)).toEqual(JSON.parse(before)));
   fireEvent.click(screen.getByRole("button", { name: "SVG書き出し" }));
   const svgBefore = await blobText(mockDownloadImage.mock.lastCall![0]);
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "PNG書き出し" })));
   const pngBefore = mockRasterizePng.mock.lastCall!.slice();
   select(1); toggle(); expect(exported()).toBe(before);
-  expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY)!)).toEqual(JSON.parse(before));
+  expect(JSON.parse(readActiveMapJson(window.localStorage)!)).toEqual(JSON.parse(before));
   fireEvent.click(screen.getByRole("button", { name: "SVG書き出し" }));
   expect(await blobText(mockDownloadImage.mock.lastCall![0])).toBe(svgBefore);
   expect(svgBefore).toContain(">C</tspan>");
@@ -281,7 +281,7 @@ it("閉親Tabがauto配置不能で失敗した場合は展開せず履歴も作
   const impossible = tree.map((node) => node.id === 1
     ? { ...node, x: Number.MAX_VALUE, width: Number.MAX_VALUE } : node);
   await start("auto", impossible); select(1); toggle();
-  expect(screen.getByRole("status")).toHaveTextContent("表示用の自動配置ができないため、元の位置で表示しています。");
+  expect(within(screen.getByRole("banner")).getByRole("status")).toHaveTextContent("表示用の自動配置ができないため、元の位置で表示しています。");
   const before = exported();
   fireEvent.keyDown(window, { key: "Tab" });
   expect(exported()).toBe(before);

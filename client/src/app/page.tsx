@@ -1,256 +1,104 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { useNodes } from "@/hooks/useNodes";
-import { AppHeader } from "@/components/layout/AppHeader";
-import { AppWorkspace } from "@/components/layout/AppWorkspace";
-import { NodeImportanceSelector } from "@/components/layout/NodeImportanceSelector";
-import { ResolutionFilterSelector } from "@/components/layout/ResolutionFilterSelector";
-import { MapImageExportControls } from "@/components/layout/MapImageExportControls";
-import { MapHistoryControls } from "@/components/layout/MapHistoryControls";
-import { NodeCollapseControl } from "@/components/layout/NodeCollapseControl";
-import { NodeDuplicateControl } from "@/components/layout/NodeDuplicateControl";
-import { MapPersistenceControls } from "@/components/layout/MapPersistenceControls";
-import { MapOperationNotice } from "@/components/layout/MapOperationNotice";
-import { NodeSearchBox } from "@/components/layout/NodeSearchBox";
-import { IllustrationPanel } from "@/components/layout/IllustrationPanel";
-import { MapStage } from "@/components/map/MapStage";
-import { INITIAL_VIEWPORT } from "@/components/map/mapViewport";
-import { useIllustrationGeneration } from "@/hooks/useIllustrationGeneration";
-import { useMapHistoryShortcuts } from "@/components/map/useMapHistoryShortcuts";
-import { useMapImageExport } from "@/hooks/useMapImageExport";
-import { useMapPersistence } from "@/hooks/useMapPersistence";
-import { useNodeDuplicationAction } from "@/hooks/useNodeDuplicationAction";
-import { useResettingMapReplacement } from "@/hooks/useResettingMapReplacement";
-import { useMapResolutionFilter } from "@/hooks/useMapResolutionFilter";
-import { useRevisionScopedNotice } from "@/hooks/useRevisionScopedNotice";
-import { useNodeLabelSearch } from "@/hooks/useNodeLabelSearch";
-import { useMapDisplayState } from "@/hooks/useMapDisplayState";
-import { useBranchCollapse } from "@/hooks/useBranchCollapse";
-import { useNodeSearchNavigation } from "@/hooks/useNodeSearchNavigation";
+import { useLayoutEffect, useRef } from "react";
+import { MapLibraryControls } from "@/components/layout/MapLibraryControls";
+import { MapLibraryDialog } from "@/components/layout/MapLibraryDialog";
+import { MapLibraryNoticeRegion } from "@/components/layout/MapLibraryNoticeRegion";
+import { MapEditor } from "@/components/map/MapEditor";
+import type { MapIndexEntry } from "@/domain/mapLibrary/mapIndex";
+import { useMapLibrary, type MapLibraryDeps } from "@/hooks/useMapLibrary";
+import { useMapLibraryDialogState } from "@/hooks/useMapLibraryDialogState";
+import { generateMapId } from "@/services/persistence/mapIdGenerator";
+import { getBrowserMapLibraryStorage } from "@/services/persistence/mapLibraryStorage";
 
-const CLIPBOARD_OPERATION_HINT = "枝をコピー: Ctrl/Cmd+C ／ 貼り付け: Ctrl/Cmd+V（新しいルートとして追加）";
+// useMapLibrary は deps を layout effect で ref へ同期するので、描画ごとに作り直さない
+const MAP_LIBRARY_DEPS: MapLibraryDeps = {
+  getStorage: getBrowserMapLibraryStorage,
+  now: () => new Date(),
+  generateId: () => generateMapId(),
+};
 
+const NO_MAPS: readonly MapIndexEntry[] = [];
+
+// シェル。マップの一覧の状態とダイアログを持ち、現在のマップの MapEditor を id で再マウントする
 export default function Home() {
-  const {
-    nodes,
-    selectedNodeId,
-    layoutMode,
-    addNode,
-    addChildNode,
-    addSiblingNode,
-    selectNode,
-    updateNodeLabel,
-    updateNodeImportance,
-    moveNode,
-    connectNodes,
-    duplicateSubtree,
-    copySubtree,
-    pasteSubtree,
-    deleteNode,
-    setLayoutMode,
-    replaceMap,
-    attachIllustration,
-    removeIllustration,
-    beginMoveHistory,
-    documentRevision,
-    canUndo,
-    canRedo,
-    undo,
-    redo,
-  } = useNodes();
-  const [viewportScale, setViewportScale] = useState(1);
-  const { replaceMapAndReset, resetRevision } = useResettingMapReplacement(replaceMap);
-  const resolutionFilter = useMapResolutionFilter({
-    nodes,
-    scale: viewportScale,
-    resetRevision,
-    resetScale: INITIAL_VIEWPORT.scale,
+  const library = useMapLibrary(MAP_LIBRARY_DEPS);
+  const { view } = library;
+  // フックは条件付きで呼ばない。loading の間は一覧を空にし、起動の通知も出さない
+  const dialog = useMapLibraryDialogState({
+    library,
+    maps: view.status === "ready" ? view.maps : NO_MAPS,
+    startupNotice: view.status === "ready" ? view.startupNotice : null,
   });
-  const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? null;
-  const branchCollapse = useBranchCollapse({ nodes, documentRevision });
-  const { expandNodes } = branchCollapse;
-  const expandNodesRef = useRef(expandNodes);
+  const listButtonRef = useRef<HTMLButtonElement>(null);
+  const createButtonRef = useRef<HTMLButtonElement>(null);
+  // ダイアログの中で最後にマウスでクリックした時刻。1回目のクリックで閉じたダイアログのダブルクリックの
+  // 2回目がキャンバスへ届いたときに、MapStage が dblclick を無視する（L-150）。再マウントをまたぐのでシェルで持つ
+  const dialogMouseClickedAtRef = useRef<number | null>(null);
+  const currentMapId = view.status === "ready" ? view.currentMap.id : null;
+  const { headerFocusRequest, consumeHeaderFocusRequest } = dialog;
+
+  // 再マウントで新しいヘッダーの ref がつながった後に、ダイアログの戻し先へフォーカスする
   useLayoutEffect(() => {
-    expandNodesRef.current = expandNodes;
-  }, [expandNodes]);
-  const addChildNodeExpanding = useCallback((parentId: number) => {
-    const createdId = addChildNode(parentId);
-    if (createdId !== null) expandNodesRef.current([parentId]);
-    return createdId;
-  }, [addChildNode]);
-  const displayState = useMapDisplayState({
-    nodes,
-    layoutMode,
-    collapseVisibleNodeIds: branchCollapse.collapseVisibleNodeIds,
-    resolutionVisibleNodeIds: resolutionFilter.visibleNodeIds,
-  });
-  const nodeSearch = useNodeLabelSearch({
-    nodes,
-    visibleNodeIds: displayState.visibleNodeIds,
-  });
-  const nodeSearchNavigation = useNodeSearchNavigation({
-    nodes,
-    resolutionVisibleNodeIds: resolutionFilter.visibleNodeIds,
-    collapseIndex: branchCollapse.index,
-    collapsedNodeIds: branchCollapse.collapsedNodeIds,
-    expandNodes: branchCollapse.expandNodes,
-    documentRevision,
-    setResolutionMode: resolutionFilter.setMode,
-    selectNode,
-  });
-  const persistence = useMapPersistence({
-    nodes,
-    layoutMode,
-    replaceMap: replaceMapAndReset,
-  });
-  const imageExport = useMapImageExport({ nodes });
-  const { generation, generateIllustration, dismissGeneration } = useIllustrationGeneration(nodes, documentRevision);
-  const duplication = useNodeDuplicationAction({
-    selectedNodeId: selectedNode?.id ?? null,
-    documentRevision,
-    duplicateSubtree,
-  });
-  const {
-    notice: clipboardNotice,
-    publishNotice: publishClipboardNotice,
-  } = useRevisionScopedNotice(documentRevision);
-  useMapHistoryShortcuts({ undo, redo });
+    if (headerFocusRequest === null) return;
+    const button = headerFocusRequest === "list"
+      ? listButtonRef.current
+      : createButtonRef.current;
+    button?.focus();
+    consumeHeaderFocusRequest();
+  }, [headerFocusRequest, currentMapId, consumeHeaderFocusRequest]);
 
   return (
     <div className="flex h-dvh flex-col bg-zinc-50 dark:bg-zinc-900">
-      <AppHeader
-        layoutMode={layoutMode}
-        onLayoutModeChange={setLayoutMode}
-        searchControls={(
-          <NodeSearchBox
-            query={nodeSearch.query}
-            onQueryChange={nodeSearch.setQuery}
-            hasQuery={nodeSearch.hasQuery}
-            matches={nodeSearch.matches}
-            total={nodeSearch.total}
-            onSelectResult={nodeSearchNavigation.navigateToNode}
+      <MapLibraryNoticeRegion notice={dialog.shellNotice} />
+      {view.status === "loading" ? (
+        <p role="status" className="px-6 py-3 text-sm text-zinc-600 dark:text-zinc-400">マップを読み込んでいます…</p>
+      ) : (
+        <>
+          <MapEditor
+            key={view.currentMap.id}
+            mapId={view.currentMap.id}
+            mapName={view.currentMap.name}
+            storageSession={view.storageSession}
+            shortcutsEnabled={dialog.screen.kind === "closed"}
+            dialogMouseClickedAtRef={dialogMouseClickedAtRef}
+            mapControls={(
+              <MapLibraryControls
+                mapName={view.currentMap.name}
+                disabled={view.storageMode === "protected"}
+                listExpanded={dialog.screen.kind === "list"}
+                onOpenList={dialog.openList}
+                onOpenCreate={dialog.openCreateFromHeader}
+                listButtonRef={listButtonRef}
+                createButtonRef={createButtonRef}
+              />
+            )}
           />
-        )}
-        importanceControls={(
-          <NodeImportanceSelector
-            importance={selectedNode?.importance ?? null}
-            disabled={selectedNode === null}
-            onChange={(importance) => {
-              if (selectedNode !== null) updateNodeImportance(selectedNode.id, importance);
-            }}
-          />
-        )}
-        resolutionControls={(
-          <ResolutionFilterSelector
-            mode={resolutionFilter.mode}
-            level={resolutionFilter.level}
-            onChange={resolutionFilter.setMode}
-          />
-        )}
-        operationControls={(
-          <>
-            <MapHistoryControls
-              canUndo={canUndo}
-              canRedo={canRedo}
-              onUndo={undo}
-              onRedo={redo}
+          {dialog.screen.kind !== "closed" && (
+            <MapLibraryDialog
+              screen={dialog.screen}
+              maps={view.maps}
+              currentMapId={view.currentMap.id}
+              notices={dialog.notices}
+              focusTarget={dialog.focusTarget}
+              onFocusTargetApplied={dialog.consumeFocusTarget}
+              onEscape={dialog.back}
+              onClose={dialog.close}
+              onOpenCreate={dialog.openCreateFromList}
+              onOpenRename={dialog.openRename}
+              onOpenDelete={dialog.openDelete}
+              onSwitch={dialog.switchTo}
+              onCancel={dialog.back}
+              onSubmitCreate={dialog.submitCreate}
+              onSubmitRename={dialog.submitRename}
+              onConfirmDelete={dialog.confirmDelete}
+              onMouseClick={() => {
+                dialogMouseClickedAtRef.current = Date.now();
+              }}
             />
-            <NodeCollapseControl
-              selectedNodeId={selectedNodeId}
-              canToggle={selectedNodeId !== null && branchCollapse.canToggle(selectedNodeId)}
-              collapsed={selectedNodeId !== null && branchCollapse.collapsedNodeIds.has(selectedNodeId)}
-              hiddenCount={selectedNodeId === null ? 0 : branchCollapse.hiddenCountById.get(selectedNodeId) ?? 0}
-              onToggle={branchCollapse.toggle}
-            />
-            <NodeDuplicateControl
-              disabled={selectedNode === null}
-              onDuplicate={duplication.duplicateSelected}
-            />
-            <span className="text-sm text-zinc-600 dark:text-zinc-400">
-              {CLIPBOARD_OPERATION_HINT}
-            </span>
-            <MapPersistenceControls
-              onExport={persistence.exportJson}
-              onImport={persistence.importJsonFile}
-            />
-            <MapImageExportControls
-              onExportPng={imageExport.exportPng}
-              onExportSvg={imageExport.exportSvg}
-              isExportingPng={imageExport.isExportingPng}
-            />
-          </>
-        )}
-        operationNotices={persistence.notice === null
-          && imageExport.notice === null
-          && duplication.notice === null
-          && clipboardNotice === null
-          && nodeSearchNavigation.notice === null
-          && !displayState.layoutFailed
-          ? null
-          : (
-            <>
-              {displayState.layoutFailed && (
-                <MapOperationNotice notice={{
-                  kind: "status",
-                  message: "表示用の自動配置ができないため、元の位置で表示しています。",
-                }} />
-              )}
-              {persistence.notice !== null && (
-                <MapOperationNotice notice={persistence.notice} />
-              )}
-              {imageExport.notice !== null && (
-                <MapOperationNotice notice={imageExport.notice} />
-              )}
-              {duplication.notice !== null && (
-                <MapOperationNotice notice={duplication.notice} />
-              )}
-              {clipboardNotice !== null && (
-                <MapOperationNotice notice={clipboardNotice} />
-              )}
-              {nodeSearchNavigation.notice !== null && (
-                <MapOperationNotice notice={nodeSearchNavigation.notice} />
-              )}
-            </>
           )}
-      />
-      <AppWorkspace
-        canvas={(
-          <MapStage
-            nodes={displayState.displayNodes}
-            focusRequest={nodeSearchNavigation.focusRequest}
-            visibleNodeIds={displayState.visibleNodeIds}
-            onViewportScaleChange={setViewportScale}
-            selectedNodeId={selectedNodeId}
-            onDoubleClick={addNode}
-            onAddChildNode={addChildNodeExpanding}
-            onAddSiblingNode={addSiblingNode}
-            onSelectNode={selectNode}
-            onUpdateLabel={updateNodeLabel}
-            onMoveNode={moveNode}
-            onBeginNodeMove={beginMoveHistory}
-            onConnectNodes={connectNodes}
-            onDeleteNode={deleteNode}
-            onCopySubtree={copySubtree}
-            onPasteSubtree={pasteSubtree}
-            onClipboardNotice={publishClipboardNotice}
-            onGenerateIllustration={generateIllustration}
-            resetRevision={resetRevision}
-            documentRevision={documentRevision}
-          />
-        )}
-        sidePanel={(
-          <IllustrationPanel
-            selectedNode={selectedNode}
-            generation={generation}
-            onGenerate={generateIllustration}
-            onAttach={(nodeId, dataUrl) => {
-              if (attachIllustration(nodeId, dataUrl)) dismissGeneration();
-            }}
-            onRemove={removeIllustration}
-          />
-        )}
-      />
+        </>
+      )}
     </div>
   );
 }

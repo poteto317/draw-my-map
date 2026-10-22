@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import Home from "@/app/page";
 import {
@@ -10,6 +10,7 @@ import {
   renderReady,
   resetMapStageTestRuntime,
 } from "@/components/map/testing/mapStageTestRuntime";
+import { activeMapBodyKey, readActiveMapJson, seedMapLibrary } from "@/testing/mapLibraryTestStorage";
 
 // Pixiだけを差し替え、MapStage・NodeLabelEditor・useNodes・履歴・保存hookは本物を通す
 jest.mock("pixi.js", () => {
@@ -35,7 +36,7 @@ jest.mock("@/services/persistence/mapJsonDownload", () => {
   const actual = jest.requireActual("@/services/persistence/mapJsonDownload");
   return {
     ...actual,
-    downloadMapJson: (json: string) => mockDownloadMapJson(json),
+    downloadMapJson: (json: string, mapName: string) => mockDownloadMapJson(json, mapName),
   };
 });
 
@@ -56,7 +57,6 @@ jest.mock("@/services/imageExport/mapPngRasterizer", () => ({
   ),
 }));
 
-const STORAGE_KEY = "draw-my-map.map.v1";
 const OLD_IMAGE = "data:image/jpeg;base64,T0xE";
 const NEW_IMAGE = "data:image/jpeg;base64,TkVX";
 
@@ -161,7 +161,7 @@ function exportedMap(): ExportedMap {
 }
 
 function storedMap(): ExportedMap | null {
-  const stored = window.localStorage.getItem(STORAGE_KEY);
+  const stored = readActiveMapJson(window.localStorage);
   return stored === null ? null : JSON.parse(stored) as ExportedMap;
 }
 
@@ -380,7 +380,7 @@ describe("ラベル編集と履歴ボタン", () => {
     { name: "Enter", commit: async (user: ReturnType<typeof userEvent.setup>) => user.keyboard("{Enter}") },
     { name: "別の場所へのblur", commit: async (user: ReturnType<typeof userEvent.setup>) => user.click(document.body) },
   ])("履歴が空でdisabledのときは、$nameで先に確定してからUndoする", async ({ commit }) => {
-    window.localStorage.setItem(STORAGE_KEY, v3Json([{ id: 7, label: "保存済み" }]));
+    seedMapLibrary(window.localStorage, [{ json: v3Json([{ id: 7, label: "保存済み" }]) }]);
     const user = userEvent.setup();
     await renderPage();
     expect(undoButton()).toBeDisabled();
@@ -445,7 +445,7 @@ describe("保存・出力と履歴", () => {
 
     expect(storedMap()?.nodes ?? []).toEqual([]);
     const writtenNodeCounts = setItem.mock.calls
-      .filter(([key]) => key === STORAGE_KEY)
+      .filter(([key]) => key === activeMapBodyKey(window.localStorage))
       .map(([, value]) => (JSON.parse(String(value)) as ExportedMap).nodes.length);
     expect(writtenNodeCounts).not.toContain(1);
   });
@@ -501,7 +501,7 @@ describe("イラスト生成と履歴", () => {
     await user.click(screen.getByRole("button", { name: "イラストを生成" }));
     expect(mockGenerateIllustrationThumbnail).toHaveBeenCalledWith("りんご", expect.anything());
     const [, { signal }] = mockGenerateIllustrationThumbnail.mock.lastCall! as [string, { signal: AbortSignal }];
-    expect(screen.getByRole("status")).toHaveTextContent("生成中です");
+    expect(screen.getByText(/生成中です/).closest('[role="status"]')).not.toBeNull();
 
     await user.click(undoButton());
     await user.click(redoButton());
@@ -560,7 +560,7 @@ describe("イラスト生成と履歴", () => {
 
 describe("マップの置換と履歴", () => {
   it("V3の初回復元後はUndo／Redoできない", async () => {
-    window.localStorage.setItem(STORAGE_KEY, v3Json([{ id: 7, label: "保存済み" }]));
+    seedMapLibrary(window.localStorage, [{ json: v3Json([{ id: 7, label: "保存済み" }]) }]);
     const user = userEvent.setup();
     await renderPage();
 
@@ -601,7 +601,7 @@ describe("マップの置換と履歴", () => {
 
     await user.upload(fileInput(container), file());
 
-    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("現在のマップは変更されていません。"));
+    await waitFor(() => expect(within(screen.getByRole("banner")).getByRole("alert")).toHaveTextContent("現在のマップは変更されていません。"));
     expect(exportedMap()).toEqual(before);
     expect(undoButton()).toBeEnabled();
     expect(redoButton()).toBeEnabled();
