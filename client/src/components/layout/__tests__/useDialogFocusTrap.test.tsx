@@ -48,6 +48,34 @@ function renderTrap(props: Partial<HarnessProps> = {}) {
   return { ...result, onEscape };
 }
 
+// 同じ name のラジオ2つを、ボタンで挟む
+function RadioTrapHarness({ checked }: { checked: "a" | "b" | null }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  useDialogFocusTrap({ dialogRef, overlayRef, onEscape: () => {} });
+
+  return (
+    <div ref={overlayRef}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="テスト">
+        <button type="button">前</button>
+        <label>
+          <input type="radio" name="place" checked={checked === "a"} onChange={() => {}} />
+          ラジオA
+        </label>
+        <label>
+          <input type="radio" name="place" checked={checked === "b"} onChange={() => {}} />
+          ラジオB
+        </label>
+        <button type="button">後</button>
+      </div>
+    </div>
+  );
+}
+
+function radio(name: string) {
+  return screen.getByRole("radio", { name });
+}
+
 function button(name: string) {
   return screen.getByRole("button", { name });
 }
@@ -213,6 +241,36 @@ describe("useDialogFocusTrap", () => {
     // 戻されないことの否定の確認なので、待たずに確かめる
     expect(button("外のボタン")).toHaveFocus();
     expect(onEscape).not.toHaveBeenCalled();
+  });
+
+  it("同じ name のラジオは、選ばれている1つにだけ Tab・Shift+Tab で止まる", async () => {
+    const user = userEvent.setup();
+    render(<RadioTrapHarness checked="b" />);
+
+    button("前").focus();
+    await user.tab();
+    expect(radio("ラジオB")).toHaveFocus();
+    await user.tab();
+    expect(button("後")).toHaveFocus();
+
+    await user.tab({ shift: true });
+    expect(radio("ラジオB")).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(button("前")).toHaveFocus();
+  });
+
+  it("同じ name のラジオがどれも選ばれていなければ、Tab・Shift+Tab のどちらでも先頭のラジオにだけ止まる", async () => {
+    const user = userEvent.setup();
+    render(<RadioTrapHarness checked={null} />);
+
+    button("前").focus();
+    await user.tab();
+    expect(radio("ラジオA")).toHaveFocus();
+    await user.tab();
+    expect(button("後")).toHaveFocus();
+
+    await user.tab({ shift: true });
+    expect(radio("ラジオA")).toHaveFocus();
   });
 
   it("listFocusableElements は type=hidden の input を含めない", () => {

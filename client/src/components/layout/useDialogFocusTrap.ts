@@ -5,14 +5,41 @@ import { useLayoutEffect, useRef, type RefObject } from "react";
 const FOCUSABLE_SELECTOR =
   'a[href], button, input:not([type="hidden"]), select, textarea, [tabindex]:not([tabindex="-1"])';
 
+function isGroupedRadio(element: HTMLElement): element is HTMLInputElement {
+  return (
+    element instanceof HTMLInputElement &&
+    element.type === "radio" &&
+    element.name !== ""
+  );
+}
+
+// 同じ name（同じフォーム）のラジオのまとまりは、ブラウザ標準の Tab と同じく止まる先を1つにする。
+// 止まる先は選ばれているラジオ、無ければ Tab・Shift+Tab のどちらでもまとまりの先頭。
+// （ブラウザは未選択のまとまりに Shift+Tab で入ると末尾に止まるが、一覧は向きに関係なく作るため合わせていない）
+function keepOneRadioPerGroup(elements: HTMLElement[]): HTMLElement[] {
+  const groups = new Map<HTMLFormElement | null, Map<string, HTMLInputElement[]>>();
+  for (const element of elements) {
+    if (!isGroupedRadio(element)) continue;
+    const byName = groups.get(element.form) ?? new Map<string, HTMLInputElement[]>();
+    groups.set(element.form, byName);
+    byName.set(element.name, [...(byName.get(element.name) ?? []), element]);
+  }
+  return elements.filter((element) => {
+    if (!isGroupedRadio(element)) return true;
+    const group = groups.get(element.form)!.get(element.name)!;
+    const stop = group.find((radio) => radio.checked) ?? group[0];
+    return element === stop;
+  });
+}
+
 // 押すたびに数え直すため、呼び出しのたびに DOM から集める
 export function listFocusableElements(container: HTMLElement): HTMLElement[] {
-  return Array.from(
-    container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-  ).filter(
-    (element) =>
-      !element.hasAttribute("disabled") &&
-      element.getAttribute("tabindex") !== "-1",
+  return keepOneRadioPerGroup(
+    Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+      (element) =>
+        !element.hasAttribute("disabled") &&
+        element.getAttribute("tabindex") !== "-1",
+    ),
   );
 }
 
