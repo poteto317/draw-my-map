@@ -20,6 +20,12 @@ import {
   type SubtreeInsertionResult,
 } from "@/domain/nodes/nodeSubtreeInsertion";
 import {
+  type ForestInsertionFailureReason,
+  type ForestInsertionTarget,
+  type ForestItem,
+  insertNodeForest,
+} from "@/domain/nodes/nodeForestInsertion";
+import {
   encodeSubtreeClipboard,
   type SubtreeClipboardData,
   type SubtreeClipboardResult,
@@ -32,6 +38,10 @@ import type { Node } from "@/types/node";
 import type { NodeImportance } from "@/types/nodeImportance";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 import type { NodeMapState } from "@/types/nodeMapState";
+
+export type InsertForestResult =
+  | { ok: true; rootId: number; count: number }
+  | { ok: false; reason: ForestInsertionFailureReason };
 
 type UseNodesReturn = {
   nodes: Node[];
@@ -54,6 +64,8 @@ type UseNodesReturn = {
   // dataはdecodeSubtreeClipboardの成功値。選択に依存せず独立した枝として追加し、成功時は新しい根のIDを返して選択する。
   // 配置不能・自動配置失敗ではnullを返し何も変えない
   pasteSubtree: (data: SubtreeClipboardData) => number | null;
+  // 箇条書きの項目を森として1回の操作で追加し、成功時は最初の根を選択する。失敗時は理由を返し何も変えない
+  insertForest: (items: readonly ForestItem[], target: ForestInsertionTarget) => InsertForestResult;
   deleteNode: (id: number) => void;
   setLayoutMode: (mode: NodeLayoutMode) => void;
   replaceMap: (state: NodeMapState) => void;
@@ -197,7 +209,7 @@ export function useNodes(): UseNodesReturn {
     return true;
   }, [applyTreeChange]);
 
-  // 枝を挿入する1回の構造変更を適用し、成功時は新しい根を選択してそのIDを返す。
+  // 枝や森を挿入する1回の構造変更を適用し、成功時は新しい根（森では最初の根）を選択してそのIDを返す。
   // 採番済みで確定しなかったIDは欠番のままにし、allocatorを巻き戻さない
   const applySubtreeInsertion = useCallback((
     insert: (
@@ -240,6 +252,24 @@ export function useNodes(): UseNodesReturn {
     ))
   ), [applySubtreeInsertion]);
 
+  const insertForest = useCallback((
+    items: readonly ForestItem[],
+    target: ForestInsertionTarget,
+  ): InsertForestResult => {
+    let failureReason: ForestInsertionFailureReason | null = null;
+    const rootId = applySubtreeInsertion((currentNodes, mode, allocateIds) => {
+      const inserted = insertNodeForest(currentNodes, items, target, mode, allocateIds);
+      if (!inserted.ok) {
+        failureReason = inserted.reason;
+        return null;
+      }
+      return { nodes: inserted.nodes, rootId: inserted.rootIds[0] };
+    });
+    // 候補を作れた後に失敗するのは、全体の自動配置だけ
+    if (rootId === null) return { ok: false, reason: failureReason ?? "placement-failed" };
+    return { ok: true, rootId, count: items.length };
+  }, [applySubtreeInsertion]);
+
   const deleteNode = useCallback((id: number) => {
     let subtreeIds = new Set<number>();
     const applied = applyTreeChange((currentNodes) => {
@@ -271,6 +301,7 @@ export function useNodes(): UseNodesReturn {
     duplicateSubtree,
     copySubtree,
     pasteSubtree,
+    insertForest,
     deleteNode,
     setLayoutMode,
     replaceMap,
