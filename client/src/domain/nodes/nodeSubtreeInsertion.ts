@@ -1,5 +1,4 @@
-import { SIBLING_VERTICAL_GAP } from "@/config/shapes";
-import { hasSufficientGap } from "@/domain/nodes/nodeLayoutArithmetic";
+import { calculateManualOffsetY } from "@/domain/nodes/nodeManualPlacement";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 
@@ -15,32 +14,6 @@ type InsertionPlan = {
   parentIndexes: (number | null)[];
   ys: number[];
 };
-
-// 手動配置では、マップ全体の下端からSIBLING_VERTICAL_GAPだけ空けた位置へ枝を平行移動する。
-// 空のマップでは基準となる下端が無いため移動しない。
-// 非有限値になる場合や、丸めで間隔を確保できない場合はnullを返す。
-function calculateManualOffsetY(
-  current: readonly Node[],
-  sources: readonly Node[],
-): number | null {
-  if (current.length === 0) return 0;
-
-  let bottom = -Infinity;
-  for (const node of current) {
-    const nodeBottom = node.y + node.height;
-    if (nodeBottom > bottom) bottom = nodeBottom;
-  }
-
-  let top = Infinity;
-  for (const node of sources) {
-    if (node.y < top) top = node.y;
-  }
-
-  const offsetY = bottom + SIBLING_VERTICAL_GAP - top;
-  if (!Number.isFinite(bottom) || !Number.isFinite(offsetY)) return null;
-  if (!hasSufficientGap(bottom, top + offsetY, SIBLING_VERTICAL_GAP)) return null;
-  return offsetY;
-}
 
 // 有限性の検査は防御として残す。offsetYがhasSufficientGapを通ると、通常はここで失敗しない
 function moveVertically(node: Node, offsetY: number): number | null {

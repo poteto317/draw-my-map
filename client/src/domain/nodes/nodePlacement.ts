@@ -1,11 +1,11 @@
 import {
-  CHILD_HORIZONTAL_GAP,
   RECT_HEIGHT,
   RECT_WIDTH,
   SIBLING_VERTICAL_GAP,
 } from "@/config/shapes";
 import type { Node } from "@/types/node";
 import { DEFAULT_NODE_IMPORTANCE } from "@/domain/nodes/nodeImportance";
+import { calculateChildPlacement } from "@/domain/nodes/nodeManualPlacement";
 
 function createNode(id: number, parentId: number | null, x: number, y: number): Node {
   return {
@@ -29,15 +29,10 @@ export function createChildNode(
   parentId: number,
   id: number,
 ): Node | null {
-  const parent = nodes.find((node) => node.id === parentId);
-  if (!parent) return null;
+  const placement = calculateChildPlacement(nodes, parentId);
+  if (!placement) return null;
 
-  const siblings = nodes.filter((node) => node.parentId === parentId);
-  const y = siblings.length === 0
-    ? parent.y
-    : Math.max(...siblings.map((node) => node.y + node.height)) + SIBLING_VERTICAL_GAP;
-
-  return createNode(id, parentId, parent.x + parent.width + CHILD_HORIZONTAL_GAP, y);
+  return createNode(id, parentId, placement.x, placement.y);
 }
 
 export function createSiblingNode(
