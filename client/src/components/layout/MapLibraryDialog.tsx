@@ -184,9 +184,17 @@ export function MapLibraryDialog({
   return (
     <div
       ref={overlayRef}
-      // キーボード・支援技術のクリックは detail が 0 で、ダブルクリックの続きが無いので数えない
       onClickCapture={(event) => {
+        // キーボード・支援技術のクリックは detail が 0 で、ダブルクリックの続きが無いので数えない。
+        // ダブルクリックの続き（detail > 1）も、閉じた後のキャンバスの dblclick を無視するために数える
         if (event.detail > 0) onMouseClick();
+        // ダブルクリックの続きの click は、1回目で画面が変わった後の同じ位置の要素（「このマップを削除」・「キャンセル」など）に
+        // 届くので、ダイアログの中ではどの要素にも届けない（L-408）。
+        // キーボードのクリック（detail 0）とマウスの1回目（detail 1）は通す
+        if (event.detail > 1) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
       }}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
     >

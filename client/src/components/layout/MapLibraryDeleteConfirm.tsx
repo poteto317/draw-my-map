@@ -37,6 +37,7 @@ export function MapLibraryDeleteConfirm({
   onCancel,
 }: MapLibraryDeleteConfirmProps) {
   const handleConfirmClick = (event: MouseEvent<HTMLButtonElement>) => {
+    // ダイアログのオーバーレイでも detail > 1 を止めるが、取り消せない削除なので部品単体でも確認を飛ばさない（二重の防御）
     if (event.detail > 1) return;
     onConfirm();
   };

@@ -331,6 +331,46 @@ describe("MapLibraryDialog", () => {
     expect(props.onClose).toHaveBeenCalledTimes(2);
   });
 
+  // 1回目の click で画面が変わると、ダブルクリックの続きの click は新しい画面の同じ位置の要素に届く（L-408）
+  describe("ダブルクリックの続きの click（detail > 1）", () => {
+    it("削除の確認の「このマップを削除」への detail 2 の click では onConfirmDelete を呼ばず、detail 0 では呼ぶ", () => {
+      const props = createProps({ screen: { kind: "delete", mapId: "b" } });
+      render(<MapLibraryDialog {...props} />);
+      const confirm = screen.getByRole("button", { name: "このマップを削除" });
+
+      const notCanceled = fireEvent.click(confirm, { detail: 2 });
+      expect(notCanceled).toBe(false);
+      expect(props.onConfirmDelete).not.toHaveBeenCalled();
+      // ダブルクリックの続きでも、閉じた後のキャンバスのためにクリックの時刻は控える
+      expect(props.onMouseClick).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(confirm, { detail: 0 });
+      expect(props.onConfirmDelete).toHaveBeenCalledTimes(1);
+      expect(props.onConfirmDelete).toHaveBeenCalledWith("b");
+    });
+
+    it("一覧の画面のマップのボタンへの detail 2 の click では onSwitch を呼ばず、detail 1 では呼ぶ", () => {
+      const props = createProps();
+      render(<MapLibraryDialog {...props} />);
+      const mapB = screen.getByRole("button", { name: /^B/ });
+
+      fireEvent.click(mapB, { detail: 2 });
+      expect(props.onSwitch).not.toHaveBeenCalled();
+
+      fireEvent.click(mapB, { detail: 1 });
+      expect(props.onSwitch).toHaveBeenCalledTimes(1);
+    });
+
+    it("名前の変更の画面の「キャンセル」への detail 2 の click では onCancel を呼ばない", () => {
+      const props = createProps({ screen: { kind: "rename", mapId: "b" } });
+      render(<MapLibraryDialog {...props} />);
+
+      fireEvent.click(screen.getByRole("button", { name: "キャンセル" }), { detail: 2 });
+
+      expect(props.onCancel).not.toHaveBeenCalled();
+    });
+  });
+
   it("削除の確認の「このマップを削除」で、対象の id で onConfirmDelete を呼ぶ", async () => {
     const user = userEvent.setup();
     const props = createProps({ screen: { kind: "delete", mapId: "b" } });
