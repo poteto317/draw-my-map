@@ -22,8 +22,9 @@ Draw My Map のフロントエンドおよびエッジバックエンドの主�
    - ヘッダーのノード検索。NFKC正規化と大文字・小文字を区別しない部分一致で現在の `nodes` を同期検索し、配列順に最大50件と総件数を表示します。`↑` / `↓`・`Enter`・`Escape` に対応し、隠れたノードの表示モード切り替え・閉じた祖先の展開と中央移動を行います。検索操作は編集履歴に追加しません。
    - 枝の折りたたみ・展開。選択した親は残して全子孫を隠し、解像度フィルターとの積集合を描画します。閉じた親へ `Tab` で子の追加に成功したときだけ、その親を展開します。閉じた親への接続では親を開かず、接続した子は隠れて選択が外れます。削除・コピー・複製と、手動配置での閉じた親のドラッグは隠れた子孫も対象にします（詳細は [features.md の 10.4 節](../docs/specifications/features.md#104-既存の編集操作との関係)）。検索結果の選択時は必要な祖先だけを展開します。折りたたみ状態は表示専用で、文書の読み込み・復元・成功した Undo / Redo 後に全展開へ戻ります。
    - 重要度フィルタリングの手動切り替えやレイアウトモード切り替え（手動配置 / ツリー自動配置）。
+   - 複数マップ（Phase 12）。ヘッダーの「マップ一覧」「新しいマップ」から開くモーダルダイアログで、名前を付けたマップの作成・一覧からの切り替え・名前変更・削除（確認付き）を行います。最上位の `Home`（シェル）が `useMapLibrary` で一覧と切り替えを持ち、編集画面の `MapEditor` を `key={マップの id}` で作り直すため、切り替えると編集履歴・表示状態・エディタ内の非同期処理の結果は前のマップから引き継ぎません。ダイアログの表示中は `MapEditor` を `inert` にし、マップのショートカットを止めます（詳細は [features.md の 12 章](../docs/specifications/features.md#12-複数マップ)）。
 3. **データ永続化とエクスポート (Domain & Services)**:
-   - `localStorage` へのリアルタイム自動保存と復元。
+   - `localStorage` へのマップごとのリアルタイム自動保存と復元。マップの一覧（インデックス）を `draw-my-map.maps.v1`、各マップの本体（Version 3 の JSON）を `draw-my-map.maps.v1.doc.<id>` に保存し、`localStorage` を直接読み書きするのは `services/persistence/mapLibraryStorage.ts` だけです。Phase 11 までの単一のキー `draw-my-map.map.v1` は、起動時に1件のマップとして移行し、次の起動で消します。保存はセッション番号で照合し、切り替えの後に前のマップの保存待ちが届いても書き込みません。
    - `MapDocument` JSON 形式でのインポート / エクスポート（旧バージョン互換性・自動マイグレーション対応）。
    - 高解像度 PNG および ベクター SVG 形式での画像エクスポート。
    - 自動配置の折りたたみ中は表示用投影座標を使用し、正本の全ノードと保存座標は維持します。JSON、`localStorage`、PNG / SVG は正本の全件を扱い、手動配置へ戻すと保存座標を表示します。
@@ -67,6 +68,7 @@ client/src/
 │   ├── history/          # 編集履歴（Undo / Redo）の純粋な遷移
 │   ├── illustration/     # イラストのトリミング、プロンプト加工、データ URL 処理
 │   ├── imageExport/      # PNG / SVG エクスポート用の境界計算、ベクター座標計算
+│   ├── mapLibrary/       # 複数マップのインデックスの型・解析・更新、起動の計画、マップ名とファイル名の規則、通知の文言
 │   ├── nodes/            # ノードツリー操作、重なり判定、自動レイアウト、重要度判定、枝の折りたたみと表示用の配置
 │   ├── search/           # ノードラベルの正規化・索引化・部分一致検索、検索結果の祖先展開の判定
 │   └── persistence/      # MapDocument スキーマ定義、エンコード/デコード、移行処理
@@ -76,8 +78,8 @@ client/src/
 ├── services/             # 外部環境との入出力・副作用アダプター (ブラウザ / Web API)
 │   ├── illustration/     # Route Handler クライアント、サムネイル縮小処理
 │   ├── imageExport/      # DOM Canvas / SVG のラスタライズとファイルダウンロード
-│   └── persistence/      # localStorage 読み書き、JSON ファイルリーダー/ダウンローダー
-├── testing/              # テスト用ヘルパー、モック、フィクスチャ (createTestNode, jpegFixture)
+│   └── persistence/      # localStorage 読み書き（mapLibraryStorage.ts だけ）、起動の実行、マップ id の生成、JSON ファイルリーダー/ダウンローダー
+├── testing/              # テスト用ヘルパー、モック、フィクスチャ (createTestNode, jpegFixture, createTestStorageSession, mapLibraryTestStorage)
 └── types/                # アプリケーション共通の TypeScript 型定義
 ```
 
@@ -144,7 +146,7 @@ client/src/
 - PNG および SVG の画像エクスポートにもイラストが含まれます。
 - すでにイラストがあるノードでは、右パネルのボタンが「イラストを再生成」に切り替わり、プレビュー確認後に置き換えが可能です。
 - 右パネルの「設定済みのイラストを削除」でノードからイラストを削除でき、ノードの高さは元に戻ります。
-- イラストデータ付加により `localStorage` の容量上限（通常約 5MB）に達した場合は、「ブラウザへ自動保存できませんでした。」と通知されます。その場合は「JSON書き出し」機能で手動バックアップを行ってください。
+- `localStorage` の容量上限（通常約 5MB）はすべてのマップで共有します。イラストデータ付加などで上限に達した場合は、「ブラウザへ自動保存できませんでした。不要なマップを削除するか、JSONで書き出してください。」と通知され、マップの切り替えと新規作成も中止されます。その場合は不要なマップを削除するか、「JSON書き出し」機能で手動バックアップを行ってください。開いていない別のマップを削除すると、空いた容量へ保存待ちの変更を書き込み直します。
 
 ### 5. 認証情報の扱い
 
@@ -168,6 +170,7 @@ Draw My Map では、コードの信頼性と保守性を維持するため、�
   - `next/jest` + `jest-environment-jsdom` 環境（パスエイリアス `@/*` 対応、`@testing-library/jest-dom` 読み込み）。
 - **共通テストフィクスチャ & Pixi テストハーネス**:
   - `src/testing/createTestNode.ts` / `src/testing/jpegFixture.ts`: テスト用 `Node` ファクトリおよび有効な JPEG SOF0 バイナリ・Data URL フィクスチャ。
+  - `src/testing/createTestStorageSession.ts` / `src/testing/mapLibraryTestStorage.ts`: フックのテスト用の偽の `MapStorageSession`、ページのテスト用にインデックスと本体を書き込む `seedMapLibrary`・現在のマップの本体を読む `readActiveMapJson`・書き込みの順序を記録する偽の `Storage`。
   - `src/components/map/pixi/testing/pixiTestHarness.ts`: WebGL 非対応の JSDOM 上で Pixi.js シーン構築・ストローク・イベント発火を検証するフェイク Pixi ランタイム。
   - `src/components/map/testing/mapStageTestRuntime.tsx` / `AutoLayoutMapStageHarness.tsx`: `MapStage` コンポーネント結合テスト用のランタイム注入・自動レイアウト検証ハーネス。
 
@@ -191,6 +194,6 @@ Draw My Map では、コードの信頼性と保守性を維持するため、�
 - [ドキュメントポータル](../docs/README.md): ドキュメント全体の目次・ガイド
 - [システムアーキテクチャ概要](../docs/architecture/overview.md): Pixi.js と React の協調モデル、設計原則
 - [機能仕様・操作マニュアル](../docs/specifications/features.md): ショートカット、ノード操作、フィルタリング仕様
-- [データモデル・永続化仕様](../docs/specifications/data-model.md): `MapDocument` JSON スキーマと保存仕様
+- [データモデル・永続化仕様](../docs/specifications/data-model.md): `MapDocument` JSON スキーマと、複数マップの `localStorage` 保存仕様
 - [イラスト生成 API 仕様](../docs/specifications/api.md): Route Handler エンドポイント仕様
 - [イラスト生成環境構築ガイド](../docs/setup/illustration-generation-setup.md): Cloudflare 設定の詳細手順書

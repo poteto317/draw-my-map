@@ -1,6 +1,6 @@
 # Draw My Map データモデル・永続化仕様書
 
-本書は、**Draw My Map** におけるデータモデル、TypeScript 型定義、JSON 永続化スキーマ（Version 1 〜 Version 3）、デコード・マイグレーション・バリデーション、枝のクリップボード形式（5.6）、およびブラウザ `localStorage` 永続化アーキテクチャの完全な技術仕様書です。
+本書は、**Draw My Map** におけるデータモデル、TypeScript 型定義、JSON 永続化スキーマ（Version 1 〜 Version 3）、デコード・マイグレーション・バリデーション、枝のクリップボード形式（5.10）、およびブラウザ `localStorage` 永続化アーキテクチャ（複数マップのインデックスと本体、起動時の移行。5.1〜5.9）の完全な技術仕様書です。
 
 ---
 
@@ -28,12 +28,16 @@
    - 4.5 [グラフ構造整合性バリデーション仕様](#45-グラフ構造整合性バリデーション仕様)
    - 4.6 [エラーメッセージ一覧](#46-エラーメッセージ一覧)
 5. [ブラウザ localStorage 永続化仕様](#5-ブラウザ-localstorage-永続化仕様)
-   - 5.1 [ストレージ設定と保存フォーマット](#51-ストレージ設定と保存フォーマット)
-   - 5.2 [自動保存ライフサイクル（useMapStorageAutoSave）](#52-自動保存ライフサイクルusemapstorageautosave)
-   - 5.3 [初期ロード・復元ライフサイクル（useMapStorageRestoration）](#53-初期ロード復元ライフサイクルusemapstoragerestoration)
-   - 5.4 [ストレージ容量ハンドリングと防御機構](#54-ストレージ容量ハンドリングと防御機構)
-   - 5.5 [JSON ファイル エクスポート／インポート仕様](#55-json-ファイル-エクスポートインポート仕様)
-   - 5.6 [枝のクリップボード形式](#56-枝のクリップボード形式)
+   - 5.1 [ストレージキーと保存フォーマット](#51-ストレージキーと保存フォーマット)
+   - 5.2 [インデックスの型と読み込み・正規化](#52-インデックスの型と読み込み正規化)
+   - 5.3 [起動の分岐と移行](#53-起動の分岐と移行)
+   - 5.4 [書き込み順序と途中失敗の扱い](#54-書き込み順序と途中失敗の扱い)
+   - 5.5 [自動保存ライフサイクル（useMapStorageAutoSave）と flush](#55-自動保存ライフサイクルusemapstorageautosaveと-flush)
+   - 5.6 [初期ロード・復元ライフサイクル（useMapStorageRestoration）](#56-初期ロード復元ライフサイクルusemapstoragerestoration)
+   - 5.7 [ストレージ容量ハンドリングと防御機構](#57-ストレージ容量ハンドリングと防御機構)
+   - 5.8 [JSON ファイル エクスポート／インポート仕様](#58-json-ファイル-エクスポートインポート仕様)
+   - 5.9 [マップの一覧の操作通知メッセージ (OperationNotice) 一覧](#59-マップの一覧の操作通知メッセージ-operationnotice-一覧)
+   - 5.10 [枝のクリップボード形式](#510-枝のクリップボード形式)
 
 ---
 
@@ -230,6 +234,12 @@ export type MapDocumentResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: string };
 ```
+
+#### `MapIndexEntry` / `MapIndexV1` (`client/src/domain/mapLibrary/mapIndex.ts`)
+複数マップの一覧（インデックス）の型です。`localStorage` のキー `draw-my-map.maps.v1` に JSON で保存します。型の定義と読み込み時の正規化は 5.2 節を参照してください。マップ本体（`MapDocument`）にはマップ名を含めず、名前・作成日時・更新日時はこの型だけが持ちます。
+
+#### `MapStorageSession` / `MapBodyWriteResult` / `MapFlushResult` (`client/src/types/mapStorageSession.ts`)
+エディタが開いているマップの本体を読み書きするための、マップ id とセッション番号を閉じ込めた保存先の型です。定義と照合の規則は 5.5 節を参照してください。
 
 ### 2.4 AI イラスト生成・通知型
 
@@ -605,17 +615,24 @@ graph TD
 
 ## 5. ブラウザ localStorage 永続化仕様
 
-### 5.1 ストレージ設定と保存フォーマット
+Phase 12 から、名前を付けた複数のマップを保存します。マップの一覧（インデックス）と各マップの中身（本体）を別のキーに分け、本体の中身は今までどおり Version 3 の JSON です。`localStorage` を直接読み書きするのは `client/src/services/persistence/mapLibraryStorage.ts` だけで（旧キーの読み取り・削除・移行のやり直しが失敗したときの書き戻しは、ここから `mapStorage.ts` の関数を呼ぶ）、フックやコンポーネントは `getItem`・`setItem`・`removeItem` を直接呼びません。
 
-- **保存先**: ブラウザの標準 `window.localStorage`
-- **ストレージキー定数**:
-  ```typescript
-  // client/src/services/persistence/mapStorage.ts
-  export const MAP_STORAGE_KEY = "draw-my-map.map.v1";
-  ```
-  *(キー名には互換性識別のため `.v1` サフィックスが付与されていますが、格納される JSON のスキーマは常に最新の Version 3 です)*
-- **保存データ形式**:
-  インデント 2 スペースで整形され、末尾に改行コード（`\n`）が付与された Version 3 の JSON 文字列。
+### 5.1 ストレージキーと保存フォーマット
+
+- **保存先**: ブラウザの標準 `window.localStorage`（取得は `getBrowserMapLibraryStorage()`。取得が例外を投げたときは `null`）
+
+| 用途 | キー | 定数・関数 | 中身 |
+| :--- | :--- | :--- | :--- |
+| インデックス | `draw-my-map.maps.v1` | `MAP_INDEX_STORAGE_KEY` | `MapIndexV1` の JSON（`encodeMapIndex` = `JSON.stringify(index)`。整形しない） |
+| マップ本体 | `draw-my-map.maps.v1.doc.<id>` | `mapBodyKey(id)`（接頭辞 `MAP_BODY_KEY_PREFIX`） | Version 3 の JSON（`serializeMapDocument` の出力） |
+| 壊れたインデックスの退避 | `draw-my-map.maps.v1.corrupt-backup` | `MAP_INDEX_BACKUP_STORAGE_KEY` | 壊れていたインデックスの生の文字列 |
+| 旧キー（移行元） | `draw-my-map.map.v1` | `MAP_STORAGE_KEY`（`mapStorage.ts`） | Phase 11 までの単一マップの JSON（Version 1〜3） |
+
+- 本体のキーは `mapBodyKey(id)` の1か所だけで作ります。id は `MAP_ID_PATTERN`（`/^[A-Za-z0-9_-]{1,64}$/`）に合う文字列で、区切りの `.` を含みません。
+- 新しいキーはすべて `draw-my-map.maps.v1` で始まり、旧キー `draw-my-map.map.v1` とは前方一致で重なりません。本体を列挙するときは接頭辞 `draw-my-map.maps.v1.doc.` で探し、残りが id の形式に合うものだけを本体とみなすため、旧キーや退避キーを本体と取り違えません。
+- インデックスに載っていない本体（孤立した本体）は、読み込み時に無視し、自動では消しません。インデックスにあって本体が無い項目は、空のマップ（まだ一度も保存していないマップ）として開きます。
+- **本体の保存データ形式**:
+  インデント 2 スペースで整形され、末尾に改行コード（`\n`）が付与された Version 3 の JSON 文字列。マップ名は本体に含めず、インデックスにだけ持ちます。
 
 ```typescript
 // client/src/domain/persistence/mapDocumentEncoder.ts
@@ -628,15 +645,169 @@ export function serializeMapDocument(document: MapDocument): string {
 }
 ```
 
-### 5.2 自動保存ライフサイクル（`useMapStorageAutoSave`）
+- **id の生成** (`generateMapId` in `services/persistence/mapIdGenerator.ts`): `crypto.randomUUID()` が使えればそれを使い、使えなければ `Date.now().toString(36)` と `Math.random().toString(36).slice(2, 10)` を `-` でつないだ文字列にします。`pickUnusedMapId`（`domain/mapLibrary/mapIndex.ts`）が、形式に合わない id と、インデックスの既存の id・`localStorage` に本体が残っている id（孤立した本体。読み取りに失敗した id も使用済みとみなす）を避けて、最大10回まで作り直します。決まらなければ `null` を返し、呼び出し元は作成を中止します。
+- **日時**: 作成日時と更新日時は `now().toISOString()`（UTC）で保存します。一覧の表示は `formatMapUpdatedAt` が数値から組み立てる「更新: YYYY/MM/DD HH:mm」（ローカル時刻）で、`toLocaleString` は使いません。
 
-`client/src/hooks/useMapStorageAutoSave.ts` が React コンポーネント側で自動保存を担当します。
+### 5.2 インデックスの型と読み込み・正規化
+
+#### `MapIndexEntry` / `MapIndexV1` (`client/src/domain/mapLibrary/mapIndex.ts`)
+
+```typescript
+export type MapIndexEntry = {
+  id: string;        // MAP_ID_PATTERN に合う文字列
+  name: string;      // 正規化済み。1〜50 コードポイント
+  createdAt: string; // ISO 8601（UTC、toISOString の形式）
+  updatedAt: string; // 同上
+};
+
+export type MapIndexV1 = {
+  version: 1;
+  currentMapId: string;          // maps のいずれかの id
+  maps: MapIndexEntry[];         // 作成順。1件以上
+  legacyCleanupPending: boolean; // 旧キーを次の起動で消すか
+};
+```
+
+- `maps` の配列順は作成順で、表示順には使いません。一覧の表示順（`sortMapEntriesForDisplay`）は「更新日時の新しい順 → 作成日時の新しい順 → id の昇順」です。開いているマップを削除したときに次に開くマップも、同じ規則で残りの先頭を選びます（`selectNextMapAfterRemoval`）。
+- 更新日時を変えるのは、そのマップの本体の書き込みが成功したときだけです（自動保存、flush、JSON 読み込みの後の強制保存）。名前の変更と切り替えでは変えません。作成時は作成日時と同じ値にします。
+
+#### 読み込みと正規化（`decodeMapIndex(raw: string): MapIndexDecodeResult`）
+
+起動時のインデックスの判定は、すべてこの純関数の結果で行います。結果は `{ kind: "ok", index, repaired }` か `{ kind: "corrupt" }` です。インデックスのキーが無い（`getItem` が `null`）場合は、呼び出し側で「無い」として別に扱います。
+
+| 入力 | 扱い |
+| :--- | :--- |
+| JSON として読めない、トップレベルがオブジェクトでない、`version !== 1`、`maps` が配列でない | `corrupt` |
+| `maps` の項目で、`id` が `MAP_ID_PATTERN` に合わない、または `name` が文字列でない | その項目だけを除外（本体は孤立した本体として残る） |
+| `name` | `normalizeStoredMapName` で正規化し直す（制御文字を半角空白に、前後の空白を除き、空なら「無題のマップ」、50 コードポイントを超えれば先頭 50 コードポイントに切り詰める） |
+| `createdAt`・`updatedAt` が `toISOString` の形式でない | 項目を捨てずに `1970-01-01T00:00:00.000Z`（`UNKNOWN_MAP_TIMESTAMP`）として扱う（表示は「更新: 不明」） |
+| 同じ id が2回以上出る | 最初の項目だけを残す |
+| 有効な項目が1件も残らない | `corrupt` |
+| `currentMapId` が文字列でない、または `maps` に無い | 表示順の先頭（最後に更新したマップ）を現在のマップにする |
+| `legacyCleanupPending` が真偽値でない | `false` として扱う |
+
+- 正規化で値を直した場合は `repaired: true` を返します。起動時に直した内容はすぐには書き込まず、次にインデックスを書くときに反映します（読み取りの経路で保存データを変えないため）。
+
+### 5.3 起動の分岐と移行
+
+起動の処理は、`localStorage` から読み取った値（`readMapLibrarySnapshot` が返す、インデックスの生の文字列・旧キーの生の文字列・本体の id の一覧）を入力に「書き込む内容・開く状態・通知」を決める純関数 `planMapLibraryStartup(snapshot, deps)`（`domain/mapLibrary/mapLibraryStartup.ts`）と、その計画を書き込みとともに実行する `runMapLibraryStartup(storage, deps)`（`services/persistence/mapLibraryStartupRunner.ts`）に分かれます。
+
+- 起動の処理は書き込みを伴い、書き込んだ結果が次の判定の入力を変えるため、何度実行しても同じ結果にはなりません。`useMapLibrary` は `startupRef` に最初の結果を入れ、StrictMode の2回目の effect では `localStorage` を読み書きせず、ref の結果をそのまま state に設定します。この effect は購読やタイマーを持たないため cleanup がありません。状態がすでに確定している（`libraryRef` が null でない）ときの再実行（開発時の Fast Refresh）では、起動時の結果で設定し直すと起動後の操作が巻き戻るため、何もしません。StrictMode の擬似的な再マウントでは layout effect が `libraryRef` をレンダー時の null に戻してから2回目が実行されるため、2回目は従来どおり ref の結果を設定します。
+- 移行と旧キーの後始末は、同じ起動の計画に入りません。移行した起動では旧キーを残し、次の起動で消します。例外は、本体かインデックスの書き込みが容量不足で失敗したときのやり直し（「旧キーからの移行」の 4）で、このときだけ移行した起動のうちに旧キーを消します。
+
+#### 起動の分岐とインデックス・通知
+
+判定の順は表の上から下です。「書くインデックス」の `M` は `maps`、`P` は `legacyCleanupPending` です。保護モードの行ではインデックスを書きません。通知はすべてシェルの通知（`MapLibraryNoticeRegion`）に1回だけ出します。
+
+| 分岐（`MapLibraryStartupPlan` の `kind`） | 書くインデックス | 保護モード | 開く内容 | 通知（種類） |
+| :--- | :--- | :--- | :--- | :--- |
+| `localStorage` を使えない（取得・`getItem`・旧キーの読み取り・キーの列挙のいずれかが例外。`protected`） | なし | はい | 空 | ブラウザの保存領域を使えないため、このマップは保存されません。必要な場合はJSONで書き出してください。（warning） |
+| インデックスが正常、`P: false`（`open`） | 書かない | いいえ | 現在のマップ | なし |
+| インデックスが正常、`P: true`（`cleanupLegacy`） | 旧キーの `removeItem` に成功したら `P: false` にして書く。失敗したら書かない | いいえ | 現在のマップ | なし |
+| 初回起動。インデックスも旧キーも無い（`initialize`） | `M: [無題のマップ]`、`P: false` | いいえ | 空 | なし |
+| 初回起動で、インデックスの書き込みに失敗 | なし | はい | 空 | ブラウザに保存できないため、このマップは保存されません。必要な場合はJSONで書き出してください。（error） |
+| 旧キーの移行に成功（`migrate`） | `M: [無題のマップ]`、`P: true` | いいえ | 旧キーの内容 | なし |
+| 旧キーの移行で、本体かインデックスが容量不足で書けず、旧キーを消したやり直しで成功（`migrate`） | `M: [無題のマップ]`、`P: false` | いいえ | 旧キーの内容 | なし |
+| 旧キーの移行で、本体またはインデックスの書き込みに失敗 | なし（書いた本体は戻す。やり直した場合は旧キーを書き戻す） | はい | 旧キーの内容 | 以前の保存データを新しい形式へ移行できませんでした。この画面での変更は保存されません。必要な場合はJSONで書き出してください。（error） |
+| 旧キーの移行のやり直しで失敗し、旧キーの書き戻しにも失敗 | なし | はい | 旧キーの内容 | 以前の保存データを新しい形式へ移行できず、ブラウザにも残せませんでした。この画面での変更は保存されません。ページを閉じる前に、JSONで書き出してください。（error） |
+| 旧キーが壊れている（`initialize`） | `M: [無題のマップ]`、`P: false` | いいえ | 空 | 以前の保存データを読み込めなかったため、空のマップで開始します。以前の保存データは消さずに残しています。（warning） |
+| 旧キーが壊れていて、インデックスの書き込みに失敗 | なし | はい | 空 | 以前の保存データを読み込めず、ブラウザにも保存できないため、このマップは保存されません。以前の保存データは消さずに残しています。（error） |
+| インデックスが壊れていて、本体が1件以上（`rebuild`） | `M: [復元したマップ 1…N]`、`P: false` | いいえ | 表示順の先頭 | マップの一覧を読み取れなかったため、保存済みのマップから一覧を作り直しました。マップ名は「復元したマップ」になっています。（warning） |
+| インデックスが壊れていて、本体が0件（旧キーの有無・状態は問わず、旧キーには触れない。`rebuild`） | `M: [無題のマップ]`、`P: false` | いいえ | 空 | マップの一覧を読み取れなかったため、空のマップで開始します。（warning） |
+| インデックスが壊れていて、退避キーかインデックスの書き込みに失敗 | なし（壊れたインデックスは残す） | はい | 空 | マップの一覧を読み取れませんでした。保存データを守るため、この画面での変更は保存されません。（error） |
+
+- 「空」は、本体の無いマップとして開くことを表します。新しい「無題のマップ」の id を決められなかった場合も、その分岐の失敗と同じ保護モードと通知になります。
+- 「現在のマップ」の本体の中身は、起動の判定では読みません。エディタの復元（5.6 節）が読みます。
+
+#### 旧キーからの移行
+
+1. 旧キーの文字列を `parseMapDocumentJsonWithVersion` でデコードします。
+2. デコードに成功した場合は、新しい id を作り、本体キーへ `serializeMapDocument(document)`（Version 3。Version 1・2 も Version 3 へ正規化する）を書きます。ノードの id・座標・イラストなどの中身は、デコード結果をそのまま引き継ぎます。続けてインデックス `{ version: 1, currentMapId: id, maps: [{ id, name: "無題のマップ", createdAt: now, updatedAt: now }], legacyCleanupPending: true }` を書きます（`writeMigratedMap`）。
+3. 本体の書き込みが容量不足以外で失敗したら、何も書かずに保護モードで旧キーの内容を開きます。インデックスの書き込みに失敗したら、書いた本体を `removeItem` で消して戻し、容量不足以外の失敗か、本体を戻せなかった場合は、同じく保護モードで開きます。戻す操作の成否は結果（`MigrationWriteResult` の `rollback: "removed" | "failed"`）に含め、戻せなかった本体は孤立した本体として残ります。どちらの場合も旧キーは変えないため、次の起動で再び移行を試します。
+4. 本体の書き込みが容量不足（`DOMException` の `name` が `QuotaExceededError` か `NS_ERROR_DOM_QUOTA_REACHED`、または `code` が 22 か 1014）で失敗したとき、または本体は書けたがインデックスの書き込みが容量不足で失敗し、書いた本体を消せたときだけ、「旧キーを1回分残す」方針の例外として、メモリ上の旧キーの元の文字列を控えたまま、「旧キーを消す → 本体を書く → インデックス（`legacyCleanupPending: false`）を書く」の順でやり直します。旧キーが容量の約半分を超えていると、旧キーと本体（とインデックス）を同時に置けないためです。
+   - やり直しで成功したら、通常のモードで開きます（`{ ok: true, legacy: "removed" }`）。旧キーはもう無いため、インデックスは `P: false` です。旧キーを残して成功した通常の移行は `{ ok: true, legacy: "kept" }` で、`P: true` です。
+   - 旧キーを消せなかったら、何も書かずに保護モードで開きます（`legacy: "kept"`）。
+   - 本体の書き込みに失敗したら、旧キーを元の文字列で書き戻します。インデックスの書き込みに失敗したら、書いた本体を `removeItem` で消してから（書き戻しに要る容量を空けるため）旧キーを書き戻します。どちらも保護モードで、通知は 3 と同じです（`legacy: "restored"`）。本体を消す操作の成否は `bodyRollback: "notNeeded" | "removed" | "failed"` で返します。
+   - 書き戻しにも失敗したら（`legacy: "lost"`）、旧キーはブラウザに残りません。旧キーの元の文字列は保護モードのセッション（`initialJson`）で画面に開いたままなので、通知で JSON での書き出しを案内します。この状態で再読み込みすると、旧キーもインデックスも無い初回起動として空のマップで始まります（本体を消せなかった場合は孤立した本体として残ります）。
+   - 書き戻しが成功した場合、次の起動でも同じ容量なら同じ結果になります。不要なデータを消して容量を空けるまでは保護モードが続きます。
+5. デコードに失敗した場合は、旧キーを消さず、変更もしません。初回起動と同じく空の「無題のマップ」でインデックスを作ります（`legacyCleanupPending: false`）。
+6. 移行に成功したときは通知を出しません。一覧には「無題のマップ」として表示されます。
+
+#### 旧キーの後始末
+
+- インデックスがあれば、旧キーの有無にかかわらず移行は行いません。
+- `legacyCleanupPending: true` のときだけ、旧キーを `removeItem` します（`removeLegacyMap`）。成功したら `legacyCleanupPending: false` にしてインデックスを書きます。旧キーの削除に失敗したら、`true` のまま次の起動で再試行します。インデックスの書き込みに失敗しても、次の起動で旧キーの削除（既に無いキーの削除）を再試行するだけです。通知は出しません。
+- 移行が成功した起動のうちに旧キーを消さないのは、移行の直後に問題が見つかったときに、開発者ツールで旧キーから戻せる余地を1回分残すためです。容量は2重になりますが、次の起動で解消します。ただし、2重にすると本体を書けない（旧キーが容量の約半分を超える）場合は、移行の 4 のやり直しで旧キーを先に消すため、この余地は残りません。
+
+#### インデックスの破損
+
+1. 壊れたインデックスの生の文字列を `draw-my-map.maps.v1.corrupt-backup` へ書きます（既にある場合は上書き）。
+2. `key(i)` で列挙したキーのうち、`draw-my-map.maps.v1.doc.` で始まり、残りが id の形式に合うものを集めます。id の昇順に並べ、名前を「復元したマップ 1」「復元したマップ 2」…、日時を `now` にした項目を作ります。本体の中身はここでは読みません（開くときにデコードします）。
+3. 本体が1件以上あれば、それらで新しいインデックス（`legacyCleanupPending: false`）を作ります。本体が無ければ、空の「無題のマップ」1件のインデックスを作ります。どちらの場合も、旧キーには触れず、移行もやり直しません。
+4. 新しいインデックスを書きます。
+5. 1 または 4 の書き込みに失敗したら、保護モードで開きます。1 が失敗した場合はインデックスを書かないため、壊れたインデックスは元の文字列のまま残ります。
+
+#### 保護モード
+
+- `localStorage` へ書き込めないとき、または書き込むと保存済みのデータを壊すおそれがあるときのモードです。`useMapLibrary` の状態 `storageMode: "persistent" | "protected"` で表します。
+- 保護モードでは、`createProtectedStorageSession(mapId, initialJson)`（`services/persistence/protectedStorageSession.ts`）で作ったセッションをエディタへ渡します。`mapId` は `generateMapId()` で作ったメモリ上だけの id で、どこにも書きません。`readBody` は `{ ok: true, value: initialJson }`（移行に失敗した場合は旧キーの生の文字列、それ以外は `null`）を返し、`writeBody` は常に `{ status: "inactive" }` を返して何も書きません。`registerFlush` は何もしない解除関数を返します。
+- 自動保存と flush は何も書かず、通知も出しません。ヘッダーの「マップ一覧」「新しいマップ」は無効です。JSON の読み込み・書き出しと画像の書き出しは使えます。
+
+### 5.4 書き込み順序と途中失敗の扱い
+
+- 1つの操作で書き換えるキーは、できるだけインデックス1つにします。新規作成・名前変更・切り替えはインデックスだけを書きます。
+- 本体とインデックスの両方に関わる操作は、読み込み時に無害な中間状態（孤立した本体、または本体の無い項目）を経由する順序にします。
+- 書き込みはすべて `mapLibraryStorage.ts` の関数を通し、`StorageWriteResult`（`{ ok: true } | { ok: false; error: string }`）を返します。例外は外へ投げません。
+- インデックスの書き込みが成功してから React の状態（インデックス、現在の id、セッション番号）を更新します。失敗したら状態を変えません。同じイベントの中の続けての更新は、最新のインデックスを持つ ref を基準に順に計算します。
+
+| 操作 | 順序 | 途中で失敗したとき |
+| :--- | :--- | :--- |
+| 新規作成（`createMap`） | flush → インデックス（項目の追加・現在の id の変更） | flush の失敗: 中止（何も変わらない）。インデックスの失敗: 中止（本体は書いていないので戻す物は無い） |
+| 切り替え（`switchMap`） | flush → インデックス（現在の id の変更） | flush の失敗: 中止。インデックスの失敗: 中止（flush で書いた本体は、そのマップの最新の内容なので戻さない） |
+| 名前変更（`renameMap`） | インデックス（名前の変更） | 失敗: 名前は変わらない |
+| 開いていない別のマップの削除（`deleteMap`） | インデックス（項目の削除）→ 本体の削除 → 現在のマップの flush（再試行） | インデックスの失敗: 中止。本体の削除の失敗: 孤立した本体として残し、warning。flush の失敗: 自動保存の失敗と同じ文言の error |
+| 開いているマップの削除（ほかにマップがある） | インデックス（項目の削除・現在の id を次のマップへ）→ セッション番号を進める → 本体の削除 → 再マウント | インデックスの失敗: 中止（開いたまま、保存待ちも残る）。本体の削除の失敗: 孤立した本体として残し、warning |
+| 最後の1つの削除 | インデックス（項目を新しい「無題のマップ」に置き換え、現在の id も新しい id へ）→ セッション番号を進める → 本体の削除 → 再マウント | 同上 |
+| 自動保存・flush（`writeBody`） | 本体 → インデックス（更新日時） | 本体の失敗: 保存の失敗として通知。インデックスの失敗: 保存は成功として扱い、通知しない（本体が正本。次の保存で更新日時を書き直す） |
+| 移行（`writeMigratedMap`） | 本体 → インデックス。本体かインデックスが容量不足のときだけ、（書いた本体の削除 →）旧キーの削除 → 本体 → インデックス（`P: false`）でやり直す | インデックスの失敗: 本体を `removeItem` で戻す（戻す操作の失敗も結果に含める）。やり直しの本体・インデックスの失敗: 本体を `removeItem` で消してから旧キーを元の文字列で書き戻す（書き戻しの失敗は `legacy: "lost"` として結果に含める） |
+| インデックスの作り直し | 退避キー → インデックス | 退避の失敗: インデックスを書かずに保護モード |
+
+- 開いているマップを削除するときは、本体を消す前にセッション番号を進めます。まだアンマウントされていない旧エディタの保存（タイマーや flush）がセッションの照合で拒否され、消した本体が書き戻されません。
+
+### 5.5 自動保存ライフサイクル（`useMapStorageAutoSave`）と flush
+
+`client/src/hooks/useMapStorageAutoSave.ts` が React コンポーネント側で自動保存を担当します。保存先は `localStorage` を直接持たず、シェルから渡される `MapStorageSession` の `writeBody` を呼びます。
+
+#### `MapStorageSession` (`client/src/types/mapStorageSession.ts`)
+
+```typescript
+export type MapBodyWriteResult =
+  | { status: "saved" }
+  | { status: "failed"; error: string }
+  | { status: "inactive" }; // セッションが古い、または保護モード。書き込まない
+
+export type MapFlushResult =
+  | { status: "saved" }
+  | { status: "unchanged" } // 保存待ちが無い、または復元前
+  | { status: "failed"; error: string };
+
+export type MapStorageSession = {
+  mapId: string;
+  readBody: () => MapDocumentResult<string | null>; // 本体の読み込み（復元に使う）
+  writeBody: (json: string) => MapBodyWriteResult;  // 本体の書き込み＋更新日時の更新
+  registerFlush: (flush: () => MapFlushResult) => () => void;
+};
+```
+
+- `useMapLibrary` は、現在のマップが変わるたびにセッション番号を進め、新しいセッションを作ります。`writeBody` は作られたときの `mapId` とセッション番号を閉じ込め、呼ばれたときに、セッション番号がシェルの現在の番号と一致し、`mapId` がインデックスにあるときだけ書きます。そうでなければ `{ status: "inactive" }` を返し、何も書かず、通知もしません。照合はマップ id ではなくセッション番号で行うため、A → B → A と切り替えたときに、最初の A のエディタの書き込みは `inactive` になります。
+- `registerFlush` も、古いセッションからの登録を受け付けません（現在の登録を上書きしない）。
 
 ```mermaid
 sequenceDiagram
     participant User as ユーザー / 操作
     participant State as React State (nodes / layout)
     participant Hook as useMapStorageAutoSave
+    participant Session as MapStorageSession (useMapLibrary)
     participant Storage as localStorage
 
     User->>State: ノード追加 / 移動 / 編集
@@ -647,13 +818,17 @@ sequenceDiagram
     else 変更あり
         Hook->>Hook: 300ms デバウンスタイマー起動
         Note over Hook: タイマー中に新たな操作があれば再スケジュール
-        Hook->>Storage: writeStoredMapJson(targetStorage, currentSnapshot) (MAP_STORAGE_KEY = "draw-my-map.map.v1")
-        alt 書き込み成功
-            Storage-->>Hook: 成功
+        Hook->>Session: writeBody(currentSnapshot)
+        alt セッションが古い・保護モード
+            Session-->>Hook: { status: "inactive" }（通知しない）
+        else 本体の書き込み成功
+            Session->>Storage: setItem(mapBodyKey(id), snapshot)
+            Session->>Storage: setItem("draw-my-map.maps.v1", 更新日時を変えたインデックス)
+            Session-->>Hook: { status: "saved" }
             Hook->>Hook: lastPersistedSnapshot を更新
         else QuotaExceededError 発生
-            Storage-->>Hook: 例外発生
-            Hook->>User: publishNotice({ kind: "error", message: "ブラウザへ自動保存できませんでした。" })
+            Session-->>Hook: { status: "failed" }
+            Hook->>User: publishNotice({ kind: "error", message: AUTO_SAVE_FAILURE_MESSAGE })
         end
     end
 ```
@@ -664,28 +839,46 @@ sequenceDiagram
    `lastPersistedSnapshotRef.current` に直近の保存スナップショット文字列を保持し、シリアライズ結果に実質的な差分がない場合は書き込みを行いません。
 3. **強制保存トリガー (`requestSnapshotSave`)**:
    重要な状態変更や明示的な保存要求時には、比較をバイパスして強制保存を実行するトリガーが用意されています。
+4. **失敗時**: `AUTO_SAVE_FAILURE_MESSAGE`（`domain/mapLibrary/mapLibraryMessages.ts`）の「ブラウザへ自動保存できませんでした。不要なマップを削除するか、JSONで書き出してください。」を通知し、次の変更で再試行します。
+5. **アンマウント**: 保存待ちのタイマーを破棄するだけで、書き込みません。再マウントを伴う操作（切り替え・新規作成）は、シェルが事前に flush します。
 
-### 5.3 初期ロード・復元ライフサイクル（`useMapStorageRestoration`）
+#### flush（`flushPendingSave(): MapFlushResult`）
 
-`client/src/hooks/useMapStorageRestoration.ts` がアプリケーション起動時（マウント時）の復元処理を制御します。
+- 復元が終わる前は `unchanged` を返し、何も書きません（空のマップの内容で、まだ読み込んでいない本体を上書きしないため）。
+- 保存待ちのタイマーを取り消し、最新の `currentSnapshot`（`useLayoutEffect` で同期する ref から読む）が最後に保存した内容と異なるか、強制保存の要求が残っている場合だけ、`writeBody` を同期で呼びます。`saved` なら最後に保存した内容を更新し、`clearSaveFailureNotice()` を呼んで `saved` を返します。`failed` なら、エディタの操作通知バーに自動保存の失敗と同じ通知（`autoSaveFailedNotice()`、`publishNotice` は ref から呼ぶ）を出して `failed` を返します。`inactive` なら `unchanged` を返します。操作ごとの失敗の通知（ダイアログ内）は、呼び出し元が出します。ダイアログ内の通知は閉じると消えるため、エディタにも出して、未保存であることを画面に残します（ダイアログを開いている間はエディタが `inert` なので、読み上げは重なりません）。
+- `useMapStoragePersistence` は `useLayoutEffect` で `storageSession.registerFlush(flushPendingSave)` を呼び、cleanup で登録を外します。`useMapLibrary` は「登録したセッション番号」と組で持ち、現在のセッション番号の登録だけを呼びます。登録が無ければ `unchanged` として扱います。
+- `clearSaveFailureNotice` は `useMapPersistence` が渡す関数で、関数形式の state 更新で「現在の通知が自動保存の失敗の通知（`kind: "error"` で文言が `AUTO_SAVE_FAILURE_MESSAGE`）なら `null` にする」だけを行います。JSON の読み込みの結果など、ほかの通知は消しません。
+
+| 操作 | flush の扱い |
+| :--- | :--- |
+| 切り替え・新規作成 | 事前に flush し、`failed` なら操作を中止してダイアログ内に error を通知する。エディタの操作通知バーにも自動保存の失敗の通知が出る。ダイアログは開いたまま |
+| 開いているマップの削除 | flush しない。保存待ちは削除するマップの内容なので捨てる |
+| 開いていない別のマップの削除 | 削除の前には flush せず、削除の後に再試行する。`failed` ならダイアログ内に自動保存の失敗と同じ文言を出す（エディタの操作通知バーにも同じ通知が出る）。`saved` ならエディタの自動保存の失敗の通知を消す |
+| 名前変更 | flush しない |
+
+### 5.6 初期ロード・復元ライフサイクル（`useMapStorageRestoration`）
+
+`client/src/hooks/useMapStorageRestoration.ts` が、エディタ（`MapEditor`）のマウント時の復元処理を制御します。マップを切り替えるとエディタが再マウントされるため、マップを開くたびに1回ずつ実行されます。
 
 1. **マウント時実行**:
-   `hydrated` が `false` の初回マウント時（`restoredRef.current === false`）に `readStoredMapJson` を呼び出します。
-2. **データ存在時とバージョン別スナップショット同期**:
+   `hydrated` が `false` の初回マウント時（`restoredRef.current === false`）に `storageSession.readBody()` を呼び出します（通常は `readMapBody` が本体キーを読み、保護モードではメモリ上の文字列を返します）。
+2. **本体が無い場合**:
+   `readBody` が `{ ok: true, value: null }` を返したときは、通知を出さずに空のマップのまま `hydrated` にします（新規作成の直後など）。
+3. **データ存在時とバージョン別スナップショット同期**:
    - `parseMapDocumentJsonWithVersion(stored.value)` を実行します。
    - パース成功時: `replaceMap({ layoutMode: document.layoutMode, nodes: document.nodes })` を呼び出して React 状態を復元します。
    - **初期ベースラインスナップショット (`initialPersistedSnapshot`) の分岐**:
-     - **`sourceVersion === 1` の場合**: `initialPersistedSnapshot` には元の V1 生文字列（`stored.value`）をそのまま設定します。これにより、復元後の `currentSnapshot`（`importance: "medium"` が補完された Version 3 シリアライズ文字列）との間に差分が生じるため、`useMapStorageAutoSave` が働いて **300ms 後に Version 3 形式で `localStorage` へ自動移行保存**されます。
+     - **`sourceVersion === 1` の場合**: `initialPersistedSnapshot` には元の V1 生文字列（`stored.value`）をそのまま設定します。これにより、復元後の `currentSnapshot`（`importance: "medium"` が補完された Version 3 シリアライズ文字列）との間に差分が生じるため、`useMapStorageAutoSave` が働いて **300ms 後に Version 3 形式で本体へ自動移行保存**されます。
      - **`sourceVersion === 2` または `3` の場合**: `initialPersistedSnapshot` には正規化後の Version 3 シリアライズ文字列（`serializeMapDocument(document)`）を設定します。これにより、復元直後の `currentSnapshot` と一致するため、**起動直後の不要な即時再書き込みを抑止**します。
-3. **データ破損・復元失敗時**:
-   - 不正な JSON やスキーマ不整合、`localStorage` アクセス例外等が発生した場合、ユーザーに次の警告通知を表示し、`initialPersistedSnapshot: currentSnapshot` としてデフォルトの空マップで安全に起動します。
+4. **データ破損・復元失敗時**:
+   - 不正な JSON やスキーマ不整合、`readBody` の失敗が発生した場合、ユーザーに次の警告通知を表示し、`initialPersistedSnapshot: currentSnapshot` としてデフォルトの空マップで安全に起動します。本体は、利用者が編集するまで上書きしません（flush も、変更が無ければ書きません）。
      - メッセージ: `"保存データを復元できませんでした。空のマップで開始します。"`（`RESTORE_WARNING`）
      - 種別: `warning`
 
-### 5.4 ストレージ容量ハンドリングと防御機構
+### 5.7 ストレージ容量ハンドリングと防御機構
 
 #### 1. 容量制約の課題
-ブラウザの `localStorage` にはオリジンごとに **約 5MB** の容量制限（Quota）が存在します。マインドマップに複数のイラスト（Base64 Data URL）が含まれる場合、容量を急速に圧迫するリスクがあります。Phase 9 の枝の複製では、画像データはメモリ上で共有されますが、保存と JSON 書き出しではノードごとに書き出されるため、イラスト付きの枝を複製すると保存サイズが画像の数だけ増えます。クリップボードから貼り付けた画像も、ノードごとに新しく保存されるため同様に増え、別タブから何度も貼り付けると約 5MB に近づきます。
+ブラウザの `localStorage` にはオリジンごとに **約 5MB** の容量制限（Quota）が存在し、Phase 12 からはこの容量をすべてのマップ（インデックスと各本体）で共有します。マップの数が増えるほど、またマップにイラスト（Base64 Data URL）が多いほど、どのマップの保存も失敗しやすくなります。旧キーから移行した起動の間は、旧キーと移行後の本体で容量が2重になります（次の起動で旧キーを消します）。旧キーが容量の約半分を超えていて2重にできない場合は、旧キーを先に消してから本体を書き直します（5.3 節「旧キーからの移行」の 4）。Phase 9 の枝の複製では、画像データはメモリ上で共有されますが、保存と JSON 書き出しではノードごとに書き出されるため、イラスト付きの枝を複製すると保存サイズが画像の数だけ増えます。クリップボードから貼り付けた画像も、ノードごとに新しく保存されるため同様に増え、別タブから何度も貼り付けると約 5MB に近づきます。
 
 #### 2. 本システムの多層防御対策
 
@@ -694,20 +887,24 @@ sequenceDiagram
 | **サムネイル縮小** | 128x128 px, JPEG 品質 0.85 (`ILLUSTRATION_THUMBNAIL_SIZE`, `ILLUSTRATION_THUMBNAIL_QUALITY`) | 1枚あたり約 10〜30KB 程度に抑制（未加工画像の 1/50 以下）。 |
 | **Data URL 文字長制限** | 100,000 文字以下 (`MAX_ILLUSTRATION_DATA_URL_LENGTH`) | 異常に大きな画像の混入をデコード・保存前にブロック。 |
 | **画像寸法制限** | 512x512 px 以下 (`MAX_ILLUSTRATION_IMAGE_DIMENSION`) | 改ざんデータによるデコード時 OOM を防御。 |
-| **エラー検知** | `DOMException`（`QuotaExceededError`）を捕捉 | アプリケーションがクラッシュせず安全にフォールバック。 |
-| **ユーザー警告** | トースト通知 (`kind: "error"`) | `"ブラウザへ自動保存できませんでした。"` を画面上部に明示。 |
+| **エラー検知** | `setItem` の例外（`QuotaExceededError` 等）を `mapLibraryStorage.ts` で捕捉し、`StorageWriteResult` で返す | アプリケーションがクラッシュせず安全にフォールバック。 |
+| **ユーザー警告** | 操作通知バーの通知 (`kind: "error"`) | `"ブラウザへ自動保存できませんでした。不要なマップを削除するか、JSONで書き出してください。"` を表示。 |
+| **切り替えの中止** | 切り替え・新規作成の前の flush が失敗したら中止 | 保存できていないマップの変更を、切り替えで失わない。 |
+| **容量の回復** | 開いていない別のマップを削除した後に flush を再試行 | 不要なマップを消して空いた容量へ、保存待ちの変更を書き込む。 |
 | **回避策の提供** | JSON エクスポート機能 | 容量制限のないローカルストレージ（ファイル）への退避を推奨。 |
 
-### 5.5 JSON ファイル エクスポート／インポート仕様
+### 5.8 JSON ファイル エクスポート／インポート仕様
 
 #### エクスポート（ダウンロード）仕様 (`mapJsonDownload.ts`, `useMapJsonExport.ts`)
 - **トリガー**: アプリケーションヘッダーの「**JSON書き出し**」ボタン。
-- **ファイル名命名規則**:
+- **ファイル名命名規則**（`createMapJsonFileName(mapName, now)` → `createMapFileName`。`domain/mapLibrary/mapFileName.ts`）:
   ```text
-  draw-my-map-YYYYMMDD-HHmmss.json
+  <安全なマップ名>-YYYYMMDD-HHmmss.json
   ```
-  *(例: 2026年10月10日 01時30分15秒の場合 `draw-my-map-20261010-013015.json`)*
-- **形式**: MIME タイプ `application/json` の UTF-8 テキスト（Version 3 形式）。
+  *(例: マップ名「無題のマップ」で 2026年10月10日 01時30分15秒の場合 `無題のマップ-20261010-013015.json`)*
+  - 安全なマップ名は `toSafeFileNameBase(name)` で作ります（`\ / : * ? " < > |` と制御文字を `_` に、連続する空白を1つに、前後の空白・先頭の `.`・末尾の `.` と空白を除き、Windows の予約名には先頭に `_` を付け、空なら `draw-my-map`）。PNG・SVG のファイル名（`createMapImageFileName(extension, mapName, now?)`）も同じ関数を使います。
+  - `useMapPersistence` → `useMapFilePersistence` → `useMapJsonExport` → `downloadJson(json, mapName)` と、エディタの props の `mapName` を渡します。書き出しの時点の名前を使います。
+- **形式**: MIME タイプ `application/json` の UTF-8 テキスト（Version 3 形式）。マップ名は JSON に含めません。
 
 #### インポート（ファイル読込）仕様 (`mapJsonFileReader.ts`, `useMapJsonImport.ts`)
 - **トリガー**: アプリケーションヘッダーの「**JSON読み込み**」ボタン。
@@ -715,7 +912,8 @@ sequenceDiagram
   - `file.text()` によりファイル内容を取得（連続してファイルが選択された場合は `latestImportRevisionRef` により最新のリクエストのみを有効化）。
   - `parseMapDocumentJson` パイプラインにより、Version 1, 2, 3 の自動識別・マイグレーション・バリデーションを実行。
   - バリデーションエラー時は `${error}現在のマップは変更されていません。` をエラー通知として表示し、現在のマップ状態を維持。
-  - 成功時は `requestSnapshotSave(importedSnapshot)` で強制保存を予約したうえで新しいマップデータでキャンバスを置き換え（`replaceMap`）、300ms デバウンス後に `localStorage` へ自動保存。
+  - 成功時は `requestSnapshotSave(importedSnapshot)` で強制保存を予約したうえで新しいマップデータでキャンバスを置き換え（`replaceMap`）、300ms デバウンス後に開いているマップの本体へ自動保存。新しいマップは作らず、インデックスのマップ名も変えません（更新日時だけが保存の成功で変わります）。
+  - `useMapJsonImport` はアンマウントの印（`mountedRef`。effect で `true`、cleanup で `false`）を持ち、`await` の後で印を確かめます。ファイルの読み取り中にマップを切り替えた場合は、`replaceMap`・`requestSnapshotSave`・通知を呼びません。`useMapPngExport` も同じ印で、ラスタライズ中に切り替えた場合のダウンロードと通知を止めます。
 
 #### 永続化・JSON 入出力の操作通知メッセージ (`OperationNotice`) 一覧
 
@@ -723,17 +921,45 @@ sequenceDiagram
 
 | 操作・発生箇所 | 種別 (`kind`) | 通知メッセージ (`message`) | 発生条件・備考 |
 | :--- | :---: | :--- | :--- |
-| **初期復元失敗**<br/>(`useMapStorageRestoration.ts`) | `warning` | `保存データを復元できませんでした。空のマップで開始します。` | `localStorage` 取得例外、`readStoredMapJson` 失敗、または保存 JSON のデコード・検証エラー時 |
-| **自動保存失敗**<br/>(`useMapStorageAutoSave.ts`, `mapStorage.ts`) | `error` | `ブラウザへ自動保存できませんでした。` | `localStorage` アクセス不可または `setItem` 書き込み例外（`QuotaExceededError` 等）発生時 |
-| **JSON 書き出し成功**<br/>(`useMapJsonExport.ts`) | `status` | `JSONファイルを書き出しました。` | `downloadJson(currentSnapshot)` の正常完了時 |
+| **初期復元失敗**<br/>(`useMapStorageRestoration.ts`) | `warning` | `保存データを復元できませんでした。空のマップで開始します。` | `readBody`（`readMapBody`）の失敗、または保存 JSON のデコード・検証エラー時 |
+| **自動保存失敗**<br/>(`useMapStorageAutoSave.ts`, `mapLibraryMessages.ts`) | `error` | `ブラウザへ自動保存できませんでした。不要なマップを削除するか、JSONで書き出してください。` | `writeBody` が `failed` を返した時（本体の `setItem` の例外。`QuotaExceededError` 等）。文言は定数 `AUTO_SAVE_FAILURE_MESSAGE` |
+| **JSON 書き出し成功**<br/>(`useMapJsonExport.ts`) | `status` | `JSONファイルを書き出しました。` | `downloadJson(currentSnapshot, mapName)` の正常完了時 |
 | **JSON 書き出し失敗**<br/>(`useMapJsonExport.ts`) | `error` | `JSONファイルを書き出せませんでした。` | `downloadJson` 実行中に例外が送出された場合 |
 | **JSON 読み込み成功**<br/>(`useMapJsonImport.ts`) | `status` | `マップを読み込みました。` | JSON ファイルのパース・検証・マップ置換が正常完了した時 |
 | **JSON ファイル読取失敗**<br/>(`useMapJsonImport.ts`, `mapJsonFileReader.ts`) | `error` | `JSONファイルを読み取れませんでした。現在のマップは変更されていません。` | `file.text()` の失敗または `readFile` が例外を送出した場合 |
 | **JSON 検証エラー**<br/>(`useMapJsonImport.ts`) | `error` | `${parsed.error}現在のマップは変更されていません。` | 4.6節の各バリデーションエラー文言の末尾に `現在のマップは変更されていません。`（`IMPORT_PRESERVED_MESSAGE`）を連結して通知 |
 
-*(※ なお、`readStoredMapJson` 内部では `getItem` 例外時に `error: "ブラウザの保存データを読み取れませんでした。"` を返しますが、呼び出し元の `useMapStorageRestoration` では上記の `RESTORE_WARNING` に統一してユーザーへ通知します。)*
+*(※ なお、`readMapBody` 内部では `getItem` 例外時に `error: "ブラウザの保存データを読み取れませんでした。"` を返しますが、呼び出し元の `useMapStorageRestoration` では上記の `RESTORE_WARNING` に統一してユーザーへ通知します。)*
 
-### 5.6 枝のクリップボード形式
+### 5.9 マップの一覧の操作通知メッセージ (`OperationNotice`) 一覧
+
+マップの作成・切り替え・名前変更・削除の結果の文言は `client/src/domain/mapLibrary/mapLibraryMessages.ts`、名前の長さのエラーは `mapName.ts` の `validateMapNameInput`、起動時の通知は `mapLibraryStartup.ts` にあります（起動時の通知は 5.3 節の表）。通知を出す場所は次の2つに分かれます。
+
+- **ダイアログ内の通知**: ダイアログを開いたまま終わる操作の結果（名前変更の成功、開いていないマップの削除の結果、各操作の失敗、削除の後の保存の再試行の失敗）。ダイアログの中に常設した `role="status"` と `role="alert"` の領域に出し、ダイアログを閉じると消します。`status` 以外は `role="alert"` に出し、本体の削除の失敗と保存の再試行の失敗が重なったときは、半角空白でつないで1つにします。
+- **シェルの通知** (`MapLibraryNoticeRegion.tsx`): ダイアログを閉じて終わる操作の結果（作成・切り替え・開いているマップの削除）と、起動時の通知。エディタ（`MapEditor`）の外にあり、再マウントでは消えず、次のシェルの通知で置き換わります。
+
+| 場面 | 関数 | 種別 (`kind`) | 通知メッセージ (`message`) | 出す場所 |
+| :--- | :--- | :---: | :--- | :--- |
+| 新規作成の成功 | `mapCreatedNotice` | `status` | `マップ「<名前>」を作成しました。` | シェル |
+| 切り替えの成功 | `mapSwitchedNotice` | `status` | `マップ「<名前>」を開きました。` | シェル |
+| 名前変更の成功 | `mapRenamedNotice` | `status` | `マップの名前を「<名前>」に変更しました。` | ダイアログ |
+| 開いていないマップの削除の成功 | `mapDeletedNotice` | `status` | `マップ「<名前>」を削除しました。` | ダイアログ |
+| 開いているマップの削除の成功 | `currentMapDeletedNotice` | `status` | `マップ「<名前>」を削除し、「<次の名前>」を開きました。` | シェル |
+| 最後のマップの削除の成功 | `lastMapDeletedNotice` | `status` | `マップ「<名前>」を削除し、新しい「無題のマップ」を作成しました。` | シェル |
+| 切り替えの前の flush の失敗 | `switchFlushFailedNotice` | `error` | `現在のマップを保存できなかったため、マップを切り替えませんでした。不要なマップを削除するか、JSONで書き出してください。` | ダイアログ（エディタの操作通知バーにも自動保存の失敗の通知） |
+| 新規作成の前の flush の失敗 | `createFlushFailedNotice` | `error` | `現在のマップを保存できなかったため、新しいマップを作成しませんでした。不要なマップを削除するか、JSONで書き出してください。` | ダイアログ（エディタの操作通知バーにも自動保存の失敗の通知） |
+| インデックスの書き込みの失敗 | `indexWriteFailedNotice(operation)` | `error` | `マップの一覧を保存できなかったため、<操作>できませんでした。不要なマップを削除してください。`（`<操作>` は `マップを作成`・`マップを切り替え`・`名前を変更`・`マップを削除`） | ダイアログ |
+| 本体の削除の失敗（開いていないマップ） | `bodyRemovalFailedNotice` | `warning` | `マップ「<名前>」を一覧から削除しましたが、保存データの一部を消せませんでした。` | ダイアログ |
+| 本体の削除の失敗（開いているマップ） | `currentBodyRemovalFailedNotice` | `warning` | `マップ「<名前>」を一覧から削除し、「<次の名前>」を開きましたが、保存データの一部を消せませんでした。` | シェル |
+| 本体の削除の失敗（最後のマップ） | `lastBodyRemovalFailedNotice` | `warning` | `マップ「<名前>」を一覧から削除し、新しい「無題のマップ」を作成しましたが、保存データの一部を消せませんでした。` | シェル |
+| id を決められない | `mapIdUnavailableNotice` | `error` | `新しいマップを作成できませんでした。もう一度お試しください。` | ダイアログ |
+| 削除の後の保存の再試行の失敗 | `AUTO_SAVE_FAILURE_MESSAGE` | `error` | `ブラウザへ自動保存できませんでした。不要なマップを削除するか、JSONで書き出してください。` | ダイアログ（エディタの操作通知バーにも同じ通知） |
+| 名前が長すぎる | `validateMapNameInput` | — | `マップ名は50文字以内で入力してください。（現在 N 文字）` | 入力欄の下（`role="alert"`）。確定しない |
+
+- 本体だけを消せなかった削除では、成功の `status` は出さず、上の `warning` だけを出します。
+- 名前は通知の中でも正規化済みの名前をそのまま表示します。
+
+### 5.10 枝のクリップボード形式
 
 選択ノードと全子孫のコピー＆ペースト（`Ctrl`/`Cmd`+`C`・`V`）が、OS のクリップボードの `text/plain` で受け渡す専用形式です（`domain/clipboard/subtreeClipboardCodec.ts`）。マップの保存形式（`MapDocument` の Version 1, 2, 3）とは別で、V3 の保存形式、`localStorage`、JSON ファイルの書き出し・読み込みは変わりません。貼り付けたノードは、貼り付け後のマップの一部として通常の V3 形式で保存されます。
 
@@ -756,7 +982,7 @@ sequenceDiagram
 
 #### 枝のコピー＆ペーストの操作通知メッセージ (`OperationNotice`) 一覧
 
-`useMapClipboardEvents.ts` が発行し、`page.tsx` が `useRevisionScopedNotice` で `documentRevision` と組にして保持します。枝の複製の通知とは独立した枠で表示します。
+`useMapClipboardEvents.ts` が発行し、`MapEditor.tsx` が `useRevisionScopedNotice` で `documentRevision` と組にして保持します。枝の複製の通知とは独立した枠で表示します。
 
 | 操作・発生箇所 | 種別 (`kind`) | 通知メッセージ (`message`) | 発生条件・備考 |
 | :--- | :---: | :--- | :--- |

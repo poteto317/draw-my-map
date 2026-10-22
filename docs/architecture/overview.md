@@ -10,7 +10,7 @@ Draw My Map のシステム全体アーキテクチャ、レイヤード設計�
 
 Draw My Map は、思考の整理・アイデア発想を直感的に支援する**ブラウザ完結型シングルページ・マインドマップアプリケーション**（SPA）です。
 
-- **ローカルファースト & クライアント完結**: マップデータ（ノードツリー、配置座標、重要度、レイアウトモード）はすべてブラウザ上の React 状態および `localStorage` で安全に保持・管理され、外部データベースへの認証や接続なしにオフラインでも動作します。JSON ファイルとしてのエクスポート/インポート、SVG/PNG 形式の画像書き出しもすべてクライアントサイドで処理されます。
+- **ローカルファースト & クライアント完結**: マップデータ（ノードツリー、配置座標、重要度、レイアウトモード）はすべてブラウザ上の React 状態および `localStorage` で安全に保持・管理され（Phase 12 から、名前を付けた複数のマップを一覧のインデックスとマップごとの本体に分けて保存）、外部データベースへの認証や接続なしにオフラインでも動作します。JSON ファイルとしてのエクスポート/インポート、SVG/PNG 形式の画像書き出しもすべてクライアントサイドで処理されます。
 - **軽量サーバーサイド連携（BFF / Route Handler）**: AI によるノードイラスト生成機能のみ、Next.js App Router の Route Handler（`POST /api/illustrations`）を介して Cloudflare Workers AI（`@cf/meta/m2m100-1.2b` による日本語プロンプト英訳、`@cf/black-forest-labs/flux-1-schnell` による画像生成）と安全に通信します。API キー等の機密情報はサーバーサイドでのみ保持されます。
 
 ```mermaid
@@ -24,7 +24,7 @@ graph TD
             Domain["Domain Layer (Layout / Tree / Search / Math / Codec)"]
             PixiApp["Pixi.js 8 (2D WebGL / Canvas Stage)"]
         end
-        LocalStorage[("localStorage<br/>(draw-my-map.map.v1)")]
+        LocalStorage[("localStorage<br/>(draw-my-map.maps.v1 /<br/>draw-my-map.maps.v1.doc.&lt;id&gt;)")]
         FileIO["File System<br/>(JSON / PNG / SVG)"]
     end
 
@@ -98,7 +98,7 @@ client/src/
 ├── server/          # 6. Server Layer (サーバーサイド API 処理・Cloudflare Workers AI 連携)
 ├── config/          # 7. Config & Constants Layer (アプリケーション共通定数)
 ├── types/           # 8. Shared Types & Interfaces (TypeScript 型定義)
-└── testing/         # 共通テストヘルパー・フィクスチャ (createTestNode, createTestMapHistoryLease, jpegFixture)
+└── testing/         # 共通テストヘルパー・フィクスチャ (createTestNode, createTestMapHistoryLease, jpegFixture, createTestStorageSession, mapLibraryTestStorage)
 ```
 
 ### 2.1 各レイヤーの責務と構成
@@ -107,17 +107,17 @@ client/src/
 - **責務**: Next.js App Router のエントリポイント、グローバルレイアウト、グローバルスタイル、および API Route Handler。
 - **構成ファイル（全 5 ファイル）**:
   - `src/app/layout.tsx`: HTML シェル、Geist フォント設定、メタデータ定義。
-  - `src/app/page.tsx`: マップエディタの最上位ページコンポーネント。各フックから状態を取得し、`AppHeader`・`AppWorkspace`・`MapStage`・`IllustrationPanel` 等へ注入。
+  - `src/app/page.tsx`: シェル（`Home`）。アンマウントされない最上位で、`useMapLibrary`（マップの一覧・起動の判定・作成・切り替え・名前変更・削除）と `useMapLibraryDialogState`（ダイアログの画面とフォーカスの戻し先）を持ち、`MapLibraryNoticeRegion`、`MapEditor`（`key={現在のマップの id}`）、`MapLibraryDialog` を描画する。ダイアログ内のマウスのクリックの時刻を ref（`dialogMouseClickedAtRef`）に控え、`MapEditor` を通して `MapStage` へ渡す（再マウントをまたいで引き継ぐため、シェルが持つ）。`useMapLibrary` へ渡す既定の依存（`getBrowserMapLibraryStorage`、`generateMapId`、`now`）をここで組み立てる。再マウントの後は、新しいヘッダーのボタンの `ref` がつながった後の `useLayoutEffect` で、ダイアログの戻し先へフォーカスする。
   - `src/app/globals.css`: Tailwind CSS v4 インポートおよびカラースキーム（ライト/ダーク）変数定義。
   - `src/app/favicon.ico`: アプリケーションアイコン。
   - `src/app/api/illustrations/route.ts`: イラスト生成 API エンドポイント（`POST /api/illustrations`, `dynamic = "force-dynamic"`）。
-- **依存可能レイヤー**: UI (Components), Hooks, Server (Route Handler のみ), Config, Types
+- **依存可能レイヤー**: UI (Components), Hooks, Services（`page.tsx` が `useMapLibrary` の既定の依存として `getBrowserMapLibraryStorage` と `generateMapId` を渡すためだけ）, Server (Route Handler のみ), Config, Types。Domain は `import type`（`MapIndexEntry`）だけ
 
 #### 2. UI Layer (Components) (`src/components/layout/`, `src/components/map/`)
 - **責務**: ユーザーに対するプレゼンテーション、DOM イベントの捕捉、および Pixi.js Canvas ステージと DOM オーバーレイの統合。
 - **構成モジュール**:
-  - **レイアウト UI (`src/components/layout/` 全 17 ファイル)**:
-    - `AppHeader.tsx`: タイトル、ノード検索、レイアウトモード切替、操作ヒント、重要度・解像度フィルタ切替、枝の折りたたみ・展開ボタンと非表示件数（`NodeCollapseControl`）、元に戻す／やり直すボタン、枝を複製ボタン、枝のコピー＆ペーストの常設案内、JSON/画像エクスポートボタン、操作通知バーを統合するヘッダー。
+  - **レイアウト UI (`src/components/layout/` 全 26 ファイル)**:
+    - `AppHeader.tsx`: タイトル、マップの操作（必須の `mapControls`。タイトルの直後）、ノード検索、レイアウトモード切替、操作ヒント、重要度・解像度フィルタ切替、枝の折りたたみ・展開ボタンと非表示件数（`NodeCollapseControl`）、元に戻す／やり直すボタン、枝を複製ボタン、枝のコピー＆ペーストの常設案内、JSON/画像エクスポートボタン、操作通知バーを統合するヘッダー。
     - `NodeSearchBox.tsx`, `nodeSearchKeyAction.ts`: ARIA combobox/listbox による検索欄と最大50件の候補一覧、および矢印・Enter・Escape・IME変換中のキー判定。
     - `AppWorkspace.tsx`: ヘッダー下の 2 カラム（メインキャンバス領域 + 右サイドパネル）レイアウト。
     - `LayoutModeSelector.tsx`: `手動配置` / `自動配置` 切り替えボタングループ（`role="group"`, `aria-label="レイアウトモード"`）。
@@ -131,10 +131,18 @@ client/src/
     - `MapImageExportControls.tsx`: `PNG書き出し`（変換中 `disabled` 制御付き） / `SVG書き出し` ボタン。
     - `MapOperationNotice.tsx`: 操作結果・警告・エラー通知を表示するアクセシブルな通知コンポーネント（`role="status"` / `role="alert"`）。
     - `IllustrationPanel.tsx`, `illustrationPanelView.ts`, `IllustrationImage.tsx`: 右サイドパネル UI（`<aside aria-label="イラスト">`）、パネル表示状態導出ロジック（`getIllustrationPanelView`）、および Data URL 用ネイティブ `<img>` ラッパー。
-  - **マップステージ・DOM オーバーレイ・座標/イベント補助 (`src/components/map/` コンポーネント 3 ファイル + 補助モジュール 17 ファイル)**:
+    - `MapLibraryControls.tsx`: ヘッダーの現在のマップ名（「マップ: <名前>」、`truncate` と `title`）と「マップ一覧」「新しいマップ」ボタン（`aria-haspopup="dialog"`、押し続けの Enter・Space を `preventDefault()`、保護モードでは `disabled` と理由の文言）。
+    - `MapLibraryNoticeRegion.tsx`: シェルの通知の常設ライブリージョン（`role="status"` と `role="alert"` を最初から空で置き、`useReannouncedNotice` で `sequence` が変わるたびに一度空にしてから次のフレームで文言を入れる）。`MapEditor` の外に置くため、再マウントでも `inert` でも消えない。
+    - `MapLibraryDialog.tsx`: モーダルダイアログの枠（`onClickCapture` で `detail > 0` のマウスのクリックごとに `onMouseClick` を呼び、シェルへ通知する。`role="dialog"`、`aria-modal="true"`、余白を押したときにフォーカスを受け止める `tabIndex={-1}`、画面によらない `aria-label="マップの管理"`）。各画面の中身は画面（と対象のマップ）ごとに key を変えて作り直す `role="group"` で包み、group の `aria-labelledby` で見出しを、削除の確認では group の `aria-describedby` で本文を指す。画面（一覧・新規作成・名前変更・削除の確認）を切り替え、`focusTarget` を `useLayoutEffect` で適用し（行のボタンは `data-map-id` と `data-map-action` で探す。属性とセレクタの対応は `mapLibraryListButtons.ts`）、常設の `role="status"`・`role="alert"` への通知は `useReannouncedNotice` で `sequence` ごとに一度空にし、次のフレームで入れ直す。開閉と画面の状態は持たない。
+    - `MapLibraryListScreen.tsx`, `MapLibraryNameForm.tsx`, `MapLibraryDeleteConfirm.tsx`: 一覧の画面（`<ul aria-label="保存済みのマップ">`、開いているマップの `aria-current`、「更新: …」、名前変更・削除のボタン）、新規作成・名前変更の画面（`<form>` の送信だけで確定、入力中の50文字の検証、IME 変換中の Enter を送信しない）、削除の確認の画面（「キャンセル」を先に置き、「このマップを削除」は押し続けとダブルクリックを無視）。
+    - `mapLibraryListButtons.ts`: 一覧の画面のボタン（行の「開く」「名前を変更」「削除」と一覧の「新しいマップ」）に付ける `data-map-id`・`data-map-action` の属性（`mapLibraryListButtonAttributes`）と、ダイアログがフォーカス先を探すセレクタ（`mapLibraryListButtonSelector`）。付ける側と探す側の対応を1か所で定める。
+    - `useDialogFocusTrap.ts`: ダイアログのフォーカスの閉じ込め（`document` の `focusin` で外へ出たフォーカスを戻す、背景の `pointerdown`・`mousedown` を `preventDefault()`）、Tab の循環（無効なボタンを除いて毎回数え直す `listFocusableElements`）、`window` の capture の `keydown` での Escape（IME 変換中と `repeat` は無視）。
+    - `useReannouncedNotice.ts`: 常設のライブリージョンに出す値を入れ直す共通フック。`sequence` が変わるたびに一度 null にし、`requestAnimationFrame` で次のフレームに値を入れる。アンマウントや次の変更ではフレームを `cancelAnimationFrame` で取り消す。`MapLibraryNoticeRegion` と `MapLibraryDialog` が使う。
+  - **マップステージ・DOM オーバーレイ・座標/イベント補助 (`src/components/map/` コンポーネント 4 ファイル + 補助モジュール 17 ファイル)**:
+    - `MapEditor.tsx`: 1つのマップの編集画面（Phase 11 までの `page.tsx` の中身）。必須の props `mapId`、`mapName`、`storageSession`、`mapControls`、`shortcutsEnabled`、`dialogMouseClickedAtRef`（シェルが持つ、ダイアログ内で最後にマウスでクリックした時刻の ref。そのまま `MapStage` へ渡し、直後の `dblclick` を無視させる）を受け取り、`useNodes` から `MapStage` までを組み立てる。シェルが `key={mapId}` で描画するため、切り替えで履歴・表示状態・エディタ内の通知・保存待ちのタイマーごと破棄される。`shortcutsEnabled` が `false`（ダイアログ表示中）の間は根に `inert` を付け、ショートカットのフックへ `enabled: false` を渡す。
     - `MapStage.tsx`: Pixi.js キャンバス要素と DOM オーバーレイ（`NodeLabelEditor`, `NodeContextMenu`）を統合するステージ親コンポーネント。
     - `NodeLabelEditor.tsx`, `nodeLabelEditorLayout.ts`: ノードテキストインライン編集用 `<input>` DOM オーバーレイと、ビューポート倍率およびイラスト有無（`topInset`）に応じた配置矩形算出。
-    - `NodeContextMenu.tsx`, `nodeContextMenuLayout.ts`, `nodeContextMenuDom.ts`, `nodeContextMenuStaleness.ts`, `nodeContextMenuTarget.ts`, `mapContextMenuAction.ts`, `menuActivationDoubleClick.ts`: 右クリックコンテキストメニュー DOM オーバーレイ、176×44px クランプ配置、メニュー内外 DOM 判定、失効（Stale）判定、右クリック時のアクション解決、メニュー項目実行後 500ms 以内のダブルクリック誤発火防止。
+    - `NodeContextMenu.tsx`, `nodeContextMenuLayout.ts`, `nodeContextMenuDom.ts`, `nodeContextMenuStaleness.ts`, `nodeContextMenuTarget.ts`, `mapContextMenuAction.ts`, `menuActivationDoubleClick.ts`: 右クリックコンテキストメニュー DOM オーバーレイ、176×44px クランプ配置、メニュー内外 DOM 判定、失効（Stale）判定、右クリック時のアクション解決、メニュー項目の実行後、またはダイアログ内のマウスのクリックの後 500ms 以内のダブルクリック誤発火防止（`isDoubleClickFromOverlayActivation`）。
     - `mapViewport.ts`, `mapGeometry.ts`, `mapDoubleClickAction.ts`, `nodeViewportFocus.ts`, `viewportFocusShortcut.ts`, `wheelZoom.ts`, `textEntryTarget.ts`, `editableTarget.ts`, `mapHistoryShortcut.ts`, `browserMapVisibilityEnvironment.ts`: ビューポート座標変換・クランプ、ノードヒットテスト（`findNodeAtPoint`）、ダブルクリックアクション分岐、ノード中央フォーカス計算、ホイールズームデルタ正規化、テキスト入力要素判定（`textEntryTarget.ts`）、編集可能要素（input・textarea・select・contenteditable）の判定（`editableTarget.ts`）、元に戻す・やり直すのショートカットの判定（`mapHistoryShortcut.ts`）、`requestAnimationFrame` / `prefers-reduced-motion` ブラウザ環境アダプタ。
   - **Pixi.js 描画・ジェスチャーエンジン (`src/components/map/pixi/` 全 23 ファイル — うち `usePixiApplication.ts` は Hooks としても機能)**:
     - シーン描画: `renderMapScene.ts`, `renderMapNodes.ts`, `renderMapEdges.ts`, `clearMapScene.ts`, `applyViewportTransform.ts`, `illustrationTextureLoader.ts`, `pixiTypes.ts`。
@@ -145,14 +153,16 @@ client/src/
 #### 3. Application State & Coordination Layer (Hooks) (`src/hooks/`, `src/components/map/use*.ts`)
 - **責務**: アプリケーション状態の保持（React State / Ref / Reducer）、ライフサイクル制御、および Domain / Services 層の呼び出し調停。
 - **構成モジュール**:
-  - **アプリケーション状態フック (`src/hooks/` 全 23 ファイル)**:
+  - **アプリケーション状態フック (`src/hooks/` 全 25 ファイル)**:
     - `useNodes.ts`, `useNodeLayoutState.ts`: ノードツリーの CRUD・選択・重要度・イラスト更新・枝の複製（`duplicateSubtree`）・枝のコピー（`copySubtree`）と貼り付け（`pasteSubtree`）と、手動/自動レイアウトモードの状態管理（複製と貼り付けの挿入処理は内部関数 `applySubtreeInsertion` を共有する）・ツリー変更時の `layoutNodeForest` 自動整列トリガー。
     - `useMapResolutionFilter.ts`, `mapResolutionFilterState.ts`: ズーム倍率・ヒステリシス・手動/自動モード遷移・マップ置換時の `pendingResetScale` 同期に基づく可視ノードフィルタリング状態管理。
-    - `useMapPersistence.ts`, `useMapStoragePersistence.ts`, `useMapStorageRestoration.ts`, `useMapStorageAutoSave.ts`, `useMapFilePersistence.ts`, `useMapJsonExport.ts`, `useMapJsonImport.ts`: `localStorage` からの初期復元・300ms デバウンス自動保存、および JSON ファイルのエクスポート/インポート調停。
-    - `useMapImageExport.ts`, `useMapPngExport.ts`, `useMapSvgExport.ts`: PNG / SVG 画像エクスポート処理、空マップ警告、PNG 書き出し中フラグ（`isExportingPng`）と通知状態管理。
+    - `useMapLibrary.ts`: シェルの状態と操作。起動の判定を1回だけ確定させ（`startupRef`）、インデックス・現在のマップ・保護モード・起動時の通知を持つ。作成（`createMap`）・切り替え（`switchMap`）・名前変更（`renameMap`）・削除（`deleteMap`）を、`localStorage` を先に書いて成功したときだけ状態を更新する順で行い、結果を `MapLibraryOperationResult` で返す。現在のマップが変わるたびにセッション番号を進めて `MapStorageSession` を作り直し、`writeBody` と `registerFlush` をセッション番号で照合する。flush の登録先も持つ。
+    - `useMapLibraryDialogState.ts`: ダイアログの画面遷移（`closed | list | create | rename | delete`）、操作の結果のダイアログ内の通知とシェルの通知への振り分け、フォーカスの戻し先（ダイアログ内の `focusTarget` と、再マウント後のヘッダーの `headerFocusRequest`）。起動時の通知を1回だけシェルの通知にする。
+    - `useMapPersistence.ts`, `useMapStoragePersistence.ts`, `useMapStorageRestoration.ts`, `useMapStorageAutoSave.ts`, `useMapFilePersistence.ts`, `useMapJsonExport.ts`, `useMapJsonImport.ts`: `storageSession`（`readBody` / `writeBody` / `registerFlush`）を通したマップ本体の初期復元・300ms デバウンス自動保存・同期の `flushPendingSave`（`useMapStoragePersistence` がセッションへ登録）・自動保存の失敗の通知だけを消す `clearSaveFailureNotice`、および JSON ファイルのエクスポート（ファイル名に `mapName` を使う）/インポート調停（アンマウント後に読み取りが終わった結果は捨てる）。
+    - `useMapImageExport.ts`, `useMapPngExport.ts`, `useMapSvgExport.ts`: PNG / SVG 画像エクスポート処理（ファイル名に `mapName` を使い、PNG は書き出しを始めた時点の名前）、空マップ警告、PNG 書き出し中フラグ（`isExportingPng`）と通知状態管理。PNG はアンマウント後にラスタライズが終わった結果を捨てる。
     - `useIllustrationGeneration.ts`: 非同期 AI イラスト生成のステートマシン管理（`idle` / `generating` / `succeeded` / `failed`）、同時 1 件制限、および `AbortController` による中断制御。
     - `useNodeDuplicationAction.ts`: 選択ノードの枝を `useNodes.duplicateSubtree` で複製し、成功 / 失敗の通知を `useRevisionScopedNotice` へ渡す。
-    - `useRevisionScopedNotice.ts`: 操作結果の通知を、次の通知か `documentRevision` の変化まで残す。通知を出した時点の `documentRevision` と組にして保持し、現在の値と違う通知を隠す。`useNodeDuplicationAction.ts`（複製の通知）と `page.tsx`（コピー／貼り付けの通知）がそれぞれ別の枠として呼ぶ。
+    - `useRevisionScopedNotice.ts`: 操作結果の通知を、次の通知か `documentRevision` の変化まで残す。通知を出した時点の `documentRevision` と組にして保持し、現在の値と違う通知を隠す。`useNodeDuplicationAction.ts`（複製の通知）と `MapEditor.tsx`（コピー／貼り付けの通知）がそれぞれ別の枠として呼ぶ。
     - `useNodeLabelSearch.ts`: `nodes` の参照が変わったときに検索索引を作り直し、入力ごとに同期検索して可視性を付加した候補を返す。
     - `useNodeSearchNavigation.ts`: 選択時にノードIDの実在を再確認し、隠れている場合は閉じた祖先の展開（`expandNodes`）と必要な解像度表示への切り替えを行って通知し（両方のときは通知文を半角空白で連結）、選択と中央移動要求を発行する。検索操作では `documentRevision` を増やさない。
     - `useBranchCollapse.ts`: `documentRevision` とノードIDで表示専用の折りたたみ集合を管理する。文書世代が変わると全展開へ戻し、削除や葉化で無効になった指定は `normalizeCollapsedNodeIds` で描画時点から除外する。ヘッダーのボタンの可否は `canToggle`（`canCollapse` による子の有無の判定）で返し、`toggle` と検索用の `expandNodes` で集合を更新する。
@@ -169,30 +179,35 @@ client/src/
     - `useHiddenNodeInteractionReset.ts`, `useMapStageReset.ts`: 非表示化したノードの選択・編集・ジェスチャー強制リセット、および `resetRevision` 更新時のステージ状態一括初期化。
     - `useDocumentRestoreInteractionReset.ts`: `documentRevision`（マップ置換・成功した Undo / Redo）の更新時に、編集中のラベル・進行中のジェスチャー・コンテキストメニューを閉じる（viewport は維持）。
     - `useMapHistoryShortcuts.ts`: Undo / Redo のキーボードショートカット登録。
+    - `window` にキーやクリップボードのイベントを登録する `useMapHistoryShortcuts`・`useNodeKeyboardShortcuts`・`useMapViewportShortcut`・`useMapClipboardEvents`・`useNodeContextMenuDismissal` は、必須の引数 `enabled` を受け取る。登録は1回のままで、`enabled` は `useLayoutEffect` で同期する ref から読み、`false`（マップのダイアログの表示中）のときはハンドラが何もせずに戻る（`preventDefault` もしない）。
     - `useNodeFocusRequest.ts`: 検索から渡された `NodeFocusRequest` を、`documentRevision` が一致し、対象が描画中の `nodes`（自動配置の折りたたみ中は表示用座標）に存在し、screen が準備できたときに 1 回だけ中央移動へ反映する。進行中のジェスチャーは先に中断する。
     - `useMapClipboardEvents.ts`: `window` の `copy` / `paste` イベントを 1 回だけ登録し、選択ノードの枝のコピーとクリップボードの枝の貼り付けを仲介する。対象判定（イベント対象とフォーカス要素が編集可能、DOM の範囲選択、ラベル編集中、ジェスチャー中、`defaultPrevented` のときはブラウザに任せる）、`clipboardData` の読み書き、`subtreeClipboardCodec` による検証、通知の生成だけを担い、スナップショット生成と挿入は `MapStage` の props（`onCopySubtree` / `onPasteSubtree`）に委ねる。コピー失敗時は `preventDefault` しない。最新の props を ref 経由で使い、アンマウント時にリスナーを解除する。
-- **依存可能レイヤー**: Services, Domain, Config, Types
+- **依存可能レイヤー**: Services, Domain, Config, Types。UI は `import type` のみ（`useMapLibraryDialogState.ts` → `MapLibraryNoticeRegion.tsx` の `ShellNotice`）
 
 #### 4. Application Services Layer (`src/services/`)
 - **責務**: ブラウザ API、DOM、ストレージ、ネットワーク通信等の副作用の抽象化および外部入出力。UI や特定の React フックには依存しない。
-- **構成サブパッケージ（全 14 ファイル）**:
-  - `services/persistence/` (3 ファイル):
-    - `mapStorage.ts`: `window.localStorage`（キー `draw-my-map.map.v1`）への読み書き、容量上限超過（`QuotaExceededError` 等）の捕捉と `MapDocumentResult` 返却。
-    - `mapJsonDownload.ts`: JSON スナップショット文字列から `Blob` と一時 Object URL を生成し、`draw-my-map-YYYYMMDD-HHmmss.json` としてダウンロードさせる処理。
+- **構成サブパッケージ（全 18 ファイル）**:
+  - `services/persistence/` (7 ファイル):
+    - `mapLibraryStorage.ts`: `localStorage` を直接読み書きする唯一のモジュール。キー（`MAP_INDEX_STORAGE_KEY` = `draw-my-map.maps.v1`、`MAP_BODY_KEY_PREFIX`、`MAP_INDEX_BACKUP_STORAGE_KEY`）と、本体のキーを作る唯一の関数 `mapBodyKey(id)`。起動時の読み取り（`readMapLibrarySnapshot`）、インデックス・本体・退避キーの読み書き、本体の削除、旧キーの削除（`removeLegacyMap`）、移行の書き込みと失敗時の本体の戻し、本体かインデックスが容量不足のときの旧キーを消したやり直しと旧キーの書き戻し（`writeMigratedMap`）。例外を外へ投げず、`StorageWriteResult` などの結果型で返す。
+    - `mapLibraryStartupRunner.ts`: `runMapLibraryStartup(storage, deps)`。`planMapLibraryStartup` の計画を、書き込みが成功したときだけ次へ進む順で実行し、`persistent`（インデックスと通知）か `protected`（メモリ上の id・初期内容・通知）の結果を返す。
+    - `protectedStorageSession.ts`: 保護モードの `MapStorageSession`（`createProtectedStorageSession`）。`readBody` は渡された初期内容を返し、`writeBody` は常に `inactive`。
+    - `mapIdGenerator.ts`: マップ id の生成（`generateMapId`。`crypto.randomUUID()`、使えなければ時刻と乱数の 36 進数）。
+    - `mapStorage.ts`: 旧キー `draw-my-map.map.v1`（`MAP_STORAGE_KEY`）の読み取り（`readStoredMapJson`）、削除（`removeStoredMapJson`）、移行のやり直しが失敗したときの書き戻し（`restoreStoredMapJson`）だけを持つ。移行専用で、`mapLibraryStorage.ts` だけが呼ぶ。
+    - `mapJsonDownload.ts`: JSON スナップショット文字列から `Blob` と一時 Object URL を生成し、`<マップ名>-YYYYMMDD-HHmmss.json`（`createMapJsonFileName(mapName, now)`）としてダウンロードさせる処理。
     - `mapJsonFileReader.ts`: **`await file.text()`（`Blob.prototype.text()` 非同期テキスト読み取り API）** を用いてローカル JSON ファイルの内容を読み取るアダプタ。
   - `services/illustration/` (3 ファイル):
     - `illustrationClient.ts`: `POST /api/illustrations` への `fetch` 通信、HTTP ステータスコード別の `IllustrationRequestError`（エラー種別型 `IllustrationErrorKind`）分類、およびユーザー向けエラー文言変換（`describeIllustrationError`）。
     - `illustrationThumbnail.ts`: オフスクリーン `<canvas>` と `HTMLImageElement` を用いた中央正方形クロップ、128×128px リサイズ、JPEG（品質 `0.85`）圧縮。
     - `illustrationGeneration.ts`: API リクエスト（`requestIllustration`）とサムネイル生成（`createIllustrationThumbnail`）を連結する統合ファサード（`generateIllustrationThumbnail`）。
   - `services/imageExport/` (8 ファイル):
-    - `createMapSvgExport.ts`, `mapSvgArtifact.ts`, `mapImageDownload.ts`, `mapImageFileName.ts`: テキスト計測とバウンディングボックス算出に基づく SVG ドキュメント生成、SVG XML の `Blob` 変換（`createMapSvgBlob`）、ファイル名生成（`createMapImageFileName`）、およびブラウザダウンロード発火（`downloadMapImage`）。
+    - `createMapSvgExport.ts`, `mapSvgArtifact.ts`, `mapImageDownload.ts`, `mapImageFileName.ts`: テキスト計測とバウンディングボックス算出に基づく SVG ドキュメント生成、SVG XML の `Blob` 変換（`createMapSvgBlob`）、ファイル名生成（`createMapImageFileName(extension, mapName, now?)`。`<マップ名>-YYYYMMDD-HHmmss.png` / `.svg`）、およびブラウザダウンロード発火（`downloadMapImage`）。
     - `mapPngRasterizer.ts`, `loadMapSvgImage.ts`, `mapCanvasPngEncoder.ts`: `createMapPngEncoder` によるオフスクリーン Canvas 寸法の上限検証（`MAX_CANVAS_ATTRIBUTE_DIMENSION`）と 2倍スケール PNG エンコード、`withLoadedMapSvgImage` による SVG `Blob` Object URL の `HTMLImageElement` 読み込みと完了/失敗時の確実な `URL.revokeObjectURL` 解放。
     - `mapTextMeasurement.ts`: Canvas 2D コンテキストを用いたテキスト幅計測（`createMapTextMeasurer`。2D コンテキストが取得できない場合は `throw new Error("Canvas 2D context is unavailable")` を送出）。
 - **依存可能レイヤー**: Domain, Config, Types
 
 #### 5. Domain Layer (`src/domain/`)
 - **責務**: システムの中核となる純粋なビジネスルール、数学・幾何計算、ツリー操作アルゴリズム、データ検証・変換。**React や Pixi.js、DOM、ブラウザ固有 API（window, document, localStorage 等）には一切依存しない純粋関数群**。
-- **構成サブパッケージ（全 49 ファイル）**:
+- **構成サブパッケージ（全 55 ファイル）**:
   - `domain/nodes/` (26 ファイル):
     - `nodeAutoLayout.ts`, `nodeLayoutForest.ts`, `nodeLayoutForestRelations.ts`, `nodeLayoutForestTraversal.ts`, `nodeLayoutGeometry.ts`, `nodeLayoutMetrics.ts`, `nodeLayoutPlacement.ts`, `nodeLayoutSpacing.ts`, `nodeLayoutArithmetic.ts`: 木構造・森構造の幾何配置計算（親子関係とルート抽出 `buildNodeForestRelations`、非再帰トラバーサルとサイクル検出 `traverseNodeForest`、フォレストインデックス化 `indexNodeForest`、座標展開 `calculateNodePositions`、深さ別列 X 座標とサブツリー垂直スパン計測 `calculateNodeLayoutMetrics`、双方向垂直中央揃え配置 `placeNodeForest`、数値オーバーフロー・浮動小数点 ULP 精度劣化防御および最小間隔判定 `checkedAdd`/`checkedSubtract`/`checkedMultiply`/`calculateRoundingTolerance`/`hasSufficientGap`、垂直間隔検証 `hasValidVerticalSpacing`）。
     - `nodeTree.ts`: ノード親子付け替え（`connectNodeTree`）、**自己接続・存在しないノード・循環参照検出（`canConnectNodes`）**、部分木 ID 収集（`collectSubtreeIds`。親子の隣接表と queue による非再帰・線形の走査で、親子が循環した入力でも停止する）、部分木連動移動（`moveNodeSubtree`）。
@@ -224,6 +239,13 @@ client/src/
     - `mapDocumentCodec.ts`, `mapDocumentEncoder.ts`, `mapDocumentDecoder.ts`: マップドキュメント（JSON Version 1, 2, 3）のエンコード（`createMapDocument`, `serializeMapDocument`）・デコード（`parseMapDocumentJson`, `parseMapDocumentJsonWithVersion`）・Version 3 マイグレーション。
     - `mapDocumentNode.ts`, `mapDocumentNodeImportance.ts`, `mapDocumentNodeIllustration.ts`, `mapDocumentNodeProjection.ts`: 各ノードフィールドの型検証・バージョン別 `importance` / `illustration` の正規化（`normalizeMapDocumentNode`, `normalizeMapDocumentNodeImportance`, `normalizeMapDocumentNodeIllustration`）・余剰プロパティを除去するプロジェクション（`projectMapDocumentNode`）。
     - `mapDocumentGraph.ts`: ノード ID 重複・親ノード存在・非再帰トラバーサルによる循環参照（サイクル）のグラフ整合性検証（`validateMapDocumentGraph`）。
+  - `domain/mapLibrary/` (6 ファイル):
+    - `mapIndex.ts`: インデックスの型（`MapIndexEntry`、`MapIndexV1`）、id の形式（`MAP_ID_PATTERN`、`isValidMapId`）、読み込みと正規化（`decodeMapIndex`）、`encodeMapIndex`、項目の追加・名前変更・更新日時・削除・最後の1つの置き換え・現在の id の変更、表示順（`sortMapEntriesForDisplay`）、削除後に開くマップ（`selectNextMapAfterRemoval`、`describeMapRemoval`）、使われていない id の選択（`pickUnusedMapId`）。
+    - `mapLibraryStartup.ts`: 起動の計画 `planMapLibraryStartup(snapshot, deps)`。読み取った文字列から、書く内容・開く状態・通知を決める（副作用なし）。
+    - `mapName.ts`: 名前の正規化（`normalizeMapName`）、コードポイント数での長さ（`countMapNameLength`）と50文字の検証（`validateMapNameInput`）、読み込み時の切り詰め（`normalizeStoredMapName`）、`DEFAULT_MAP_NAME`（「無題のマップ」）。
+    - `mapFileName.ts`: ファイル名に使えない文字・予約名を避ける `toSafeFileNameBase` と、JSON・PNG・SVG 共通のファイル名 `createMapFileName(mapName, extension, now)`。
+    - `mapTimestamp.ts`: 日時の補正（`normalizeMapTimestamp`）と「更新: YYYY/MM/DD HH:mm」の表示（`formatMapUpdatedAt`）。
+    - `mapLibraryMessages.ts`: マップの操作の通知の文言と、自動保存の失敗の文言 `AUTO_SAVE_FAILURE_MESSAGE`。
   - `domain/imageExport/` (6 ファイル):
     - `mapSvgDocument.ts`, `mapSvgNodes.ts`, `mapSvgEdges.ts`, `mapExportBounds.ts`, `mapExportText.ts`, `mapXmlText.ts`: ベクター画像としての SVG XML 文字列の決定論的生成、外接バウンディングボックス算出（余白 32px）、指数探索＋二分探索によるテキスト折り返しレイアウト計算、および XML 1.0 文字サニタイズ・エスケープ。
 - **依存可能レイヤー**: Config, Types
@@ -249,7 +271,7 @@ client/src/
 
 #### 8. Types Layer (`src/types/`)
 - **責務**: アプリケーション横断で共有される TypeScript 型定義、インターフェース、ユニオン型。
-- **構成ファイル（全 11 ファイル完全網羅）**:
+- **構成ファイル（全 13 ファイル完全網羅）**:
   - `types/node.ts`: `Node`（`id`, `parentId`, `x`, `y`, `width`, `height`, `label`, `importance`, `illustration?`）。
   - `types/nodeImportance.ts`: `NodeImportance`（`"high" | "medium" | "low"`）。
   - `types/nodeLayout.ts`: `NodeLayoutMode`（`"manual" | "auto"`）。
@@ -261,6 +283,8 @@ client/src/
   - `types/operationNotice.ts`: `OperationNotice`（`kind: "status" | "warning" | "error"`, `message: string`）。
   - `types/nodeSearch.ts`: `NodeSearchListItem`（検索の一致結果 `NodeSearchMatch` に、現在の表示で隠れているかを示す `hidden` を加えた候補）。※`domain/search/nodeLabelSearch` の `NodeSearchMatch` 型のみを `import type` しています。
   - `types/nodeFocusRequest.ts`: `NodeFocusRequest`（`nodeId`, `sequence`, `documentRevision`）。検索からの中央移動要求。
+  - `types/mapStorageSession.ts`: `MapStorageSession`（`mapId`, `readBody`, `writeBody`, `registerFlush`）と結果型 `MapBodyWriteResult`（`saved` / `failed` / `inactive`）・`MapFlushResult`（`saved` / `unchanged` / `failed`）。
+  - `types/mapLibraryDialog.ts`: ダイアログの画面（`MapLibraryDialogScreen`）、フォーカス先（`MapLibraryDialogFocusTarget`）、ダイアログ内の通知（`MapLibraryDialogNotices`）。
 - **依存可能レイヤー**: なし（最下位層。ただし `types/mapImageExport.ts` から `domain/imageExport/mapSvgDocument` への `import type`、`types/nodeSearch.ts` から `domain/search/nodeLabelSearch` への `import type` のみ例外的に許容）
 
 ---
@@ -280,6 +304,7 @@ flowchart TD
 
     App --> UI
     App --> Hooks
+    App --> Services
     App --> Server
     App --> Config
     App --> Types
@@ -313,16 +338,16 @@ flowchart TD
 
 | 参照元 \ 参照先 | App | UI | Hooks | Services | Domain | Server | Config | Types |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **App** | - | ○ | ○ | × | × | ○ | ○ | ○ |
+| **App** | - | ○ | ○ | ○ | △ | ○ | ○ | ○ |
 | **UI** | × | - | ○ | ○ | ○ | × | ○ | ○ |
-| **Hooks** | × | × | - | ○ | ○ | × | ○ | ○ |
+| **Hooks** | × | △ | - | ○ | ○ | × | ○ | ○ |
 | **Services** | × | × | × | - | ○ | × | ○ | ○ |
 | **Server** | × | × | × | × | ○ | - | ○ | ○ |
 | **Domain** | × | × | × | × | - | × | ○ | ○ |
 | **Config** | × | × | × | × | × | × | - | ○ |
 | **Types** | × | × | × | × | △ | × | × | - |
 
-*(○: 依存許可, △: `import type`（コンパイル時型参照）のみ許可［`types/mapImageExport.ts` → `domain/imageExport/mapSvgDocument.ts`］, ×: 依存禁止, -: 同一レイヤー)*
+*(○: 依存許可, △: `import type`（コンパイル時型参照）のみ許可［`types/mapImageExport.ts` → `domain/imageExport/mapSvgDocument.ts`、`types/nodeSearch.ts` → `domain/search/nodeLabelSearch.ts`、`app/page.tsx` → `domain/mapLibrary/mapIndex.ts`（`MapIndexEntry`）、`hooks/useMapLibraryDialogState.ts` → `components/layout/MapLibraryNoticeRegion.tsx`（`ShellNotice`）］, ×: 依存禁止, -: 同一レイヤー。App → Services は、`page.tsx` が `useMapLibrary` の既定の依存（`getBrowserMapLibraryStorage`、`generateMapId`）を渡すためだけに使う)*
 
 ---
 
@@ -509,7 +534,7 @@ sequenceDiagram
 - **コンテキストメニュー (`NodeContextMenu.tsx`, `nodeContextMenuLayout.ts`, `menuActivationDoubleClick.ts`)**:
   - `clampNodeContextMenuPosition`（`nodeContextMenuLayout.ts`）により、固定サイズ `176×44px`（`NODE_CONTEXT_MENU_SIZE`）のメニューがステージ境界内 `[0, container.width - 176] × [0, container.height - 44]` に収まるようクランプ配置されます。
   - `onMouseDown={(e) => e.preventDefault()}`、`onContextMenu={(e) => e.preventDefault()}`、`onDoubleClick={(e) => e.stopPropagation()}` を設定。メニューアイテムのクリック時にキャンバスの選択解除（`onSelectNode(null)`）や新規ノード生成が誤ってトリガーされるのを完全に防止。
-  - メニュー項目をクリックしてメニューが閉じた直後、素早い 2 回目のクリックが背面キャンバスに到達して `dblclick`（新規ノード生成や編集開始）が誤発火するのを防ぐため、`menuActivationDoubleClick.ts` によりメニュー実行後 **500ms 以内**（`MENU_ACTIVATION_DOUBLE_CLICK_WINDOW_MS = 500`）のダブルクリックを無視します。
+  - メニュー項目をクリックしてメニューが閉じた直後、素早い 2 回目のクリックが背面キャンバスに到達して `dblclick`（新規ノード生成や編集開始）が誤発火するのを防ぐため、`menuActivationDoubleClick.ts` によりメニュー実行後 **500ms 以内**（`MENU_ACTIVATION_DOUBLE_CLICK_WINDOW_MS = 500`）のダブルクリックを無視します。同じ判定（`isDoubleClickFromOverlayActivation`）はマップ管理ダイアログのボタンのダブルクリックにも使います。ダイアログ内のマウスのクリック（`MapLibraryDialog` の `onClickCapture` で `detail > 0` のとき `onMouseClick` を呼ぶ）の時刻を、シェル（`Home`）が ref（`dialogMouseClickedAtRef`）に控え、`MapEditor` を通して `MapStage` へ渡し、`MapStage` が 500ms 以内の `dblclick` を無視します。編集画面を `key={mapId}` で作り直しても時刻を引き継ぐため、ref はシェルが持ちます（詳細は features.md 12.7）。
 - **非表示化時のインタラクション即時リセット (`useHiddenNodeInteractionReset.ts`)**:
   - 解像度フィルタの切り替え、ズームアウト、枝の折りたたみ、接続の付け替えなどの構造変更によって、現在選択中（`selectedNodeId`）またはインライン編集中（`editingNodeId`）のノードが `visibleNodeIds`（折りたたみと解像度フィルターの積集合）から外れて非表示になった場合、`useHiddenNodeInteractionReset` が `useLayoutEffect` で即座に選択解除（`onSelectNode(null)`）、インライン編集のキャンセル（`cancelEditing()`）、および進行中ジェスチャーの強制解除（`cancelActiveGesture()`）を実行し、非表示ノードに対するゴースト操作を防ぎます。
 
@@ -519,7 +544,7 @@ sequenceDiagram
 
 ### 4.1 トップレベルの状態管理構造
 
-アプリケーションのルート状態は `client/src/app/page.tsx` において以下のカスタムフックにより集約・調停されます：
+アプリケーションの状態は2段に分かれます。最上位のシェル（`client/src/app/page.tsx` の `Home`）は、マップの一覧と切り替えの状態を `useMapLibrary` と `useMapLibraryDialogState` で持ちます（後述「複数マップと切り替えの流れ」）。1つのマップの編集状態は、シェルが `key={現在のマップの id}` で描画する `client/src/components/map/MapEditor.tsx` において以下のカスタムフックにより集約・調停されます：
 
 1. **`useNodes`**:
    - アプリケーションの基本データ構造であるノード配列（`Node[]`）、現在選択中のノード ID（`selectedNodeId`）、現在のレイアウトモード（`manual` / `auto`）を保持。
@@ -533,7 +558,7 @@ sequenceDiagram
    - ビューポートの `scale` に連動して、解像度フィルターで表示すべきノード ID のセット（`visibleNodeIds`。全 `nodes` に適用した解像度可視集合 R）を算出。MapStage へ渡す最終的な可視集合は、9 番の `useMapDisplayState` が折りたたみと統合して作る。
    - 閾値付近での微小なズーム往復によるノードのチラつきを防ぐヒステリシス制御ロジックを内包。
 4. **`useMapPersistence`**:
-   - マップ状態の変更を検知し、`localStorage` へのデバウンス自動保存を実施。
+   - マップ状態の変更を検知し、シェルから渡された `storageSession` の `writeBody` で、開いているマップの本体へデバウンス自動保存を実施。切り替えなどの前にシェルが呼ぶ `flushPendingSave` をセッションへ登録する。
    - JSON ファイルのエクスポート（ダウンロード）およびインポート（ファイル読み込み・スキーママイグレーション検証・マップ置換）を提供。
 5. **`useIllustrationGeneration`**:
    - ノードごとのイラスト生成状態（`idle` | `generating` | `succeeded` | `failed`）を管理。
@@ -541,20 +566,31 @@ sequenceDiagram
 6. **`useNodeDuplicationAction`**:
    - 選択ノードの枝の複製を呼び、結果の通知を `useRevisionScopedNotice` で保持する。`documentRevision` が変わると古い通知を隠す。
 7. **`useRevisionScopedNotice`**:
-   - 操作結果の通知を、通知を出した時点の `documentRevision` と組にして保持し、`documentRevision` が変わると古い通知を隠す。`useNodeDuplicationAction` が複製の通知に、`page.tsx` が `MapStage` の `useMapClipboardEvents` からのコピー／貼り付けの通知に、それぞれ別の枠として使う。
+   - 操作結果の通知を、通知を出した時点の `documentRevision` と組にして保持し、`documentRevision` が変わると古い通知を隠す。`useNodeDuplicationAction` が複製の通知に、`MapEditor.tsx` が `MapStage` の `useMapClipboardEvents` からのコピー／貼り付けの通知に、それぞれ別の枠として使う。
 8. **`useNodeLabelSearch` / `useNodeSearchNavigation`**:
    - `nodes` から作った索引を入力のたびに同期検索し、最終可視集合（折りたたみと解像度フィルターの積集合）と合わせて候補を構成する。
    - 候補選択時はノードIDの実在を確認し、閉じた祖先だけを展開し、必要なら表示モードを切り替えてから選択と `NodeFocusRequest` を発行する。検索、祖先の展開、表示切り替え、選択、viewport移動は編集履歴へ記録せず、`documentRevision` も増やさない。
 9. **`useBranchCollapse` / `useMapDisplayState`**:
-   - `useBranchCollapse` は表示専用の折りたたみ集合を `documentRevision` と組にして保持し、折りたたみによる可視集合 C、閉じたノードごとの全子孫数、`toggle` / `expandNodes` を返す。`documentRevision` が変わると全展開へ戻す。閉じた親へ `Tab` で子を追加できたときは、`page.tsx` が `expandNodes` でその親を展開する。
+   - `useBranchCollapse` は表示専用の折りたたみ集合を `documentRevision` と組にして保持し、折りたたみによる可視集合 C、閉じたノードごとの全子孫数、`toggle` / `expandNodes` を返す。`documentRevision` が変わると全展開へ戻す。閉じた親へ `Tab` で子を追加できたときは、`MapEditor.tsx` が `expandNodes` でその親を展開する。
    - `useMapDisplayState` は C と 3 番の解像度可視集合 R から最終可視集合 V = C ∩ R を作り、自動配置で折りたたみ中だけ表示用座標の `displayNodes` を返す。MapStage はこの `displayNodes` と V を受け取る。正本 `nodes` は変更しない。
+
+#### 複数マップと切り替えの流れ
+
+- **責務の分担**: インデックスの解析・正規化・更新・起動の計画・名前とファイル名の規則は純関数（`domain/mapLibrary/`）、`localStorage` の読み書きは `services/persistence/mapLibraryStorage.ts` だけ、状態と操作の順序は `useMapLibrary`、ダイアログの画面とフォーカスは `useMapLibraryDialogState`、配線はシェル（`Home`）、表示と操作は部品（`MapLibraryControls`、`MapLibraryDialog` ほか）が受け持つ。
+- **起動**: シェルは起動の判定が終わるまで `MapEditor` を描画せず、「マップを読み込んでいます…」を表示する。`useMapLibrary` の effect が `runMapLibraryStartup` を1回だけ実行し（`startupRef` で StrictMode の2回目を防ぐ）、結果から状態を作る。
+- **書き込みと状態の更新**: 各操作は、最新のインデックスを持つ ref を基準に次のインデックスを計算し、`localStorage` へ書けたときだけ ref と React の状態を更新する。結果は `MapLibraryOperationResult`（`remounted` と通知）で返し、`useMapLibraryDialogState` がダイアログ内の通知かシェルの通知かに振り分ける。
+- **セッション番号による照合**: `useMapLibrary` は、現在のマップが変わるたび（作成・切り替え・開いているマップの削除）にセッション番号を進め、その番号と `mapId` を閉じ込めた `MapStorageSession` を作って `MapEditor` へ渡す。`writeBody` は呼ばれた時点のシェルのセッション番号と一致し、`mapId` がインデックスにあるときだけ書き、そうでなければ `inactive` を返す。マップ id や `documentRevision` の値ではなくセッション番号で照合するため、A → B → A と切り替えても、最初の A のエディタの保存待ちが2回目の A へ書き込まれない。開いているマップの削除では、インデックスを書いた後、本体を消す前に番号を進め、旧エディタの保存が消した本体を書き戻さないようにする。
+- **flush**: `MapEditor` の `useMapStoragePersistence` が `registerFlush(flushPendingSave)` を `useLayoutEffect` で登録し、`useMapLibrary` は登録したセッション番号と組で持つ。切り替えと新規作成の前に現在のセッションの登録だけを同期で呼び、`failed` なら操作を中止する。開いていない別のマップの削除では、削除の後に呼んで、空いた容量へ保存待ちを書き直す。
+- **再マウント**: `MapEditor` は `key={mapId}` で描画されるため、切り替えると `useNodes`（ノード・選択・編集履歴）、`documentRevision` と `resetRevision`（どちらも 0 から始まる）、ビューポート、解像度フィルター、折りたたみ、検索、エディタ内の通知、保存待ちのタイマーがすべて破棄される。新しいエディタの revision は旧エディタの値と一致しうるため、エディタの外へ結果を出す処理（保存、ダウンロード、シェルへの通知）は revision で照合しない。保存はセッション番号、非同期処理（`useMapJsonImport`、`useMapPngExport`）はアンマウントの印で照合し、イラスト生成は既存のアンマウント時の `abort` で止まる。
+- **ダイアログ中のエディタ**: シェルはダイアログを開いている間、`MapEditor` へ `shortcutsEnabled={false}` を渡す。`MapEditor` は根に `inert` を付け、`window` にイベントを登録するショートカットのフックへ `enabled: false` を渡す。シェルの通知（`MapLibraryNoticeRegion`）とダイアログは `MapEditor` の外にあるため、`inert` の影響を受けない。
+- **他タブ**: `storage` イベントは購読しない。各タブはメモリ上のインデックスを基準に丸ごと書くため、最後に書いたタブのインデックスが残る。
 
 #### 編集履歴の所有とリビジョン
 
 - **所有者**: 編集履歴は `useNodeLayoutState` が呼ぶ `useMapHistory`（純粋な遷移は `domain/history/mapHistory.ts`）が所有する。ref を正とし、同じ結果を React state へ反映するため、同一イベント内の連続操作（追加→削除→Undo など）でも最新の状態を使える。`NodeMapState`（`nodes` と `layoutMode`）だけを記録し、選択・viewport・表示フィルターは含めない。
 - **ドラッグのグループ**: Pixi 側はドラッグの閾値を越えた最初の有効な移動を通知する直前に `onBeginNodeMove` を呼んで履歴グループのリースを受け取り（クリックだけでは履歴を開始しない）、移動のたびに有効かを確認する。ドラッグ全体が1操作になり、Undo / Redo / 別編集 / マップ置換でリースは失効し、遅れて届いた古い移動通知は無視される。
 - **二種類のリビジョン**:
-  - `resetRevision`: JSON 読み込みと初回復元による**マップ置換**で増加する。ステージの viewport 初期化、解像度フィルターのリセットなど、マップを開き直したときの初期化に使う。
+  - `resetRevision`: JSON 読み込みと初回復元による**マップ置換**で増加する（マップの切り替えでは増やさず、`MapEditor` ごと作り直す）。ステージの viewport 初期化、解像度フィルターのリセットなど、マップを開き直したときの初期化に使う。
   - `documentRevision`: マップ置換に加えて、**成功した Undo / Redo** でも増加する。編集中の状態・ジェスチャー・コンテキストメニューを閉じ、進行中のイラスト生成と既存プレビュー、枝の複製の通知、枝のコピー／貼り付けの通知、ノード検索の通知と中央移動要求を失効させ、枝の折りたたみを全展開へ戻す。viewport と表示フィルターは維持する。
 - **保存**: 復元後のマップは通常の 300ms デバウンス自動保存に流れる。履歴は保存しない。
 
@@ -566,7 +602,7 @@ sequenceDiagram
 
 #### 枝のコピー＆ペーストの流れ
 
-- `MapStage` が `useMapClipboardEvents` を 1 回呼び、`window` の `copy` / `paste` イベントを受ける（`keydown` で C / V を捕まえず、`navigator.clipboard` も使わない）。`Home` は `useNodes` の `copySubtree` / `pasteSubtree` と通知の発行関数を `MapStage` の props（`onCopySubtree` / `onPasteSubtree` / `onClipboardNotice`）として渡す。
+- `MapStage` が `useMapClipboardEvents` を 1 回呼び、`window` の `copy` / `paste` イベントを受ける（`keydown` で C / V を捕まえず、`navigator.clipboard` も使わない）。`MapEditor` は `useNodes` の `copySubtree` / `pasteSubtree` と通知の発行関数を `MapStage` の props（`onCopySubtree` / `onPasteSubtree` / `onClipboardNotice`）として渡す。
 - コピー: `copySubtree(sourceId)` が最新のノード配列から `encodeSubtreeClipboard` で専用形式の文字列を作る（ノード・選択・履歴は変えない）。hook が `clipboardData.setData("text/plain", ...)` して `preventDefault` する。失敗時は `preventDefault` せず、エラー通知だけを出す。
 - 貼り付け: hook が `preventDefault` し、`getData("text/plain")` を `decodeSubtreeClipboard` で検証して `pasteSubtree(data)` に渡す。`useNodes` は複製と共通の内部関数 `applySubtreeInsertion` を通じて `applyTreeChange` を 1 回だけ呼び、最新の `layoutMode` で `insertNodeSubtree`（親は `null`、新しい根として追加）を実行する。追加と自動配置が 1 回の履歴になる。失敗時（`null`）はマップ・選択・履歴・Redo を変えない。成功時は新しい根を選択し、`documentRevision` は増やさない。
 - 同期のイベント処理なので、非同期のクリップボード要求の世代管理は持たない。
@@ -585,7 +621,7 @@ sequenceDiagram
 - 折りたたみによる集合を C、全 `nodes` から計算した解像度可視集合を R とし、MapStage、接続線、hit test、メニュー、編集、選択解除は V = C ∩ R を共通利用する。高重要度の子孫も閉じた祖先を越えて表示されない。
 - 自動配置では `nodeCollapseLayout` が C のノードだけを配置して表示用 `displayNodes` へ座標を合成する。保存、コピー、複製、削除、イラスト生成、JSON、`localStorage`、PNG / SVG は正本 `nodes` を使うため、全件と元座標を保つ。手動配置では正本座標をそのまま表示する。
 - 検索結果を選ぶと `useNodeSearchNavigation` が対象の厳密な祖先だけを展開し、必要な場合だけ解像度表示も変更する。その描画の最新 `displayNodes` 座標へフォーカスする。無関係な閉じた枝と対象自身の指定は維持する。
-- 閉じた親へ `Tab` で子を追加できたときだけ、`page.tsx` がその親を展開し、新規ノードの編集が見える状態にする。閉じた親への接続では折りたたみ指定を変えないため、接続した子は V から外れる。
+- 閉じた親へ `Tab` で子を追加できたときだけ、`MapEditor.tsx` がその親を展開し、新規ノードの編集が見える状態にする。閉じた親への接続では折りたたみ指定を変えないため、接続した子は V から外れる。
 - 手動配置で閉じた親をドラッグすると、`moveNodeSubtree` が正本 `nodes` の部分木全体を動かすため、隠れた子孫も同じ量だけ移動する。複製・貼り付けで発行した新しいIDは折りたたみ集合に含まれないため、新しい枝は展開した状態で表示され、元の枝の指定は維持される。各操作の利用者向けの説明は features.md の 10.4 節にまとめる。折りたたみや構造変更で選択中・編集中のノードが V から外れた場合は、`useHiddenNodeInteractionReset` が選択解除・編集取消・ジェスチャー取消を行う。
 - import、自動復元、成功した Undo / Redo で文書世代が変わると全展開へ戻る。同じIDが再利用されても旧指定や旧フォーカス要求を持ち越さない。
 
@@ -678,7 +714,7 @@ Draw My Map では、レイヤードアーキテクチャの利点を最大限�
 
 ### 5.2 テストハーネスと共通フィクスチャの階層設計
 
-Pixi.js は WebGL / Canvas コンテキストを必要とするため、通常の Node.js / jsdom 環境ではそのまま初期化できません。Draw My Map ではテストの粒度に応じて **3 種類の専用テストハーネス**と **2 種類の共通テストヘルパー**を明確に使い分けています。
+Pixi.js は WebGL / Canvas コンテキストを必要とするため、通常の Node.js / jsdom 環境ではそのまま初期化できません。Draw My Map ではテストの粒度に応じて **3 種類の専用テストハーネス**と **共通テストヘルパー**を明確に使い分けています。
 
 #### 1. Pixi シーン描画単体テスト用ハーネス (`src/components/map/pixi/testing/pixiTestHarness.ts`)
 - **役割**: `renderMapScene`、`renderMapNodes`、`renderMapEdges`、`clearMapScene` など、`src/components/map/pixi/` 内の描画関数を React コンポーネントから切り離して単体検証するための軽量スタブハーネス（`createPixiTestHarness`）です。
@@ -699,6 +735,8 @@ Pixi.js は WebGL / Canvas コンテキストを必要とするため、通常�
 #### 4. アプリケーション共通テストヘルパー (`src/testing/`)
 - `src/testing/createTestNode.ts` (`createTestNode`): デフォルト値（`id: 1, parentId: null, x: 0, y: 0, width: 100, height: 60, label: "", importance: "medium"`）を持ち、任意のフィールドを `Partial<Node>` でオーバーライドできるテスト用ノード生成ファクトリ。
 - `src/testing/createTestMapHistoryLease.ts` (`createTestMapHistoryLease`, `createMapHistoryLeaseSpy`): 常に有効な `MapHistoryGroupLease` と、開始・終了・失効を記録する spy を生成する。`onBeginNodeMove` 用の lease が必要なテストで共通に使う。
+- `src/testing/createTestStorageSession.ts` (`createTestStorageSession`): フックのテスト用の偽の `MapStorageSession`。書き込みの結果を `saved`・`failed`・`inactive` に切り替えられ（`failed`・`inactive` では本物と同じく書かない）、書けた内容の履歴と flush の登録を記録する。
+- `src/testing/mapLibraryTestStorage.ts` (`seedMapLibrary`, `readMapIndex`, `readActiveMapJson`, `activeMapBodyKey`, `createRecordingStorage`): ページのテスト用に、インデックスと本体を書き込む補助、現在のマップの本体を読む補助、書き込み・削除の順序を記録する偽の `Storage`。本体のコードからは使わない。
 - `src/testing/jpegFixture.ts` (`createJpegBytes`, `bytesToJpegDataUrl`, `createJpegDataUrl`): 指定した幅・高さと SOF マーカー（デフォルト `0xc0`）を持つ最小構成の JPEG バイナリ配列（SOI + APP0 + SOF + EOI）および `data:image/jpeg;base64,...` Data URL を生成するフィクスチャ。JPEG 寸法解析や Data URL バリデーションの境界値テストで使用されます。
 
 ---
@@ -715,5 +753,5 @@ cd client && npm run verify
 1. `npm run tailwind:scan`: Tailwind CSS v4 のクラススキャン検証。
 2. `npm run lint`: ESLint による静的構文解析とルールチェック。
 3. `npm run typecheck`: TypeScript コンパイラ（`tsc --noEmit`）による厳格な型整合性チェック。
-4. `npm test -- --runInBand`: Jest による全ユニット・統合テストの実行（約 160 テストファイル、数千アサーション）。
+4. `npm test -- --runInBand`: Jest による全ユニット・統合テストの実行（約 200 テストファイル、数千アサーション）。
 5. `npm run build`: Next.js 本番ビルドの成否確認（SSR・バンドル最適化エラーの早期検出）。
