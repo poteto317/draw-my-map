@@ -12,6 +12,9 @@ import { NodeCollapseControl } from "@/components/layout/NodeCollapseControl";
 import { NodeDuplicateControl } from "@/components/layout/NodeDuplicateControl";
 import { MapPersistenceControls } from "@/components/layout/MapPersistenceControls";
 import { MapOperationNotice } from "@/components/layout/MapOperationNotice";
+import { OutlineImportControl } from "@/components/layout/OutlineImportControl";
+import { OutlineImportDialog } from "@/components/layout/OutlineImportDialog";
+import { resolveOutlineParentCandidate } from "@/components/layout/outlineParentCandidate";
 import { NodeSearchBox } from "@/components/layout/NodeSearchBox";
 import { IllustrationPanel } from "@/components/layout/IllustrationPanel";
 import { MapStage } from "@/components/map/MapStage";
@@ -28,6 +31,7 @@ import { useNodeLabelSearch } from "@/hooks/useNodeLabelSearch";
 import { useMapDisplayState } from "@/hooks/useMapDisplayState";
 import { useBranchCollapse } from "@/hooks/useBranchCollapse";
 import { useNodeSearchNavigation } from "@/hooks/useNodeSearchNavigation";
+import { useOutlineImport } from "@/hooks/useOutlineImport";
 import type { MapStorageSession } from "@/types/mapStorageSession";
 
 const CLIPBOARD_OPERATION_HINT = "枝をコピー: Ctrl/Cmd+C ／ 貼り付け: Ctrl/Cmd+V（新しいルートとして追加）";
@@ -43,7 +47,8 @@ type MapEditorProps = {
 };
 
 // 1つのマップの編集画面。マップを切り替えるときは親が key を変えて再マウントし、履歴と表示状態を破棄する。
-// shortcutsEnabled が false の間（ダイアログ表示中）は、根を inert にしてショートカットも止める
+// shortcutsEnabled が false の間（ダイアログ表示中）は、根を inert にしてショートカットも止める。
+// 箇条書きの取り込みのダイアログを開いている間も同じように止め、ダイアログは根の兄弟に描いて inert の外に置く
 export function MapEditor({
   mapId,
   mapName,
@@ -67,6 +72,7 @@ export function MapEditor({
     duplicateSubtree,
     copySubtree,
     pasteSubtree,
+    insertForest,
     deleteNode,
     setLayoutMode,
     replaceMap,
@@ -140,145 +146,203 @@ export function MapEditor({
     notice: clipboardNotice,
     publishNotice: publishClipboardNotice,
   } = useRevisionScopedNotice(documentRevision);
-  useMapHistoryShortcuts({ undo, redo, enabled: shortcutsEnabled });
+  const outlineImport = useOutlineImport({
+    selectedNodeId,
+    documentRevision,
+    insertForest,
+    expandNodes: branchCollapse.expandNodes,
+  });
+  // 下の effect の依存配列に入れるため、値と関数を取り出しておく
+  const { focusRequest: outlineFocusRequest, consumeFocusRequest: consumeOutlineFocusRequest } = outlineImport;
+  const outlineImportButtonRef = useRef<HTMLButtonElement>(null);
+  // 入口をすべて同じ値で止める（L-061）
+  const editorShortcutsEnabled = shortcutsEnabled && outlineImport.screen === "closed";
+  useMapHistoryShortcuts({ undo, redo, enabled: editorShortcutsEnabled });
+
+  // 閉じる描画で根の inert が外れた後に当てる（L-155）。"input"・"preview" はダイアログが当てる
+  useLayoutEffect(() => {
+    if (outlineFocusRequest !== "header") return;
+    outlineImportButtonRef.current?.focus();
+    consumeOutlineFocusRequest();
+  }, [outlineFocusRequest, consumeOutlineFocusRequest]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col" data-map-id={mapId} inert={!shortcutsEnabled}>
-      <AppHeader
-        layoutMode={layoutMode}
-        onLayoutModeChange={setLayoutMode}
-        mapControls={mapControls}
-        searchControls={(
-          <NodeSearchBox
-            query={nodeSearch.query}
-            onQueryChange={nodeSearch.setQuery}
-            hasQuery={nodeSearch.hasQuery}
-            matches={nodeSearch.matches}
-            total={nodeSearch.total}
-            onSelectResult={nodeSearchNavigation.navigateToNode}
-          />
-        )}
-        importanceControls={(
-          <NodeImportanceSelector
-            importance={selectedNode?.importance ?? null}
-            disabled={selectedNode === null}
-            onChange={(importance) => {
-              if (selectedNode !== null) updateNodeImportance(selectedNode.id, importance);
-            }}
-          />
-        )}
-        resolutionControls={(
-          <ResolutionFilterSelector
-            mode={resolutionFilter.mode}
-            level={resolutionFilter.level}
-            onChange={resolutionFilter.setMode}
-          />
-        )}
-        operationControls={(
-          <>
-            <MapHistoryControls
-              canUndo={canUndo}
-              canRedo={canRedo}
-              onUndo={undo}
-              onRedo={redo}
+    <>
+      <div className="flex min-h-0 flex-1 flex-col" data-map-id={mapId} inert={!editorShortcutsEnabled}>
+        <AppHeader
+          layoutMode={layoutMode}
+          onLayoutModeChange={setLayoutMode}
+          mapControls={mapControls}
+          searchControls={(
+            <NodeSearchBox
+              query={nodeSearch.query}
+              onQueryChange={nodeSearch.setQuery}
+              hasQuery={nodeSearch.hasQuery}
+              matches={nodeSearch.matches}
+              total={nodeSearch.total}
+              onSelectResult={nodeSearchNavigation.navigateToNode}
             />
-            <NodeCollapseControl
-              selectedNodeId={selectedNodeId}
-              canToggle={selectedNodeId !== null && branchCollapse.canToggle(selectedNodeId)}
-              collapsed={selectedNodeId !== null && branchCollapse.collapsedNodeIds.has(selectedNodeId)}
-              hiddenCount={selectedNodeId === null ? 0 : branchCollapse.hiddenCountById.get(selectedNodeId) ?? 0}
-              onToggle={branchCollapse.toggle}
-            />
-            <NodeDuplicateControl
+          )}
+          importanceControls={(
+            <NodeImportanceSelector
+              importance={selectedNode?.importance ?? null}
               disabled={selectedNode === null}
-              onDuplicate={duplication.duplicateSelected}
+              onChange={(importance) => {
+                if (selectedNode !== null) updateNodeImportance(selectedNode.id, importance);
+              }}
             />
-            <span className="text-sm text-zinc-600 dark:text-zinc-400">
-              {CLIPBOARD_OPERATION_HINT}
-            </span>
-            <MapPersistenceControls
-              onExport={persistence.exportJson}
-              onImport={persistence.importJsonFile}
+          )}
+          resolutionControls={(
+            <ResolutionFilterSelector
+              mode={resolutionFilter.mode}
+              level={resolutionFilter.level}
+              onChange={resolutionFilter.setMode}
             />
-            <MapImageExportControls
-              onExportPng={imageExport.exportPng}
-              onExportSvg={imageExport.exportSvg}
-              isExportingPng={imageExport.isExportingPng}
-            />
-          </>
-        )}
-        operationNotices={persistence.notice === null
-          && imageExport.notice === null
-          && duplication.notice === null
-          && clipboardNotice === null
-          && nodeSearchNavigation.notice === null
-          && !displayState.layoutFailed
-          ? null
-          : (
+          )}
+          operationControls={(
             <>
-              {displayState.layoutFailed && (
-                <MapOperationNotice notice={{
-                  kind: "status",
-                  message: "表示用の自動配置ができないため、元の位置で表示しています。",
-                }} />
-              )}
-              {persistence.notice !== null && (
-                <MapOperationNotice notice={persistence.notice} />
-              )}
-              {imageExport.notice !== null && (
-                <MapOperationNotice notice={imageExport.notice} />
-              )}
-              {duplication.notice !== null && (
-                <MapOperationNotice notice={duplication.notice} />
-              )}
-              {clipboardNotice !== null && (
-                <MapOperationNotice notice={clipboardNotice} />
-              )}
-              {nodeSearchNavigation.notice !== null && (
-                <MapOperationNotice notice={nodeSearchNavigation.notice} />
-              )}
+              <MapHistoryControls
+                canUndo={canUndo}
+                canRedo={canRedo}
+                onUndo={undo}
+                onRedo={redo}
+              />
+              <NodeCollapseControl
+                selectedNodeId={selectedNodeId}
+                canToggle={selectedNodeId !== null && branchCollapse.canToggle(selectedNodeId)}
+                collapsed={selectedNodeId !== null && branchCollapse.collapsedNodeIds.has(selectedNodeId)}
+                hiddenCount={selectedNodeId === null ? 0 : branchCollapse.hiddenCountById.get(selectedNodeId) ?? 0}
+                onToggle={branchCollapse.toggle}
+              />
+              <NodeDuplicateControl
+                disabled={selectedNode === null}
+                onDuplicate={duplication.duplicateSelected}
+              />
+              <span className="text-sm text-zinc-600 dark:text-zinc-400">
+                {CLIPBOARD_OPERATION_HINT}
+              </span>
+              <OutlineImportControl
+                expanded={outlineImport.screen !== "closed"}
+                onOpen={outlineImport.open}
+                buttonRef={outlineImportButtonRef}
+              />
+              <MapPersistenceControls
+                onExport={persistence.exportJson}
+                onImport={persistence.importJsonFile}
+              />
+              <MapImageExportControls
+                onExportPng={imageExport.exportPng}
+                onExportSvg={imageExport.exportSvg}
+                isExportingPng={imageExport.isExportingPng}
+              />
             </>
           )}
-      />
-      <AppWorkspace
-        canvas={(
-          <MapStage
-            nodes={displayState.displayNodes}
-            focusRequest={nodeSearchNavigation.focusRequest}
-            visibleNodeIds={displayState.visibleNodeIds}
-            onViewportScaleChange={setViewportScale}
-            selectedNodeId={selectedNodeId}
-            onDoubleClick={addNode}
-            onAddChildNode={addChildNodeExpanding}
-            onAddSiblingNode={addSiblingNode}
-            onSelectNode={selectNode}
-            onUpdateLabel={updateNodeLabel}
-            onMoveNode={moveNode}
-            onBeginNodeMove={beginMoveHistory}
-            onConnectNodes={connectNodes}
-            onDeleteNode={deleteNode}
-            onCopySubtree={copySubtree}
-            onPasteSubtree={pasteSubtree}
-            onClipboardNotice={publishClipboardNotice}
-            onGenerateIllustration={generateIllustration}
-            resetRevision={resetRevision}
-            documentRevision={documentRevision}
-            shortcutsEnabled={shortcutsEnabled}
-            dialogMouseClickedAtRef={dialogMouseClickedAtRef}
-          />
-        )}
-        sidePanel={(
-          <IllustrationPanel
-            selectedNode={selectedNode}
-            generation={generation}
-            onGenerate={generateIllustration}
-            onAttach={(nodeId, dataUrl) => {
-              if (attachIllustration(nodeId, dataUrl)) dismissGeneration();
-            }}
-            onRemove={removeIllustration}
-          />
-        )}
-      />
-    </div>
+          operationNotices={persistence.notice === null
+            && imageExport.notice === null
+            && duplication.notice === null
+            && clipboardNotice === null
+            && nodeSearchNavigation.notice === null
+            && outlineImport.notice === null
+            && !displayState.layoutFailed
+            ? null
+            : (
+              <>
+                {displayState.layoutFailed && (
+                  <MapOperationNotice notice={{
+                    kind: "status",
+                    message: "表示用の自動配置ができないため、元の位置で表示しています。",
+                  }} />
+                )}
+                {persistence.notice !== null && (
+                  <MapOperationNotice notice={persistence.notice} />
+                )}
+                {imageExport.notice !== null && (
+                  <MapOperationNotice notice={imageExport.notice} />
+                )}
+                {duplication.notice !== null && (
+                  <MapOperationNotice notice={duplication.notice} />
+                )}
+                {clipboardNotice !== null && (
+                  <MapOperationNotice notice={clipboardNotice} />
+                )}
+                {nodeSearchNavigation.notice !== null && (
+                  <MapOperationNotice notice={nodeSearchNavigation.notice} />
+                )}
+                {outlineImport.notice !== null && (
+                  <MapOperationNotice notice={outlineImport.notice} />
+                )}
+              </>
+            )}
+        />
+        <AppWorkspace
+          canvas={(
+            <MapStage
+              nodes={displayState.displayNodes}
+              focusRequest={nodeSearchNavigation.focusRequest}
+              visibleNodeIds={displayState.visibleNodeIds}
+              onViewportScaleChange={setViewportScale}
+              selectedNodeId={selectedNodeId}
+              onDoubleClick={addNode}
+              onAddChildNode={addChildNodeExpanding}
+              onAddSiblingNode={addSiblingNode}
+              onSelectNode={selectNode}
+              onUpdateLabel={updateNodeLabel}
+              onMoveNode={moveNode}
+              onBeginNodeMove={beginMoveHistory}
+              onConnectNodes={connectNodes}
+              onDeleteNode={deleteNode}
+              onCopySubtree={copySubtree}
+              onPasteSubtree={pasteSubtree}
+              onClipboardNotice={publishClipboardNotice}
+              onGenerateIllustration={generateIllustration}
+              resetRevision={resetRevision}
+              documentRevision={documentRevision}
+              shortcutsEnabled={editorShortcutsEnabled}
+              dialogMouseClickedAtRef={dialogMouseClickedAtRef}
+            />
+          )}
+          sidePanel={(
+            <IllustrationPanel
+              selectedNode={selectedNode}
+              generation={generation}
+              onGenerate={generateIllustration}
+              onAttach={(nodeId, dataUrl) => {
+                if (attachIllustration(nodeId, dataUrl)) dismissGeneration();
+              }}
+              onRemove={removeIllustration}
+            />
+          )}
+        />
+      </div>
+      {/* data-map-id を付けず、根の inert の外に置く */}
+      {outlineImport.screen !== "closed" && (
+        <OutlineImportDialog
+          screen={outlineImport.screen}
+          text={outlineImport.text}
+          textLength={outlineImport.textLength}
+          inputError={outlineImport.inputError}
+          outline={outlineImport.outline}
+          preview={outlineImport.preview}
+          parentCandidate={resolveOutlineParentCandidate(
+            nodes,
+            outlineImport.parentCandidateId,
+            outlineImport.parentCandidateStale,
+          )}
+          target={outlineImport.target}
+          dialogNotices={outlineImport.dialogNotices}
+          focusRequest={outlineImport.focusRequest}
+          onFocusRequestApplied={outlineImport.consumeFocusRequest}
+          onTextChange={outlineImport.setText}
+          onPreview={outlineImport.requestPreview}
+          onCancel={outlineImport.close}
+          onBack={outlineImport.back}
+          onTargetChange={outlineImport.setTarget}
+          onSubmit={outlineImport.submit}
+          onMouseClick={() => {
+            dialogMouseClickedAtRef.current = Date.now();
+          }}
+        />
+      )}
+    </>
   );
 }
