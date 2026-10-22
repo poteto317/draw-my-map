@@ -122,6 +122,16 @@ async function openList(user: ReturnType<typeof userEvent.setup>) {
   return dialog();
 }
 
+// 空き領域のダブルクリックでノードを追加し、元に戻せる状態にする
+function addNodeByDoubleClick() {
+  const stage = document.querySelector<HTMLElement>(".cursor-crosshair")!;
+  fireEvent.doubleClick(stage, { clientX: 600, clientY: 400 });
+}
+
+function undoButton(): HTMLElement {
+  return screen.getByRole("button", { name: "元に戻す" });
+}
+
 async function createFromHeader(user: ReturnType<typeof userEvent.setup>, name: string) {
   await user.click(headerButton("新しいマップ"));
   const input = dialog().getByRole("textbox", { name: "マップ名" });
@@ -277,6 +287,28 @@ describe("Home とマップの一覧の結合", () => {
       await waitFor(() => expect(mockDownloadMapImage).toHaveBeenCalledTimes(1));
       expect(mockDownloadMapImage.mock.lastCall![1]).toMatch(/^新A-\d{8}-\d{6}\.svg$/);
     });
+
+    it("開いているマップの名前を変えても、エディタを作り直さず、元に戻す履歴が残る", async () => {
+      seedTwoMaps();
+      const user = userEvent.setup();
+      await renderHome();
+      addNodeByDoubleClick();
+      expect(exportedLabels()).toHaveLength(2);
+      expect(undoButton()).toBeEnabled();
+
+      const list = await openList(user);
+      await user.click(list.getByRole("button", { name: "名前を変更: A" }));
+      const input = dialog().getByRole("textbox", { name: "マップ名" });
+      await user.clear(input);
+      await user.type(input, "新A");
+      await user.click(dialog().getByRole("button", { name: "変更" }));
+      await user.click(dialog().getByRole("button", { name: "閉じる" }));
+
+      expect(currentMapName()).toHaveTextContent("マップ: 新A");
+      expect(undoButton()).toBeEnabled();
+      await user.click(undoButton());
+      expect(exportedLabels()).toEqual(["A1"]);
+    });
   });
 
   describe("削除", () => {
@@ -298,6 +330,23 @@ describe("Home とマップの一覧の結合", () => {
       expect(readIndex().maps.map((map) => map.id)).toEqual(["a"]);
       expect(window.localStorage.getItem(mapBodyKey("b"))).toBeNull();
       await user.click(dialog().getByRole("button", { name: "閉じる" }));
+      expect(exportedLabels()).toEqual(["A1"]);
+    });
+
+    it("開いていないマップを消しても、エディタを作り直さず、元に戻す履歴が残る", async () => {
+      seedTwoMaps();
+      const user = userEvent.setup();
+      await renderHome();
+      addNodeByDoubleClick();
+      expect(exportedLabels()).toHaveLength(2);
+      expect(undoButton()).toBeEnabled();
+
+      await deleteFromList(user, "B");
+      await user.click(dialog().getByRole("button", { name: "閉じる" }));
+
+      expect(currentMapName()).toHaveTextContent("マップ: A");
+      expect(undoButton()).toBeEnabled();
+      await user.click(undoButton());
       expect(exportedLabels()).toEqual(["A1"]);
     });
 
