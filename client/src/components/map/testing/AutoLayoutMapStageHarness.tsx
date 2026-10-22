@@ -36,6 +36,7 @@ export function AutoLayoutMapStageHarness() {
       <MapStage
         nodes={nodes}
         focusRequest={null}
+        dialogMouseClickedAtRef={{ current: null }}
         selectedNodeId={selectedNodeId}
         onDoubleClick={addNode}
         onAddChildNode={addChildNode}
@@ -50,6 +51,7 @@ export function AutoLayoutMapStageHarness() {
         onPasteSubtree={pasteSubtree}
         onClipboardNotice={() => {}}
         documentRevision={documentRevision}
+        shortcutsEnabled
       />
       <output data-testid="node-state">{JSON.stringify(nodes)}</output>
       <output data-testid="selected-node-id">{selectedNodeId}</output>

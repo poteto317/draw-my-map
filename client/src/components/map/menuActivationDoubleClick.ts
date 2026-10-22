@@ -1,6 +1,6 @@
 export const MENU_ACTIVATION_DOUBLE_CLICK_WINDOW_MS = 500;
 
-export function isDoubleClickFromMenuActivation(
+export function isDoubleClickFromOverlayActivation(
   activatedAt: number | null,
   now: number,
 ): boolean {

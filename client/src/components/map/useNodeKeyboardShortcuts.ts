@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 
 type NodeKeyboardShortcutOptions = {
   selectedNodeId: number | null;
@@ -9,6 +9,7 @@ type NodeKeyboardShortcutOptions = {
   onAddSiblingNode: (nodeId: number) => number | null;
   onDeleteNode: (nodeId: number) => void;
   onStartEditing: (nodeId: number, initialText: string) => void;
+  enabled: boolean;
 };
 
 const isInteractiveTarget = (target: EventTarget | null): boolean => (
@@ -23,9 +24,17 @@ export function useNodeKeyboardShortcuts({
   onAddSiblingNode,
   onDeleteNode,
   onStartEditing,
+  enabled,
 }: NodeKeyboardShortcutOptions): void {
+  // enabled の切り替えで window の登録をやり直さないよう、ref から読む
+  const enabledRef = useRef(enabled);
+  useLayoutEffect(() => {
+    enabledRef.current = enabled;
+  }, [enabled]);
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (!enabledRef.current) return;
       if (isEditing || selectedNodeId === null || isInteractiveTarget(event.target)) return;
 
       let createdId: number | null = null;

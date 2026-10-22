@@ -37,6 +37,8 @@ const defaultProps = {
   onCopySubtree: jest.fn(() => ({ ok: false, reason: "invalid" }) as const),
   onPasteSubtree: jest.fn(() => null),
   onClipboardNotice: jest.fn(),
+  shortcutsEnabled: true,
+  dialogMouseClickedAtRef: { current: null },
 };
 
 const sampleNodes: Node[] = [

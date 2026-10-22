@@ -12,6 +12,7 @@ type Options = {
   nodes: readonly Node[];
   selectedNodeId: number | null;
   isEditing: boolean;
+  enabled: boolean;
   screen: ScreenSize | null;
   hasActiveGesture: () => boolean;
   onFocusNode: (node: Node, screen: ScreenSize) => void;
@@ -21,6 +22,7 @@ export function useMapViewportShortcut({
   nodes,
   selectedNodeId,
   isEditing,
+  enabled,
   screen,
   hasActiveGesture,
   onFocusNode,
@@ -29,6 +31,7 @@ export function useMapViewportShortcut({
     nodes,
     selectedNodeId,
     isEditing,
+    enabled,
     screen,
     hasActiveGesture,
     onFocusNode,
@@ -38,16 +41,18 @@ export function useMapViewportShortcut({
       nodes,
       selectedNodeId,
       isEditing,
+      enabled,
       screen,
       hasActiveGesture,
       onFocusNode,
     };
-  }, [nodes, selectedNodeId, isEditing, screen, hasActiveGesture, onFocusNode]);
+  }, [nodes, selectedNodeId, isEditing, enabled, screen, hasActiveGesture, onFocusNode]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!isViewportFocusShortcut(event)) return;
       const latestOptions = latestOptionsRef.current;
+      if (!latestOptions.enabled) return;
       const request = resolveViewportFocusRequest({
         key: event.key,
         ctrlKey: event.ctrlKey,

@@ -11,12 +11,15 @@ function pressF(target: EventTarget = window) {
 }
 
 describe("useMapViewportShortcut", () => {
+  afterEach(() => jest.restoreAllMocks());
+
   it("F以外のキーではgesture状態を照会しない", () => {
     const hasActiveGesture = jest.fn(() => false);
     renderHook(() => useMapViewportShortcut({
       nodes: [node],
       selectedNodeId: 1,
       isEditing: false,
+      enabled: true,
       screen: { width: 800, height: 600 },
       hasActiveGesture,
       onFocusNode: jest.fn(),
@@ -38,6 +41,7 @@ describe("useMapViewportShortcut", () => {
       nodes: [node],
       selectedNodeId: 1,
       isEditing: false,
+      enabled: true,
       screen: { width: 800, height: 600 },
       hasActiveGesture,
       onFocusNode,
@@ -62,6 +66,7 @@ describe("useMapViewportShortcut", () => {
       nodes: [node],
       selectedNodeId: 1,
       isEditing: false,
+      enabled: true,
       screen: { width: 800, height: 600 },
       hasActiveGesture: () => false,
       onFocusNode,
@@ -84,6 +89,7 @@ describe("useMapViewportShortcut", () => {
         nodes,
         selectedNodeId: 1,
         isEditing: false,
+        enabled: true,
         screen,
         hasActiveGesture: () => false,
         onFocusNode,
@@ -105,12 +111,58 @@ describe("useMapViewportShortcut", () => {
   it("unmount後はkeydownを処理しない", () => {
     const onFocusNode = jest.fn();
     const { unmount } = renderHook(() => useMapViewportShortcut({
-      nodes: [node], selectedNodeId: 1, isEditing: false,
+      nodes: [node], selectedNodeId: 1, isEditing: false, enabled: true,
       screen: { width: 800, height: 600 }, hasActiveGesture: () => false, onFocusNode,
     }));
     unmount();
     pressF();
 
     expect(onFocusNode).not.toHaveBeenCalled();
+  });
+
+  it("enabledがfalseの間はFに反応せず、既定動作も止めない", () => {
+    const hasActiveGesture = jest.fn(() => false);
+    const onFocusNode = jest.fn();
+    renderHook(() => useMapViewportShortcut({
+      nodes: [node],
+      selectedNodeId: 1,
+      isEditing: false,
+      enabled: false,
+      screen: { width: 800, height: 600 },
+      hasActiveGesture,
+      onFocusNode,
+    }));
+
+    const event = pressF(document.body);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(onFocusNode).not.toHaveBeenCalled();
+  });
+
+  it("enabledをfalseからtrueへ切り替えると、再登録なしでFが動く", () => {
+    const addEventListener = jest.spyOn(window, "addEventListener");
+    const onFocusNode = jest.fn();
+    const screen = { width: 800, height: 600 };
+    const { rerender } = renderHook(
+      ({ enabled }) => useMapViewportShortcut({
+        nodes: [node],
+        selectedNodeId: 1,
+        isEditing: false,
+        enabled,
+        screen,
+        hasActiveGesture: () => false,
+        onFocusNode,
+      }),
+      { initialProps: { enabled: false } },
+    );
+
+    expect(pressF(document.body).defaultPrevented).toBe(false);
+    rerender({ enabled: true });
+    const event = pressF(document.body);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(onFocusNode).toHaveBeenCalledWith(node, screen);
+    expect(addEventListener.mock.calls.filter(([type]) => type === "keydown")).toHaveLength(1);
+    addEventListener.mockRestore();
   });
 });

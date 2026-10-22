@@ -12,7 +12,7 @@ describe("useMapHistoryShortcuts", () => {
   it("Undo・Redoの各キーで対応する関数を呼び、既定動作を止める", () => {
     const undo = jest.fn(() => true);
     const redo = jest.fn(() => true);
-    renderHook(() => useMapHistoryShortcuts({ undo, redo }));
+    renderHook(() => useMapHistoryShortcuts({ undo, redo, enabled: true }));
 
     const undoEvent = press({ key: "z", ctrlKey: true });
     expect(undo).toHaveBeenCalledTimes(1);
@@ -29,7 +29,7 @@ describe("useMapHistoryShortcuts", () => {
   it("履歴が空で関数がfalseを返しても、対象キーの既定動作は止める", () => {
     const undo = jest.fn(() => false);
     const redo = jest.fn(() => false);
-    renderHook(() => useMapHistoryShortcuts({ undo, redo }));
+    renderHook(() => useMapHistoryShortcuts({ undo, redo, enabled: true }));
 
     expect(press({ key: "z", ctrlKey: true }).defaultPrevented).toBe(true);
     expect(press({ key: "y", ctrlKey: true }).defaultPrevented).toBe(true);
@@ -40,7 +40,7 @@ describe("useMapHistoryShortcuts", () => {
   it("対象外のキーと入力欄内のキーでは関数を呼ばず、既定動作も止めない", () => {
     const undo = jest.fn(() => true);
     const redo = jest.fn(() => true);
-    renderHook(() => useMapHistoryShortcuts({ undo, redo }));
+    renderHook(() => useMapHistoryShortcuts({ undo, redo, enabled: true }));
     const input = document.createElement("input");
     document.body.appendChild(input);
 
@@ -62,7 +62,7 @@ describe("useMapHistoryShortcuts", () => {
     const undo = jest.fn(() => true);
     const redo = jest.fn(() => true);
     function Harness() {
-      useMapHistoryShortcuts({ undo, redo });
+      useMapHistoryShortcuts({ undo, redo, enabled: true });
       return <button type="button">JSON書き出し</button>;
     }
     render(<Harness />);
@@ -83,7 +83,7 @@ describe("useMapHistoryShortcuts", () => {
     const firstRedo = jest.fn(() => true);
     const latestRedo = jest.fn(() => true);
     const { rerender } = renderHook(
-      ({ undo, redo }) => useMapHistoryShortcuts({ undo, redo }),
+      ({ undo, redo }) => useMapHistoryShortcuts({ undo, redo, enabled: true }),
       { initialProps: { undo: firstUndo, redo: firstRedo } },
     );
 
@@ -103,12 +103,45 @@ describe("useMapHistoryShortcuts", () => {
   it("アンマウント後はキーに反応しない", () => {
     const undo = jest.fn(() => true);
     const redo = jest.fn(() => true);
-    const { unmount } = renderHook(() => useMapHistoryShortcuts({ undo, redo }));
+    const { unmount } = renderHook(() => useMapHistoryShortcuts({ undo, redo, enabled: true }));
 
     unmount();
     const event = press({ key: "z", ctrlKey: true });
 
     expect(undo).not.toHaveBeenCalled();
     expect(event.defaultPrevented).toBe(false);
+  });
+
+  it("enabledがfalseの間はキーに反応せず、既定動作も止めない", () => {
+    const undo = jest.fn(() => true);
+    const redo = jest.fn(() => true);
+    renderHook(() => useMapHistoryShortcuts({ undo, redo, enabled: false }));
+
+    const undoEvent = press({ key: "z", ctrlKey: true }, document.body);
+    const redoEvent = press({ key: "y", ctrlKey: true }, document.body);
+
+    expect(undo).not.toHaveBeenCalled();
+    expect(redo).not.toHaveBeenCalled();
+    expect(undoEvent.defaultPrevented).toBe(false);
+    expect(redoEvent.defaultPrevented).toBe(false);
+  });
+
+  it("enabledをfalseからtrueへ切り替えると、再登録なしで同じキーが動く", () => {
+    const addListener = jest.spyOn(window, "addEventListener");
+    const undo = jest.fn(() => true);
+    const redo = jest.fn(() => true);
+    const { rerender } = renderHook(
+      ({ enabled }) => useMapHistoryShortcuts({ undo, redo, enabled }),
+      { initialProps: { enabled: false } },
+    );
+
+    expect(press({ key: "z", ctrlKey: true }, document.body).defaultPrevented).toBe(false);
+    rerender({ enabled: true });
+    const event = press({ key: "z", ctrlKey: true }, document.body);
+
+    expect(undo).toHaveBeenCalledTimes(1);
+    expect(event.defaultPrevented).toBe(true);
+    expect(addListener.mock.calls.filter(([type]) => type === "keydown")).toHaveLength(1);
+    addListener.mockRestore();
   });
 });

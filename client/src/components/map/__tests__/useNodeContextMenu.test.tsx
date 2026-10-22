@@ -13,12 +13,17 @@ function setup(overrides: Partial<Parameters<typeof useNodeContextMenu>[0]> = {}
       visibleNodeIds: new Set([1, 2]) as ReadonlySet<number>,
       resetRevision: 0,
       viewport,
+      shortcutsEnabled: true,
       ...overrides,
     },
   });
 }
 
 describe("useNodeContextMenu", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it("openで対象を保持し、closeでnullに戻す", () => {
     const { result } = setup();
     expect(result.current.menu).toBeNull();
@@ -44,10 +49,10 @@ describe("useNodeContextMenu", () => {
     const { result, rerender } = setup();
     act(() => result.current.open(target));
 
-    rerender({ nodes, visibleNodeIds: new Set([2]), resetRevision: 0, viewport });
+    rerender({ nodes, visibleNodeIds: new Set([2]), resetRevision: 0, viewport, shortcutsEnabled: true });
     expect(result.current.menu).toBeNull();
 
-    rerender({ nodes, visibleNodeIds: new Set([1, 2]), resetRevision: 0, viewport });
+    rerender({ nodes, visibleNodeIds: new Set([1, 2]), resetRevision: 0, viewport, shortcutsEnabled: true });
     expect(result.current.menu).toBeNull();
   });
 
@@ -55,16 +60,16 @@ describe("useNodeContextMenu", () => {
     const { result, rerender } = setup();
     act(() => result.current.open(target));
 
-    rerender({ nodes, visibleNodeIds: new Set([1, 2]), resetRevision: 1, viewport });
+    rerender({ nodes, visibleNodeIds: new Set([1, 2]), resetRevision: 1, viewport, shortcutsEnabled: true });
     expect(result.current.menu).toBeNull();
 
-    rerender({ nodes, visibleNodeIds: new Set([1, 2]), resetRevision: 0, viewport });
+    rerender({ nodes, visibleNodeIds: new Set([1, 2]), resetRevision: 0, viewport, shortcutsEnabled: true });
     expect(result.current.menu).toBeNull();
   });
 
   it("リセット後でもopenできる", () => {
     const { result, rerender } = setup();
-    rerender({ nodes, visibleNodeIds: new Set([1, 2]), resetRevision: 1, viewport });
+    rerender({ nodes, visibleNodeIds: new Set([1, 2]), resetRevision: 1, viewport, shortcutsEnabled: true });
 
     act(() => result.current.open(target));
 
@@ -80,10 +85,11 @@ describe("useNodeContextMenu", () => {
       visibleNodeIds: new Set([1, 2]),
       resetRevision: 0,
       viewport: { offsetX: 30, offsetY: 0, scale: 1 },
+      shortcutsEnabled: true,
     });
     expect(result.current.menu).toBeNull();
 
-    rerender({ nodes, visibleNodeIds: new Set([1, 2]), resetRevision: 0, viewport });
+    rerender({ nodes, visibleNodeIds: new Set([1, 2]), resetRevision: 0, viewport, shortcutsEnabled: true });
     expect(result.current.menu).toBeNull();
   });
 
@@ -96,8 +102,33 @@ describe("useNodeContextMenu", () => {
       visibleNodeIds: new Set([1, 2]),
       resetRevision: 0,
       viewport: { ...viewport },
+      shortcutsEnabled: true,
     });
 
     expect(result.current.menu).toEqual(target);
+  });
+
+  it("shortcutsEnabledがfalseの間はEscapeで閉じず、trueへ戻すと再登録なしで閉じる", () => {
+    const addListener = jest.spyOn(window, "addEventListener");
+    const { result, rerender } = setup({ shortcutsEnabled: false });
+    act(() => result.current.open(target));
+    const keydownCount = () => addListener.mock.calls.filter(([type]) => type === "keydown").length;
+    const registered = keydownCount();
+
+    act(() => { fireEvent.keyDown(window, { key: "Escape" }); });
+    expect(result.current.menu).toEqual(target);
+
+    rerender({
+      nodes,
+      visibleNodeIds: new Set([1, 2]),
+      resetRevision: 0,
+      viewport,
+      shortcutsEnabled: true,
+    });
+    act(() => { fireEvent.keyDown(window, { key: "Escape" }); });
+
+    expect(result.current.menu).toBeNull();
+    expect(registered).toBe(1);
+    expect(keydownCount()).toBe(1);
   });
 });

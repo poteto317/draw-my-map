@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, type MouseEvent } from "react";
+import { useMemo, useRef, type MouseEvent, type RefObject } from "react";
 import { NodeContextMenu } from "@/components/map/NodeContextMenu";
 import {
   resolveMapContextMenuAction,
@@ -10,7 +10,7 @@ import { isInsideNodeContextMenu } from "@/components/map/nodeContextMenuDom";
 import { isTextEntryTarget } from "@/components/map/textEntryTarget";
 import { useNodeContextMenu } from "@/components/map/useNodeContextMenu";
 import { NodeLabelEditor } from "@/components/map/NodeLabelEditor";
-import { isDoubleClickFromMenuActivation } from "@/components/map/menuActivationDoubleClick";
+import { isDoubleClickFromOverlayActivation } from "@/components/map/menuActivationDoubleClick";
 import { resolveMapDoubleClickAction } from "@/components/map/mapDoubleClickAction";
 import { usePixiApplication } from "@/components/map/pixi/usePixiApplication";
 import { useHiddenNodeInteractionReset } from "@/components/map/useHiddenNodeInteractionReset";
@@ -61,6 +61,11 @@ type MapStageProps = {
   onPasteSubtree: (data: SubtreeClipboardData) => number | null;
   onClipboardNotice: (notice: OperationNotice) => void;
   onGenerateIllustration?: (nodeId: number) => void;
+  // false の間（ダイアログ表示中など）は、キーボード・クリップボードのショートカットとメニューを閉じる操作を止める
+  shortcutsEnabled: boolean;
+  // 画面の外のダイアログで最後にマウスでクリックした時刻。ダイアログが1回目のクリックで閉じると、
+  // ダブルクリックの2回目と dblclick がこのキャンバスへ届くので、メニューの項目と同じ時間窓で無視する
+  dialogMouseClickedAtRef: RefObject<number | null>;
 };
 
 export function MapStage({
@@ -84,6 +89,8 @@ export function MapStage({
   onPasteSubtree,
   onClipboardNotice,
   onGenerateIllustration,
+  shortcutsEnabled,
+  dialogMouseClickedAtRef,
 }: MapStageProps) {
   const effectiveVisibleNodeIds = useMemo(
     () => visibleNodeIds ?? new Set(nodes.map((node) => node.id)),
@@ -111,6 +118,7 @@ export function MapStage({
     visibleNodeIds: effectiveVisibleNodeIds,
     resetRevision,
     viewport,
+    shortcutsEnabled,
   });
   const {
     connectionTargetNodeId,
@@ -184,6 +192,7 @@ export function MapStage({
     nodes,
     selectedNodeId,
     isEditing: editing.editingNodeId !== null,
+    enabled: shortcutsEnabled,
     screen: runtime ? runtime.app.screen : null,
     hasActiveGesture,
     onFocusNode: focusNode,
@@ -208,6 +217,7 @@ export function MapStage({
     onAddSiblingNode,
     onDeleteNode,
     onStartEditing: editing.startEditing,
+    enabled: shortcutsEnabled,
   });
 
   useMapClipboardEvents({
@@ -217,13 +227,17 @@ export function MapStage({
     copySubtree: onCopySubtree,
     pasteSubtree: onPasteSubtree,
     publishNotice: onClipboardNotice,
+    enabled: shortcutsEnabled,
   });
 
   const handleDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
-    // The 2nd click of a double-click on the menu item lands on the canvas after the menu closed.
-    // Date.now() is read only after a menu activation so normal double-clicks stay clock-neutral.
+    // The 2nd click of a double-click on a menu item or a dialog button lands on the canvas after
+    // the overlay closed. Date.now() is read only after such an activation so normal double-clicks stay clock-neutral.
     const activatedAt = menuActivatedAtRef.current;
-    if (activatedAt !== null && isDoubleClickFromMenuActivation(activatedAt, Date.now())) return;
+    if (activatedAt !== null && isDoubleClickFromOverlayActivation(activatedAt, Date.now())) return;
+    // Dialog case: the 1st click closed the dialog (switch, create, delete, close).
+    const dialogClickedAt = dialogMouseClickedAtRef.current ?? null;
+    if (dialogClickedAt !== null && isDoubleClickFromOverlayActivation(dialogClickedAt, Date.now())) return;
     const container = containerRef.current;
     if (!container) return;
 

@@ -50,6 +50,8 @@ const defaultProps = {
   onCopySubtree: jest.fn(() => ({ ok: false, reason: "invalid" }) as const),
   onPasteSubtree: jest.fn(() => null),
   onClipboardNotice: jest.fn(),
+  shortcutsEnabled: true,
+  dialogMouseClickedAtRef: { current: null },
 };
 
 const sampleNodes: Node[] = [
@@ -102,6 +104,8 @@ function KeyboardCreationHarness({ initiallySelected = true }: { initiallySelect
         onPasteSubtree={pasteSubtree}
         onClipboardNotice={() => {}}
         documentRevision={documentRevision}
+        shortcutsEnabled
+        dialogMouseClickedAtRef={{ current: null }}
       />
       <output data-testid="node-state">{JSON.stringify(nodes)}</output>
       <output data-testid="selected-node-id">{selectedNodeId}</output>
@@ -154,6 +158,8 @@ function MouseConnectionHarness() {
         onPasteSubtree={pasteSubtree}
         onClipboardNotice={() => {}}
         documentRevision={documentRevision}
+        shortcutsEnabled
+        dialogMouseClickedAtRef={{ current: null }}
       />
       <output data-testid="node-state">{JSON.stringify(nodes)}</output>
       <output data-testid="selected-node-id">{selectedNodeId}</output>
@@ -207,6 +213,8 @@ function SubtreeMoveHarness() {
         onPasteSubtree={pasteSubtree}
         onClipboardNotice={() => {}}
         documentRevision={documentRevision}
+        shortcutsEnabled
+        dialogMouseClickedAtRef={{ current: null }}
       />
       <output data-testid="node-state">{JSON.stringify(nodes)}</output>
     </>
@@ -609,6 +617,72 @@ describe("MapStage boundary", () => {
     expect(lastWorldContainer()).toBe(worldContainerBeforeKeyDown);
     expect(worldContainerBeforeKeyDown?.position.set).toHaveBeenCalledTimes(1);
     expect(worldContainerBeforeKeyDown?.position.set).toHaveBeenLastCalledWith(0, 0);
+  });
+
+  describe("shortcutsEnabled", () => {
+    function dispatchCopy() {
+      const event = new Event("copy", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", {
+        value: { setData: jest.fn(), getData: jest.fn(() => "") },
+      });
+      document.body.dispatchEvent(event);
+    }
+
+    function fireShortcuts() {
+      fireEvent.keyDown(window, { key: "Tab" });
+      fireEvent.keyDown(window, { key: "Delete" });
+      fireEvent.keyDown(window, { key: "f" });
+      dispatchCopy();
+    }
+
+    it("falseの間は選択ノードがあってもTab・Delete・F・copyで何も呼ばない", async () => {
+      const onAddChildNode = jest.fn(() => null);
+      const onDeleteNode = jest.fn();
+      const onCopySubtree = jest.fn(() => ({ ok: false, reason: "invalid" }) as const);
+      await renderReady(
+        <MapStage
+          {...defaultProps}
+          nodes={sampleNodes}
+          selectedNodeId={1}
+          shortcutsEnabled={false}
+          onAddChildNode={onAddChildNode}
+          onDeleteNode={onDeleteNode}
+          onCopySubtree={onCopySubtree}
+        />,
+      );
+      const worldContainer = lastWorldContainer();
+      const positionCalls = worldContainer?.position.set.mock.calls.length;
+
+      fireShortcuts();
+
+      expect(onAddChildNode).not.toHaveBeenCalled();
+      expect(onDeleteNode).not.toHaveBeenCalled();
+      expect(onCopySubtree).not.toHaveBeenCalled();
+      expect(lastWorldContainer()?.position.set.mock.calls.length).toBe(positionCalls);
+    });
+
+    it("falseからtrueへrerenderすると同じ操作が動く", async () => {
+      const onAddChildNode = jest.fn(() => null);
+      const onDeleteNode = jest.fn();
+      const onCopySubtree = jest.fn(() => ({ ok: false, reason: "invalid" }) as const);
+      const props = {
+        ...defaultProps,
+        nodes: sampleNodes,
+        selectedNodeId: 1,
+        onAddChildNode,
+        onDeleteNode,
+        onCopySubtree,
+      };
+      const { rerender } = await renderReady(<MapStage {...props} shortcutsEnabled={false} />);
+
+      rerender(<MapStage {...props} shortcutsEnabled />);
+      fireShortcuts();
+
+      expect(onAddChildNode).toHaveBeenCalledWith(1);
+      expect(onDeleteNode).toHaveBeenCalledWith(1);
+      expect(onCopySubtree).toHaveBeenCalledWith(1);
+      expect(lastWorldContainer()?.position.set).toHaveBeenLastCalledWith(300, 240);
+    });
   });
 
   it("preserves the current draft when the editing input is double-clicked", async () => {

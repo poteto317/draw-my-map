@@ -67,6 +67,8 @@ function HistoryHarness({ apiRef, setup, visibleNodeIds }: HistoryHarnessProps) 
       onClipboardNotice={() => {}}
       onGenerateIllustration={() => {}}
       documentRevision={api.documentRevision}
+      shortcutsEnabled
+      dialogMouseClickedAtRef={{ current: null }}
     />
   );
 }

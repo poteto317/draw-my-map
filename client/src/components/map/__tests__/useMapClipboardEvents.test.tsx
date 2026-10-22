@@ -72,6 +72,7 @@ function setup(overrides: Partial<Options> = {}) {
     ),
     pasteSubtree: jest.fn<number | null, [SubtreeClipboardData]>(() => 10),
     publishNotice: jest.fn<void, [OperationNotice]>(),
+    enabled: true,
     ...overrides,
   };
   const rendered = renderHook((props: Options) => useMapClipboardEvents(props), {
@@ -482,6 +483,7 @@ describe("useMapClipboardEvents の登録", () => {
       copySubtree: jest.fn(() => ({ ok: true, value: CLIPBOARD_TEXT }) as const),
       pasteSubtree: jest.fn(() => 11),
       publishNotice: jest.fn(),
+      enabled: true,
     };
 
     rerender(next);
@@ -508,5 +510,36 @@ describe("useMapClipboardEvents の登録", () => {
 
     expect(options.copySubtree).not.toHaveBeenCalled();
     expect(options.pasteSubtree).not.toHaveBeenCalled();
+  });
+
+  it("enabledがfalseの間はcopy・pasteを処理せず、既定動作も止めない", () => {
+    const { options } = setup({ enabled: false });
+
+    const copy = dispatchClipboard("copy", clipboardData());
+    const paste = dispatchClipboard("paste", clipboardData());
+
+    expect(copy.defaultPrevented).toBe(false);
+    expect(paste.defaultPrevented).toBe(false);
+    expect(options.copySubtree).not.toHaveBeenCalled();
+    expect(options.pasteSubtree).not.toHaveBeenCalled();
+    expect(options.publishNotice).not.toHaveBeenCalled();
+  });
+
+  it("enabledをfalseからtrueへ切り替えると、再登録なしで動く", () => {
+    const addListener = jest.spyOn(window, "addEventListener");
+    const { options, rerender } = setup({ enabled: false });
+    const registeredCount = addListener.mock.calls.length;
+
+    rerender({ ...options, enabled: true });
+    const copy = dispatchClipboard("copy", clipboardData());
+    const paste = dispatchClipboard("paste", clipboardData());
+
+    expect(copy.defaultPrevented).toBe(true);
+    expect(paste.defaultPrevented).toBe(true);
+    expect(options.copySubtree).toHaveBeenCalledWith(1);
+    expect(options.pasteSubtree).toHaveBeenCalledTimes(1);
+    expect(addListener.mock.calls.length).toBe(registeredCount);
+    expect(addListener.mock.calls.filter(([type]) => type === "copy")).toHaveLength(1);
+    expect(addListener.mock.calls.filter(([type]) => type === "paste")).toHaveLength(1);
   });
 });

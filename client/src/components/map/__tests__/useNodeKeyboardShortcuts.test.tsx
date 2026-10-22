@@ -8,6 +8,7 @@ type ShortcutOptions = {
   onAddSiblingNode: (nodeId: number) => number | null;
   onDeleteNode: (nodeId: number) => void;
   onStartEditing: (nodeId: number, initialText: string) => void;
+  enabled: boolean;
 };
 
 function ShortcutHarness(options: ShortcutOptions) {
@@ -23,6 +24,7 @@ function createOptions(overrides: Partial<ShortcutOptions> = {}): ShortcutOption
     onAddSiblingNode: jest.fn(() => 3),
     onDeleteNode: jest.fn(),
     onStartEditing: jest.fn(),
+    enabled: true,
     ...overrides,
   };
 }
@@ -34,6 +36,8 @@ function dispatchKey(key: string) {
 }
 
 describe("useNodeKeyboardShortcuts", () => {
+  afterEach(() => jest.restoreAllMocks());
+
   it("creates a child and starts an empty edit on Tab", () => {
     const options = createOptions();
     render(<ShortcutHarness {...options} />);
@@ -148,5 +152,39 @@ describe("useNodeKeyboardShortcuts", () => {
 
     dispatchKey("Tab");
     expect(options.onAddChildNode).not.toHaveBeenCalled();
+  });
+
+  it.each(["Tab", "Enter", "Delete", "Backspace"])(
+    "enabledがfalseの間は%sに反応せず、既定動作も止めない",
+    (key) => {
+      const options = createOptions({ enabled: false });
+      render(<ShortcutHarness {...options} />);
+      const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+
+      document.body.dispatchEvent(event);
+
+      expect(event.defaultPrevented).toBe(false);
+      expect(options.onAddChildNode).not.toHaveBeenCalled();
+      expect(options.onAddSiblingNode).not.toHaveBeenCalled();
+      expect(options.onDeleteNode).not.toHaveBeenCalled();
+      expect(options.onStartEditing).not.toHaveBeenCalled();
+    },
+  );
+
+  it("enabledをfalseからtrueへ切り替えると、再登録なしで同じキーが動く", () => {
+    const addListener = jest.spyOn(window, "addEventListener");
+    const options = createOptions({ enabled: false });
+    const { rerender } = render(<ShortcutHarness {...options} />);
+
+    document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }));
+    expect(options.onAddChildNode).not.toHaveBeenCalled();
+    rerender(<ShortcutHarness {...options} enabled />);
+    const event = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+    document.body.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(options.onAddChildNode).toHaveBeenCalledWith(1);
+    expect(addListener.mock.calls.filter(([type]) => type === "keydown")).toHaveLength(1);
+    addListener.mockRestore();
   });
 });

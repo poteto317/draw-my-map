@@ -14,6 +14,7 @@ type UseNodeContextMenuOptions = {
   visibleNodeIds: ReadonlySet<number>;
   resetRevision: number;
   viewport: Viewport;
+  shortcutsEnabled: boolean;
 };
 
 type StoredMenu = NodeContextMenuState & { revision: number; viewport: Viewport };
@@ -23,6 +24,7 @@ export function useNodeContextMenu({
   visibleNodeIds,
   resetRevision,
   viewport,
+  shortcutsEnabled,
 }: UseNodeContextMenuOptions) {
   const [stored, setStored] = useState<StoredMenu | null>(null);
 
@@ -44,7 +46,7 @@ export function useNodeContextMenu({
   );
 
   const isOpen = stored !== null && !isStale;
-  useNodeContextMenuDismissal(isOpen, close);
+  useNodeContextMenuDismissal(isOpen, close, shortcutsEnabled);
 
   const menu: NodeContextMenuState | null = isOpen
     ? { nodeId: stored.nodeId, position: stored.position }

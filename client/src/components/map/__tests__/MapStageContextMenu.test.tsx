@@ -37,6 +37,8 @@ const defaultProps = {
   onCopySubtree: jest.fn(() => ({ ok: false, reason: "invalid" }) as const),
   onPasteSubtree: jest.fn(() => null),
   onClipboardNotice: jest.fn(),
+  shortcutsEnabled: true,
+  dialogMouseClickedAtRef: { current: null },
 };
 
 const sampleNodes: Node[] = [
@@ -363,6 +365,25 @@ describe("MapStage context menu boundary", () => {
 
     expect(notPrevented).toBe(false);
     expect(onSelectNode).toHaveBeenCalledWith(1);
+    expect(queryByRole("menu")).not.toBeInTheDocument();
+  });
+});
+
+describe("MapStage context menu shortcutsEnabled", () => {
+  it("shortcutsEnabledがfalseの間は開いているメニューがEscapeで閉じず、trueへ戻すと閉じる", async () => {
+    const props = { ...defaultProps, nodes: sampleNodes, onGenerateIllustration: jest.fn() };
+    const { getByRole, queryByRole, rerender } = await renderReady(<MapStage {...props} />);
+    const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+    mockStageBounds(container);
+    fireEvent.contextMenu(container, { clientX: 100, clientY: 60 });
+    expect(getByRole("menu")).toBeInTheDocument();
+
+    rerender(<MapStage {...props} shortcutsEnabled={false} />);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(getByRole("menu")).toBeInTheDocument();
+
+    rerender(<MapStage {...props} shortcutsEnabled />);
+    fireEvent.keyDown(window, { key: "Escape" });
     expect(queryByRole("menu")).not.toBeInTheDocument();
   });
 });

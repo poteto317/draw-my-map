@@ -18,6 +18,8 @@ type MapClipboardEventOptions = {
   copySubtree: (sourceId: number) => SubtreeClipboardResult<string>;
   pasteSubtree: (data: SubtreeClipboardData) => number | null;
   publishNotice: (notice: OperationNotice) => void;
+  // false の間（ダイアログ表示中など）は何もせず、既定動作も止めない
+  enabled: boolean;
 };
 
 const CLIPBOARD_FORMAT = "text/plain";
@@ -92,6 +94,7 @@ export function useMapClipboardEvents({
   copySubtree,
   pasteSubtree,
   publishNotice,
+  enabled,
 }: MapClipboardEventOptions): void {
   const latestOptionsRef = useRef<MapClipboardEventOptions>({
     selectedNodeId,
@@ -100,6 +103,7 @@ export function useMapClipboardEvents({
     copySubtree,
     pasteSubtree,
     publishNotice,
+    enabled,
   });
   useLayoutEffect(() => {
     latestOptionsRef.current = {
@@ -109,18 +113,21 @@ export function useMapClipboardEvents({
       copySubtree,
       pasteSubtree,
       publishNotice,
+      enabled,
     };
-  }, [selectedNodeId, isEditing, hasActiveGesture, copySubtree, pasteSubtree, publishNotice]);
+  }, [selectedNodeId, isEditing, hasActiveGesture, copySubtree, pasteSubtree, publishNotice, enabled]);
 
   useEffect(() => {
     const handleCopy = (event: ClipboardEvent) => {
       const options = latestOptionsRef.current;
+      if (!options.enabled) return;
       if (isLeftToBrowser(event, options)) return;
       const notice = copySelectedSubtree(event, options);
       if (notice !== null) options.publishNotice(notice);
     };
     const handlePaste = (event: ClipboardEvent) => {
       const options = latestOptionsRef.current;
+      if (!options.enabled) return;
       if (isLeftToBrowser(event, options)) return;
       options.publishNotice(pasteClipboardSubtree(event, options));
     };
