@@ -680,7 +680,7 @@ export type MapIndexV1 = {
 | JSON として読めない、トップレベルがオブジェクトでない、`version !== 1`、`maps` が配列でない | `corrupt` |
 | `maps` の項目で、`id` が `MAP_ID_PATTERN` に合わない、または `name` が文字列でない | その項目だけを除外（本体は孤立した本体として残る） |
 | `name` | `normalizeStoredMapName` で正規化し直す（制御文字を半角空白に、前後の空白を除き、空なら「無題のマップ」、50 コードポイントを超えれば先頭 50 コードポイントに切り詰める） |
-| `createdAt`・`updatedAt` が `toISOString` の形式でない | 項目を捨てずに `1970-01-01T00:00:00.000Z`（`UNKNOWN_MAP_TIMESTAMP`）として扱う（表示は「更新: 不明」） |
+| `createdAt`・`updatedAt` が `toISOString` の形式でない | 項目を捨てずに `1970-01-01T00:00:00.000Z`（`UNKNOWN_MAP_TIMESTAMP`）として扱う（表示は「更新: 不明」）。`updatedAt` は本体を次に保存したときに上書きされ、`createdAt` は補正後の値のまま残る |
 | 同じ id が2回以上出る | 最初の項目だけを残す |
 | 有効な項目が1件も残らない | `corrupt` |
 | `currentMapId` が文字列でない、または `maps` に無い | 表示順の先頭（最後に更新したマップ）を現在のマップにする |
@@ -902,7 +902,7 @@ sequenceDiagram
   <安全なマップ名>-YYYYMMDD-HHmmss.json
   ```
   *(例: マップ名「無題のマップ」で 2026年10月10日 01時30分15秒の場合 `無題のマップ-20261010-013015.json`)*
-  - 安全なマップ名は `toSafeFileNameBase(name)` で作ります（`\ / : * ? " < > |` と制御文字を `_` に、連続する空白を1つに、前後の空白・先頭の `.`・末尾の `.` と空白を除き、Windows の予約名には先頭に `_` を付け、空なら `draw-my-map`）。PNG・SVG のファイル名（`createMapImageFileName(extension, mapName, now?)`）も同じ関数を使います。
+  - 安全なマップ名は `toSafeFileNameBase(name)` で作ります（`\ / : * ? " < > |` と制御文字を `_` に、連続する空白を1つに、前後の空白・先頭の `.` と空白・末尾の `.` と空白を除き、Windows の予約名には先頭に `_` を付け、空なら `draw-my-map`）。PNG・SVG のファイル名（`createMapImageFileName(extension, mapName, now?)`）も同じ関数を使います。
   - `useMapPersistence` → `useMapFilePersistence` → `useMapJsonExport` → `downloadJson(json, mapName)` と、エディタの props の `mapName` を渡します。書き出しの時点の名前を使います。
 - **形式**: MIME タイプ `application/json` の UTF-8 テキスト（Version 3 形式）。マップ名は JSON に含めません。
 
