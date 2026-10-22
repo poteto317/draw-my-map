@@ -2,7 +2,7 @@ export type MapFileExtension = "json" | "png" | "svg";
 
 const FALLBACK_FILE_NAME_BASE = "draw-my-map";
 const FORBIDDEN_FILE_NAME_CHARACTERS = /[\\/:*?"<>|\u0000-\u001f\u007f]/g;
-const WINDOWS_RESERVED_NAMES = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i;
+const WINDOWS_RESERVED_NAMES = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$/i;
 
 function pad(value: number): string {
   return String(value).padStart(2, "0");
@@ -14,7 +14,7 @@ export function toSafeFileNameBase(name: string): string {
     .replace(FORBIDDEN_FILE_NAME_CHARACTERS, "_")
     .replace(/\s+/g, " ")
     .trim()
-    .replace(/^\.+/, "")
+    .replace(/^[. ]+/, "")
     .replace(/[. ]+$/, "");
 
   if (base === "") {

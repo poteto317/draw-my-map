@@ -39,6 +39,14 @@ describe("toSafeFileNameBase", () => {
     expect(toSafeFileNameBase("   ")).toBe("draw-my-map");
   });
 
+  it("先頭のピリオドを除いた後に残る空白も除く", () => {
+    expect(toSafeFileNameBase(". メモ")).toBe("メモ");
+  });
+
+  it("予約名に拡張子が続く名前にも先頭に _ を付ける", () => {
+    expect(toSafeFileNameBase("CON.txt")).toBe("_CON.txt");
+  });
+
   it("日本語と絵文字はそのまま残す", () => {
     expect(toSafeFileNameBase("旅行😀")).toBe("旅行😀");
   });
