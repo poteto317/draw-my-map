@@ -15,17 +15,32 @@ export function readStoredMapJson(
   }
 }
 
-export function writeStoredMapJson(
-  storage: Pick<Storage, "setItem">,
-  json: string,
+export function removeStoredMapJson(
+  storage: Pick<Storage, "removeItem">,
 ): MapDocumentResult<void> {
   try {
-    storage.setItem(MAP_STORAGE_KEY, json);
+    storage.removeItem(MAP_STORAGE_KEY);
     return { ok: true, value: undefined };
   } catch {
     return {
       ok: false,
-      error: "ブラウザへ自動保存できませんでした。",
+      error: "ブラウザの保存データを削除できませんでした。",
+    };
+  }
+}
+
+// 移行のやり直しが失敗したときに、消した旧キーを元の文字列のまま書き戻す。
+export function restoreStoredMapJson(
+  storage: Pick<Storage, "setItem">,
+  raw: string,
+): MapDocumentResult<void> {
+  try {
+    storage.setItem(MAP_STORAGE_KEY, raw);
+    return { ok: true, value: undefined };
+  } catch {
+    return {
+      ok: false,
+      error: "ブラウザへ保存できませんでした。",
     };
   }
 }

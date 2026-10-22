@@ -1,7 +1,8 @@
 import {
   MAP_STORAGE_KEY,
   readStoredMapJson,
-  writeStoredMapJson,
+  removeStoredMapJson,
+  restoreStoredMapJson,
 } from "@/services/persistence/mapStorage";
 
 describe("mapStorage", () => {
@@ -38,15 +39,38 @@ describe("mapStorage", () => {
     });
   });
 
-  describe("writeStoredMapJson", () => {
-    it("固定キーへJSONを保存する", () => {
-      const setItem = jest.fn();
+  describe("removeStoredMapJson", () => {
+    it("固定キーを削除する", () => {
+      const removeItem = jest.fn();
 
-      expect(writeStoredMapJson({ setItem }, "{}\n")).toEqual({
+      expect(removeStoredMapJson({ removeItem })).toEqual({
         ok: true,
         value: undefined,
       });
-      expect(setItem).toHaveBeenCalledWith("draw-my-map.map.v1", "{}\n");
+      expect(removeItem).toHaveBeenCalledWith("draw-my-map.map.v1");
+    });
+
+    it("削除例外を利用者向けエラーへ変換する", () => {
+      const removeItem = jest.fn(() => {
+        throw new DOMException("blocked", "SecurityError");
+      });
+
+      expect(removeStoredMapJson({ removeItem })).toEqual({
+        ok: false,
+        error: "ブラウザの保存データを削除できませんでした。",
+      });
+    });
+  });
+
+  describe("restoreStoredMapJson", () => {
+    it("固定キーへ元の文字列をそのまま書き戻す", () => {
+      const setItem = jest.fn();
+
+      expect(restoreStoredMapJson({ setItem }, "{\"version\":1}\n")).toEqual({
+        ok: true,
+        value: undefined,
+      });
+      expect(setItem).toHaveBeenCalledWith("draw-my-map.map.v1", "{\"version\":1}\n");
     });
 
     it("書き込み例外を利用者向けエラーへ変換する", () => {
@@ -54,9 +78,9 @@ describe("mapStorage", () => {
         throw new DOMException("full", "QuotaExceededError");
       });
 
-      expect(writeStoredMapJson({ setItem }, "{}\n")).toEqual({
+      expect(restoreStoredMapJson({ setItem }, "{}")).toEqual({
         ok: false,
-        error: "ブラウザへ自動保存できませんでした。",
+        error: "ブラウザへ保存できませんでした。",
       });
     });
   });

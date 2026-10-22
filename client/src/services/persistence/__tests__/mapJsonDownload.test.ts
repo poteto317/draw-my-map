@@ -19,9 +19,19 @@ describe("mapJsonDownload", () => {
     jest.restoreAllMocks();
   });
 
-  it("ローカル日時をゼロ埋めしたJSONファイル名を作る", () => {
-    expect(createMapJsonFileName(new Date(2026, 8, 20, 12, 34, 56)))
-      .toBe("draw-my-map-20260920-123456.json");
+  it("マップ名とローカル日時をゼロ埋めしたJSONファイル名を作る", () => {
+    expect(createMapJsonFileName("旅行", new Date(2026, 9, 21, 9, 5, 7)))
+      .toBe("旅行-20261021-090507.json");
+  });
+
+  it("ファイル名に使えない文字を置き換える", () => {
+    expect(createMapJsonFileName("a/b", new Date(2026, 9, 21, 9, 5, 7)))
+      .toBe("a_b-20261021-090507.json");
+  });
+
+  it("空の名前では draw-my-map を使う", () => {
+    expect(createMapJsonFileName("", new Date(2026, 9, 21, 9, 5, 7)))
+      .toBe("draw-my-map-20261021-090507.json");
   });
 
   it("JSON Blobを日時付きファイルとしてダウンロードしてURLを解放する", () => {
@@ -41,7 +51,7 @@ describe("mapJsonDownload", () => {
     const click = jest.spyOn(HTMLAnchorElement.prototype, "click")
       .mockImplementation(() => undefined);
 
-    downloadMapJson("{}\n", new Date(2026, 8, 20, 12, 34, 56));
+    downloadMapJson("{}\n", "旅行", new Date(2026, 8, 20, 12, 34, 56));
 
     const blob = createObjectURL.mock.calls[0]?.[0];
     expect(blob).toBeInstanceOf(Blob);
@@ -49,7 +59,7 @@ describe("mapJsonDownload", () => {
     expect(click).toHaveBeenCalledTimes(1);
     const anchor = click.mock.instances[0] as unknown as HTMLAnchorElement;
     expect(anchor.href).toBe("blob:map-json");
-    expect(anchor.download).toBe("draw-my-map-20260920-123456.json");
+    expect(anchor.download).toBe("旅行-20260920-123456.json");
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:map-json");
   });
 
@@ -68,7 +78,7 @@ describe("mapJsonDownload", () => {
         throw new Error("download failed");
       });
 
-    expect(() => downloadMapJson("{}\n")).toThrow("download failed");
+    expect(() => downloadMapJson("{}\n", "旅行")).toThrow("download failed");
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:map-json");
   });
 });
