@@ -1,6 +1,6 @@
 # Draw My Map データモデル・永続化仕様書
 
-本書は、**Draw My Map** におけるデータモデル、TypeScript 型定義、JSON 永続化スキーマ（Version 1 〜 Version 3）、デコード・マイグレーション・バリデーション、枝のクリップボード形式（5.10）、およびブラウザ `localStorage` 永続化アーキテクチャ（複数マップのインデックスと本体、起動時の移行。5.1〜5.9）の完全な技術仕様書です。
+本書は、**Draw My Map** におけるデータモデル、TypeScript 型定義、JSON 永続化スキーマ（Version 1 〜 Version 3）、デコード・マイグレーション・バリデーション、枝のクリップボード形式（5.10）、箇条書きからの追加で受け渡す型（2.6。保存形式は変えない）、およびブラウザ `localStorage` 永続化アーキテクチャ（複数マップのインデックスと本体、起動時の移行。5.1〜5.9）の完全な技術仕様書です。
 
 ---
 
@@ -15,6 +15,7 @@
    - 2.3 [永続化・ドキュメント型](#23-永続化ドキュメント型)
    - 2.4 [AI イラスト生成・通知型](#24-ai-イラスト生成通知型)
    - 2.5 [画像エクスポート型](#25-画像エクスポート型)
+   - 2.6 [箇条書きからの追加の型](#26-箇条書きからの追加の型)
 3. [MapDocument JSON スキーマ仕様](#3-mapdocument-json-スキーマ仕様)
    - 3.1 [Version 1 スキーマ（Phase 5 初期）](#31-version-1-スキーマphase-5-初期)
    - 3.2 [Version 2 スキーマ（Phase 6）](#32-version-2-スキーマphase-6)
@@ -81,13 +82,14 @@ Root Node B (id: 5, parentId: null)
 4. **レイアウトと幾何情報の分離**:
    - ノードの幾何座標（`x`, `y`）およびサイズ（`width`, `height`）はノード自体が保持しますが、配置方針（`layoutMode`: `"manual"` または `"auto"`）はマップドキュメント全体のグローバル状態として管理されます。
    - 自動配置モード時でも、計算されたレイアウト座標はそのまま各ノードの `x`, `y` に反映され、保存されます。
+   - 箇条書きからの追加（Phase 13）は、解析の結果（`ParsedOutline`）を通常の `Node` として `nodes` の末尾に足すだけで、`Node` 型、`NodeMapState`、編集履歴、V3 の保存形式、JSON の形式に項目を足しません（2.6 節）。
    - 枝の折りたたみ（Phase 11）は画面表示専用の状態で、`NodeMapState`、編集履歴、JSON、`localStorage` に含めません。自動配置で折りたたみ中に使う表示用の座標（`displayNodes`）も保存せず、正本の `nodes` の `x`, `y` は変えません。import、自動復元、成功した Undo / Redo の後は全展開に戻ります。
 
 ---
 
 ## 2. TypeScript 型定義リファレンス
 
-システムの中核を構成する共有型定義は `client/src/types/` 配下の全 9 ファイルに集約されています。
+システムの中核を構成する共有型定義は `client/src/types/` 配下の全 13 ファイルに集約されています。
 
 | ファイルパス | エクスポートされる型名 | 役割・用途 |
 | :--- | :--- | :--- |
@@ -100,6 +102,10 @@ Root Node B (id: 5, parentId: null)
 | `client/src/types/illustrationGeneration.ts` | `IllustrationGenerationState` | AI イラスト生成の非同期状態マシン（判別共用体） |
 | `client/src/types/operationNotice.ts` | `OperationNotice` | ヘッダー通知バーに表示する操作結果・警告・エラー通知型 |
 | `client/src/types/mapImageExport.ts` | `CreateSvgExport`, `DownloadImage`, `RasterizePng` | SVG / PNG 画像エクスポート処理の依存注入用関数シグネチャ型 |
+| `client/src/types/nodeSearch.ts` | `NodeSearchListItem` | ノード検索の候補（一致結果 `NodeSearchMatch` に、現在の表示で隠れているかの `hidden` を加えたもの） |
+| `client/src/types/nodeFocusRequest.ts` | `NodeFocusRequest` | 検索からの中央移動要求（`nodeId`, `sequence`, `documentRevision`） |
+| `client/src/types/mapStorageSession.ts` | `MapStorageSession`, `MapBodyWriteResult`, `MapFlushResult` | 開いているマップの本体の読み書きと flush の登録（5.5 節） |
+| `client/src/types/mapLibraryDialog.ts` | `MapLibraryDialogScreen`, `OpenMapLibraryDialogScreen`, `MapLibraryRowAction`, `MapLibraryDialogFocusTarget`, `MapLibraryDialogNotices` | マップのダイアログの画面、行の操作、フォーカス先、ダイアログ内の通知 |
 
 ### 2.1 ノード・キャンバス状態型
 
@@ -288,6 +294,70 @@ export type RasterizePng = (
 - `CreateSvgExport`: ノード配列から SVG XML 文字列と寸法（`MapSvgDocument: { svg: string; width: number; height: number }`）を生成する関数型（ノードが空の場合は `null`）。
 - `DownloadImage`: 生成された画像 `Blob` を指定ファイル名でブラウザダウンロードさせる関数型。
 - `RasterizePng`: SVG XML 文字列と論理幅・高さを受け取り、2倍スケールの PNG `Blob` へ非同期ラスタライズする関数型。
+
+### 2.6 箇条書きからの追加の型
+
+箇条書きからの追加（Phase 13。[features.md の 13 章](./features.md#13-箇条書きからの追加)）の解析と挿入で受け渡す型です。いずれもメモリ上だけで使い、保存形式（V3）・JSON・`localStorage`・編集履歴には現れません。追加したノードは通常の `Node`（重要度 `"medium"`、イラスト無し、幅100・高さ60）として保存されます。
+
+#### `OutlineItem` / `OutlineWarning` / `ParsedOutline` / `OutlineParseError` / `OutlineParseResult` (`client/src/domain/outline/outlineParser.ts`)
+`parseOutlineText(text: string): OutlineParseResult` の結果の型です。成功と失敗を判別共用体で返し、呼び出し元（`useOutlineImport`）は成功したときだけプレビューへ進みます。
+
+```typescript
+export type OutlineItem = {
+  label: string; // 記号・前後の空白を除き、制御文字を半角空白にした値。空でない
+  depth: number; // 0 が一番上の階層。直前の項目の depth + 1 以下
+  parentIndex: number | null; // items の添字（自分より前）。depth 0 は null
+  lineNumber: number; // 1 始まりの入力の行番号
+};
+
+export type OutlineWarningKind =
+  | "depth-adjusted"
+  | "empty-label"
+  | "long-label";
+
+export type OutlineWarning = {
+  kind: OutlineWarningKind;
+  count: number; // 1 以上
+  lineNumbers: number[]; // 先頭の OUTLINE_WARNING_LINE_NUMBER_LIMIT 件まで（昇順）
+};
+
+export type ParsedOutline = {
+  items: OutlineItem[]; // 入力の順（先行順）。1件以上 OUTLINE_MAX_ITEMS 件以下
+  rootCount: number; // depth 0 の件数
+  maxDepth: number; // depth の最大値
+  warnings: OutlineWarning[]; // count が1以上のものだけ。種類の順は固定
+};
+
+export type OutlineParseError =
+  | { kind: "too-long"; length: number }
+  | { kind: "too-many-lines"; lines: number }
+  | { kind: "no-items" };
+
+export type OutlineParseResult =
+  | { ok: true; outline: ParsedOutline }
+  | { ok: false; error: OutlineParseError };
+```
+- `OUTLINE_WARNING_LINE_NUMBER_LIMIT`（5）は `outlineParser.ts` に、`OUTLINE_MAX_ITEMS`（10,000）は `outlineLimits.ts` に定義しています。文字数の上限 `OUTLINE_MAX_TEXT_LENGTH`（1,000,000。UTF-16 コード単位）を超えると `too-long`、空行でない行が 10,000 を超えると `too-many-lines`、取り込める行が無いと `no-items` になります。
+- `items` は先行順で、親は常に自分より前にあります。プレビュー用の木（`buildOutlinePreview`、`client/src/domain/outline/outlinePreview.ts`）は、この並びの先頭の最大200件から作ります。
+
+#### `ForestItem` / `ForestInsertionTarget` / `ForestInsertionResult` (`client/src/domain/nodes/nodeForestInsertion.ts`)
+`insertNodeForest(current, items, target, mode, allocateIds): ForestInsertionResult` の引数と結果の型です。`domain/nodes` は `domain/outline` を参照せず、`OutlineItem` は `ForestItem` の形を満たすので、`useOutlineImport` が `ParsedOutline.items` をそのまま渡します。
+
+```typescript
+export type ForestItem = { label: string; parentIndex: number | null }; // parentIndex は自分より前の添字
+
+export type ForestInsertionTarget =
+  | { kind: "root" }
+  | { kind: "child"; parentId: number };
+
+export type ForestInsertionFailureReason = "parent-missing" | "invalid-items" | "placement-failed";
+
+export type ForestInsertionResult =
+  | { ok: true; nodes: Node[]; rootIds: number[] } // rootIds は深さ0の項目の新しい ID（入力の順）
+  | { ok: false; reason: ForestInsertionFailureReason };
+```
+- 成功時の `nodes` は、`current` を変えずに、その後ろへ `items` の順で新しいノードを足した配列です。ID は検査（項目の形、親の存在、座標）をすべて済ませた後に `allocateIds` を1回だけ呼んで採番します。
+- `useNodes.insertForest(items, target)` は、これを `applyTreeChange` の1回の commit の中で呼び、`InsertForestResult`（`{ ok: true; rootId: number; count: number } | { ok: false; reason: ForestInsertionFailureReason }`。`client/src/hooks/useNodes.ts`）を返します。自動配置での全体の再配置に失敗したときは `placement-failed` です。
 
 ---
 
