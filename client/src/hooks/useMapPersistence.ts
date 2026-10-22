@@ -1,23 +1,24 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { isAutoSaveFailedNotice } from "@/domain/mapLibrary/mapLibraryMessages";
 import { createMapDocument, serializeMapDocument } from "@/domain/persistence/mapDocumentCodec";
 import { useMapFilePersistence } from "@/hooks/useMapFilePersistence";
 import { useMapStoragePersistence } from "@/hooks/useMapStoragePersistence";
 import type { MapDocumentResult } from "@/types/mapDocument";
+import type { MapStorageSession } from "@/types/mapStorageSession";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 import type { NodeMapState } from "@/types/nodeMapState";
 import type { OperationNotice } from "@/types/operationNotice";
 
-type MapStorage = Pick<Storage, "getItem" | "setItem">;
-
 type UseMapPersistenceOptions = {
   nodes: readonly Node[];
   layoutMode: NodeLayoutMode;
   replaceMap: (state: NodeMapState) => void;
-  storage?: MapStorage;
-  downloadJson?: (json: string) => void;
+  storageSession: MapStorageSession;
+  mapName: string;
+  downloadJson?: (json: string, mapName: string) => void;
   readFile?: (file: File) => Promise<MapDocumentResult<string>>;
 };
 
@@ -31,7 +32,8 @@ export function useMapPersistence({
   nodes,
   layoutMode,
   replaceMap,
-  storage,
+  storageSession,
+  mapName,
   downloadJson,
   readFile,
 }: UseMapPersistenceOptions): UseMapPersistenceResult {
@@ -40,14 +42,20 @@ export function useMapPersistence({
     () => serializeMapDocument(createMapDocument(nodes, layoutMode)),
     [nodes, layoutMode],
   );
+  // 自動保存の失敗の通知だけを消し、ほかの通知は残す
+  const clearSaveFailureNotice = useCallback(() => {
+    setNotice((current) => (isAutoSaveFailedNotice(current) ? null : current));
+  }, []);
   const { requestSnapshotSave } = useMapStoragePersistence({
     currentSnapshot,
     replaceMap,
     publishNotice: setNotice,
-    storage,
+    storageSession,
+    clearSaveFailureNotice,
   });
   const { exportJson, importJsonFile } = useMapFilePersistence({
     currentSnapshot,
+    mapName,
     replaceMap,
     requestSnapshotSave,
     publishNotice: setNotice,

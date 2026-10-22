@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createMapSvgExport } from "@/services/imageExport/createMapSvgExport";
 import { createMapImageFileName } from "@/services/imageExport/mapImageFileName";
 import { downloadMapImage } from "@/services/imageExport/mapImageDownload";
@@ -15,6 +15,7 @@ import type { OperationNotice } from "@/types/operationNotice";
 
 type UseMapPngExportOptions = {
   nodes: readonly Node[];
+  mapName: string;
   publishNotice: (notice: OperationNotice) => void;
   createSvgExport?: CreateSvgExport;
   rasterizePng?: RasterizePng;
@@ -23,6 +24,7 @@ type UseMapPngExportOptions = {
 
 export function useMapPngExport({
   nodes,
+  mapName,
   publishNotice,
   createSvgExport = createMapSvgExport,
   rasterizePng = rasterizeMapSvgToPng,
@@ -33,10 +35,21 @@ export function useMapPngExport({
 } {
   const [isExportingPng, setIsExportingPng] = useState(false);
   const exportingPngRef = useRef(false);
+  const mountedRef = useRef(false);
+
+  // StrictModeの二重実行でも、再セットアップで true に戻す
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const exportPng = useCallback(async () => {
     if (exportingPngRef.current) return;
 
+    // 変換中にマップ名が変わっても、書き出しを始めた時点の名前を使う
+    const exportMapName = mapName;
     exportingPngRef.current = true;
     setIsExportingPng(true);
     try {
@@ -54,21 +67,23 @@ export function useMapPngExport({
         svgExport.width,
         svgExport.height,
       );
-      downloadPng(pngBlob, createMapImageFileName("png"));
+      if (!mountedRef.current) return;
+      downloadPng(pngBlob, createMapImageFileName("png", exportMapName));
       publishNotice({
         kind: "status",
         message: "PNGファイルを書き出しました。",
       });
     } catch {
+      if (!mountedRef.current) return;
       publishNotice({
         kind: "error",
         message: "PNGファイルを書き出せませんでした。",
       });
     } finally {
       exportingPngRef.current = false;
-      setIsExportingPng(false);
+      if (mountedRef.current) setIsExportingPng(false);
     }
-  }, [createSvgExport, downloadPng, nodes, publishNotice, rasterizePng]);
+  }, [createSvgExport, downloadPng, mapName, nodes, publishNotice, rasterizePng]);
 
   return { exportPng, isExportingPng };
 }

@@ -6,18 +6,20 @@ import type { OperationNotice } from "@/types/operationNotice";
 
 type UseMapJsonExportOptions = {
   currentSnapshot: string;
+  mapName: string;
   publishNotice: (notice: OperationNotice) => void;
-  downloadJson?: (json: string) => void;
+  downloadJson?: (json: string, mapName: string) => void;
 };
 
 export function useMapJsonExport({
   currentSnapshot,
+  mapName,
   publishNotice,
   downloadJson = downloadMapJson,
 }: UseMapJsonExportOptions): () => void {
   return useCallback(() => {
     try {
-      downloadJson(currentSnapshot);
+      downloadJson(currentSnapshot, mapName);
       publishNotice({
         kind: "status",
         message: "JSONファイルを書き出しました。",
@@ -28,5 +30,5 @@ export function useMapJsonExport({
         message: "JSONファイルを書き出せませんでした。",
       });
     }
-  }, [currentSnapshot, downloadJson, publishNotice]);
+  }, [currentSnapshot, mapName, downloadJson, publishNotice]);
 }

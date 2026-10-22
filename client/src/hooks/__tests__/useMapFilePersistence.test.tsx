@@ -13,6 +13,7 @@ describe("useMapFilePersistence", () => {
     const publishNotice = jest.fn();
     const { result } = renderHook(() => useMapFilePersistence({
       currentSnapshot: emptyMapJson,
+      mapName: "旅行",
       replaceMap: jest.fn(),
       requestSnapshotSave: jest.fn(),
       publishNotice,
@@ -22,7 +23,7 @@ describe("useMapFilePersistence", () => {
 
     act(() => result.current.exportJson());
 
-    expect(downloadJson).toHaveBeenCalledWith(emptyMapJson);
+    expect(downloadJson).toHaveBeenCalledWith(emptyMapJson, "旅行");
     expect(publishNotice).toHaveBeenCalledWith({
       kind: "status",
       message: "JSONファイルを書き出しました。",
@@ -35,6 +36,7 @@ describe("useMapFilePersistence", () => {
     const publishNotice = jest.fn();
     const { result } = renderHook(() => useMapFilePersistence({
       currentSnapshot: emptyMapJson,
+      mapName: "旅行",
       replaceMap,
       requestSnapshotSave,
       publishNotice,

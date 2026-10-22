@@ -1,3 +1,4 @@
+import { StrictMode } from "react";
 import { act, renderHook } from "@testing-library/react";
 import { useMapPngExport } from "@/hooks/useMapPngExport";
 import { createTestNode } from "@/testing/createTestNode";
@@ -31,7 +32,7 @@ describe("useMapPngExport", () => {
       .mockReturnValueOnce(null)
       .mockReturnValue(svgExport);
     const { result } = renderHook(() => useMapPngExport({
-      nodes: [], publishNotice, createSvgExport, rasterizePng, downloadPng,
+      nodes: [], mapName: "旅行", publishNotice, createSvgExport, rasterizePng, downloadPng,
     }));
 
     await act(async () => result.current.exportPng());
@@ -56,7 +57,7 @@ describe("useMapPngExport", () => {
     const rasterizePng = jest.fn(async () => pngBlob);
     const downloadPng = jest.fn();
     const { result } = renderHook(() => useMapPngExport({
-      nodes, publishNotice, createSvgExport, rasterizePng, downloadPng,
+      nodes, mapName: "旅行", publishNotice, createSvgExport, rasterizePng, downloadPng,
     }));
 
     await act(async () => result.current.exportPng());
@@ -67,12 +68,40 @@ describe("useMapPngExport", () => {
     );
     expect(downloadPng).toHaveBeenCalledTimes(1);
     expect(downloadPng).toHaveBeenCalledWith(
-      pngBlob, expect.stringMatching(/^draw-my-map-\d{8}-\d{6}\.png$/),
+      pngBlob, expect.stringMatching(/^旅行-\d{8}-\d{6}\.png$/),
     );
     expect(publishNotice).toHaveBeenCalledWith({
       kind: "status", message: "PNGファイルを書き出しました。",
     });
     expect(result.current.isExportingPng).toBe(false);
+  });
+
+  it("変換中にマップ名が変わっても開始時のマップ名でファイル名を作る", async () => {
+    const pending = deferred<Blob>();
+    const downloadPng = jest.fn();
+    const { result, rerender } = renderHook(
+      ({ mapName }) => useMapPngExport({
+        nodes,
+        mapName,
+        publishNotice: jest.fn(),
+        createSvgExport: () => svgExport,
+        rasterizePng: () => pending.promise,
+        downloadPng,
+      }),
+      { initialProps: { mapName: "旅行" } },
+    );
+    let exporting!: Promise<void>;
+
+    act(() => { exporting = result.current.exportPng(); });
+    rerender({ mapName: "新しい名前" });
+    await act(async () => {
+      pending.resolve(new Blob(["png"]));
+      await exporting;
+    });
+
+    expect(downloadPng).toHaveBeenCalledWith(
+      expect.any(Blob), expect.stringMatching(/^旅行-\d{8}-\d{6}\.png$/),
+    );
   });
 
   it("変換中の同一tick連打を同期ガードし成功後に再実行できる", async () => {
@@ -82,7 +111,7 @@ describe("useMapPngExport", () => {
     const rasterizePng = jest.fn(() => pending.promise);
     const downloadPng = jest.fn();
     const { result } = renderHook(() => useMapPngExport({
-      nodes, publishNotice, createSvgExport, rasterizePng, downloadPng,
+      nodes, mapName: "旅行", publishNotice, createSvgExport, rasterizePng, downloadPng,
     }));
     let first!: Promise<void>;
     let second!: Promise<void>;
@@ -117,7 +146,7 @@ describe("useMapPngExport", () => {
       .mockResolvedValue(new Blob(["png"]));
     const downloadPng = jest.fn();
     const { result } = renderHook(() => useMapPngExport({
-      nodes, publishNotice, createSvgExport: () => svgExport, rasterizePng, downloadPng,
+      nodes, mapName: "旅行", publishNotice, createSvgExport: () => svgExport, rasterizePng, downloadPng,
     }));
     let exporting!: Promise<void>;
 
@@ -148,6 +177,7 @@ describe("useMapPngExport", () => {
     });
     const { result } = renderHook(() => useMapPngExport({
       nodes,
+      mapName: "旅行",
       publishNotice,
       createSvgExport: () => {
         if (shouldFail && failure === "create") throw new Error("create failed");
@@ -170,6 +200,45 @@ describe("useMapPngExport", () => {
     await act(async () => result.current.exportPng());
 
     expect(publishNotice).toHaveBeenLastCalledWith({
+      kind: "status", message: "PNGファイルを書き出しました。",
+    });
+    expect(result.current.isExportingPng).toBe(false);
+  });
+
+  it.each(["解決", "拒否"])("アンマウント後に変換が%sされてもダウンロードも通知もしない", async (outcome) => {
+    const pending = deferred<Blob>();
+    const publishNotice = jest.fn();
+    const downloadPng = jest.fn();
+    const { result, unmount } = renderHook(() => useMapPngExport({
+      nodes, mapName: "旅行", publishNotice, createSvgExport: () => svgExport,
+      rasterizePng: () => pending.promise, downloadPng,
+    }));
+    let exporting!: Promise<void>;
+
+    act(() => { exporting = result.current.exportPng(); });
+    unmount();
+    await act(async () => {
+      if (outcome === "解決") pending.resolve(new Blob(["png"]));
+      else pending.reject(new Error("rasterize failed"));
+      await exporting;
+    });
+
+    expect(downloadPng).not.toHaveBeenCalled();
+    expect(publishNotice).not.toHaveBeenCalled();
+  });
+
+  it("StrictModeでアンマウントしていなければ従来どおりダウンロードと通知をする", async () => {
+    const publishNotice = jest.fn();
+    const downloadPng = jest.fn();
+    const { result } = renderHook(() => useMapPngExport({
+      nodes, mapName: "旅行", publishNotice, createSvgExport: () => svgExport,
+      rasterizePng: async () => new Blob(["png"]), downloadPng,
+    }), { wrapper: StrictMode });
+
+    await act(async () => result.current.exportPng());
+
+    expect(downloadPng).toHaveBeenCalledTimes(1);
+    expect(publishNotice).toHaveBeenCalledWith({
       kind: "status", message: "PNGファイルを書き出しました。",
     });
     expect(result.current.isExportingPng).toBe(false);

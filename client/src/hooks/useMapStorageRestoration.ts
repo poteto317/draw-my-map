@@ -5,17 +5,15 @@ import {
   parseMapDocumentJsonWithVersion,
   serializeMapDocument,
 } from "@/domain/persistence/mapDocumentCodec";
-import { readStoredMapJson } from "@/services/persistence/mapStorage";
+import type { MapDocumentResult } from "@/types/mapDocument";
 import type { NodeMapState } from "@/types/nodeMapState";
 import type { OperationNotice } from "@/types/operationNotice";
-
-type ReadableMapStorage = Pick<Storage, "getItem">;
 
 type UseMapStorageRestorationOptions = {
   currentSnapshot: string;
   replaceMap: (state: NodeMapState) => void;
   publishNotice: (notice: OperationNotice) => void;
-  storage?: ReadableMapStorage;
+  readBody: () => MapDocumentResult<string | null>;
 };
 
 type MapStorageRestoration = {
@@ -29,7 +27,7 @@ export function useMapStorageRestoration({
   currentSnapshot,
   replaceMap,
   publishNotice,
-  storage,
+  readBody,
 }: UseMapStorageRestorationOptions): MapStorageRestoration {
   const [restoration, setRestoration] = useState<MapStorageRestoration>({
     hydrated: false,
@@ -44,19 +42,7 @@ export function useMapStorageRestoration({
     if (restoredRef.current) return;
     restoredRef.current = true;
 
-    let targetStorage: ReadableMapStorage;
-    try {
-      targetStorage = storage ?? window.localStorage;
-    } catch {
-      publishNotice({ kind: "warning", message: RESTORE_WARNING });
-      setRestoration({
-        hydrated: true,
-        initialPersistedSnapshot: currentSnapshot,
-      });
-      return;
-    }
-
-    const stored = readStoredMapJson(targetStorage);
+    const stored = readBody();
     if (!stored.ok || stored.value === null) {
       if (!stored.ok) {
         publishNotice({ kind: "warning", message: RESTORE_WARNING });
@@ -89,7 +75,7 @@ export function useMapStorageRestoration({
         ? stored.value
         : serializeMapDocument(document),
     });
-  }, [currentSnapshot, publishNotice, replaceMap, storage]);
+  }, [currentSnapshot, publishNotice, readBody, replaceMap]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   return restoration;

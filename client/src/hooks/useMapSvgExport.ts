@@ -11,6 +11,7 @@ import type { OperationNotice } from "@/types/operationNotice";
 
 type UseMapSvgExportOptions = {
   nodes: readonly Node[];
+  mapName: string;
   publishNotice: (notice: OperationNotice) => void;
   createSvgExport?: CreateSvgExport;
   downloadSvg?: DownloadImage;
@@ -18,6 +19,7 @@ type UseMapSvgExportOptions = {
 
 export function useMapSvgExport({
   nodes,
+  mapName,
   publishNotice,
   createSvgExport = createMapSvgExport,
   downloadSvg = downloadMapImage,
@@ -35,7 +37,7 @@ export function useMapSvgExport({
 
       downloadSvg(
         createMapSvgBlob(svgExport.svg),
-        createMapImageFileName("svg"),
+        createMapImageFileName("svg", mapName),
       );
       publishNotice({
         kind: "status",
@@ -47,5 +49,5 @@ export function useMapSvgExport({
         message: "SVGファイルを書き出せませんでした。",
       });
     }
-  }, [createSvgExport, downloadSvg, nodes, publishNotice]);
+  }, [createSvgExport, downloadSvg, mapName, nodes, publishNotice]);
 }

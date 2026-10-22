@@ -1,8 +1,10 @@
 import { StrictMode, type ReactNode } from "react";
 import { act, renderHook } from "@testing-library/react";
+import { AUTO_SAVE_FAILURE_MESSAGE } from "@/domain/mapLibrary/mapLibraryMessages";
 import { useMapPersistence } from "@/hooks/useMapPersistence";
 import type { Node } from "@/types/node";
 import { createTestNode } from "@/testing/createTestNode";
+import { createTestStorageSession } from "@/testing/createTestStorageSession";
 
 const storedMapJson = `{
   "version": 1,
@@ -81,16 +83,6 @@ function node(label: string): Node {
   });
 }
 
-function storageDouble(initialValue: string | null) {
-  let value = initialValue;
-  return {
-    getItem: jest.fn(() => value),
-    setItem: jest.fn((_key: string, nextValue: string) => {
-      value = nextValue;
-    }),
-  };
-}
-
 describe("useMapPersistence", () => {
   beforeEach(() => {
     jest.useFakeTimers();
@@ -103,23 +95,24 @@ describe("useMapPersistence", () => {
 
   describe("初期復元", () => {
     it("保存値がない場合は現在の空マップを維持して自動保存しない", () => {
-      const storage = storageDouble(null);
+      const storage = createTestStorageSession({ initialJson: null });
       const replaceMap = jest.fn();
 
       renderHook(() => useMapPersistence({
         nodes: [],
         layoutMode: "manual",
         replaceMap,
-        storage,
+        storageSession: storage.session,
+        mapName: "旅行",
       }));
       act(() => jest.advanceTimersByTime(300));
 
       expect(replaceMap).not.toHaveBeenCalled();
-      expect(storage.setItem).not.toHaveBeenCalled();
+      expect(storage.writes).toEqual([]);
     });
 
     it("検証済みの保存値を一度だけ復元する", () => {
-      const storage = storageDouble(storedMapJson);
+      const storage = createTestStorageSession({ initialJson: storedMapJson });
       const replaceMap = jest.fn();
       const wrapper = ({ children }: { children: ReactNode }) => (
         <StrictMode>{children}</StrictMode>
@@ -129,7 +122,8 @@ describe("useMapPersistence", () => {
         nodes: [],
         layoutMode: "manual",
         replaceMap,
-        storage,
+        storageSession: storage.session,
+        mapName: "旅行",
       }), { wrapper });
 
       expect(replaceMap).toHaveBeenCalledTimes(1);
@@ -149,16 +143,17 @@ describe("useMapPersistence", () => {
     });
 
     it("壊れた保存値を空マップで上書きしない", () => {
-      const storage = storageDouble("{broken");
+      const storage = createTestStorageSession({ initialJson: "{broken" });
       const { result } = renderHook(() => useMapPersistence({
         nodes: [],
         layoutMode: "manual",
         replaceMap: jest.fn(),
-        storage,
+        storageSession: storage.session,
+        mapName: "旅行",
       }));
       act(() => jest.advanceTimersByTime(300));
 
-      expect(storage.setItem).not.toHaveBeenCalled();
+      expect(storage.writes).toEqual([]);
       expect(result.current.notice).toEqual({
         kind: "warning",
         message: "保存データを復元できませんでした。空のマップで開始します。",
@@ -166,55 +161,52 @@ describe("useMapPersistence", () => {
     });
 
     it("Storage読み取り例外を警告へ変換して現在状態を維持する", () => {
-      const storage = {
-        getItem: jest.fn(() => {
-          throw new DOMException("blocked", "SecurityError");
-        }),
-        setItem: jest.fn(),
-      };
+      const storage = createTestStorageSession({
+        readError: "ブラウザの保存データを読み取れませんでした。",
+      });
       const replaceMap = jest.fn();
       const { result } = renderHook(() => useMapPersistence({
         nodes: [node("現在")],
         layoutMode: "manual",
         replaceMap,
-        storage,
+        storageSession: storage.session,
+        mapName: "旅行",
       }));
 
       expect(replaceMap).not.toHaveBeenCalled();
       expect(result.current.notice?.kind).toBe("warning");
-      expect(storage.setItem).not.toHaveBeenCalled();
+      expect(storage.writes).toEqual([]);
     });
 
-    it("localStorageプロパティ取得例外をeffect外へ漏らさない", () => {
-      const descriptor = Object.getOwnPropertyDescriptor(window, "localStorage");
-      Object.defineProperty(window, "localStorage", {
-        configurable: true,
-        get() {
-          throw new DOMException("blocked", "SecurityError");
-        },
-      });
+    it("storageSessionのreadBodyの内容を復元する", () => {
+      const storage = createTestStorageSession({ initialJson: mapBJson });
+      const replaceMap = jest.fn();
 
-      try {
-        const { result } = renderHook(() => useMapPersistence({
-          nodes: [],
-          layoutMode: "manual",
-          replaceMap: jest.fn(),
-        }));
-        expect(result.current.notice?.kind).toBe("warning");
-      } finally {
-        if (descriptor) Object.defineProperty(window, "localStorage", descriptor);
-      }
+      renderHook(() => useMapPersistence({
+        nodes: [],
+        layoutMode: "manual",
+        replaceMap,
+        storageSession: storage.session,
+        mapName: "旅行",
+      }));
+
+      expect(replaceMap).toHaveBeenCalledTimes(1);
+      expect(replaceMap).toHaveBeenCalledWith({
+        layoutMode: "manual",
+        nodes: [node("B")],
+      });
     });
 
     it("V1復元済みスナップショットを300ms後にV2で書き戻す", () => {
-      const storage = storageDouble(storedMapJson);
+      const storage = createTestStorageSession({ initialJson: storedMapJson });
 
       const { rerender } = renderHook(
         ({ nodes }) => useMapPersistence({
           nodes,
           layoutMode: nodes.length === 0 ? "manual" : "auto",
           replaceMap: jest.fn(),
-          storage,
+          storageSession: storage.session,
+          mapName: "旅行",
         }),
         { initialProps: { nodes: [] as Node[] } },
       );
@@ -230,9 +222,7 @@ describe("useMapPersistence", () => {
       }] });
       act(() => jest.advanceTimersByTime(300));
 
-      expect(storage.setItem).toHaveBeenCalledWith(
-        "draw-my-map.map.v1",
-        `{
+      expect(storage.writes).toEqual([`{
   "version": 3,
   "layoutMode": "auto",
   "nodes": [
@@ -247,20 +237,20 @@ describe("useMapPersistence", () => {
       "importance": "medium"
     }
   ]
-}\n`,
-      );
+}\n`]);
     });
   });
 
   describe("自動保存", () => {
     it("連続変更から300ms後に最新スナップショットだけを保存する", () => {
-      const storage = storageDouble(null);
+      const storage = createTestStorageSession({ initialJson: null });
       const { rerender } = renderHook(
         ({ label }) => useMapPersistence({
           nodes: [node(label)],
           layoutMode: "manual",
           replaceMap: jest.fn(),
-          storage,
+          storageSession: storage.session,
+          mapName: "旅行",
         }),
         { initialProps: { label: "A" } },
       );
@@ -269,24 +259,21 @@ describe("useMapPersistence", () => {
       act(() => jest.advanceTimersByTime(200));
       rerender({ label: "C" });
       act(() => jest.advanceTimersByTime(299));
-      expect(storage.setItem).not.toHaveBeenCalled();
+      expect(storage.writes).toEqual([]);
 
       act(() => jest.advanceTimersByTime(1));
-      expect(storage.setItem).toHaveBeenCalledTimes(1);
-      expect(storage.setItem).toHaveBeenCalledWith(
-        "draw-my-map.map.v1",
-        mapCJson,
-      );
+      expect(storage.writes).toEqual([mapCJson]);
     });
 
     it("unmount時に保留中の保存を破棄する", () => {
-      const storage = storageDouble(null);
+      const storage = createTestStorageSession({ initialJson: null });
       const { rerender, unmount } = renderHook(
         ({ label }) => useMapPersistence({
           nodes: [node(label)],
           layoutMode: "manual",
           replaceMap: jest.fn(),
-          storage,
+          storageSession: storage.session,
+          mapName: "旅行",
         }),
         { initialProps: { label: "A" } },
       );
@@ -295,17 +282,18 @@ describe("useMapPersistence", () => {
       unmount();
       act(() => jest.advanceTimersByTime(300));
 
-      expect(storage.setItem).not.toHaveBeenCalled();
+      expect(storage.writes).toEqual([]);
     });
 
     it("AからBを保存後にAへ戻した変更も保存する", () => {
-      const storage = storageDouble(null);
+      const storage = createTestStorageSession({ initialJson: null });
       const { rerender } = renderHook(
         ({ label }) => useMapPersistence({
           nodes: [node(label)],
           layoutMode: "manual",
           replaceMap: jest.fn(),
-          storage,
+          storageSession: storage.session,
+          mapName: "旅行",
         }),
         { initialProps: { label: "A" } },
       );
@@ -315,31 +303,19 @@ describe("useMapPersistence", () => {
       rerender({ label: "A" });
       act(() => jest.advanceTimersByTime(300));
 
-      expect(storage.setItem).toHaveBeenNthCalledWith(
-        1,
-        "draw-my-map.map.v1",
-        mapBJson,
-      );
-      expect(storage.setItem).toHaveBeenNthCalledWith(
-        2,
-        "draw-my-map.map.v1",
-        mapAJson,
-      );
+      expect(storage.writes).toEqual([mapBJson, mapAJson]);
     });
 
     it("保存失敗を通知し同じ内容への再変更で再試行する", () => {
-      const setItem = jest.fn()
-        .mockImplementationOnce(() => {
-          throw new DOMException("full", "QuotaExceededError");
-        })
-        .mockImplementation(() => undefined);
-      const storage = { getItem: jest.fn(() => null), setItem };
+      const storage = createTestStorageSession({ initialJson: null });
+      storage.setWriteOutcome("failed");
       const { result, rerender } = renderHook(
         ({ label }) => useMapPersistence({
           nodes: [node(label)],
           layoutMode: "manual",
           replaceMap: jest.fn(),
-          storage,
+          storageSession: storage.session,
+          mapName: "旅行",
         }),
         { initialProps: { label: "A" } },
       );
@@ -348,15 +324,84 @@ describe("useMapPersistence", () => {
       act(() => jest.advanceTimersByTime(300));
       expect(result.current.notice).toEqual({
         kind: "error",
-        message: "ブラウザへ自動保存できませんでした。",
+        message: AUTO_SAVE_FAILURE_MESSAGE,
       });
+      expect(storage.writes).toEqual([]);
 
+      storage.setWriteOutcome("saved");
       rerender({ label: "A" });
       rerender({ label: "B" });
       act(() => jest.advanceTimersByTime(300));
 
-      expect(setItem).toHaveBeenCalledTimes(2);
-      expect(setItem).toHaveBeenLastCalledWith("draw-my-map.map.v1", mapBJson);
+      expect(storage.writes).toEqual([mapBJson]);
+    });
+  });
+
+  describe("保存待ちの flush", () => {
+    it("flush の保存に成功したら自動保存の失敗の通知を消す", () => {
+      const storage = createTestStorageSession({ initialJson: null });
+      storage.setWriteOutcome("failed");
+      const { result, rerender } = renderHook(
+        ({ label }) => useMapPersistence({
+          nodes: [node(label)],
+          layoutMode: "manual",
+          replaceMap: jest.fn(),
+          storageSession: storage.session,
+          mapName: "旅行",
+        }),
+        { initialProps: { label: "A" } },
+      );
+
+      rerender({ label: "B" });
+      act(() => jest.advanceTimersByTime(300));
+      expect(result.current.notice).toEqual({
+        kind: "error",
+        message: AUTO_SAVE_FAILURE_MESSAGE,
+      });
+
+      storage.setWriteOutcome("saved");
+      let flushed: unknown;
+      act(() => {
+        flushed = storage.callRegisteredFlush();
+      });
+
+      expect(flushed).toEqual({ status: "saved" });
+      expect(storage.writes).toEqual([mapBJson]);
+      expect(result.current.notice).toBeNull();
+    });
+
+    it("flush の保存に成功しても JSON 読み込みの通知は残す", async () => {
+      const storage = createTestStorageSession({ initialJson: null });
+      const readFile = jest.fn().mockResolvedValue({
+        ok: true,
+        value: mapAJson,
+      });
+      const { result } = renderHook(() => useMapPersistence({
+        nodes: [node("A")],
+        layoutMode: "manual",
+        replaceMap: jest.fn(),
+        storageSession: storage.session,
+        mapName: "旅行",
+        readFile,
+      }));
+
+      await act(async () => result.current.importJsonFile(new File([], "map.json")));
+      expect(result.current.notice).toEqual({
+        kind: "status",
+        message: "マップを読み込みました。",
+      });
+
+      let flushed: unknown;
+      act(() => {
+        flushed = storage.callRegisteredFlush();
+      });
+
+      expect(flushed).toEqual({ status: "saved" });
+      expect(storage.writes).toEqual([mapAJson]);
+      expect(result.current.notice).toEqual({
+        kind: "status",
+        message: "マップを読み込みました。",
+      });
     });
   });
 
@@ -367,13 +412,14 @@ describe("useMapPersistence", () => {
         nodes: [node("A")],
         layoutMode: "manual",
         replaceMap: jest.fn(),
-        storage: storageDouble(null),
+        storageSession: createTestStorageSession().session,
+        mapName: "旅行",
         downloadJson,
       }));
 
       act(() => result.current.exportJson());
 
-      expect(downloadJson).toHaveBeenCalledWith(mapAJson);
+      expect(downloadJson).toHaveBeenCalledWith(mapAJson, "旅行");
       expect(result.current.notice).toEqual({
         kind: "status",
         message: "JSONファイルを書き出しました。",
@@ -388,7 +434,8 @@ describe("useMapPersistence", () => {
         nodes: [],
         layoutMode: "manual",
         replaceMap: jest.fn(),
-        storage: storageDouble(null),
+        storageSession: createTestStorageSession().session,
+        mapName: "旅行",
         downloadJson,
       }));
 
@@ -411,7 +458,8 @@ describe("useMapPersistence", () => {
         nodes: [node("現在")],
         layoutMode: "manual",
         replaceMap,
-        storage: storageDouble(null),
+        storageSession: createTestStorageSession().session,
+        mapName: "旅行",
         readFile,
       }));
 
@@ -438,7 +486,7 @@ describe("useMapPersistence", () => {
     });
 
     it("現在と同じ内容のインポートもブラウザ保存へ反映する", async () => {
-      const storage = storageDouble(null);
+      const storage = createTestStorageSession({ initialJson: null });
       const readFile = jest.fn().mockResolvedValue({
         ok: true,
         value: mapAJson,
@@ -447,17 +495,15 @@ describe("useMapPersistence", () => {
         nodes: [node("A")],
         layoutMode: "manual",
         replaceMap: jest.fn(),
-        storage,
+        storageSession: storage.session,
+        mapName: "旅行",
         readFile,
       }));
 
       await act(async () => result.current.importJsonFile(new File([], "map.json")));
       act(() => jest.advanceTimersByTime(300));
 
-      expect(storage.setItem).toHaveBeenCalledWith(
-        "draw-my-map.map.v1",
-        mapAJson,
-      );
+      expect(storage.writes).toEqual([mapAJson]);
     });
 
     it("ファイル読み取り失敗では現在のマップを変更しない", async () => {
@@ -470,7 +516,8 @@ describe("useMapPersistence", () => {
         nodes: [node("現在")],
         layoutMode: "manual",
         replaceMap,
-        storage: storageDouble(null),
+        storageSession: createTestStorageSession().session,
+        mapName: "旅行",
         readFile,
       }));
 
@@ -490,7 +537,8 @@ describe("useMapPersistence", () => {
         nodes: [node("現在")],
         layoutMode: "manual",
         replaceMap,
-        storage: storageDouble(null),
+        storageSession: createTestStorageSession().session,
+        mapName: "旅行",
         readFile,
       }));
 
@@ -513,7 +561,8 @@ describe("useMapPersistence", () => {
         nodes: [node("現在")],
         layoutMode: "manual",
         replaceMap,
-        storage: storageDouble(null),
+        storageSession: createTestStorageSession().session,
+        mapName: "旅行",
         readFile,
       }));
 

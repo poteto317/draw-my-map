@@ -1,5 +1,6 @@
 import { renderHook } from "@testing-library/react";
 import { useMapStorageRestoration } from "@/hooks/useMapStorageRestoration";
+import { createTestStorageSession } from "@/testing/createTestStorageSession";
 
 const emptyMapJson = `{
   "version": 2,
@@ -30,7 +31,7 @@ describe("useMapStorageRestoration", () => {
       currentSnapshot: emptyMapJson,
       replaceMap,
       publishNotice: jest.fn(),
-      storage: { getItem: jest.fn(() => legacyMapJson) },
+      readBody: createTestStorageSession({ initialJson: legacyMapJson }).session.readBody,
     }));
 
     expect(result.current).toEqual({
@@ -50,9 +51,7 @@ describe("useMapStorageRestoration", () => {
       currentSnapshot: emptyMapJson,
       replaceMap,
       publishNotice,
-      storage: {
-        getItem: jest.fn(() => "{broken"),
-      },
+      readBody: createTestStorageSession({ initialJson: "{broken" }).session.readBody,
     }));
 
     expect(result.current).toEqual({
@@ -64,5 +63,47 @@ describe("useMapStorageRestoration", () => {
       kind: "warning",
       message: "保存データを復元できませんでした。空のマップで開始します。",
     });
+  });
+
+  it("保存データを読み取れないときは現在snapshotを基準にして警告する", () => {
+    const publishNotice = jest.fn();
+    const replaceMap = jest.fn();
+    const { result } = renderHook(() => useMapStorageRestoration({
+      currentSnapshot: emptyMapJson,
+      replaceMap,
+      publishNotice,
+      readBody: createTestStorageSession({
+        readError: "ブラウザの保存データを読み取れませんでした。",
+      }).session.readBody,
+    }));
+
+    expect(result.current).toEqual({
+      hydrated: true,
+      initialPersistedSnapshot: emptyMapJson,
+    });
+    expect(replaceMap).not.toHaveBeenCalled();
+    expect(publishNotice).toHaveBeenCalledTimes(1);
+    expect(publishNotice).toHaveBeenCalledWith({
+      kind: "warning",
+      message: "保存データを復元できませんでした。空のマップで開始します。",
+    });
+  });
+
+  it("保存データが無いときは通知せず現在snapshotを基準にする", () => {
+    const publishNotice = jest.fn();
+    const replaceMap = jest.fn();
+    const { result } = renderHook(() => useMapStorageRestoration({
+      currentSnapshot: emptyMapJson,
+      replaceMap,
+      publishNotice,
+      readBody: createTestStorageSession({ initialJson: null }).session.readBody,
+    }));
+
+    expect(result.current).toEqual({
+      hydrated: true,
+      initialPersistedSnapshot: emptyMapJson,
+    });
+    expect(replaceMap).not.toHaveBeenCalled();
+    expect(publishNotice).not.toHaveBeenCalled();
   });
 });

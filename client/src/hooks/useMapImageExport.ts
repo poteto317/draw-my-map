@@ -13,6 +13,7 @@ import type { OperationNotice } from "@/types/operationNotice";
 
 type UseMapImageExportOptions = {
   nodes: readonly Node[];
+  mapName: string;
   createSvgExport?: CreateSvgExport;
   downloadSvg?: DownloadImage;
   rasterizePng?: RasterizePng;
@@ -28,6 +29,7 @@ type UseMapImageExportResult = {
 
 export function useMapImageExport({
   nodes,
+  mapName,
   createSvgExport,
   downloadSvg,
   rasterizePng,
@@ -36,12 +38,14 @@ export function useMapImageExport({
   const [notice, setNotice] = useState<OperationNotice | null>(null);
   const exportSvg = useMapSvgExport({
     nodes,
+    mapName,
     publishNotice: setNotice,
     createSvgExport,
     downloadSvg,
   });
   const { exportPng, isExportingPng } = useMapPngExport({
     nodes,
+    mapName,
     publishNotice: setNotice,
     createSvgExport,
     rasterizePng,

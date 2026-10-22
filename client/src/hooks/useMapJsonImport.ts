@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { parseMapDocumentJson, serializeMapDocument } from "@/domain/persistence/mapDocumentCodec";
 import { readMapJsonFile } from "@/services/persistence/mapJsonFileReader";
 import type { MapDocumentResult } from "@/types/mapDocument";
@@ -23,6 +23,15 @@ export function useMapJsonImport({
   readFile = readMapJsonFile,
 }: UseMapJsonImportOptions): (file: File) => Promise<void> {
   const latestImportRevisionRef = useRef(0);
+  const mountedRef = useRef(false);
+
+  // StrictModeの二重実行でも、再セットアップで true に戻す
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   return useCallback(async (file: File) => {
     const importRevision = latestImportRevisionRef.current + 1;
@@ -31,6 +40,7 @@ export function useMapJsonImport({
     try {
       read = await readFile(file);
     } catch {
+      if (!mountedRef.current) return;
       if (importRevision !== latestImportRevisionRef.current) return;
       publishNotice({
         kind: "error",
@@ -39,6 +49,7 @@ export function useMapJsonImport({
       return;
     }
 
+    if (!mountedRef.current) return;
     if (importRevision !== latestImportRevisionRef.current) return;
 
     if (!read.ok) {

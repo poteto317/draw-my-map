@@ -20,7 +20,7 @@ describe("useMapSvgExport", () => {
     const publishNotice = jest.fn();
     const downloadSvg = jest.fn();
     const { result } = renderHook(() => useMapSvgExport({
-      nodes: [], publishNotice, downloadSvg,
+      nodes: [], mapName: "旅行", publishNotice, downloadSvg,
     }));
 
     act(() => result.current());
@@ -36,7 +36,7 @@ describe("useMapSvgExport", () => {
     const createSvgExport = jest.fn(() => svgExport);
     const downloadSvg = jest.fn();
     const { result } = renderHook(() => useMapSvgExport({
-      nodes, publishNotice, createSvgExport, downloadSvg,
+      nodes, mapName: "旅行", publishNotice, createSvgExport, downloadSvg,
     }));
 
     act(() => result.current());
@@ -46,7 +46,7 @@ describe("useMapSvgExport", () => {
     const [blob, fileName] = downloadSvg.mock.calls[0] as [Blob, string];
     expect(blob).toBeInstanceOf(Blob);
     expect(blob.type).toBe("image/svg+xml;charset=utf-8");
-    expect(fileName).toMatch(/^draw-my-map-\d{8}-\d{6}\.svg$/);
+    expect(fileName).toMatch(/^旅行-\d{8}-\d{6}\.svg$/);
     const text = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onerror = () => reject(reader.error);
@@ -67,6 +67,7 @@ describe("useMapSvgExport", () => {
     const publishNotice = jest.fn();
     const { result } = renderHook(() => useMapSvgExport({
       nodes,
+      mapName: "旅行",
       publishNotice,
       createSvgExport: () => {
         if (failure === "create") throw new Error("create failed");

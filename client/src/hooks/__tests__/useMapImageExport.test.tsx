@@ -14,7 +14,7 @@ const svgExport = {
 
 describe("useMapImageExport", () => {
   it("公開戻り値の形と初期状態を維持する", () => {
-    const { result } = renderHook(() => useMapImageExport({ nodes }));
+    const { result } = renderHook(() => useMapImageExport({ nodes, mapName: "旅行" }));
 
     expect(result.current).toEqual({
       exportSvg: expect.any(Function),
@@ -31,7 +31,7 @@ describe("useMapImageExport", () => {
     const rasterizePng = jest.fn(async () => pngBlob);
     const downloadPng = jest.fn();
     const { result } = renderHook(() => useMapImageExport({
-      nodes, createSvgExport, downloadSvg, rasterizePng, downloadPng,
+      nodes, mapName: "旅行", createSvgExport, downloadSvg, rasterizePng, downloadPng,
     }));
 
     act(() => result.current.exportSvg());
@@ -50,7 +50,12 @@ describe("useMapImageExport", () => {
     expect(rasterizePng).toHaveBeenCalledWith(
       '<svg xmlns="http://www.w3.org/2000/svg" />', 184, 112,
     );
-    expect(downloadPng).toHaveBeenCalledWith(pngBlob, expect.any(String));
+    expect(downloadSvg).toHaveBeenCalledWith(
+      expect.any(Blob), expect.stringMatching(/^旅行-\d{8}-\d{6}\.svg$/),
+    );
+    expect(downloadPng).toHaveBeenCalledWith(
+      pngBlob, expect.stringMatching(/^旅行-\d{8}-\d{6}\.png$/),
+    );
     expect(downloadSvg).toHaveBeenCalledTimes(1);
     expect(result.current.notice).toEqual({
       kind: "status", message: "PNGファイルを書き出しました。",
@@ -68,6 +73,7 @@ describe("useMapImageExport", () => {
     const pending = new Promise<Blob>((resolvePromise) => { resolve = resolvePromise; });
     const { result } = renderHook(() => useMapImageExport({
       nodes,
+      mapName: "旅行",
       createSvgExport: () => svgExport,
       downloadSvg: () => {},
       rasterizePng: () => pending,
