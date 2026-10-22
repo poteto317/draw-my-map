@@ -37,8 +37,12 @@
 
 ## 実装完了後のブランチの扱い（マージ前の扱い。マージ後は「PRマージ後の後処理」に従う）
 
-- 作業は`.worktrees/<branch>`のgit worktreeで行い、全タスクの完了・最終レビュー・`npm run verify`成功の後は、ブランチをそのまま保持する（`superpowers:finishing-a-development-branch`の選択肢3）。
-- ユーザーが明示的に指示しない限り、mainへのマージ、push、Pull Request作成、worktreeやブランチの削除は行わない。完了報告では、ブランチ名・worktreeのパス・未決事項だけを伝え、選択肢の確認はしない。
+- 作業は`.worktrees/<branch>`のgit worktreeで行う。
+- dev-flow-kitの開発ループ（下の「開発フロー」）で進める場合は、ループの起動（`/feature`、`/dev-flow --resume`、自動連結による各コマンドの起動）をコミット・push・Pull Request作成・mainへのマージの指示とみなし、確認を求めずに各コマンドの手順どおり最後まで進める。
+  - マージは`pr-merge`の手順で行い、Rebaseマージにする。`pr-review-loop`が「対応すべき」0件の周回を3周連続で終えていること、未解決のレビュースレッドが無いこと、失敗しているCIチェックが無いことを確かめてから行う。満たさない場合はマージせずに停止して報告する。ブランチ保護を迂回するオプション（`--admin`など）は使わない。
+  - mainは`リポジトリルート`（メインのチェックアウト）で使われているため、worktreeの中でmainへ切り替えない。マージ後は、メインのチェックアウトで`git pull --ff-only`を実行して最新にする。
+  - マージ後は、続けて「PRマージ後の後処理」を行う。
+- 開発ループの外で作業する場合は、ユーザーが明示的に指示しない限り、mainへのマージ、push、Pull Request作成、worktreeやブランチの削除は行わない。全タスクの完了・最終レビュー・`npm run verify`成功の後は、ブランチをそのまま保持し（`superpowers:finishing-a-development-branch`の選択肢3）、完了報告ではブランチ名・worktreeのパス・未決事項だけを伝え、選択肢の確認はしない。
 
 ## Pull Requestレビュー
 
@@ -64,7 +68,8 @@ PRのマージ後は次の順で後処理を行う。
 機能開発は、dev-flow-kit（https://github.com/poteto317/dev-flow-kit 、ローカルの clone は `$DEV_FLOW_KIT`）の開発ループで進める。
 
 - **起動方法**: Claude Code で `/feature [機能の説明]` を実行する。機能の説明を省くと、ロードマップから次の未完了項目を選ぶ。以降は確認が必要なときだけ止まり、次の順に自動で進む。
-  `feature` → `refactor-srp` → `review-loop` → `commit-ja` → `pr-ja` → `pr-review-loop` → `review-digest` → `lessons-push`
+  `feature` → `refactor-srp` → `review-loop` → `commit-ja` → `pr-ja` → `pr-review-loop` → `pr-merge` → `review-digest` → `lessons-push`
+- **マージと後処理**: `pr-merge`でPRをマージした後、`review-digest`へ進む前に「PRマージ後の後処理」（ROADMAPの照合、メインのチェックアウトでの検証、マージ済みworktreeとローカルブランチの整理）を行う。リモートのブランチは削除しない。
 - **依頼の言い換え**: 「次の機能を実装して」「ロードマップを進めて」「開発ループを回して」などの依頼は、`/feature` の起動として扱い、Skill ツールで `dev-flow-kit:feature` を起動する。途中のステップだけを頼まれた場合（例: 「SRP リファクタリングして」「レビューループを回して」「PR を作って」）は、該当するコマンド（`dev-flow-kit:refactor-srp` など）を起動する。その 1 ステップだけでよい場合は `--only` を付ける。
 - **再開**: 中断したフローは `/dev-flow --resume` で再開する。状態はこのリポジトリの `.claude/dev-flow/` に保存される（git 管理外）。
 - **実装前の確認**: `$DEV_FLOW_KIT/lessons/review-lessons.md` の「優先度 A のチェックリスト」を確認し、今回の変更に関係する項目は本文も読む。
