@@ -26,7 +26,11 @@ export function MapHistoryControls({
     const activeElement = document.activeElement;
     if (activeElement !== focusedButton && activeElement !== document.body && activeElement !== null) return;
     const otherButton = focusedButton === undoButtonRef.current ? redoButtonRef.current : undoButtonRef.current;
-    if (!otherButton || otherButton.disabled) return;
+    if (!otherButton || otherButton.disabled) {
+      // 移せる先が無いなら記録を捨てる。残すと、後で別の理由でボタンが有効になったときに誤ってフォーカスを奪う
+      focusedButtonRef.current = null;
+      return;
+    }
     // 押したボタンが無効になってもキーボードのフォーカスを失わないよう、もう一方の有効なボタンへ移す
     otherButton.focus();
   }, [canUndo, canRedo]);

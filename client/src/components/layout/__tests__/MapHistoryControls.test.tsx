@@ -117,6 +117,37 @@ describe("MapHistoryControls", () => {
       expect(screen.getByRole("button", { name: "やり直す" })).not.toHaveFocus();
     });
 
+    it("もう一方も無効ならフォーカスを移さない", () => {
+      const { rerender } = renderControls(true, false);
+      screen.getByRole("button", { name: "元に戻す" }).focus();
+      // 無効のボタンにはfocus()しても移らないので、移そうとしたこと自体をspyで確かめる
+      const focusSpy = jest.spyOn(HTMLElement.prototype, "focus");
+      try {
+        rerender(<MapHistoryControls canUndo={false} canRedo={false} onUndo={jest.fn()} onRedo={jest.fn()} />);
+        expect(focusSpy).not.toHaveBeenCalled();
+      } finally {
+        focusSpy.mockRestore();
+      }
+    });
+
+    it("両方が無効になった後は記録を捨て、後で片方が有効になってもフォーカスを移さない", () => {
+      const { rerender } = renderControls(true, false);
+      screen.getByRole("button", { name: "元に戻す" }).focus();
+      rerender(<MapHistoryControls canUndo={false} canRedo={false} onUndo={jest.fn()} onRedo={jest.fn()} />);
+      // jsdomは無効化したボタンにフォーカスを残すため、別の要素を経由してbodyへ戻す
+      const outside = document.createElement("input");
+      document.body.appendChild(outside);
+      outside.focus();
+      outside.blur();
+      outside.remove();
+      expect(document.body).toHaveFocus();
+
+      rerender(<MapHistoryControls canUndo={false} canRedo onUndo={jest.fn()} onRedo={jest.fn()} />);
+
+      expect(document.body).toHaveFocus();
+      expect(screen.getByRole("button", { name: "やり直す" })).not.toHaveFocus();
+    });
+
     it("フォーカスがボタンの外にあるときは、フォーカスを移さない", () => {
       const { rerender } = render(
         <>
