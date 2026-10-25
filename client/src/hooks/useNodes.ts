@@ -30,6 +30,11 @@ import {
   type SubtreeClipboardData,
   type SubtreeClipboardResult,
 } from "@/domain/clipboard/subtreeClipboardCodec";
+import {
+  reorderSiblingByRequest,
+  type ReorderSiblingResult,
+  type SiblingReorderRequest,
+} from "@/domain/nodes/nodeSiblingOrder";
 import { replaceNodeImportance } from "@/domain/nodes/nodeImportanceUpdate";
 import { clearNodeIllustration, replaceNodeIllustration } from "@/domain/nodes/nodeIllustrationUpdate";
 import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
@@ -66,6 +71,12 @@ type UseNodesReturn = {
   pasteSubtree: (data: SubtreeClipboardData) => number | null;
   // 箇条書きの項目を森として1回の操作で追加し、成功時は最初の根を選択する。失敗時は理由を返し何も変えない
   insertForest: (items: readonly ForestItem[], target: ForestInsertionTarget) => InsertForestResult;
+  // 見えている兄弟の中で並べ替える。applyTreeChange を1回だけ呼び、選択と documentRevision は変えない。失敗時は何も変えない
+  reorderSibling: (
+    nodeId: number,
+    request: SiblingReorderRequest,
+    visibleNodeIds: ReadonlySet<number>,
+  ) => ReorderSiblingResult;
   deleteNode: (id: number) => void;
   setLayoutMode: (mode: NodeLayoutMode) => void;
   replaceMap: (state: NodeMapState) => void;
@@ -270,6 +281,31 @@ export function useNodes(): UseNodesReturn {
     return { ok: true, rootId, count: items.length };
   }, [applySubtreeInsertion]);
 
+  // 「1つ上・1つ下」は描画時の配列ではなく、確定時点の最新の配列から挿入先を解決する。
+  // 並べ替えは編集中の折りたたみや通知を保つため、documentRevision を上げない
+  const reorderSibling = useCallback((
+    nodeId: number,
+    request: SiblingReorderRequest,
+    visibleNodeIds: ReadonlySet<number>,
+  ): ReorderSiblingResult => {
+    let outcome: ReorderSiblingResult | null = null;
+    const applied = applyTreeChange((currentNodes, mode) => {
+      const reordered = reorderSiblingByRequest(currentNodes, nodeId, request, visibleNodeIds, mode);
+      if (!reordered.ok) {
+        outcome = reordered;
+        return null;
+      }
+      const { nodes: reorderedNodes, ...position } = reordered;
+      outcome = position;
+      return reorderedNodes;
+    });
+    // 候補を作れた後に失敗するのは、全体の自動配置だけ
+    const settled = outcome as ReorderSiblingResult | null;
+    if (applied && settled?.ok) return settled;
+    if (settled === null || settled.ok) return { ok: false, reason: "placement-failed" };
+    return settled;
+  }, [applyTreeChange]);
+
   const deleteNode = useCallback((id: number) => {
     let subtreeIds = new Set<number>();
     const applied = applyTreeChange((currentNodes) => {
@@ -302,6 +338,7 @@ export function useNodes(): UseNodesReturn {
     copySubtree,
     pasteSubtree,
     insertForest,
+    reorderSibling,
     deleteNode,
     setLayoutMode,
     replaceMap,
