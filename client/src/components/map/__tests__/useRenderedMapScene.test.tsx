@@ -3,6 +3,7 @@ import { INITIAL_VIEWPORT, type Viewport } from "@/components/map/mapViewport";
 import { applyViewportTransform } from "@/components/map/pixi/applyViewportTransform";
 import { renderMapScene, type RenderMapSceneOptions } from "@/components/map/pixi/renderMapScene";
 import type { PixiRuntime } from "@/components/map/pixi/pixiTypes";
+import type { SiblingReorderIndicator } from "@/components/map/siblingReorderDropSlot";
 import { useRenderedMapScene } from "@/components/map/useRenderedMapScene";
 import { createTestNode } from "@/testing/createTestNode";
 import type { Texture } from "pixi.js";
@@ -34,6 +35,8 @@ function createOptions(
     selectedNodeId: null,
     editingNodeId: null,
     connectionTargetNodeId: null,
+    siblingReorderSourceNodeId: null,
+    siblingReorderIndicator: null,
     createNodePointerDownHandler,
     visibleNodeIds: new Set([1]),
   };
@@ -74,6 +77,8 @@ describe("useRenderedMapScene", () => {
         selectedNodeId: options.selectedNodeId,
         editingNodeId: options.editingNodeId,
         connectionTargetNodeId: options.connectionTargetNodeId,
+        siblingReorderSourceNodeId: options.siblingReorderSourceNodeId,
+        siblingReorderIndicator: options.siblingReorderIndicator,
         visibleNodeIds: options.visibleNodeIds,
         onNodePointerDown,
         viewport: INITIAL_VIEWPORT,
@@ -188,6 +193,59 @@ describe("useRenderedMapScene", () => {
       runtime.app,
       runtime.constructors,
       expect.objectContaining({ illustrationTextures: textures }),
+    );
+  });
+
+  it("挿入位置の線が変わるとsceneを再生成し、同じ値のままなら再生成しない", () => {
+    const viewportRef = { current: INITIAL_VIEWPORT };
+    const baseOptions = createOptions();
+    const indicator = { left: 10, right: 110, y: 200 };
+    const { rerender } = renderHook(
+      ({ siblingReorderIndicator }: { siblingReorderIndicator: SiblingReorderIndicator | null }) =>
+        useRenderedMapScene({
+          runtime,
+          options: { ...baseOptions, siblingReorderSourceNodeId: 1, siblingReorderIndicator },
+          viewport: INITIAL_VIEWPORT,
+          viewportRef,
+        }),
+      { initialProps: { siblingReorderIndicator: null as SiblingReorderIndicator | null } },
+    );
+
+    rerender({ siblingReorderIndicator: indicator });
+
+    expect(mockedRenderMapScene).toHaveBeenCalledTimes(2);
+    expect(mockedRenderMapScene).toHaveBeenLastCalledWith(
+      runtime.app,
+      runtime.constructors,
+      expect.objectContaining({ siblingReorderSourceNodeId: 1, siblingReorderIndicator: indicator }),
+    );
+
+    rerender({ siblingReorderIndicator: indicator });
+
+    expect(mockedRenderMapScene).toHaveBeenCalledTimes(2);
+  });
+
+  it("ドラッグ中のノードが変わるとsceneを再生成する", () => {
+    const viewportRef = { current: INITIAL_VIEWPORT };
+    const baseOptions = createOptions();
+    const { rerender } = renderHook(
+      ({ siblingReorderSourceNodeId }: { siblingReorderSourceNodeId: number | null }) =>
+        useRenderedMapScene({
+          runtime,
+          options: { ...baseOptions, siblingReorderSourceNodeId },
+          viewport: INITIAL_VIEWPORT,
+          viewportRef,
+        }),
+      { initialProps: { siblingReorderSourceNodeId: null as number | null } },
+    );
+
+    rerender({ siblingReorderSourceNodeId: 1 });
+
+    expect(mockedRenderMapScene).toHaveBeenCalledTimes(2);
+    expect(mockedRenderMapScene).toHaveBeenLastCalledWith(
+      runtime.app,
+      runtime.constructors,
+      expect.objectContaining({ siblingReorderSourceNodeId: 1 }),
     );
   });
 });

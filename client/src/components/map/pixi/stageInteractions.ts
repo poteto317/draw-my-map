@@ -2,15 +2,19 @@ import type { Viewport } from "@/components/map/mapViewport";
 import { createCanvasPanGesture } from "@/components/map/pixi/canvasPanGesture";
 import { createNodeConnectionGesture } from "@/components/map/pixi/nodeConnectionGesture";
 import { createNodeMoveGesture } from "@/components/map/pixi/nodeMoveGesture";
-import type { LatestValue } from "@/components/map/pixi/pointerGesture";
+import type { LatestValue, PointerGesture } from "@/components/map/pixi/pointerGesture";
 import { createPointerGestureSession } from "@/components/map/pixi/pointerGestureSession";
 import {
   hasFinitePointerCoordinates,
   toPointerSample,
 } from "@/components/map/pixi/pointerSample";
+import { createSiblingReorderGesture } from "@/components/map/pixi/siblingReorderGesture";
 import { createTouchGestureCoordinator } from "@/components/map/pixi/touchGestureCoordinator";
+import type { SiblingReorderPreview } from "@/components/map/siblingReorderDropSlot";
 import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
+import type { SiblingReorderRequest } from "@/domain/nodes/nodeSiblingOrder";
 import type { Node } from "@/types/node";
+import type { NodeLayoutMode } from "@/types/nodeLayout";
 import type { Container, FederatedPointerEvent } from "pixi.js";
 
 export type { LatestValue } from "@/components/map/pixi/pointerGesture";
@@ -25,6 +29,9 @@ type StageInteractionOptions = {
   onConnectNodesRef: LatestValue<(parentId: number, childId: number) => void>;
   onConnectionTargetChangeRef: LatestValue<(id: number | null) => void>;
   onViewportChangeRef: LatestValue<(viewport: Viewport) => void>;
+  layoutModeRef: LatestValue<NodeLayoutMode>;
+  onReorderSiblingRef: LatestValue<(nodeId: number, request: SiblingReorderRequest) => void>;
+  onSiblingReorderPreviewChangeRef: LatestValue<(preview: SiblingReorderPreview | null) => void>;
   dragThreshold?: number;
 };
 
@@ -44,10 +51,21 @@ export function createStageInteractions({
   onConnectNodesRef,
   onConnectionTargetChangeRef,
   onViewportChangeRef,
+  layoutModeRef,
+  onReorderSiblingRef,
+  onSiblingReorderPreviewChangeRef,
   dragThreshold = 4,
 }: StageInteractionOptions) {
   let activeBinding: StageBinding | null = null;
   const pointerGestures = createPointerGestureSession();
+  // 省略時は全件が見えている扱い（resolveEffectiveVisibleNodeIds と同じ意味）
+  const siblingReorderVisibleNodeIdsRef: LatestValue<ReadonlySet<number>> = visibleNodeIdsRef ?? {
+    get current() {
+      return new Set(nodesRef.current.map((node) => node.id));
+    },
+  };
+  // 最後に作った並べ替えのジェスチャー。進行中かどうかを pointerGestures の現在の lease と比べて判定する
+  let siblingReorderGesture: PointerGesture | null = null;
 
   const touchGestures = createTouchGestureCoordinator({
     viewportRef,
@@ -66,6 +84,11 @@ export function createStageInteractions({
   };
 
   const hasActiveGesture = () => pointerGestures.hasActive() || touchGestures.hasActivePinch();
+
+  const isSiblingReorderActive = () => {
+    const lease = pointerGestures.current();
+    return lease !== null && lease.gesture === siblingReorderGesture;
+  };
 
   const handleNodePointerDown = (
     bindingAtEntry: StageBinding,
@@ -99,15 +122,29 @@ export function createStageInteractions({
       return;
     }
 
-    const gesture = event.shiftKey
-      ? createNodeConnectionGesture({
+    let gesture: PointerGesture | null;
+    if (event.shiftKey) {
+      gesture = createNodeConnectionGesture({
         sourceNodeId: nodeId,
         nodesRef,
         visibleNodeIdsRef,
         onConnectNodesRef,
         onConnectionTargetChangeRef,
-      })
-      : createNodeMoveGesture({
+      });
+    } else if (layoutModeRef.current === "auto") {
+      gesture = createSiblingReorderGesture({
+        nodeId,
+        startSample: sample,
+        nodesRef,
+        visibleNodeIdsRef: siblingReorderVisibleNodeIdsRef,
+        layoutModeRef,
+        onReorderSiblingRef,
+        onSiblingReorderPreviewChangeRef,
+        dragThreshold,
+      });
+      siblingReorderGesture = gesture;
+    } else {
+      gesture = createNodeMoveGesture({
         nodeId,
         startSample: sample,
         nodesRef,
@@ -115,6 +152,7 @@ export function createStageInteractions({
         onBeginNodeMoveRef,
         dragThreshold,
       });
+    }
     if (!gesture) return;
 
     const nextGesture = pointerGestures.start(sample.pointerId, gesture);
@@ -247,6 +285,7 @@ export function createStageInteractions({
     createNodePointerDownHandler,
     cancelActiveGesture: cancelAllInteractions,
     hasActiveGesture,
+    isSiblingReorderActive,
     activeNodeIds: () => pointerGestures.current()?.gesture.activeNodeIds?.() ?? [],
   };
 }

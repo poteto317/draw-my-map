@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { Graphics } from "pixi.js";
 import { MapStage } from "@/components/map/MapStage";
 import {
   lastWorldContainer,
@@ -52,6 +53,8 @@ const defaultProps = {
   onClipboardNotice: jest.fn(),
   shortcutsEnabled: true,
   dialogMouseClickedAtRef: { current: null },
+  layoutMode: "manual" as const,
+  onReorderSibling: jest.fn(),
 };
 
 const sampleNodes: Node[] = [
@@ -106,6 +109,8 @@ function KeyboardCreationHarness({ initiallySelected = true }: { initiallySelect
         documentRevision={documentRevision}
         shortcutsEnabled
         dialogMouseClickedAtRef={{ current: null }}
+        layoutMode="manual"
+        onReorderSibling={() => {}}
       />
       <output data-testid="node-state">{JSON.stringify(nodes)}</output>
       <output data-testid="selected-node-id">{selectedNodeId}</output>
@@ -160,6 +165,8 @@ function MouseConnectionHarness() {
         documentRevision={documentRevision}
         shortcutsEnabled
         dialogMouseClickedAtRef={{ current: null }}
+        layoutMode="manual"
+        onReorderSibling={() => {}}
       />
       <output data-testid="node-state">{JSON.stringify(nodes)}</output>
       <output data-testid="selected-node-id">{selectedNodeId}</output>
@@ -215,6 +222,8 @@ function SubtreeMoveHarness() {
         documentRevision={documentRevision}
         shortcutsEnabled
         dialogMouseClickedAtRef={{ current: null }}
+        layoutMode="manual"
+        onReorderSibling={() => {}}
       />
       <output data-testid="node-state">{JSON.stringify(nodes)}</output>
     </>
@@ -685,6 +694,66 @@ describe("MapStage boundary", () => {
     });
   });
 
+  describe("兄弟の順序のショートカット", () => {
+    it("Alt+↑で選択中のノードを1つ上へ移す要求を onReorderSibling へ渡し、既定動作を止める", async () => {
+      const onReorderSibling = jest.fn();
+      await renderReady(
+        <MapStage {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onReorderSibling={onReorderSibling} />,
+      );
+
+      const notCanceled = fireEvent.keyDown(document.body, { key: "ArrowUp", altKey: true });
+
+      expect(onReorderSibling).toHaveBeenCalledTimes(1);
+      expect(onReorderSibling).toHaveBeenCalledWith(1, { kind: "step", direction: "up" });
+      expect(notCanceled).toBe(false);
+    });
+
+    it("shortcutsEnabled が false なら Alt+↑ で onReorderSibling を呼ばない", async () => {
+      const onReorderSibling = jest.fn();
+      await renderReady(
+        <MapStage
+          {...defaultProps}
+          nodes={sampleNodes}
+          selectedNodeId={1}
+          shortcutsEnabled={false}
+          onReorderSibling={onReorderSibling}
+        />,
+      );
+
+      fireEvent.keyDown(document.body, { key: "ArrowUp", altKey: true });
+
+      expect(onReorderSibling).not.toHaveBeenCalled();
+    });
+
+    it("ラベル編集中は Alt+↑ で onReorderSibling を呼ばない", async () => {
+      const onReorderSibling = jest.fn();
+      const { getByTestId } = await renderReady(
+        <MapStage {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onReorderSibling={onReorderSibling} />,
+      );
+      const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+      mockStageBounds(container);
+      fireEvent.doubleClick(container, { clientX: 100, clientY: 60 });
+      const input = getByTestId("node-label-input");
+
+      fireEvent.keyDown(input, { key: "ArrowUp", altKey: true });
+      fireEvent.keyDown(document.body, { key: "ArrowUp", altKey: true });
+
+      expect(input).toBeInTheDocument();
+      expect(onReorderSibling).not.toHaveBeenCalled();
+    });
+
+    it("Alt+Shift+↑ では onReorderSibling を呼ばない", async () => {
+      const onReorderSibling = jest.fn();
+      await renderReady(
+        <MapStage {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onReorderSibling={onReorderSibling} />,
+      );
+
+      fireEvent.keyDown(document.body, { key: "ArrowUp", altKey: true, shiftKey: true });
+
+      expect(onReorderSibling).not.toHaveBeenCalled();
+    });
+  });
+
   it("preserves the current draft when the editing input is double-clicked", async () => {
     const { getByTestId } = await renderReady(
       <MapStage {...defaultProps} nodes={sampleNodes} />,
@@ -980,6 +1049,99 @@ describe("MapStage boundary", () => {
     expect(remainingChild).toMatchObject({
       parentId: rootBeforeDelete.id,
       y: rootBeforeDelete.y,
+    });
+  });
+
+  describe("自動配置のドラッグによる兄弟の並べ替え", () => {
+    beforeEach(() => {
+      let id = 0;
+      jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    });
+
+    function readNodes(getByTestId: (id: string) => HTMLElement): Node[] {
+      return JSON.parse(getByTestId("node-state").textContent ?? "[]") as Node[];
+    }
+
+    it("2つ目のルートを先頭のルートより上へドラッグすると、並びと縦位置が入れ替わる", async () => {
+      const { getByTestId } = await renderReady(<AutoLayoutMapStageHarness />);
+      const before = readNodes(getByTestId);
+      const firstRoot = before.find((node) => node.id === 1)!;
+      const secondRoot = before.find((node) => node.id === 2)!;
+      expect(before.map((node) => node.id)).toEqual([1, 2]);
+
+      const firstCenterY = firstRoot.y + firstRoot.height / 2;
+      act(() => {
+        mockNodePointerHandlers.at(-1)?.pointerdown?.(pointer(
+          secondRoot.x + secondRoot.width / 2,
+          secondRoot.y + secondRoot.height / 2,
+        ));
+        mockStageHandlers.pointermove?.(pointer(secondRoot.x + secondRoot.width / 2, firstCenterY - 10));
+        mockStageHandlers.pointerup?.(pointer(secondRoot.x + secondRoot.width / 2, firstCenterY - 10));
+      });
+
+      const after = readNodes(getByTestId);
+      expect(after.map((node) => node.id)).toEqual([2, 1]);
+      expect(after[0]).toMatchObject({ id: 2, x: firstRoot.x, y: firstRoot.y });
+    });
+
+    it("ドラッグの途中は挿入位置の線を描き、離した後の描画では線を描かない", async () => {
+      const { getByTestId } = await renderReady(<AutoLayoutMapStageHarness />);
+      const before = readNodes(getByTestId);
+      const firstRoot = before.find((node) => node.id === 1)!;
+      const secondRoot = before.find((node) => node.id === 2)!;
+      const pointerX = secondRoot.x + secondRoot.width / 2;
+      const dropY = firstRoot.y + firstRoot.height / 2 - 10;
+      const mockedGraphics = jest.mocked(Graphics);
+      const isIndicatorLine = (graphics: { fill: jest.Mock }) =>
+        graphics.fill.mock.calls.some(([style]) => style?.color === 0x2563eb);
+
+      act(() => {
+        mockNodePointerHandlers.at(-1)?.pointerdown?.(pointer(pointerX, secondRoot.y + secondRoot.height / 2));
+        mockStageHandlers.pointermove?.(pointer(pointerX, dropY));
+      });
+
+      const line = mockedGraphics.mock.results.at(-1)!.value as { fill: jest.Mock; rect: jest.Mock };
+      expect(line.fill).toHaveBeenCalledWith({ color: 0x2563eb });
+      expect(line.rect.mock.calls[0][3]).toBe(6);
+      const createdBeforeDrop = mockedGraphics.mock.results.length;
+
+      act(() => {
+        mockStageHandlers.pointerup?.(pointer(pointerX, dropY));
+      });
+
+      const createdAfterDrop = mockedGraphics.mock.results.slice(createdBeforeDrop);
+      expect(createdAfterDrop.length).toBeGreaterThan(0);
+      expect(createdAfterDrop.some(({ value }) => isIndicatorLine(value))).toBe(false);
+    });
+
+    it("ドラッグの途中のEscapeで中止し、離しても並びを変えない", async () => {
+      const { getByTestId } = await renderReady(<AutoLayoutMapStageHarness />);
+      const before = readNodes(getByTestId);
+      const firstRoot = before.find((node) => node.id === 1)!;
+      const secondRoot = before.find((node) => node.id === 2)!;
+      const pointerX = secondRoot.x + secondRoot.width / 2;
+      const dropY = firstRoot.y + firstRoot.height / 2 - 10;
+
+      act(() => {
+        mockNodePointerHandlers.at(-1)?.pointerdown?.(pointer(pointerX, secondRoot.y + secondRoot.height / 2));
+        mockStageHandlers.pointermove?.(pointer(pointerX, dropY));
+      });
+      let notCanceled = true;
+      act(() => {
+        notCanceled = fireEvent.keyDown(window, { key: "Escape" });
+      });
+      act(() => {
+        mockStageHandlers.pointerup?.(pointer(pointerX, dropY));
+      });
+
+      expect(notCanceled).toBe(false);
+      expect(readNodes(getByTestId)).toEqual(before);
+    });
+
+    it("ドラッグしていないときのEscapeはpreventDefaultしない", async () => {
+      await renderReady(<AutoLayoutMapStageHarness />);
+
+      expect(fireEvent.keyDown(window, { key: "Escape" })).toBe(true);
     });
   });
 });

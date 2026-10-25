@@ -69,6 +69,8 @@ function HistoryHarness({ apiRef, setup, visibleNodeIds }: HistoryHarnessProps) 
       documentRevision={api.documentRevision}
       shortcutsEnabled
       dialogMouseClickedAtRef={{ current: null }}
+      layoutMode="manual"
+      onReorderSibling={() => {}}
     />
   );
 }

@@ -24,6 +24,7 @@ function render(overrides: Partial<{
     selectedNodeId: overrides.selectedNodeId ?? null,
     editingNodeId: overrides.editingNodeId ?? null,
     connectionTargetNodeId: overrides.connectionTargetNodeId ?? null,
+    siblingReorderSourceNodeId: null,
     onNodePointerDown,
     visibleKeys: overrides.visibleKeys ?? new Set(["node:1"]),
   });
@@ -100,7 +101,7 @@ describe("renderMapNodes", () => {
     const harness = createPixiTestHarness();
     const targets = renderMapNodes(harness.app.stage as never, harness.constructors as never, {
       nodes: [node], selectedNodeId: null, editingNodeId: null, connectionTargetNodeId: null,
-      onNodePointerDown: jest.fn(), visibleKeys: new Set(["node:1"]),
+      siblingReorderSourceNodeId: null, onNodePointerDown: jest.fn(), visibleKeys: new Set(["node:1"]),
     });
     const container = harness.stage.addChild.mock.calls[0][0] as {
       alpha: number; visible: boolean; eventMode: string; cursor: string;
@@ -132,7 +133,7 @@ describe("renderMapNodes", () => {
       const harness = createPixiTestHarness();
       renderMapNodes(harness.app.stage as never, harness.constructors as never, {
         nodes: [illustratedNode], selectedNodeId: null, editingNodeId: null, connectionTargetNodeId: null,
-        onNodePointerDown: jest.fn(), illustrationTextures,
+        siblingReorderSourceNodeId: null, onNodePointerDown: jest.fn(), illustrationTextures,
       });
       return harness;
     }
@@ -154,6 +155,58 @@ describe("renderMapNodes", () => {
 
       expect(Sprite).not.toHaveBeenCalled();
       expect(Text.mock.results[0].value.y).toBe(20 + 116 / 2 + 56 / 2);
+    });
+  });
+
+  describe("並べ替えのドラッグ中のノード", () => {
+    const IMAGE = "data:image/jpeg;base64,AAAA";
+    const firstNode = createTestNode({
+      id: 1, parentId: null, x: 50, y: 30, width: 100, height: 60, label: "先頭",
+    });
+    const draggedNode = createTestNode({
+      id: 2, parentId: null, x: 50, y: 130, width: 100,
+      height: ILLUSTRATED_NODE_HEIGHT, label: "ドラッグ中", illustration: IMAGE,
+    });
+
+    function renderReorder(siblingReorderSourceNodeId: number | null) {
+      const harness = createPixiTestHarness();
+      renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+        nodes: [firstNode, draggedNode], selectedNodeId: 2, editingNodeId: null,
+        connectionTargetNodeId: null, siblingReorderSourceNodeId, onNodePointerDown: jest.fn(),
+        illustrationTextures: new Map([[IMAGE, {} as Texture]]),
+      });
+      const containers = harness.stage.addChild.mock.calls.map(
+        ([container]: [unknown]) => container as { alpha: number; addChild: jest.Mock },
+      );
+      const childrenOf = (index: number) => containers[index].addChild.mock.calls.map(
+        ([child]: [unknown]) => child as { alpha?: number },
+      );
+      return { ...harness, containers, childrenOf };
+    }
+
+    it("ドラッグ中のノードの枠・イラスト・ラベルだけを半透明にし、Containerのalphaは変えない", () => {
+      const { containers, childrenOf, Graphics, Sprite, Text } = renderReorder(2);
+      const [shape, sprite, label] = childrenOf(1);
+
+      expect([shape, sprite, label]).toEqual([
+        Graphics.mock.results[1].value, Sprite.mock.results[0].value, Text.mock.results[1].value,
+      ]);
+      expect(shape.alpha).toBe(0.5);
+      expect(sprite.alpha).toBe(0.5);
+      expect(label.alpha).toBe(0.5);
+      expect(containers[1].alpha).toBe(1);
+      expect(Graphics.mock.results[1].value.stroke).toHaveBeenCalledWith({ width: 3, color: 0x2563eb });
+      for (const child of childrenOf(0)) expect(child.alpha ?? 1).toBe(1);
+      expect(containers[0].alpha).toBe(1);
+    });
+
+    it("nullではどのノードも半透明にしない", () => {
+      const { containers, childrenOf } = renderReorder(null);
+
+      for (const index of [0, 1]) {
+        expect(containers[index].alpha).toBe(1);
+        for (const child of childrenOf(index)) expect(child.alpha ?? 1).toBe(1);
+      }
     });
   });
 });

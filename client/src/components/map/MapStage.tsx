@@ -26,14 +26,18 @@ import { useNodeEditing } from "@/components/map/useNodeEditing";
 import { useNodeKeyboardShortcuts } from "@/components/map/useNodeKeyboardShortcuts";
 import { useNodeFocusRequest } from "@/components/map/useNodeFocusRequest";
 import { useRenderedMapScene } from "@/components/map/useRenderedMapScene";
+import { useSiblingReorderDragEscape } from "@/components/map/useSiblingReorderDragEscape";
+import { useSiblingReorderShortcut } from "@/components/map/useSiblingReorderShortcut";
 import { useIllustrationTextures } from "@/components/map/useIllustrationTextures";
 import { useViewportScaleNotification } from "@/components/map/useViewportScaleNotification";
 import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
+import type { SiblingReorderRequest } from "@/domain/nodes/nodeSiblingOrder";
 import type {
   SubtreeClipboardData,
   SubtreeClipboardResult,
 } from "@/domain/clipboard/subtreeClipboardCodec";
 import type { Node } from "@/types/node";
+import type { NodeLayoutMode } from "@/types/nodeLayout";
 import type { OperationNotice } from "@/types/operationNotice";
 import type { NodeFocusRequest } from "@/types/nodeFocusRequest";
 
@@ -55,6 +59,9 @@ type MapStageProps = {
   // ドラッグの最初の有効な移動の直前に呼び、終了までの移動を1操作にまとめる
   onBeginNodeMove: () => MapHistoryGroupLease;
   onConnectNodes: (parentId: number, childId: number) => void;
+  layoutMode: NodeLayoutMode;
+  // ショートカットとドラッグの並べ替えの要求。結果の通知は呼び出し元が出す
+  onReorderSibling: (nodeId: number, request: SiblingReorderRequest) => void;
   onDeleteNode: (id: number) => void;
   // copy/pasteイベントで呼ぶ。枝データの生成と挿入はHome側、結果の通知もHomeへ返す
   onCopySubtree: (sourceId: number) => SubtreeClipboardResult<string>;
@@ -84,6 +91,8 @@ export function MapStage({
   onMoveNode,
   onBeginNodeMove,
   onConnectNodes,
+  layoutMode,
+  onReorderSibling,
   onDeleteNode,
   onCopySubtree,
   onPasteSubtree,
@@ -122,9 +131,11 @@ export function MapStage({
   });
   const {
     connectionTargetNodeId,
+    siblingReorderPreview,
     createNodePointerDownHandler,
     cancelActiveGesture,
     hasActiveGesture,
+    isSiblingReorderActive,
   } = useMapStageInteractions({
     runtime,
     nodes,
@@ -135,6 +146,8 @@ export function MapStage({
     onMoveNode,
     onBeginNodeMove,
     onConnectNodes,
+    layoutMode,
+    onReorderSibling,
   });
 
   const scene = useRenderedMapScene({
@@ -144,6 +157,8 @@ export function MapStage({
       selectedNodeId,
       editingNodeId: editing.editingNodeId,
       connectionTargetNodeId,
+      siblingReorderSourceNodeId: siblingReorderPreview?.nodeId ?? null,
+      siblingReorderIndicator: siblingReorderPreview?.indicator ?? null,
       createNodePointerDownHandler,
       visibleNodeIds: effectiveVisibleNodeIds,
       illustrationTextures,
@@ -170,6 +185,11 @@ export function MapStage({
     cancelEditing,
     cancelActiveGesture,
     closeContextMenu: contextMenu.close,
+  });
+
+  useSiblingReorderDragEscape({
+    isSiblingReorderActive,
+    cancelActiveGesture,
   });
 
   useHiddenNodeInteractionReset({
@@ -218,6 +238,14 @@ export function MapStage({
     onDeleteNode,
     onStartEditing: editing.startEditing,
     enabled: shortcutsEnabled,
+  });
+
+  useSiblingReorderShortcut({
+    selectedNodeId,
+    isEditing: editing.editingNodeId !== null,
+    hasActiveGesture,
+    enabled: shortcutsEnabled,
+    onReorderSibling,
   });
 
   useMapClipboardEvents({

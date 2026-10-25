@@ -4,6 +4,9 @@ import { createStageInteractions } from "@/components/map/pixi/stageInteractions
 import type { Node } from "@/types/node";
 import { createTestNode } from "@/testing/createTestNode";
 import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
+import type { SiblingReorderPreview } from "@/components/map/siblingReorderDropSlot";
+import type { SiblingReorderRequest } from "@/domain/nodes/nodeSiblingOrder";
+import type { NodeLayoutMode } from "@/types/nodeLayout";
 import {
   createMapHistoryLeaseSpy as createMoveHistorySpy,
   createTestMapHistoryLease,
@@ -106,6 +109,9 @@ function createController(overrides: Partial<{
   onConnectionTargetChange: (id: number | null) => void;
   dragThreshold: number;
   visibleNodeIds: ReadonlySet<number>;
+  layoutMode: NodeLayoutMode;
+  onReorderSibling: (nodeId: number, request: SiblingReorderRequest) => void;
+  onSiblingReorderPreviewChange: (preview: SiblingReorderPreview | null) => void;
 }> = {}) {
   const nodesRef = { current: overrides.nodes ?? [node] };
   const viewportRef = {
@@ -124,6 +130,13 @@ function createController(overrides: Partial<{
     current: overrides.onConnectionTargetChange ?? jest.fn(),
   };
   const onViewportChangeRef = { current: jest.fn() };
+  const layoutModeRef: { current: NodeLayoutMode } = { current: overrides.layoutMode ?? "manual" };
+  const onReorderSiblingRef = {
+    current: overrides.onReorderSibling ?? jest.fn<void, [number, SiblingReorderRequest]>(),
+  };
+  const onSiblingReorderPreviewChangeRef = {
+    current: overrides.onSiblingReorderPreviewChange ?? jest.fn<void, [SiblingReorderPreview | null]>(),
+  };
   const visibleNodeIdsRef = overrides.visibleNodeIds === undefined
     ? undefined
     : { current: overrides.visibleNodeIds };
@@ -137,6 +150,9 @@ function createController(overrides: Partial<{
     onConnectionTargetChangeRef,
     onViewportChangeRef,
     visibleNodeIdsRef,
+    layoutModeRef,
+    onReorderSiblingRef,
+    onSiblingReorderPreviewChangeRef,
     dragThreshold: overrides.dragThreshold,
   });
 
@@ -151,6 +167,9 @@ function createController(overrides: Partial<{
     onConnectionTargetChangeRef,
     onViewportChangeRef,
     visibleNodeIdsRef,
+    layoutModeRef,
+    onReorderSiblingRef,
+    onSiblingReorderPreviewChangeRef,
   };
 }
 
@@ -1324,6 +1343,215 @@ describe("createStageInteractions", () => {
       handlers.pointermove?.(pointer(120, 60));
 
       expect(latest.onBeginNodeMove).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("兄弟の並べ替えのドラッグ", () => {
+    // 縦に並んだ2つのルート。id 1 の中心は y 30、id 2 の中心は y 130
+    const upperRoot: Node = createTestNode({ id: 1, parentId: null, x: 0, y: 0, label: "上" });
+    const lowerRoot: Node = createTestNode({ id: 2, parentId: null, x: 0, y: 100, label: "下" });
+    const stackedRoots: readonly Node[] = [upperRoot, lowerRoot];
+
+    it("自動配置ではShiftなしのドラッグで並べ替え、移動しない", () => {
+      const { stage, handlers } = createStage();
+      const {
+        controller,
+        onMoveNodeRef,
+        onBeginNodeMoveRef,
+        onReorderSiblingRef,
+        onSiblingReorderPreviewChangeRef,
+      } = createController({ nodes: stackedRoots, layoutMode: "auto" });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 1, pointer(50, 30) as never);
+      handlers.pointermove?.(pointer(50, 140));
+      handlers.pointerup?.(pointer(50, 140));
+
+      expect(onReorderSiblingRef.current).toHaveBeenCalledTimes(1);
+      expect(onReorderSiblingRef.current).toHaveBeenCalledWith(1, {
+        kind: "drop",
+        target: { position: "after", anchorId: 2 },
+      });
+      expect(onSiblingReorderPreviewChangeRef.current).toHaveBeenLastCalledWith(null);
+      expect(onMoveNodeRef.current).not.toHaveBeenCalled();
+      expect(onBeginNodeMoveRef.current).not.toHaveBeenCalled();
+    });
+
+    it("手動配置ではShiftなしのドラッグで今までどおり移動する", () => {
+      const { stage, handlers } = createStage();
+      const {
+        controller,
+        onMoveNodeRef,
+        onBeginNodeMoveRef,
+        onReorderSiblingRef,
+        onSiblingReorderPreviewChangeRef,
+      } = createController({ nodes: stackedRoots, layoutMode: "manual" });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 1, pointer(50, 30) as never);
+      handlers.pointermove?.(pointer(50, 140));
+      handlers.pointerup?.(pointer(50, 140));
+
+      expect(onBeginNodeMoveRef.current).toHaveBeenCalledTimes(1);
+      expect(onMoveNodeRef.current).toHaveBeenCalledWith(1, 0, 110);
+      expect(onReorderSiblingRef.current).not.toHaveBeenCalled();
+      expect(onSiblingReorderPreviewChangeRef.current).not.toHaveBeenCalled();
+    });
+
+    it.each(["auto", "manual"] as const)("%sの配置でもShiftありのドラッグは接続する", (layoutMode) => {
+      const { stage, handlers } = createStage();
+      const {
+        controller,
+        onMoveNodeRef,
+        onConnectNodesRef,
+        onReorderSiblingRef,
+        onSiblingReorderPreviewChangeRef,
+      } = createController({ nodes: stackedRoots, layoutMode });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 1, pointer(50, 30, { shiftKey: true }) as never);
+      handlers.pointermove?.(pointer(50, 130));
+      handlers.pointerup?.(pointer(50, 130));
+
+      expect(onConnectNodesRef.current).toHaveBeenCalledWith(1, 2);
+      expect(onMoveNodeRef.current).not.toHaveBeenCalled();
+      expect(onReorderSiblingRef.current).not.toHaveBeenCalled();
+      expect(onSiblingReorderPreviewChangeRef.current).not.toHaveBeenCalled();
+    });
+
+    it.each(["pointerupoutside", "pointercancel"] as const)("%sで中止し、プレビューを消して並べ替えない", (eventName) => {
+      const { stage, handlers } = createStage();
+      const {
+        controller,
+        onReorderSiblingRef,
+        onSiblingReorderPreviewChangeRef,
+      } = createController({ nodes: stackedRoots, layoutMode: "auto" });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 1, pointer(50, 30) as never);
+      handlers.pointermove?.(pointer(50, 140));
+      expect(onSiblingReorderPreviewChangeRef.current).toHaveBeenLastCalledWith(
+        expect.objectContaining({ nodeId: 1 }),
+      );
+      handlers[eventName]?.(pointer(50, 140));
+      handlers.pointerup?.(pointer(50, 140));
+
+      expect(onSiblingReorderPreviewChangeRef.current).toHaveBeenLastCalledWith(null);
+      expect(onReorderSiblingRef.current).not.toHaveBeenCalled();
+      expect(controller.isSiblingReorderActive()).toBe(false);
+    });
+
+    it("2本目の指で中止し、プレビューを消して並べ替えない", () => {
+      const { stage, handlers } = createStage();
+      const {
+        controller,
+        onReorderSiblingRef,
+        onSiblingReorderPreviewChangeRef,
+      } = createController({ nodes: stackedRoots, layoutMode: "auto" });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 1, pointer(50, 30, {
+        pointerId: 1,
+        pointerType: "touch",
+        path: [stage],
+      }) as never);
+      handlers.pointermove?.(pointer(50, 140, { pointerId: 1, pointerType: "touch" }));
+      expect(onSiblingReorderPreviewChangeRef.current).toHaveBeenLastCalledWith(
+        expect.objectContaining({ nodeId: 1 }),
+      );
+      nodePointerDown(controller, 2, pointer(50, 130, {
+        pointerId: 2,
+        pointerType: "touch",
+        path: [stage],
+      }) as never);
+      handlers.pointerup?.(pointer(50, 140, { pointerId: 1, pointerType: "touch" }));
+
+      expect(onSiblingReorderPreviewChangeRef.current).toHaveBeenLastCalledWith(null);
+      expect(onReorderSiblingRef.current).not.toHaveBeenCalled();
+      expect(controller.isSiblingReorderActive()).toBe(false);
+    });
+
+    it("自動配置の並べ替えの途中だけisSiblingReorderActiveがtrueになり、終わるとfalseに戻る", () => {
+      const { stage, handlers } = createStage();
+      const { controller } = createController({ nodes: stackedRoots, layoutMode: "auto" });
+      controller.bind(stage as never);
+
+      expect(controller.isSiblingReorderActive()).toBe(false);
+      nodePointerDown(controller, 1, pointer(50, 30) as never);
+      expect(controller.isSiblingReorderActive()).toBe(true);
+      handlers.pointermove?.(pointer(50, 140));
+      expect(controller.isSiblingReorderActive()).toBe(true);
+      handlers.pointerup?.(pointer(50, 140));
+
+      expect(controller.isSiblingReorderActive()).toBe(false);
+    });
+
+    it("cancelActiveGestureの後はisSiblingReorderActiveがfalseになる", () => {
+      const { stage, handlers } = createStage();
+      const { controller, onReorderSiblingRef } = createController({ nodes: stackedRoots, layoutMode: "auto" });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 1, pointer(50, 30) as never);
+      handlers.pointermove?.(pointer(50, 140));
+      controller.cancelActiveGesture();
+      handlers.pointerup?.(pointer(50, 140));
+
+      expect(controller.isSiblingReorderActive()).toBe(false);
+      expect(onReorderSiblingRef.current).not.toHaveBeenCalled();
+    });
+
+    it("手動配置の移動の途中はisSiblingReorderActiveがfalseになる", () => {
+      const { stage, handlers } = createStage();
+      const { controller } = createController({ nodes: stackedRoots, layoutMode: "manual" });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 1, pointer(50, 30) as never);
+      handlers.pointermove?.(pointer(50, 140));
+
+      expect(controller.hasActiveGesture()).toBe(true);
+      expect(controller.isSiblingReorderActive()).toBe(false);
+    });
+
+    it.each(["auto", "manual"] as const)("%sの配置のパンの途中はisSiblingReorderActiveがfalseになる", (layoutMode) => {
+      const { stage, handlers } = createStage();
+      const { controller } = createController({ nodes: stackedRoots, layoutMode });
+      controller.bind(stage as never);
+
+      handlers.pointerdown?.(pointer(400, 400, { target: stage }));
+      handlers.pointermove?.(pointer(450, 450));
+
+      expect(controller.hasActiveGesture()).toBe(true);
+      expect(controller.isSiblingReorderActive()).toBe(false);
+    });
+
+    it("自動配置のShiftの接続の途中はisSiblingReorderActiveがfalseになる", () => {
+      const { stage, handlers } = createStage();
+      const { controller } = createController({ nodes: stackedRoots, layoutMode: "auto" });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 1, pointer(50, 30, { shiftKey: true }) as never);
+      handlers.pointermove?.(pointer(50, 130));
+
+      expect(controller.hasActiveGesture()).toBe(true);
+      expect(controller.isSiblingReorderActive()).toBe(false);
+    });
+
+    it("visibleNodeIdsRefを渡すと、隠れた兄弟を飛ばして挿入位置を決める", () => {
+      // id 2 が見えていれば y 140 は id 2 の後ろになるが、隠れているので元の位置のまま
+      const thirdRoot: Node = createTestNode({ id: 3, parentId: null, x: 0, y: 200, label: "末尾" });
+      const { stage, handlers } = createStage();
+      const { controller, onReorderSiblingRef } = createController({
+        nodes: [upperRoot, lowerRoot, thirdRoot],
+        visibleNodeIds: new Set([1, 3]),
+        layoutMode: "auto",
+      });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 1, pointer(50, 30) as never);
+      handlers.pointermove?.(pointer(50, 140));
+      handlers.pointerup?.(pointer(50, 140));
+
+      expect(onReorderSiblingRef.current).not.toHaveBeenCalled();
     });
   });
 });

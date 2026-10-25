@@ -18,6 +18,8 @@ export function AutoLayoutMapStageHarness() {
     copySubtree,
     pasteSubtree,
     setLayoutMode,
+    layoutMode,
+    reorderSibling,
     documentRevision,
   } = useNodes();
   const initializedRef = useRef(false);
@@ -46,6 +48,10 @@ export function AutoLayoutMapStageHarness() {
         onMoveNode={moveNode}
         onBeginNodeMove={beginMoveHistory}
         onConnectNodes={connectNodes}
+        layoutMode={layoutMode}
+        onReorderSibling={(nodeId, request) => {
+          reorderSibling(nodeId, request, new Set(nodes.map((node) => node.id)));
+        }}
         onDeleteNode={deleteNode}
         onCopySubtree={copySubtree}
         onPasteSubtree={pasteSubtree}

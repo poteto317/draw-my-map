@@ -3,9 +3,12 @@ import type { Viewport } from "@/components/map/mapViewport";
 import { createStageInteractions } from "@/components/map/pixi/stageInteractions";
 import type { LatestValue } from "@/components/map/pixi/pointerGesture";
 import type { PixiRuntime } from "@/components/map/pixi/pixiTypes";
+import type { SiblingReorderPreview } from "@/components/map/siblingReorderDropSlot";
 import { useStageInteractionValues } from "@/components/map/useStageInteractionValues";
 import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
+import type { SiblingReorderRequest } from "@/domain/nodes/nodeSiblingOrder";
 import type { Node } from "@/types/node";
+import type { NodeLayoutMode } from "@/types/nodeLayout";
 
 type UseMapStageInteractionsOptions = {
   runtime: PixiRuntime | null;
@@ -17,6 +20,8 @@ type UseMapStageInteractionsOptions = {
   onMoveNode: (id: number, x: number, y: number) => void;
   onBeginNodeMove: () => MapHistoryGroupLease;
   onConnectNodes: (parentId: number, childId: number) => void;
+  layoutMode: NodeLayoutMode;
+  onReorderSibling: (nodeId: number, request: SiblingReorderRequest) => void;
 };
 
 export function useMapStageInteractions({
@@ -29,9 +34,13 @@ export function useMapStageInteractions({
   onMoveNode,
   onBeginNodeMove,
   onConnectNodes,
+  layoutMode,
+  onReorderSibling,
 }: UseMapStageInteractionsOptions) {
   const [connectionTargetNodeId, setConnectionTargetNodeId] = useState<number | null>(null);
   const onConnectionTargetChangeRef = useRef(setConnectionTargetNodeId);
+  const [siblingReorderPreview, setSiblingReorderPreview] = useState<SiblingReorderPreview | null>(null);
+  const onSiblingReorderPreviewChangeRef = useRef(setSiblingReorderPreview);
   const {
     nodesRef,
     visibleNodeIdsRef,
@@ -40,6 +49,8 @@ export function useMapStageInteractions({
     onBeginNodeMoveRef,
     onConnectNodesRef,
     onViewportChangeRef,
+    layoutModeRef,
+    onReorderSiblingRef,
   } = useStageInteractionValues({
     nodes,
     visibleNodeIds,
@@ -48,6 +59,8 @@ export function useMapStageInteractions({
     onMoveNode,
     onBeginNodeMove,
     onConnectNodes,
+    layoutMode,
+    onReorderSibling,
   });
 
   const interactionsRef = useRef<ReturnType<typeof createStageInteractions> | null>(null);
@@ -61,6 +74,9 @@ export function useMapStageInteractions({
     onConnectNodesRef,
     onConnectionTargetChangeRef,
     onViewportChangeRef,
+    layoutModeRef,
+    onReorderSiblingRef,
+    onSiblingReorderPreviewChangeRef,
   });
   const interactions = interactionsRef.current;
 
@@ -80,8 +96,10 @@ export function useMapStageInteractions({
 
   return {
     connectionTargetNodeId,
+    siblingReorderPreview,
     createNodePointerDownHandler: interactions.createNodePointerDownHandler,
     cancelActiveGesture: interactions.cancelActiveGesture,
     hasActiveGesture: interactions.hasActiveGesture,
+    isSiblingReorderActive: interactions.isSiblingReorderActive,
   };
 }

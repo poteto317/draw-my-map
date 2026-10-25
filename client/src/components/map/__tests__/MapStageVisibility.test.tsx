@@ -39,6 +39,8 @@ const defaultProps = {
   onClipboardNotice: jest.fn(),
   shortcutsEnabled: true,
   dialogMouseClickedAtRef: { current: null },
+  layoutMode: "manual" as const,
+  onReorderSibling: jest.fn(),
 };
 
 const sampleNodes: Node[] = [

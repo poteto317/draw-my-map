@@ -10,6 +10,7 @@ import { MapImageExportControls } from "@/components/layout/MapImageExportContro
 import { MapHistoryControls } from "@/components/layout/MapHistoryControls";
 import { NodeCollapseControl } from "@/components/layout/NodeCollapseControl";
 import { NodeDuplicateControl } from "@/components/layout/NodeDuplicateControl";
+import { NodeSiblingOrderControl } from "@/components/layout/NodeSiblingOrderControl";
 import { MapPersistenceControls } from "@/components/layout/MapPersistenceControls";
 import { MapOperationNotice } from "@/components/layout/MapOperationNotice";
 import { OutlineImportControl } from "@/components/layout/OutlineImportControl";
@@ -32,6 +33,7 @@ import { useMapDisplayState } from "@/hooks/useMapDisplayState";
 import { useBranchCollapse } from "@/hooks/useBranchCollapse";
 import { useNodeSearchNavigation } from "@/hooks/useNodeSearchNavigation";
 import { useOutlineImport } from "@/hooks/useOutlineImport";
+import { useSiblingReorderAction } from "@/hooks/useSiblingReorderAction";
 import type { MapStorageSession } from "@/types/mapStorageSession";
 
 const CLIPBOARD_OPERATION_HINT = "枝をコピー: Ctrl/Cmd+C ／ 貼り付け: Ctrl/Cmd+V（新しいルートとして追加）";
@@ -73,6 +75,7 @@ export function MapEditor({
     copySubtree,
     pasteSubtree,
     insertForest,
+    reorderSibling,
     deleteNode,
     setLayoutMode,
     replaceMap,
@@ -152,6 +155,16 @@ export function MapEditor({
     insertForest,
     expandNodes: branchCollapse.expandNodes,
   });
+  const siblingReorder = useSiblingReorderAction({
+    selectedNodeId,
+    nodes,
+    visibleNodeIds: displayState.visibleNodeIds,
+    documentRevision,
+    reorderSibling,
+  });
+  const { moveSelected: moveSelectedSibling } = siblingReorder;
+  const moveSelectedSiblingUp = useCallback(() => moveSelectedSibling("up"), [moveSelectedSibling]);
+  const moveSelectedSiblingDown = useCallback(() => moveSelectedSibling("down"), [moveSelectedSibling]);
   // 下の effect の依存配列に入れるため、値と関数を取り出しておく
   const { focusRequest: outlineFocusRequest, consumeFocusRequest: consumeOutlineFocusRequest } = outlineImport;
   const outlineImportButtonRef = useRef<HTMLButtonElement>(null);
@@ -218,6 +231,12 @@ export function MapEditor({
                 disabled={selectedNode === null}
                 onDuplicate={duplication.duplicateSelected}
               />
+              <NodeSiblingOrderControl
+                canMoveUp={siblingReorder.canMoveUp}
+                canMoveDown={siblingReorder.canMoveDown}
+                onMoveUp={moveSelectedSiblingUp}
+                onMoveDown={moveSelectedSiblingDown}
+              />
               <span className="text-sm text-zinc-600 dark:text-zinc-400">
                 {CLIPBOARD_OPERATION_HINT}
               </span>
@@ -243,6 +262,7 @@ export function MapEditor({
             && clipboardNotice === null
             && nodeSearchNavigation.notice === null
             && outlineImport.notice === null
+            && siblingReorder.notice === null
             && !displayState.layoutFailed
             ? null
             : (
@@ -271,6 +291,9 @@ export function MapEditor({
                 {outlineImport.notice !== null && (
                   <MapOperationNotice notice={outlineImport.notice} />
                 )}
+                {siblingReorder.notice !== null && (
+                  <MapOperationNotice notice={siblingReorder.notice} />
+                )}
               </>
             )}
         />
@@ -290,6 +313,8 @@ export function MapEditor({
               onMoveNode={moveNode}
               onBeginNodeMove={beginMoveHistory}
               onConnectNodes={connectNodes}
+              layoutMode={layoutMode}
+              onReorderSibling={siblingReorder.reorder}
               onDeleteNode={deleteNode}
               onCopySubtree={copySubtree}
               onPasteSubtree={pasteSubtree}

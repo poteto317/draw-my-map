@@ -3,7 +3,9 @@
 import { useLayoutEffect, useRef } from "react";
 import type { Viewport } from "@/components/map/mapViewport";
 import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
+import type { SiblingReorderRequest } from "@/domain/nodes/nodeSiblingOrder";
 import type { Node } from "@/types/node";
+import type { NodeLayoutMode } from "@/types/nodeLayout";
 
 type UseStageInteractionValuesOptions = {
   nodes: readonly Node[];
@@ -13,6 +15,8 @@ type UseStageInteractionValuesOptions = {
   onMoveNode: (id: number, x: number, y: number) => void;
   onBeginNodeMove: () => MapHistoryGroupLease;
   onConnectNodes: (parentId: number, childId: number) => void;
+  layoutMode: NodeLayoutMode;
+  onReorderSibling: (nodeId: number, request: SiblingReorderRequest) => void;
 };
 
 export function resolveEffectiveVisibleNodeIds(
@@ -30,6 +34,8 @@ export function useStageInteractionValues({
   onMoveNode,
   onBeginNodeMove,
   onConnectNodes,
+  layoutMode,
+  onReorderSibling,
 }: UseStageInteractionValuesOptions) {
   const nodesRef = useRef<readonly Node[]>(nodes);
   const visibleNodeIdsRef = useRef<ReadonlySet<number>>(
@@ -40,6 +46,8 @@ export function useStageInteractionValues({
   const onMoveNodeRef = useRef(onMoveNode);
   const onBeginNodeMoveRef = useRef(onBeginNodeMove);
   const onConnectNodesRef = useRef(onConnectNodes);
+  const layoutModeRef = useRef(layoutMode);
+  const onReorderSiblingRef = useRef(onReorderSibling);
 
   useLayoutEffect(() => {
     nodesRef.current = nodes;
@@ -49,7 +57,19 @@ export function useStageInteractionValues({
     onMoveNodeRef.current = onMoveNode;
     onBeginNodeMoveRef.current = onBeginNodeMove;
     onConnectNodesRef.current = onConnectNodes;
-  }, [nodes, visibleNodeIds, onViewportChange, onSelectNode, onMoveNode, onBeginNodeMove, onConnectNodes]);
+    layoutModeRef.current = layoutMode;
+    onReorderSiblingRef.current = onReorderSibling;
+  }, [
+    nodes,
+    visibleNodeIds,
+    onViewportChange,
+    onSelectNode,
+    onMoveNode,
+    onBeginNodeMove,
+    onConnectNodes,
+    layoutMode,
+    onReorderSibling,
+  ]);
 
   return {
     nodesRef,
@@ -59,5 +79,7 @@ export function useStageInteractionValues({
     onMoveNodeRef,
     onBeginNodeMoveRef,
     onConnectNodesRef,
+    layoutModeRef,
+    onReorderSiblingRef,
   };
 }

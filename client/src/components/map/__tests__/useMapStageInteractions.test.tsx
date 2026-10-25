@@ -2,6 +2,7 @@ import { act, renderHook } from "@testing-library/react";
 import { INITIAL_VIEWPORT } from "@/components/map/mapViewport";
 import { useMapStageInteractions } from "@/components/map/useMapStageInteractions";
 import type { Node } from "@/types/node";
+import type { NodeLayoutMode } from "@/types/nodeLayout";
 import { createTestNode } from "@/testing/createTestNode";
 import { createTestMapHistoryLease as createLease } from "@/testing/createTestMapHistoryLease";
 
@@ -83,6 +84,8 @@ describe("useMapStageInteractions", () => {
         onMoveNode: jest.fn(),
         onBeginNodeMove: createLease,
         onConnectNodes: jest.fn(),
+        layoutMode: "manual",
+        onReorderSibling: jest.fn(),
       }),
     );
 
@@ -112,6 +115,8 @@ describe("useMapStageInteractions", () => {
         onMoveNode,
         onBeginNodeMove: createLease,
         onConnectNodes,
+        layoutMode: "manual",
+        onReorderSibling: jest.fn(),
       }),
     );
 
@@ -141,6 +146,8 @@ describe("useMapStageInteractions", () => {
           onMoveNode,
           onBeginNodeMove: createLease,
           onConnectNodes: jest.fn(),
+          layoutMode: "manual",
+          onReorderSibling: jest.fn(),
         }),
       { initialProps: { visibleNodeIds: new Set([1, 2]) } },
     );
@@ -171,6 +178,8 @@ describe("useMapStageInteractions", () => {
           onMoveNode: jest.fn(),
           onBeginNodeMove: createLease,
           onConnectNodes,
+          layoutMode: "manual",
+          onReorderSibling: jest.fn(),
         }),
       { initialProps: { visibleNodeIds: new Set([1, 2]) } },
     );
@@ -204,6 +213,8 @@ describe("useMapStageInteractions", () => {
           onMoveNode: jest.fn(),
           onBeginNodeMove: createLease,
           onConnectNodes,
+          layoutMode: "manual",
+          onReorderSibling: jest.fn(),
         }),
       { initialProps: { visibleNodeIds: new Set([1, 2]) } },
     );
@@ -238,6 +249,8 @@ describe("useMapStageInteractions", () => {
         onMoveNode: jest.fn(),
         onBeginNodeMove: createLease,
         onConnectNodes,
+        layoutMode: "manual",
+        onReorderSibling: jest.fn(),
       }),
     );
 
@@ -273,6 +286,8 @@ describe("useMapStageInteractions", () => {
           onMoveNode: jest.fn(),
           onBeginNodeMove: createLease,
           onConnectNodes: jest.fn(),
+          layoutMode: "manual",
+          onReorderSibling: jest.fn(),
         }),
       { initialProps: { runtime: null } },
     );
@@ -302,6 +317,8 @@ describe("useMapStageInteractions", () => {
           onMoveNode: jest.fn(),
           onBeginNodeMove: createLease,
           onConnectNodes: jest.fn(),
+          layoutMode: "manual",
+          onReorderSibling: jest.fn(),
         }),
       { initialProps: { runtime: initial.runtime } },
     );
@@ -318,5 +335,100 @@ describe("useMapStageInteractions", () => {
     rerender({ runtime: null });
 
     expect(result.current.connectionTargetNodeId).toBeNull();
+  });
+
+  describe("兄弟の並べ替えのドラッグ", () => {
+    // 縦に並んだ2つのルート。id 1 の中心は y 30、id 2 の中心は y 130
+    const stackedRoots: Node[] = [
+      createTestNode({ id: 1, parentId: null, x: 0, y: 0, label: "上" }),
+      createTestNode({ id: 2, parentId: null, x: 0, y: 100, label: "下" }),
+    ];
+
+    it("自動配置ではドラッグの途中にプレビューを出し、離すとプレビューを消して並べ替えを要求する", () => {
+      const { runtime, stage, handlers } = createRuntime();
+      const onMoveNode = jest.fn();
+      const onReorderSibling = jest.fn();
+      const viewportRef = { current: INITIAL_VIEWPORT };
+      const { result } = renderHook(() =>
+        useMapStageInteractions({
+          runtime: runtime as never,
+          nodes: stackedRoots,
+          viewportRef,
+          onViewportChange: jest.fn(),
+          onSelectNode: jest.fn(),
+          onMoveNode,
+          onBeginNodeMove: createLease,
+          onConnectNodes: jest.fn(),
+          layoutMode: "auto",
+          onReorderSibling,
+        }),
+      );
+
+      expect(result.current.siblingReorderPreview).toBeNull();
+      act(() => {
+        result.current.createNodePointerDownHandler()(1, pointer(50, 30, { path: [stage] }) as never);
+      });
+      expect(result.current.isSiblingReorderActive()).toBe(true);
+      act(() => handlers.pointermove?.(pointer(50, 140)));
+
+      expect(result.current.siblingReorderPreview).toEqual({
+        nodeId: 1,
+        indicator: { left: -8, right: 108, y: 180 },
+      });
+
+      act(() => handlers.pointerup?.(pointer(50, 140)));
+
+      expect(result.current.siblingReorderPreview).toBeNull();
+      expect(result.current.isSiblingReorderActive()).toBe(false);
+      expect(onReorderSibling).toHaveBeenCalledWith(1, {
+        kind: "drop",
+        target: { position: "after", anchorId: 2 },
+      });
+      expect(onMoveNode).not.toHaveBeenCalled();
+    });
+
+    it("layoutModeをrerenderで変えると、次のジェスチャーから分岐が変わる", () => {
+      const { runtime, stage, handlers } = createRuntime();
+      const onMoveNode = jest.fn();
+      const onReorderSibling = jest.fn();
+      const viewportRef = { current: INITIAL_VIEWPORT };
+      const { result, rerender } = renderHook(
+        ({ layoutMode }: { layoutMode: NodeLayoutMode }) =>
+          useMapStageInteractions({
+            runtime: runtime as never,
+            nodes: stackedRoots,
+            viewportRef,
+            onViewportChange: jest.fn(),
+            onSelectNode: jest.fn(),
+            onMoveNode,
+            onBeginNodeMove: createLease,
+            onConnectNodes: jest.fn(),
+            layoutMode,
+            onReorderSibling,
+          }),
+        { initialProps: { layoutMode: "manual" as NodeLayoutMode } },
+      );
+      const drag = () => {
+        act(() => {
+          result.current.createNodePointerDownHandler()(1, pointer(50, 30, { path: [stage] }) as never);
+          handlers.pointermove?.(pointer(50, 140));
+          handlers.pointerup?.(pointer(50, 140));
+        });
+      };
+
+      drag();
+      expect(onMoveNode).toHaveBeenCalledTimes(1);
+      expect(onReorderSibling).not.toHaveBeenCalled();
+
+      rerender({ layoutMode: "auto" });
+      drag();
+      expect(onMoveNode).toHaveBeenCalledTimes(1);
+      expect(onReorderSibling).toHaveBeenCalledTimes(1);
+
+      rerender({ layoutMode: "manual" });
+      drag();
+      expect(onMoveNode).toHaveBeenCalledTimes(2);
+      expect(onReorderSibling).toHaveBeenCalledTimes(1);
+    });
   });
 });

@@ -221,6 +221,74 @@ describe("MapEditor", () => {
     }
   });
 
+  describe("兄弟の順序", () => {
+    const threeRootsJson = `${JSON.stringify({
+      version: 3,
+      layoutMode: "manual",
+      nodes: [
+        { id: 1, parentId: null, label: "ルート1", importance: "medium", x: 250, y: 100, width: 100, height: 60 },
+        { id: 2, parentId: null, label: "ルート2", importance: "medium", x: 250, y: 200, width: 100, height: 60 },
+        { id: 3, parentId: null, label: "ルート3", importance: "medium", x: 250, y: 300, width: 100, height: 60 },
+      ],
+    })}\n`;
+
+    // 直近の描画で登録されたノードのpointerdownで選択し、同じpointerで離す（indexはnodes配列の順）
+    function selectNode(index: number, nodeCount: number) {
+      act(() => {
+        mockNodePointerHandlers.at(index - nodeCount)?.pointerdown?.(pointer(300, 200));
+        mockStageHandlers.pointerup?.(pointer(300, 200));
+      });
+    }
+
+    function moveUpButton(): HTMLElement {
+      return screen.getByRole("button", { name: "枝を上へ移動" });
+    }
+
+    function moveDownButton(): HTMLElement {
+      return screen.getByRole("button", { name: "枝を下へ移動" });
+    }
+
+    it("「兄弟の順序」を「枝を複製」の後、クリップボードの案内の前に置く", async () => {
+      await renderEditor();
+
+      const duplicateButton = screen.getByRole("button", { name: "枝を複製" });
+      const group = screen.getByRole("group", { name: "兄弟の順序" });
+      const hint = screen.getByText((content) => content.startsWith("枝をコピー: Ctrl/Cmd+C"));
+      expect(duplicateButton.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(group.compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it("未選択なら「上へ」「下へ」をどちらも無効にする", async () => {
+      await renderEditor({ storage: createTestStorageSession({ initialJson: threeRootsJson }) });
+
+      expect(moveUpButton()).toBeDisabled();
+      expect(moveDownButton()).toBeDisabled();
+    });
+
+    it("先頭のルートを選択すると「上へ」だけ無効、末尾のルートを選択すると「下へ」だけ無効にする", async () => {
+      await renderEditor({ storage: createTestStorageSession({ initialJson: threeRootsJson }) });
+
+      selectNode(0, 3);
+      expect(moveUpButton()).toBeDisabled();
+      expect(moveDownButton()).toBeEnabled();
+
+      selectNode(2, 3);
+      expect(moveUpButton()).toBeEnabled();
+      expect(moveDownButton()).toBeDisabled();
+    });
+
+    it("「下へ」を押すと選択中のルートを1つ下へ移し、操作通知バーに位置を出す", async () => {
+      await renderEditor({ storage: createTestStorageSession({ initialJson: threeRootsJson }) });
+      selectNode(0, 3);
+
+      fireEvent.click(moveDownButton());
+
+      expect(screen.getByTestId("operation-notices"))
+        .toHaveTextContent("枝を下へ移動しました（見えているルートの3件中2番目）。");
+      expect(exportedMap().nodes.map((node) => node.id)).toEqual([2, 1, 3]);
+    });
+  });
+
   describe("箇条書きから追加", () => {
     it("「箇条書きから追加」をクリップボードの案内の後、「JSON書き出し」の前に置く", async () => {
       await renderEditor();

@@ -27,6 +27,8 @@ describe("renderMapScene", () => {
       selectedNodeId: null,
       editingNodeId: null,
       connectionTargetNodeId: null,
+      siblingReorderSourceNodeId: null,
+      siblingReorderIndicator: null,
       onNodePointerDown: jest.fn(),
       viewport: INITIAL_VIEWPORT,
     });
@@ -52,6 +54,8 @@ describe("renderMapScene", () => {
       selectedNodeId: null,
       editingNodeId: null,
       connectionTargetNodeId: null,
+      siblingReorderSourceNodeId: null,
+      siblingReorderIndicator: null,
       onNodePointerDown: jest.fn(),
       viewport,
     });
@@ -70,6 +74,8 @@ describe("renderMapScene", () => {
       selectedNodeId: null,
       editingNodeId: null,
       connectionTargetNodeId: null,
+      siblingReorderSourceNodeId: null,
+      siblingReorderIndicator: null,
       onNodePointerDown: jest.fn(),
       viewport: INITIAL_VIEWPORT,
     });
@@ -83,7 +89,7 @@ describe("renderMapScene", () => {
     const harness = createPixiTestHarness();
     renderMapScene(harness.app as never, harness.constructors as never, {
       nodes, selectedNodeId: null, editingNodeId: null, connectionTargetNodeId: null,
-      onNodePointerDown: jest.fn(), viewport: INITIAL_VIEWPORT, visibleNodeIds: new Set([2]),
+      siblingReorderSourceNodeId: null, siblingReorderIndicator: null, onNodePointerDown: jest.fn(), viewport: INITIAL_VIEWPORT, visibleNodeIds: new Set([2]),
     });
 
     expect(harness.Graphics).toHaveBeenCalledTimes(3);
@@ -101,6 +107,8 @@ describe("renderMapScene", () => {
       selectedNodeId: null,
       editingNodeId: null,
       connectionTargetNodeId: null,
+      siblingReorderSourceNodeId: null,
+      siblingReorderIndicator: null,
       onNodePointerDown: jest.fn(),
       viewport: INITIAL_VIEWPORT,
       visibleNodeIds,
@@ -123,5 +131,50 @@ describe("renderMapScene", () => {
         eventMode: key.startsWith("node:") && isVisible ? "static" : "none",
       });
     }
+  });
+
+  it("挿入位置の線をノードより後にworldへ追加し、可視性のターゲットには入れない", () => {
+    const harness = createPixiTestHarness();
+
+    const scene = renderMapScene(harness.app as never, harness.constructors as never, {
+      nodes,
+      selectedNodeId: null,
+      editingNodeId: null,
+      connectionTargetNodeId: null,
+      siblingReorderSourceNodeId: 2,
+      siblingReorderIndicator: { left: 262, right: 378, y: 110 },
+      onNodePointerDown: jest.fn(),
+      viewport: INITIAL_VIEWPORT,
+    });
+
+    const world = harness.containers[0];
+    const line = harness.Graphics.mock.results.at(-1)!.value;
+    expect(line.rect).toHaveBeenCalledWith(262, 107, 116, 6);
+    expect(world.addChild.mock.calls.map(([child]: [unknown]) => child)).toEqual([
+      harness.Graphics.mock.results[0].value,
+      harness.containers[1],
+      harness.containers[2],
+      line,
+    ]);
+    expect([...scene.visibilityTargets.keys()]).toEqual(["edge:2", "node:1", "node:2"]);
+  });
+
+  it("siblingReorderIndicatorがnullなら線を追加しない", () => {
+    const harness = createPixiTestHarness();
+
+    renderMapScene(harness.app as never, harness.constructors as never, {
+      nodes,
+      selectedNodeId: null,
+      editingNodeId: null,
+      connectionTargetNodeId: null,
+      siblingReorderSourceNodeId: 2,
+      siblingReorderIndicator: null,
+      onNodePointerDown: jest.fn(),
+      viewport: INITIAL_VIEWPORT,
+    });
+
+    const world = harness.containers[0];
+    expect(harness.Graphics).toHaveBeenCalledTimes(3);
+    expect(world.addChild).toHaveBeenCalledTimes(3);
   });
 });

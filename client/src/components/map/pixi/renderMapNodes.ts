@@ -12,11 +12,15 @@ export type RenderMapNodesOptions = {
   selectedNodeId: number | null;
   editingNodeId: number | null;
   connectionTargetNodeId: number | null;
+  // 並べ替えのドラッグ中のノード。元の位置で半透明にする
+  siblingReorderSourceNodeId: number | null;
   onNodePointerDown: (nodeId: number, event: FederatedPointerEvent) => void;
   visibleKeys?: ReadonlySet<string>;
   // キーは data URL
   illustrationTextures?: ReadonlyMap<string, Texture>;
 };
+
+const DRAGGED_NODE_ALPHA = 0.5;
 
 function createNodeShape(
   constructors: PixiConstructors,
@@ -82,6 +86,8 @@ export function renderMapNodes(
     const isEditing = node.id === options.editingNodeId;
     const isSelected = node.id === options.selectedNodeId;
     const isConnectionTarget = node.id === options.connectionTargetNodeId;
+    // Container の alpha は表示のフェードが使うので、子要素の alpha で半透明にする
+    const contentAlpha = node.id === options.siblingReorderSourceNodeId ? DRAGGED_NODE_ALPHA : 1;
     const container = new constructors.Container();
     container.alpha = isVisible ? 1 : 0;
     container.visible = isVisible;
@@ -91,13 +97,20 @@ export function renderMapNodes(
       options.onNodePointerDown(node.id, event);
     });
 
-    container.addChild(createNodeShape(constructors, node, { isSelected, isConnectionTarget }));
+    const shape = createNodeShape(constructors, node, { isSelected, isConnectionTarget });
+    shape.alpha = contentAlpha;
+    container.addChild(shape);
 
     const sprite = createNodeIllustrationSprite(constructors, node, options.illustrationTextures);
-    if (sprite !== null) container.addChild(sprite);
+    if (sprite !== null) {
+      sprite.alpha = contentAlpha;
+      container.addChild(sprite);
+    }
 
     if (!isEditing) {
-      container.addChild(createNodeLabelText(constructors, node));
+      const text = createNodeLabelText(constructors, node);
+      text.alpha = contentAlpha;
+      container.addChild(text);
     }
 
     stage.addChild(container);
