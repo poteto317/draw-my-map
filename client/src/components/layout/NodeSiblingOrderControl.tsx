@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, type FocusEvent, type KeyboardEvent } from "react";
+import { SIBLING_REORDER_BUTTON_ATTRIBUTE } from "@/components/map/siblingReorderShortcut";
 
 export type NodeSiblingOrderControlProps = {
   canMoveUp: boolean;
@@ -49,6 +50,9 @@ export function NodeSiblingOrderControl({
     if (event.key === "Enter" && event.repeat) event.preventDefault();
   }
 
+  // 目印を付けたボタンでは、windowのAlt+↑/↓のショートカットが働く。ここでは処理しないので二重には動かない
+  const shortcutTargetProps = { [SIBLING_REORDER_BUTTON_ATTRIBUTE]: "" };
+
   // clickはevent.detailで弾かない。ダブルクリックは2回の移動として扱う。
   // pointerdownの既定動作は止めない。編集中のラベル入力をblurで確定してから移動させるため
   return (
@@ -64,6 +68,7 @@ export function NodeSiblingOrderControl({
         onFocus={handleFocus}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
+        {...shortcutTargetProps}
         disabled={!canMoveUp}
       >
         上へ
@@ -79,6 +84,7 @@ export function NodeSiblingOrderControl({
         onFocus={handleFocus}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
+        {...shortcutTargetProps}
         disabled={!canMoveDown}
       >
         下へ

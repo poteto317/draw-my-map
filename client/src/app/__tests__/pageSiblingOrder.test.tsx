@@ -49,6 +49,8 @@ jest.mock("@/services/imageExport/mapPngRasterizer", () => ({
 
 const ROOT_MOVED_UP_MESSAGE = "枝を上へ移動しました（見えているルートの3件中1番目）。";
 const ROOT_MOVED_DOWN_MESSAGE = "枝を下へ移動しました（見えているルートの3件中3番目）。";
+const ROOT_MOVED_TO_MIDDLE_MESSAGE = "枝を下へ移動しました（見えているルートの3件中2番目）。";
+const ROOT_BOTTOM_EDGE_MESSAGE = "これ以上下へ移動できません（見えているルートの末尾です）。";
 const ROOT_TOP_EDGE_MESSAGE = "これ以上上へ移動できません（見えているルートの先頭です）。";
 const HIDDEN_SKIPPED_MESSAGE = "枝を上へ移動しました（見えている兄弟の2件中1番目）。";
 const HIDDEN_BEYOND_MESSAGE = "これ以上下へ移動できません（見えている兄弟の末尾です）。"
@@ -329,6 +331,60 @@ describe("ページの兄弟の並べ替え（ショートカット）", () => {
     expect(within(noticeBar()).getByText(ROOT_TOP_EDGE_MESSAGE)).toHaveAttribute("role", "status");
     expect(exportedIds()).toEqual([1, 2, 3]);
     expect(undoButton()).toBeDisabled();
+  });
+
+  it("「上へ」を押した後、フォーカスがボタンにあるまま Alt+↓ を押すと並べ替えて通知する", async () => {
+    const user = userEvent.setup();
+    storeThreeRoots();
+    await renderPage();
+    selectNode(1, 3);
+    await user.click(upButton());
+    expect(exportedIds()).toEqual([2, 1, 3]);
+    // 先頭に着いて「上へ」が無効になり、フォーカスは「下へ」へ引き継がれている
+    expect(downButton()).toHaveFocus();
+
+    pressAlt("ArrowDown", document.activeElement!);
+
+    expect(exportedIds()).toEqual([1, 2, 3]);
+    expect(within(noticeBar()).getByText(ROOT_MOVED_TO_MIDDLE_MESSAGE)).toHaveAttribute("role", "status");
+    expect(downButton()).toHaveFocus();
+    await expectStoredIds([1, 2, 3]);
+  });
+
+  it("「下へ」にフォーカスがあるときの Alt+↓ は1回だけ動かし、押し続けも受け付け、端では通知する", async () => {
+    storeThreeRoots();
+    await renderPage();
+    selectNode(0, 3, 300, 130);
+    downButton().focus();
+
+    const notPrevented = fireEvent.keyDown(downButton(), { key: "ArrowDown", altKey: true });
+
+    // ボタンとwindowで二重に動けば [2, 3, 1] になる
+    expect(notPrevented).toBe(false);
+    expect(exportedIds()).toEqual([2, 1, 3]);
+    expect(screen.getByText(ROOT_MOVED_TO_MIDDLE_MESSAGE)).toBeInTheDocument();
+
+    fireEvent.keyDown(downButton(), { key: "ArrowDown", altKey: true, repeat: true });
+    expect(exportedIds()).toEqual([2, 3, 1]);
+    // 末尾に着いて「下へ」が無効になり、フォーカスは「上へ」へ移る。そこからの Alt+↓ は端の通知になる
+    expect(upButton()).toHaveFocus();
+
+    fireEvent.keyDown(upButton(), { key: "ArrowDown", altKey: true, repeat: true });
+    expect(within(noticeBar()).getByText(ROOT_BOTTOM_EDGE_MESSAGE)).toHaveAttribute("role", "status");
+    expect(exportedIds()).toEqual([2, 3, 1]);
+  });
+
+  it("「上へ」「下へ」以外のヘッダーのボタンにフォーカスがあるときの Alt+↑ では並べ替えない", async () => {
+    storeThreeRoots();
+    await renderPage();
+    selectNode(1, 3);
+    const otherButton = screen.getByRole("button", { name: "JSON書き出し" });
+    otherButton.focus();
+
+    pressAlt("ArrowUp", otherButton);
+
+    expect(screen.queryByText(ROOT_MOVED_UP_MESSAGE)).not.toBeInTheDocument();
+    expect(exportedIds()).toEqual([1, 2, 3]);
   });
 
   it("箇条書きのダイアログを開いている間は、body への Alt+↑ で並べ替えない", async () => {

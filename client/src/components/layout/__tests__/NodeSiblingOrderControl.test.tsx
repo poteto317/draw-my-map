@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NodeSiblingOrderControl } from "@/components/layout/NodeSiblingOrderControl";
+import { SIBLING_REORDER_BUTTON_ATTRIBUTE } from "@/components/map/siblingReorderShortcut";
 
 type Props = Parameters<typeof NodeSiblingOrderControl>[0];
 
@@ -90,6 +91,27 @@ describe("NodeSiblingOrderControl", () => {
     expect(fireEvent.keyDown(button, { key: "Enter", repeat: true })).toBe(false);
     expect(fireEvent.keyDown(button, { key: "Enter", repeat: false })).toBe(true);
     expect(fireEvent.keyDown(button, { key: " ", repeat: true })).toBe(true);
+  });
+
+  it("両方のボタンにAlt+↑/↓のショートカットを通す目印を付ける", () => {
+    render(<NodeSiblingOrderControl {...createProps()} />);
+    expect(getUpButton()).toHaveAttribute(SIBLING_REORDER_BUTTON_ATTRIBUTE);
+    expect(getDownButton()).toHaveAttribute(SIBLING_REORDER_BUTTON_ATTRIBUTE);
+    expect(screen.getByRole("group", { name: "兄弟の順序" })).not.toHaveAttribute(SIBLING_REORDER_BUTTON_ATTRIBUTE);
+  });
+
+  it.each([
+    ["上へ", getUpButton],
+    ["下へ", getDownButton],
+  ])("%sへのAlt+↑/↓は自分では処理せず、windowのショートカットだけに任せる", (_label, getButton) => {
+    const props = createProps();
+    render(<NodeSiblingOrderControl {...props} />);
+    const button = getButton();
+
+    expect(fireEvent.keyDown(button, { key: "ArrowUp", altKey: true })).toBe(true);
+    expect(fireEvent.keyDown(button, { key: "ArrowDown", altKey: true, repeat: true })).toBe(true);
+    expect(props.onMoveUp).not.toHaveBeenCalled();
+    expect(props.onMoveDown).not.toHaveBeenCalled();
   });
 
   it("pointerdownの既定動作を止めない", () => {

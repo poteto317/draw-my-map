@@ -42,7 +42,7 @@
 - **データ形式**: 兄弟の順序は `nodes` 配列の相対順で表す（既存のまま）。並べ替えは、移動する枝の根ノード1つの配列内の位置を変えるだけにする。子孫の配列位置は変えない（足りる根拠は「子孫の配列位置を動かさなくてよい根拠」の節）。理由: 保存形式・履歴・JSON を変えずに済み、配列全体の再採番も要らないため（L-540）。
 - **動かせないとき**: ボタンは `disabled`。ショートカットは、理由を `status` の通知で知らせる。理由: 押しても何も起きないと、壊れていると思われるため（L-057）。
 - **通知**: 操作通知バーの8系統目として足す。成功したときも `status` で読み上げる（画面の変化をスクリーンリーダーの利用者へ伝えるため）。features.md の「7系統」の記述を「8系統」に直す。
-- **ショートカットの止め方**: 既存の `useNodeKeyboardShortcuts` と同じ条件（`enabled` の ref、ラベル編集中、入力欄などの対話要素、IME 変換中、`keyCode` 229）で止める。`Ctrl` / `Meta` / `Shift` との併用は無視する。キーの押し続け（`repeat`）は許可し、押し続けると続けて移動する。ボタンの Enter の押し続けは、既存の流儀どおり無視する。
+- **ショートカットの止め方**: 既存の `useNodeKeyboardShortcuts` と同じ条件（`enabled` の ref、ラベル編集中、入力欄などの対話要素、IME 変換中、`keyCode` 229）で止める。ただし、このショートカットを `title` と `aria-keyshortcuts` で案内しているヘッダーの「上へ」「下へ」ボタンにフォーカスがある間は止めない（押した直後にフォーカスがボタンに残るため。PR #28 のレビューで決定）。`Ctrl` / `Meta` / `Shift` との併用は無視する。キーの押し続け（`repeat`）は許可し、押し続けると続けて移動する。ボタンの Enter の押し続けは、既存の流儀どおり無視する。
 - **ドラッグ**: 4px のしきい値に達したら並べ替えのジェスチャーを始める。ポインタの y から、同じ親の見えている兄弟の間の挿入位置を決め、挿入位置を示す線を描く。落とすと1回の commit。挿入位置が元の位置と同じなら何もしない。Escape、`pointercancel`、ステージの外でポインタを離したときは中止する。`Shift` + ドラッグ（接続）は今のまま。
 
 ### この設計書の作成者が決めたこと（下の各節で根拠を書く）
@@ -366,6 +366,7 @@ type NodeSiblingOrderControlProps = {
 
 - `aria-label` は表示する文字（「上へ」「下へ」）を含む（見える名前と読み上げる名前を一致させる）。
 - `disabled` 属性で実際に押せなくする（L-058）。`canMoveUp` = `selectedNodeId !== null && availability.up`、`canMoveDown` も同様。未選択、選択中のノードが見えている兄弟の端、一人っ子のときに無効になる。
+- **ショートカットの目印**: 両方のボタンに `data-sibling-reorder-button` 属性を付け、フォーカスがあっても `Alt+↑/↓` のショートカット（判定5）が働くようにする。ボタン自身は `Alt+↑/↓` を処理しない。
 - **Enter の押し続け**: 両方のボタンの `onKeyDown` で、`event.key === "Enter" && event.repeat` なら `preventDefault` する（連続して移動しない。L-408）。Space は keyup で押されるので止めない。
 - **フォーカス**: `MapHistoryControls` と同じ仕組みにする。押したボタンが無効になった（端に着いた）とき、フォーカスがそのボタンか `body` にあれば、もう一方のボタンが有効ならそちらへ移す。両方の Enter の押し続けを止めているので、移った先で逆の操作が続けて起きることは無い。
 - **クリック**: `event.detail` では弾かない。ダブルクリックは2回の移動として扱う（「枝を複製」と同じ）。端に着いて無効になったボタンへの2回目のクリックは何もしない。
@@ -408,7 +409,7 @@ type SiblingReorderShortcutInput = {
 2. `isComposing` が偽、かつ `keyCode !== 229`（IME 変換中。L-474）。
 3. `altKey` が真で、`ctrlKey`・`metaKey`・`shiftKey` がすべて偽（Windows の AltGr は Ctrl+Alt なので対象外）。
 4. `isEditing` が偽（ラベル編集中ではない）。
-5. `target` が対話要素でない（`isInteractiveTarget`: `button, input, textarea, select, a[href], [contenteditable]` の内側でない。`useNodeKeyboardShortcuts` と同じ判定を共通のモジュールへ移して使う。L-522）。検索入力欄・セレクト・ラジオボタンでの `Alt+↑/↓`（候補の移動、ドロップダウンを開く操作、macOS のカーソル移動）はブラウザに任せる。
+5. `target` が対話要素でない（`isInteractiveTarget`: `button, input, textarea, select, a[href], [contenteditable]` の内側でない。`useNodeKeyboardShortcuts` と同じ判定を共通のモジュールへ移して使う。L-522）。例外として、`target` から最も近い `button` が目印の `data-sibling-reorder-button` 属性（定数 `SIBLING_REORDER_BUTTON_ATTRIBUTE`。`NodeSiblingOrderControl` の「上へ」「下へ」だけに付ける）を持つときは、対話要素として扱わない。目印付きの要素の中にある別のボタンは止める。ボタンの `onKeyDown` では `Alt+↑/↓` を処理しないので、`window` の判定だけが1回動き、二重には動かない。検索入力欄・セレクト・ラジオボタンでの `Alt+↑/↓`（候補の移動、ドロップダウンを開く操作、macOS のカーソル移動）はブラウザに任せる。
 6. `selectedNodeId !== null`。
 7. `hasActiveGesture` が偽（ドラッグ・パン・ピンチの途中ではない。`F` キーと同じ）。
 8. `repeat` は見ない（押し続けを許可する）。
@@ -600,7 +601,7 @@ resolveSiblingReorderDrop(
 5. 端ではボタンが無効になり、ショートカットは端の通知を出す。隠れた兄弟が先にあれば「すべて」への切り替えを案内する。
 6. 1回の並べ替えが1回の「元に戻す」で戻り、「やり直す」で同じ順と座標に戻る。並べ替えた直後の選択は移動したノードのまま（「元に戻す」「やり直す」は既存の規則どおり選択を外す）。並べ替えでは折りたたみは保たれる。
 7. 成功・失敗の通知が操作通知バーの8系統目に出る。
-8. ラベル編集中・入力欄・IME 変換中・ダイアログを開いている間・ジェスチャーの途中は、ショートカットが働かない。ボタンの Enter の押し続けで連続して移動しない。
+8. ラベル編集中・入力欄・「上へ」「下へ」以外のボタン・IME 変換中・ダイアログを開いている間・ジェスチャーの途中は、ショートカットが働かない。「上へ」「下へ」にフォーカスがある間は働く。ボタンの Enter の押し続けで連続して移動しない。
 9. 保存形式・JSON・履歴の形式は変わらない。並べ替えた順は自動保存・JSON の書き出しと読み込みで保たれる。
 10. `npm run verify` が成功する。`docs/specifications/features.md`、`docs/specifications/data-model.md`、`docs/architecture/overview.md`、`docs/testing/browser-test-cases.md`、README 類、`ROADMAP.md` が実装に合っている。
 
@@ -636,7 +637,8 @@ resolveSiblingReorderDrop(
 ### 純関数: `siblingReorderShortcut.test.ts`
 
 - `Alt+ArrowUp` → `"up"`、`Alt+ArrowDown` → `"down"`。
-- それぞれ1つだけ条件を外した入力で `null`: Alt なし、Ctrl・Meta・Shift の併用、`isComposing`、`keyCode` 229、`defaultPrevented`、`isEditing`、`selectedNodeId === null`、`hasActiveGesture`、`target` が `button`・`input`・`textarea`・`select`・`a[href]`・`[contenteditable]` の内側、`ArrowLeft` など別のキー。
+- それぞれ1つだけ条件を外した入力で `null`: Alt なし、Ctrl・Meta・Shift の併用、`isComposing`、`keyCode` 229、`defaultPrevented`、`isEditing`、`selectedNodeId === null`、`hasActiveGesture`、`target` が目印の無い `button`・`input`・`textarea`・`select`・`a[href]`・`[contenteditable]` の内側、目印付きの要素の中にある目印の無い `button`、`ArrowLeft` など別のキー。
+- `target` が目印付きの `button`（またはその内側）なら方向を返し、そのうえで Ctrl・Meta・Shift の併用、`isComposing`、`keyCode` 229、`defaultPrevented`、`isEditing`、`hasActiveGesture` では `null` になること。
 - `repeat: true` でも方向を返すこと。
 
 ### 純関数: `siblingReorderDropSlot.test.ts`
@@ -682,11 +684,12 @@ resolveSiblingReorderDrop(
 - `canMoveUp: false` で「上へ」に `disabled` 属性が付き、クリックで `onMoveUp` が呼ばれないこと（L-058）。
 - `fireEvent.keyDown(button, { key: "Enter", repeat: true })` の戻り値が `false`、`repeat: false` では `true` であること（両方のボタン。L-408）。
 - 押したボタンが無効になったとき、もう一方が有効ならそちらへフォーカスが移り、もう一方も無効なら移さないこと。
+- 両方のボタンに目印の属性が付き、ボタンへの `Alt+↑/↓` では `onMoveUp` / `onMoveDown` を呼ばず、`preventDefault` もしないこと。
 
 ### ページの結合テスト: `app/__tests__/pageSiblingOrder.test.tsx`（`pageDuplication.test.tsx` に倣い、実際の `Home` から。L-060）
 
 - 手動配置: 3つのルートを作り、真ん中を選択して「上へ」→ ルートの順と座標（例の式どおり）、通知の文言、選択が変わらないこと。1回の「元に戻す」で戻り、「やり直す」で同じになること。
-- Alt+↑ / Alt+↓ を `body` に送って同じ結果になること。ラベル編集中・検索入力欄・`Alt+Shift+↑` で何も変わらないこと。
+- Alt+↑ / Alt+↓ を `body` に送って同じ結果になること。ラベル編集中・検索入力欄・`Alt+Shift+↑`・「上へ」「下へ」以外のヘッダーのボタンで何も変わらないこと。「上へ」を押した後、フォーカスがボタンにあるまま Alt+↓ を押すと並べ替わって通知が出ること。「下へ」へ送った Alt+↓ が1回だけ動き（二重に動かない）、押し続けで続けて動き、端ではフォーカスを引き継いだ「上へ」から端の通知が出ること。
 - 端でボタンが無効になり、Alt+↑ で端の通知が出ること。表示レベルを「高のみ」にして隠れた兄弟を作り、飛び越えることと、端の案内の文言。
 - 自動配置: ノードの `pointerdown`（`mapStageTestRuntime` の `pointer` ヘルパー）→ ステージの `pointermove` → `pointerup` で並べ替わること。元の位置で離す・`pointerupoutside`・Escape で変わらないこと。自動配置のドラッグで履歴が増えず、「やり直す」が消えないこと（元の位置で離した場合）。手動配置では同じ操作でノードが移動すること（既存の動作）。
 - 箇条書きのダイアログを開いている間に、`body` へ Alt+↑ を送っても変わらないこと（L-061）。
@@ -752,6 +755,6 @@ resolveSiblingReorderDrop(
 | L-460 | 並べ替えは正本の全配列に対して行い、隠れた兄弟を消さない・順を変えない。テストで固定する |
 | L-472 | 自動配置では表示の上下が配列の順と一致するのでドラッグで並べ替え、一致しない手動配置ではドラッグを並べ替えに使わず、縦位置の入れ替えで画面と並びを一致させる |
 | L-474 | ショートカットとドラッグ中の Escape で、`isComposing` と `keyCode` 229 を無視する |
-| L-522 | ショートカットの対象外の要素を、既存の `isInteractiveTarget`（ボタン・リンク・入力欄・`contenteditable`）と同じにする |
+| L-522 | ショートカットの対象外の要素を、既存の `isInteractiveTarget`（ボタン・リンク・入力欄・`contenteditable`）と同じにする。ただし、ショートカットを案内している「上へ」「下へ」ボタンだけは目印の属性で対象に戻す |
 | L-540 | 順序のフィールドを足さず、配列の相対順を正本にする。再採番をしない |
 | L-541 | `splice` と添字を使わず、1回の走査で新しい配列を作る。anchor の検査で範囲外や向きの食い違いを拒否する |
