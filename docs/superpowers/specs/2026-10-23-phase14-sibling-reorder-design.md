@@ -456,7 +456,7 @@ type SiblingReorderPreview = {
 ```
 
 - 始めた時点で T が `nodesRef` に無い、または座標が有限でなければ `null`（ジェスチャーを作らない）。
-- `move(sample)`: 有限でない座標は無視する。`layoutModeRef.current !== "auto"` なら自分を中止する（下の `cancel` と同じ）。`createDragActivation(startSample.screen, dragThreshold)` で 4px に達するまでは何もしない。達した後は、`resolveSiblingReorderDrop` で挿入位置を求め、挿入位置が前回と違うとき（または最初に達したとき）だけ `onSiblingReorderPreviewChangeRef.current({ nodeId, indicator })` を呼ぶ。
+- `move(sample)`: 有限でない座標は無視する。`layoutModeRef.current !== "auto"` なら自分を中止する（下の `cancel` と同じ）。`createDragActivation(startSample.screen, dragThreshold)` で 4px に達するまでは何もしない。達した後は、`resolveSiblingReorderDrop` で挿入位置を求め、挿入先（position・anchorId）か線の座標（left・right・y）が前回と違うとき（または最初に達したとき）だけ `onSiblingReorderPreviewChangeRef.current({ nodeId, indicator })` を呼ぶ。
 - `end(sample)`: しきい値に達していなければ何もしない（クリック）。`layoutModeRef.current !== "auto"` なら中止と同じ。それ以外は、`end` の `sample` と最新の `nodesRef`・`visibleNodeIdsRef` で挿入位置を求め直し（`move` で控えた値を使わない。L-035）、プレビューを `null` に戻してから、`target` が `null` でなければ `onReorderSiblingRef.current(nodeId, { kind: "drop", target })` を呼ぶ。`end` の座標が有限でなければ中止と同じ。
 - `cancel()`: プレビューを `null` に戻し、以後の `move` / `end` を無視する。並べ替えない。
 - `activeNodeIds()`: `[nodeId]`。T が隠れたら、`useMapStageInteractions` の既存の effect がジェスチャーを中止する。
@@ -501,7 +501,7 @@ resolveSiblingReorderDrop(
 - **挿入位置の線**: `renderSiblingReorderIndicator` が `Graphics` の `rect(left, y − 3, right − left, 6).fill({ color: 0x2563eb })` で描く（太さ 6、ワールド座標。倍率 1 で 6px、0.5 で 3px）。ノードと接続線の後に `worldContainer` へ足し、いちばん上に重ねる。`eventMode` は `"none"`（ポインタを受けない）。
 - 色は選択の枠と同じ青 `#2563eb`。キャンバスの背景（ライト `#fafafa`、ダーク `#18181b`）に対するコントラストは、ライトで約 4.9:1、ダークで約 3.4:1 で、どちらも図形に求める 3:1 を満たす。Pixi の色はダークモードでも変えない（ノードの白背景と同じ扱い）。
 - **ドラッグ中のノード**: `renderMapNodes` の新しいオプション `siblingReorderSourceNodeId` に一致するノードは、枠と背景の `Graphics`・イラストの `Sprite`・ラベルの `Text` の `alpha` を 0.5 にする（`Container` の `alpha` は表示のフェードが使うので触らない）。選択の青い枠はそのまま（半透明）。子孫と接続線は変えない。ノードはポインタに追従させず、元の位置に置いたままにする。
-- 描画は `connectionTargetNodeId` と同じく、`useMapStageInteractions` の状態 `siblingReorderPreview` が変わったときに場面を描き直す。プレビューを変えるのは挿入位置が変わったときだけなので、描き直しはポインタの移動ごとには起きない。
+- 描画は `connectionTargetNodeId` と同じく、`useMapStageInteractions` の状態 `siblingReorderPreview` が変わったときに場面を描き直す。プレビューを変えるのは挿入先か線の座標が変わったときだけなので、描き直しはポインタの移動ごとには起きない。
 
 #### 中止の条件
 
@@ -667,7 +667,7 @@ resolveSiblingReorderDrop(
 
 ### ジェスチャー: `pixi/__tests__/siblingReorderGesture.test.ts` と `useMapStageInteractions.test.tsx`
 
-- 4px 未満の移動では、プレビューも並べ替えも起きないこと。4px に達したら、挿入位置が変わったときだけプレビューの関数が呼ばれること。
+- 4px 未満の移動では、プレビューも並べ替えも起きないこと。4px に達したら、挿入先か線の座標が変わったときだけプレビューの関数が呼ばれること（ドラッグ中に兄弟がずれたときは、同じ挿入位置でも呼ばれること）。
 - `end` が、`end` の座標と最新の ref で挿入位置を求め直すこと（`move` の後に `nodesRef` を差し替えると、差し替えた後の配列で判定される）。
 - 元の位置で離すと `onReorderSibling` を呼ばないこと。`cancel` の後の `end` で呼ばないこと。`end` と `cancel` を何度呼んでもプレビューを戻すのは1回であること。
 - 配置モードが途中で手動になると、`move` / `end` で中止すること。

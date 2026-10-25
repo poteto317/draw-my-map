@@ -59,7 +59,7 @@ describe("createSiblingReorderGesture", () => {
     expect(onReorderSibling).not.toHaveBeenCalled();
   });
 
-  it("挿入位置が変わったときだけプレビューを更新する", () => {
+  it("挿入先か線の座標が変わったときだけプレビューを更新する", () => {
     const { gesture, onPreviewChange } = createActiveGesture();
 
     gesture.move(pointer(100, 110, 150));
