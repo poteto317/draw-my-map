@@ -243,6 +243,7 @@ type SiblingSwapResult =
 
 1. 画面上の上下を決める。`first.top < second.top` なら上側 X = first、下側 Y = second。`second.top < first.top` なら X = second、Y = first。等しければ X = first、Y = second。
 2. 元の間隔 `gap0 = checkedSubtract(Y.top, X.bottom)`（`null` なら `null`）。`gap = gap0 >= 0 ? gap0 : SIBLING_VERTICAL_GAP`。
+   - X が first で `gap0 >= 0` なら（画面の上下がすでに新しい並びと一致している）、3 以降の計算をせず、座標を変えずに成功を返す（`nodes` は新しい配列、各ノードは同じオブジェクト）。計算すると丸め誤差で `dySecond` が 0 にならず（例: `1.42e-14`）、`checkedAdd` が桁落ちと判定して `placement-failed` になるため。
 3. 新しい上端:
    - `newFirstTop = X.top`（上側の上端を固定する）
    - `newSecondTop = checkedAdd(checkedAdd(X.top, first.height), gap)`（どちらかが `null` なら `null`）
@@ -251,7 +252,7 @@ type SiblingSwapResult =
 
 性質:
 
-- 画面の上下が、すでに新しい並びと一致していて重なっていない（`first` が上で `gap0 >= 0`）なら、`dyFirst = 0`、`dySecond = (X.top + X.height + gap0) - Y.top = 0` となり、座標は変わらない（配列の順だけが変わる）。
+- 画面の上下が、すでに新しい並びと一致していて重なっていない（`first` が上で `gap0 >= 0`）なら、数式の上では `dyFirst = 0`、`dySecond = (X.top + X.height + gap0) - Y.top = 0` で、座標は変わらない（配列の順だけが変わる）。浮動小数点では `dySecond` が 0 にならないことがあるので、手順 2 で計算をせずに返す。
 - 入れ替えた後、first と second の間隔は `gap`。2つの組を合わせた範囲の上端は `X.top` のまま。
 - `checkedAdd` は、0 でない値を足しても結果が変わらない桁落ちも `null` にするので、巨大な座標で「動いたつもりで動かない」ことは起きない。
 

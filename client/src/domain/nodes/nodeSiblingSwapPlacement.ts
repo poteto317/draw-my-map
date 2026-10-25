@@ -133,6 +133,9 @@ export function swapSiblingBranchPositions(
 
   const rawGap = checkedSubtract(lower.top, upper.bottom);
   if (rawGap === null) return PLACEMENT_FAILED;
+  // 画面の上下がすでに新しい並びと一致しているなら座標は変えない。
+  // 差分を計算すると丸め誤差で 0 にならず、桁落ちと誤判定するため先に返す
+  if (firstIsUpper && rawGap >= 0) return { ok: true, nodes: [...nodes] };
   const gap = rawGap >= 0 ? rawGap : SIBLING_VERTICAL_GAP;
 
   const newFirstTop = upper.top;

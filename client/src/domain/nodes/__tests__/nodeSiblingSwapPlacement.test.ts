@@ -72,6 +72,41 @@ describe("swapSiblingBranchPositions", () => {
     expect(result[1]).toBe(nodes[1]);
   });
 
+  it("例4: 丸め誤差で差分が0にならない座標でも、座標を変えずに成功する", () => {
+    const nodes = [
+      createTestNode({ id: 1, x: 0, y: 0, height: 60 }),
+      createTestNode({
+        id: 2,
+        parentId: 1,
+        x: 200,
+        y: -120.71143073062946,
+        height: 52,
+      }),
+      createTestNode({
+        id: 3,
+        parentId: 2,
+        x: 400,
+        y: 263.8503316621531,
+        height: 64,
+      }),
+      createTestNode({
+        id: 4,
+        parentId: 1,
+        x: 200,
+        y: -498.8695383066635,
+        height: 75,
+      }),
+    ];
+
+    const result = swapSiblingBranchPositions(nodes, [4], [2]);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.nodes).not.toBe(nodes);
+    expect(result.nodes).toHaveLength(nodes.length);
+    result.nodes.forEach((node, index) => expect(node).toBe(nodes[index]));
+  });
+
   it("例5: 枝が重なっているときは外接範囲で詰め直す", () => {
     const nodes = [
       createTestNode({ id: 1, y: 0 }),
