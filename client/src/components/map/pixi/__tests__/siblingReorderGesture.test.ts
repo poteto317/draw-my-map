@@ -78,6 +78,26 @@ describe("createSiblingReorderGesture", () => {
     });
   });
 
+  it("ドラッグ中に兄弟の座標が変わったら、同じ slot でも次の move で線を最新の座標に合わせる", () => {
+    const { gesture, nodesRef, onPreviewChange } = createActiveGesture();
+
+    gesture.move(pointer(100, 200, 250));
+    expect(onPreviewChange).toHaveBeenLastCalledWith({
+      nodeId: 3,
+      indicator: { left: 212, right: 328, y: 280 },
+    });
+
+    // 自動配置で B が 10 下へずれる（B の中心は 240 で、ポインタ 255 でも slot は同じ）
+    nodesRef.current = nodes.map((node) => node.id === 4 ? { ...node, y: 210 } : node);
+    gesture.move(pointer(100, 205, 255));
+
+    expect(onPreviewChange).toHaveBeenCalledTimes(2);
+    expect(onPreviewChange).toHaveBeenLastCalledWith({
+      nodeId: 3,
+      indicator: { left: 212, right: 328, y: 285 },
+    });
+  });
+
   it("離すとプレビューを null に戻してから並べ替えを要求する", () => {
     const { gesture, onReorderSibling, onPreviewChange } = createActiveGesture();
 

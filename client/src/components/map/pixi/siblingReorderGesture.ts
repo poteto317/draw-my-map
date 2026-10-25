@@ -3,6 +3,7 @@ import type { LatestValue, PointerGesture, PointerSample } from "@/components/ma
 import { hasFinitePointerCoordinates } from "@/components/map/pixi/pointerSample";
 import {
   resolveSiblingReorderDrop,
+  type SiblingReorderDrop,
   type SiblingReorderPreview,
 } from "@/components/map/siblingReorderDropSlot";
 import type { SiblingReorderRequest } from "@/domain/nodes/nodeSiblingOrder";
@@ -21,6 +22,18 @@ export type SiblingReorderGestureOptions = {
   dragThreshold: number;
 };
 
+// 挿入先と線の座標が同じなら、同じプレビューとみなす。slot だけで比べると、
+// ドラッグ中に自動配置で兄弟の座標が変わったときに線が古い位置に残る
+function isSameDrop(a: SiblingReorderDrop, b: SiblingReorderDrop): boolean {
+  if (a.target?.position !== b.target?.position || a.target?.anchorId !== b.target?.anchorId) {
+    return false;
+  }
+  if (a.indicator === null || b.indicator === null) return a.indicator === b.indicator;
+  return a.indicator.left === b.indicator.left
+    && a.indicator.right === b.indicator.right
+    && a.indicator.y === b.indicator.y;
+}
+
 export function createSiblingReorderGesture({
   nodeId,
   startSample,
@@ -37,7 +50,7 @@ export function createSiblingReorderGesture({
   const dragActivation = createDragActivation(startSample.screen, dragThreshold);
   // しきい値を超えてプレビューを出したか。超えていなければクリックとして扱う
   let activated = false;
-  let lastSlot: number | null = null;
+  let lastDrop: SiblingReorderDrop | null = null;
   let finished = false;
 
   const resolveDrop = (pointerY: number) =>
@@ -60,9 +73,9 @@ export function createSiblingReorderGesture({
       const drop = resolveDrop(sample.world.y);
       // 判定できないときは前のプレビューを保つ
       if (drop === null) return;
-      if (activated && drop.slot === lastSlot) return;
+      if (lastDrop !== null && isSameDrop(drop, lastDrop)) return;
       activated = true;
-      lastSlot = drop.slot;
+      lastDrop = drop;
       onSiblingReorderPreviewChangeRef.current({ nodeId, indicator: drop.indicator });
     },
     end(sample) {
