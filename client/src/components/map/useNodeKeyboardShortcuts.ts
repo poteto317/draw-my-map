@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef } from "react";
+import { isInteractiveTarget } from "@/components/map/interactiveTarget";
 
 type NodeKeyboardShortcutOptions = {
   selectedNodeId: number | null;
@@ -11,11 +12,6 @@ type NodeKeyboardShortcutOptions = {
   onStartEditing: (nodeId: number, initialText: string) => void;
   enabled: boolean;
 };
-
-const isInteractiveTarget = (target: EventTarget | null): boolean => (
-  target instanceof HTMLElement
-  && Boolean(target.closest("button, input, textarea, select, a[href], [contenteditable]"))
-);
 
 export function useNodeKeyboardShortcuts({
   selectedNodeId,
