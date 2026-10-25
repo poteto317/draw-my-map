@@ -16,6 +16,7 @@
    - 2.4 [AI イラスト生成・通知型](#24-ai-イラスト生成通知型)
    - 2.5 [画像エクスポート型](#25-画像エクスポート型)
    - 2.6 [箇条書きからの追加の型](#26-箇条書きからの追加の型)
+   - 2.7 [兄弟ノードの順序変更の型](#27-兄弟ノードの順序変更の型)
 3. [MapDocument JSON スキーマ仕様](#3-mapdocument-json-スキーマ仕様)
    - 3.1 [Version 1 スキーマ（Phase 5 初期）](#31-version-1-スキーマphase-5-初期)
    - 3.2 [Version 2 スキーマ（Phase 6）](#32-version-2-スキーマphase-6)
@@ -83,6 +84,7 @@ Root Node B (id: 5, parentId: null)
    - ノードの幾何座標（`x`, `y`）およびサイズ（`width`, `height`）はノード自体が保持しますが、配置方針（`layoutMode`: `"manual"` または `"auto"`）はマップドキュメント全体のグローバル状態として管理されます。
    - 自動配置モード時でも、計算されたレイアウト座標はそのまま各ノードの `x`, `y` に反映され、保存されます。
    - 箇条書きからの追加（Phase 13）は、解析の結果（`ParsedOutline`）を通常の `Node` として `nodes` の末尾に足すだけで、`Node` 型、`NodeMapState`、編集履歴、V3 の保存形式、JSON の形式に項目を足しません（2.6 節）。
+   - 兄弟ノードの順序変更（Phase 14）は、`nodes` 配列の中で移動する枝の根ノード1つの位置を変える（手動配置では縦位置も変える）だけで、順序のフィールドや保存形式・JSON・編集履歴の項目を足しません（2.7 節）。
    - 枝の折りたたみ（Phase 11）は画面表示専用の状態で、`NodeMapState`、編集履歴、JSON、`localStorage` に含めません。自動配置で折りたたみ中に使う表示用の座標（`displayNodes`）も保存せず、正本の `nodes` の `x`, `y` は変えません。import、自動復元、成功した Undo / Redo の後は全展開に戻ります。
 
 ---
@@ -139,6 +141,8 @@ export type Node = {
   illustration?: string;
 };
 ```
+
+- 兄弟とルートの順は `nodes` 配列の相対順です（同じ `parentId` を持つノード同士の、配列の中の前後）。並べ替えは根ノード1つの配列内の位置を変え、子孫の位置は変えません。順序のフィールド（`order` など）は持ちません。親子は `parentId` で表すので、子が親より前にあってもかまいません（[features.md の 14 章](./features.md#14-兄弟ノードの順序変更)）。
 
 #### `NodeImportance` (`client/src/types/nodeImportance.ts`)
 ノードの重要度を表現するユニオン型です。解像度フィルタリングの基準となります。
@@ -358,6 +362,74 @@ export type ForestInsertionResult =
 ```
 - 成功時の `nodes` は、`current` を変えずに、その後ろへ `items` の順で新しいノードを足した配列です。ID は検査（項目の形、親の存在、座標）をすべて済ませた後に `allocateIds` を1回だけ呼んで採番します。
 - `useNodes.insertForest(items, target)` は、これを `applyTreeChange` の1回の commit の中で呼び、`InsertForestResult`（`{ ok: true; rootId: number; count: number } | { ok: false; reason: ForestInsertionFailureReason }`。`client/src/hooks/useNodes.ts`）を返します。自動配置での全体の再配置に失敗したときは `placement-failed` です。
+
+### 2.7 兄弟ノードの順序変更の型
+
+兄弟ノードの順序変更（Phase 14。[features.md の 14 章](./features.md#14-兄弟ノードの順序変更)）で受け渡す型です。定義元はすべて `client/src/domain/nodes/nodeSiblingOrder.ts` です。いずれもメモリ上だけで使い、保存形式（V3）・JSON・`localStorage`・編集履歴には現れません。
+
+#### `SiblingReorderDirection` / `SiblingReorderTarget` / `SiblingReorderRequest` (`client/src/domain/nodes/nodeSiblingOrder.ts`)
+
+```typescript
+export type SiblingReorderDirection = "up" | "down";
+
+// anchorId は、移動するノード T と同じ親を持つ「見えている」兄弟。
+// "before": T を anchor の直前へ移す（anchor は T より前）。"after": T を anchor の直後へ移す（anchor は T より後ろ）
+export type SiblingReorderTarget = {
+  position: "before" | "after";
+  anchorId: number;
+};
+
+export type SiblingReorderRequest =
+  | { kind: "step"; direction: SiblingReorderDirection } // ショートカット・ボタン
+  | { kind: "drop"; target: SiblingReorderTarget }; // ドラッグ
+```
+- 対象と挿入先は ID で指定し、配列の添字は受け渡しません。`step` は、`useNodes.reorderSibling` が `applyTreeChange` のコールバックの中で呼ぶ `reorderSiblingByRequest` が、最新のノード配列から `findSiblingReorderTarget` で挿入先へ解決します。
+
+#### `SiblingReorderResult` (`client/src/domain/nodes/nodeSiblingOrder.ts`)
+`reorderSiblingNodes(nodes, nodeId, target, visibleNodeIds, mode): SiblingReorderResult` の結果の型です。
+
+```typescript
+export type SiblingReorderFailureReason =
+  | "node-missing" // T が無い
+  | "node-hidden" // T が見えていない
+  | "invalid-target" // anchor が無い・見えていない・兄弟でない・T 自身・向きが合わない・枝が重複している
+  | "placement-failed"; // reorderSiblingNodes では手動配置の座標の計算の失敗（有限でない・桁落ち）。useNodes.reorderSibling ではそれに加えて自動配置の失敗も含む
+
+export type SiblingReorderResult =
+  | {
+    ok: true;
+    nodes: Node[];
+    direction: SiblingReorderDirection; // "before" なら "up"、"after" なら "down"
+    visibleIndex: number; // 移動後の、見えている兄弟の中での位置（0始まり）
+    visibleCount: number; // 見えている兄弟の数（T を含む）
+    isRoot: boolean;
+  }
+  | { ok: false; reason: SiblingReorderFailureReason };
+```
+- 成功時の `nodes` は、`nodes` を1回走査して作った新しい配列です。座標を変えないノードは同じオブジェクトのままです。手動配置では `swapSiblingBranchPositions`（`client/src/domain/nodes/nodeSiblingSwapPlacement.ts`）で2つの組の `y` を平行移動し、自動配置では先頭のルートが変わるときだけ旧先頭の `x` / `y` を新しい先頭へ引き継ぎます。
+
+#### `ReorderSiblingResult` (`client/src/domain/nodes/nodeSiblingOrder.ts`)
+`useNodes.reorderSibling(nodeId, request, visibleNodeIds): ReorderSiblingResult` の戻り値の型です。domain の `formatSiblingReorderNotice` からも参照するため、`hooks/useNodes.ts` ではなく domain に置きます。
+
+```typescript
+export type ReorderSiblingResult =
+  | {
+    ok: true;
+    direction: SiblingReorderDirection;
+    visibleIndex: number;
+    visibleCount: number;
+    isRoot: boolean;
+  }
+  | {
+    ok: false;
+    reason: "at-edge";
+    direction: SiblingReorderDirection;
+    hiddenBeyond: boolean; // その向きに隠れた兄弟が1つ以上ある
+    isRoot: boolean;
+  }
+  | { ok: false; reason: SiblingReorderFailureReason };
+```
+- `applyTreeChange` を1回だけ呼びます。成功したときだけ1回の commit になり、選択と `documentRevision` は変えません。端と失敗ではノード・選択・履歴・「やり直す」を変えません。自動配置の `layoutNodeForest` が失敗したときは `placement-failed` です。
 
 ---
 
