@@ -215,6 +215,51 @@ describe("ページの自動配置のドラッグによる兄弟の並べ替え"
     expect(undoButton()).toBeDisabled();
   });
 
+  it("ドラッグ中にキーボードで「マップ一覧」を開いて閉じた後に離しても、並べ替えず通知もしない", async () => {
+    const user = userEvent.setup();
+    storeAutoLayoutChildren();
+    await renderPage();
+
+    nodePointerDown(1, 520, 100);
+    stagePointer("pointermove", 520, 250);
+    within(screen.getByRole("banner")).getByRole("button", { name: "マップ一覧" }).focus();
+    await user.keyboard("{Enter}");
+    const dialog = within(screen.getByRole("dialog"));
+    dialog.getByRole("button", { name: "閉じる" }).focus();
+    await user.keyboard("{Enter}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    stagePointer("pointermove", 520, 260);
+    stagePointer("pointerup", 520, 260);
+
+    expect(exportedIds()).toEqual(ORIGINAL_IDS);
+    expect(screen.queryByText(MOVED_DOWN_MESSAGE)).not.toBeInTheDocument();
+    expect(undoButton()).toBeDisabled();
+  });
+
+  it("手動配置でドラッグ中に「マップ一覧」を開くと開いた時点の位置で止まり、閉じた後に離しても動かず、開く前の移動は1回の「元に戻す」で戻る", async () => {
+    const user = userEvent.setup();
+    storeAutoLayoutChildren();
+    await renderPage();
+    await user.click(within(screen.getByRole("group", { name: "レイアウトモード" })).getByRole("button", { name: "手動配置" }));
+    const nodesBefore = exportedMap().nodes;
+
+    // 開く前に動かし、履歴のグループを開いた状態にする（A は (470, 70) から 30 下へ）
+    nodePointerDown(1, 520, 100);
+    stagePointer("pointermove", 520, 130);
+    expect(exportedMap().nodes[1]).toMatchObject({ id: 2, x: 470, y: 100 });
+    within(screen.getByRole("banner")).getByRole("button", { name: "マップ一覧" }).focus();
+    await user.keyboard("{Enter}");
+    within(screen.getByRole("dialog")).getByRole("button", { name: "閉じる" }).focus();
+    await user.keyboard("{Enter}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    stagePointer("pointermove", 520, 250);
+    stagePointer("pointerup", 520, 250);
+
+    expect(exportedMap().nodes[1]).toMatchObject({ id: 2, x: 470, y: 100 });
+    await user.click(undoButton());
+    expect(exportedMap().nodes).toEqual(nodesBefore);
+  });
+
   it("手動配置に切り替えると、同じドラッグはノードの移動になり並びを変えない", async () => {
     const user = userEvent.setup();
     storeAutoLayoutChildren();

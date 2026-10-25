@@ -2,7 +2,9 @@ import { useEffect, useRef } from "react";
 import { MapStage } from "@/components/map/MapStage";
 import { useNodes } from "@/hooks/useNodes";
 
-export function AutoLayoutMapStageHarness() {
+type AutoLayoutMapStageHarnessProps = { shortcutsEnabled?: boolean };
+
+export function AutoLayoutMapStageHarness({ shortcutsEnabled = true }: AutoLayoutMapStageHarnessProps = {}) {
   const {
     nodes,
     selectedNodeId,
@@ -57,7 +59,7 @@ export function AutoLayoutMapStageHarness() {
         onPasteSubtree={pasteSubtree}
         onClipboardNotice={() => {}}
         documentRevision={documentRevision}
-        shortcutsEnabled
+        shortcutsEnabled={shortcutsEnabled}
       />
       <output data-testid="node-state">{JSON.stringify(nodes)}</output>
       <output data-testid="selected-node-id">{selectedNodeId}</output>

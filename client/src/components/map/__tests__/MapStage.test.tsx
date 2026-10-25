@@ -694,6 +694,69 @@ describe("MapStage boundary", () => {
     });
   });
 
+  describe("ドラッグ中に shortcutsEnabled が false になったとき", () => {
+    it("ノードの移動を中止し、その後の pointerup でも移動しない", async () => {
+      const onMoveNode = jest.fn();
+      const props = { ...defaultProps, nodes: sampleNodes, onMoveNode };
+      const { rerender } = await renderReady(<MapStage {...props} />);
+
+      act(() => {
+        mockNodePointerHandlers.at(-2)?.pointerdown?.(pointer(100, 60));
+      });
+      rerender(<MapStage {...props} shortcutsEnabled={false} />);
+      act(() => {
+        mockStageHandlers.pointermove?.(pointer(140, 100));
+        mockStageHandlers.pointerup?.(pointer(140, 100));
+      });
+
+      expect(onMoveNode).not.toHaveBeenCalled();
+    });
+
+    it("Shift+ドラッグの接続を中止し、その後の pointerup でも接続しない", async () => {
+      const onConnectNodes = jest.fn();
+      const props = { ...defaultProps, nodes: sampleNodes, onConnectNodes };
+      const { rerender } = await renderReady(<MapStage {...props} />);
+
+      act(() => {
+        mockNodePointerHandlers.at(-2)?.pointerdown?.(pointer(100, 60, { shiftKey: true }));
+        mockStageHandlers.pointermove?.(pointer(250, 130));
+      });
+      rerender(<MapStage {...props} shortcutsEnabled={false} />);
+      act(() => {
+        mockStageHandlers.pointermove?.(pointer(250, 130));
+        mockStageHandlers.pointerup?.(pointer(250, 130));
+      });
+
+      expect(onConnectNodes).not.toHaveBeenCalled();
+    });
+
+    it("true に戻した後は、新しいドラッグで移動と接続ができる", async () => {
+      const onMoveNode = jest.fn();
+      const onConnectNodes = jest.fn();
+      const props = { ...defaultProps, nodes: sampleNodes, onMoveNode, onConnectNodes };
+      const { rerender } = await renderReady(<MapStage {...props} />);
+
+      act(() => {
+        mockNodePointerHandlers.at(-2)?.pointerdown?.(pointer(100, 60));
+      });
+      rerender(<MapStage {...props} shortcutsEnabled={false} />);
+      rerender(<MapStage {...props} shortcutsEnabled />);
+      act(() => {
+        mockNodePointerHandlers.at(-2)?.pointerdown?.(pointer(100, 60));
+        mockStageHandlers.pointermove?.(pointer(140, 100));
+        mockStageHandlers.pointerup?.(pointer(140, 100));
+      });
+      act(() => {
+        mockNodePointerHandlers.at(-2)?.pointerdown?.(pointer(100, 60, { shiftKey: true }));
+        mockStageHandlers.pointermove?.(pointer(250, 130));
+        mockStageHandlers.pointerup?.(pointer(250, 130));
+      });
+
+      expect(onMoveNode).toHaveBeenCalledWith(1, 90, 70);
+      expect(onConnectNodes).toHaveBeenCalledWith(1, 2);
+    });
+  });
+
   describe("兄弟の順序のショートカット", () => {
     it("Alt+↑で選択中のノードを1つ上へ移す要求を onReorderSibling へ渡し、既定動作を止める", async () => {
       const onReorderSibling = jest.fn();
@@ -1136,6 +1199,36 @@ describe("MapStage boundary", () => {
 
       expect(notCanceled).toBe(false);
       expect(readNodes(getByTestId)).toEqual(before);
+    });
+
+    it("ドラッグ中に shortcutsEnabled が false になると中止し、離しても並びを変えない。true に戻すと新しいドラッグで並べ替えられる", async () => {
+      const { getByTestId, rerender } = await renderReady(<AutoLayoutMapStageHarness />);
+      const before = readNodes(getByTestId);
+      const firstRoot = before.find((node) => node.id === 1)!;
+      const secondRoot = before.find((node) => node.id === 2)!;
+      const pointerX = secondRoot.x + secondRoot.width / 2;
+      const startY = secondRoot.y + secondRoot.height / 2;
+      const dropY = firstRoot.y + firstRoot.height / 2 - 10;
+
+      act(() => {
+        mockNodePointerHandlers.at(-1)?.pointerdown?.(pointer(pointerX, startY));
+        mockStageHandlers.pointermove?.(pointer(pointerX, dropY));
+      });
+      rerender(<AutoLayoutMapStageHarness shortcutsEnabled={false} />);
+      act(() => {
+        mockStageHandlers.pointerup?.(pointer(pointerX, dropY));
+      });
+
+      expect(readNodes(getByTestId)).toEqual(before);
+
+      rerender(<AutoLayoutMapStageHarness />);
+      act(() => {
+        mockNodePointerHandlers.at(-1)?.pointerdown?.(pointer(pointerX, startY));
+        mockStageHandlers.pointermove?.(pointer(pointerX, dropY));
+        mockStageHandlers.pointerup?.(pointer(pointerX, dropY));
+      });
+
+      expect(readNodes(getByTestId).map((node) => node.id)).toEqual([2, 1]);
     });
 
     it("ドラッグしていないときのEscapeはpreventDefaultしない", async () => {

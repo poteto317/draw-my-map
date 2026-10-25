@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, type MouseEvent, type RefObject } from "react";
+import { useLayoutEffect, useMemo, useRef, type MouseEvent, type RefObject } from "react";
 import { NodeContextMenu } from "@/components/map/NodeContextMenu";
 import {
   resolveMapContextMenuAction,
@@ -186,6 +186,12 @@ export function MapStage({
     cancelActiveGesture,
     closeContextMenu: contextMenu.close,
   });
+
+  // ダイアログを開く（shortcutsEnabled が false になる）と、進行中のドラッグを中止する。
+  // キーボードや2本目の指でダイアログを開いても、タッチの暗黙のキャプチャで pointerup がキャンバスへ届くため
+  useLayoutEffect(() => {
+    if (!shortcutsEnabled) cancelActiveGesture();
+  }, [shortcutsEnabled, cancelActiveGesture]);
 
   useSiblingReorderDragEscape({
     isSiblingReorderActive,
