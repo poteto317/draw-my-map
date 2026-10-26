@@ -6,7 +6,6 @@ import {
   type SiblingReorderRequest,
 } from "@/domain/nodes/nodeSiblingOrder";
 import { formatSiblingReorderNotice } from "@/domain/nodes/nodeSiblingOrderMessages";
-import { useRevisionScopedNotice } from "@/hooks/useRevisionScopedNotice";
 import type { Node } from "@/types/node";
 import type { OperationNotice } from "@/types/operationNotice";
 
@@ -14,12 +13,12 @@ export type UseSiblingReorderActionOptions = {
   selectedNodeId: number | null;
   nodes: readonly Node[];
   visibleNodeIds: ReadonlySet<number>;
-  documentRevision: number;
   reorderSibling: (
     nodeId: number,
     request: SiblingReorderRequest,
     visibleNodeIds: ReadonlySet<number>,
   ) => ReorderSiblingResult;
+  publishNotice: (notice: OperationNotice) => void; // 枝の構造の変更の通知の枠
 };
 
 export type UseSiblingReorderActionReturn = {
@@ -27,19 +26,16 @@ export type UseSiblingReorderActionReturn = {
   canMoveDown: boolean;
   moveSelected: (direction: SiblingReorderDirection) => void;
   reorder: (nodeId: number, request: SiblingReorderRequest) => void;
-  notice: OperationNotice | null;
 };
 
-// 兄弟の並べ替えのボタンの有効・無効と、結果の通知を持つ。通知は次の要求か documentRevision の変化まで残す
+// 兄弟の並べ替えのボタンの有効・無効を持ち、結果ごとに通知を1回発行する。通知の枠は呼び出し元が持つ
 export function useSiblingReorderAction({
   selectedNodeId,
   nodes,
   visibleNodeIds,
-  documentRevision,
   reorderSibling,
+  publishNotice,
 }: UseSiblingReorderActionOptions): UseSiblingReorderActionReturn {
-  const { notice, publishNotice } = useRevisionScopedNotice(documentRevision);
-
   const availability = useMemo(
     () => getSiblingReorderAvailability(nodes, selectedNodeId, visibleNodeIds),
     [nodes, selectedNodeId, visibleNodeIds],
@@ -60,6 +56,5 @@ export function useSiblingReorderAction({
     canMoveDown: selectedNodeId !== null && availability.down,
     moveSelected,
     reorder,
-    notice,
   };
 }

@@ -55,6 +55,7 @@ const defaultProps = {
   dialogMouseClickedAtRef: { current: null },
   layoutMode: "manual" as const,
   onReorderSibling: jest.fn(),
+  onChangeNodeIndent: jest.fn(),
 };
 
 const sampleNodes: Node[] = [
@@ -111,6 +112,7 @@ function KeyboardCreationHarness({ initiallySelected = true }: { initiallySelect
         dialogMouseClickedAtRef={{ current: null }}
         layoutMode="manual"
         onReorderSibling={() => {}}
+        onChangeNodeIndent={() => {}}
       />
       <output data-testid="node-state">{JSON.stringify(nodes)}</output>
       <output data-testid="selected-node-id">{selectedNodeId}</output>
@@ -167,6 +169,7 @@ function MouseConnectionHarness() {
         dialogMouseClickedAtRef={{ current: null }}
         layoutMode="manual"
         onReorderSibling={() => {}}
+        onChangeNodeIndent={() => {}}
       />
       <output data-testid="node-state">{JSON.stringify(nodes)}</output>
       <output data-testid="selected-node-id">{selectedNodeId}</output>
@@ -224,6 +227,7 @@ function SubtreeMoveHarness() {
         dialogMouseClickedAtRef={{ current: null }}
         layoutMode="manual"
         onReorderSibling={() => {}}
+        onChangeNodeIndent={() => {}}
       />
       <output data-testid="node-state">{JSON.stringify(nodes)}</output>
     </>
@@ -814,6 +818,130 @@ describe("MapStage boundary", () => {
       fireEvent.keyDown(document.body, { key: "ArrowUp", altKey: true, shiftKey: true });
 
       expect(onReorderSibling).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("階層の上げ下げのショートカット", () => {
+    it("Alt+→で選択中のノードの階層を下げる要求を onChangeNodeIndent へ渡し、既定動作を止める", async () => {
+      const onChangeNodeIndent = jest.fn();
+      await renderReady(
+        <MapStage {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onChangeNodeIndent={onChangeNodeIndent} />,
+      );
+
+      const notCanceled = fireEvent.keyDown(document.body, { key: "ArrowRight", altKey: true });
+
+      expect(onChangeNodeIndent).toHaveBeenCalledTimes(1);
+      expect(onChangeNodeIndent).toHaveBeenCalledWith(1, "indent");
+      expect(notCanceled).toBe(false);
+    });
+
+    it("Alt+←で選択中のノードの階層を上げる要求を onChangeNodeIndent へ渡し、既定動作を止める", async () => {
+      const onChangeNodeIndent = jest.fn();
+      await renderReady(
+        <MapStage {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onChangeNodeIndent={onChangeNodeIndent} />,
+      );
+
+      const notCanceled = fireEvent.keyDown(document.body, { key: "ArrowLeft", altKey: true });
+
+      expect(onChangeNodeIndent).toHaveBeenCalledTimes(1);
+      expect(onChangeNodeIndent).toHaveBeenCalledWith(1, "outdent");
+      expect(notCanceled).toBe(false);
+    });
+
+    it("shortcutsEnabled が false なら Alt+→ で onChangeNodeIndent を呼ばず、既定動作も止めない", async () => {
+      const onChangeNodeIndent = jest.fn();
+      await renderReady(
+        <MapStage
+          {...defaultProps}
+          nodes={sampleNodes}
+          selectedNodeId={1}
+          shortcutsEnabled={false}
+          onChangeNodeIndent={onChangeNodeIndent}
+        />,
+      );
+
+      const notCanceled = fireEvent.keyDown(document.body, { key: "ArrowRight", altKey: true });
+
+      expect(onChangeNodeIndent).not.toHaveBeenCalled();
+      expect(notCanceled).toBe(true);
+    });
+
+    it("ラベル編集中は Alt+→ で onChangeNodeIndent を呼ばない", async () => {
+      const onChangeNodeIndent = jest.fn();
+      const { getByTestId } = await renderReady(
+        <MapStage {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onChangeNodeIndent={onChangeNodeIndent} />,
+      );
+      const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+      mockStageBounds(container);
+      fireEvent.doubleClick(container, { clientX: 100, clientY: 60 });
+      const input = getByTestId("node-label-input");
+
+      fireEvent.keyDown(input, { key: "ArrowRight", altKey: true });
+      fireEvent.keyDown(document.body, { key: "ArrowRight", altKey: true });
+
+      expect(input).toBeInTheDocument();
+      expect(onChangeNodeIndent).not.toHaveBeenCalled();
+    });
+
+    it("Alt+Shift+→ では onChangeNodeIndent を呼ばない", async () => {
+      const onChangeNodeIndent = jest.fn();
+      await renderReady(
+        <MapStage {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onChangeNodeIndent={onChangeNodeIndent} />,
+      );
+
+      fireEvent.keyDown(document.body, { key: "ArrowRight", altKey: true, shiftKey: true });
+
+      expect(onChangeNodeIndent).not.toHaveBeenCalled();
+    });
+
+    it("Alt+↑ では onChangeNodeIndent を呼ばず onReorderSibling を呼ぶ", async () => {
+      const onChangeNodeIndent = jest.fn();
+      const onReorderSibling = jest.fn();
+      await renderReady(
+        <MapStage
+          {...defaultProps}
+          nodes={sampleNodes}
+          selectedNodeId={1}
+          onChangeNodeIndent={onChangeNodeIndent}
+          onReorderSibling={onReorderSibling}
+        />,
+      );
+
+      fireEvent.keyDown(document.body, { key: "ArrowUp", altKey: true });
+
+      expect(onReorderSibling).toHaveBeenCalledTimes(1);
+      expect(onChangeNodeIndent).not.toHaveBeenCalled();
+    });
+
+    it("Alt+→ では onReorderSibling を呼ばない", async () => {
+      const onChangeNodeIndent = jest.fn();
+      const onReorderSibling = jest.fn();
+      await renderReady(
+        <MapStage
+          {...defaultProps}
+          nodes={sampleNodes}
+          selectedNodeId={1}
+          onChangeNodeIndent={onChangeNodeIndent}
+          onReorderSibling={onReorderSibling}
+        />,
+      );
+
+      fireEvent.keyDown(document.body, { key: "ArrowRight", altKey: true });
+
+      expect(onChangeNodeIndent).toHaveBeenCalledTimes(1);
+      expect(onReorderSibling).not.toHaveBeenCalled();
+    });
+
+    it("選択が無いときの Alt+← は onChangeNodeIndent を呼ばず、ブラウザの「戻る」は止める", async () => {
+      const onChangeNodeIndent = jest.fn();
+      await renderReady(
+        <MapStage {...defaultProps} nodes={sampleNodes} selectedNodeId={null} onChangeNodeIndent={onChangeNodeIndent} />,
+      );
+
+      const notCanceled = fireEvent.keyDown(document.body, { key: "ArrowLeft", altKey: true });
+
+      expect(onChangeNodeIndent).not.toHaveBeenCalled();
+      expect(notCanceled).toBe(false);
     });
   });
 

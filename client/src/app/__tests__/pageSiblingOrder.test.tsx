@@ -246,6 +246,30 @@ describe("ページの兄弟の並べ替え（ボタン）", () => {
     expect(downButton()).toBeDisabled();
   });
 
+  it("並べ替えの通知はコピーの通知を消さず、続けて複製・コピーしても並べ替えの通知が残る", async () => {
+    const user = userEvent.setup();
+    const COPY_MESSAGE = "枝をコピーしました。";
+    const DUPLICATE_MESSAGE = "枝を複製しました。Fキーで選択ノードへ移動できます。";
+    const clipboardData = { setData: jest.fn(), getData: jest.fn(() => "") };
+    storeThreeRoots();
+    await renderPage();
+    selectNode(1, 3);
+    fireEvent.copy(document.body, { clipboardData });
+    expect(within(noticeBar()).getByText(COPY_MESSAGE)).toBeInTheDocument();
+
+    await user.click(upButton());
+    expect(within(noticeBar()).getByText(COPY_MESSAGE)).toBeInTheDocument();
+    expect(within(noticeBar()).getByText(ROOT_MOVED_UP_MESSAGE)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "枝を複製" }));
+    expect(within(noticeBar()).getByText(DUPLICATE_MESSAGE)).toBeInTheDocument();
+    expect(within(noticeBar()).getByText(COPY_MESSAGE)).toBeInTheDocument();
+    expect(within(noticeBar()).getByText(ROOT_MOVED_UP_MESSAGE)).toBeInTheDocument();
+
+    fireEvent.copy(document.body, { clipboardData });
+    expect(within(noticeBar()).getByText(ROOT_MOVED_UP_MESSAGE)).toBeInTheDocument();
+  });
+
   it("無効の「上へ」をクリックしても並びを変えず、通知も出さない", async () => {
     storeThreeRoots();
     await renderPage();

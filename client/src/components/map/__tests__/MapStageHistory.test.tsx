@@ -71,6 +71,7 @@ function HistoryHarness({ apiRef, setup, visibleNodeIds }: HistoryHarnessProps) 
       dialogMouseClickedAtRef={{ current: null }}
       layoutMode="manual"
       onReorderSibling={() => {}}
+      onChangeNodeIndent={() => {}}
     />
   );
 }

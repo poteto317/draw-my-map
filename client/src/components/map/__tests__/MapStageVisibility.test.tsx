@@ -41,6 +41,7 @@ const defaultProps = {
   dialogMouseClickedAtRef: { current: null },
   layoutMode: "manual" as const,
   onReorderSibling: jest.fn(),
+  onChangeNodeIndent: jest.fn(),
 };
 
 const sampleNodes: Node[] = [

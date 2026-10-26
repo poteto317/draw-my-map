@@ -289,6 +289,87 @@ describe("MapEditor", () => {
     });
   });
 
+  describe("階層の上げ下げ", () => {
+    const parentWithTwoChildrenJson = `${JSON.stringify({
+      version: 3,
+      layoutMode: "manual",
+      nodes: [
+        { id: 1, parentId: null, label: "R", importance: "medium", x: 0, y: 100, width: 100, height: 60 },
+        { id: 2, parentId: 1, label: "A", importance: "medium", x: 220, y: 0, width: 100, height: 60 },
+        { id: 3, parentId: 1, label: "B", importance: "medium", x: 220, y: 200, width: 100, height: 60 },
+      ],
+    })}\n`;
+
+    // 直近の描画で登録されたノードのpointerdownで選択し、同じpointerで離す（indexはnodes配列の順）
+    function selectNode(index: number, nodeCount: number) {
+      act(() => {
+        mockNodePointerHandlers.at(index - nodeCount)?.pointerdown?.(pointer(300, 200));
+        mockStageHandlers.pointerup?.(pointer(300, 200));
+      });
+    }
+
+    function outdentButton(): HTMLElement {
+      return screen.getByRole("button", { name: "枝の階層を上げる" });
+    }
+
+    function indentButton(): HTMLElement {
+      return screen.getByRole("button", { name: "枝の階層を下げる" });
+    }
+
+    it("「階層」を「兄弟の順序」の後、クリップボードの案内の前に置く", async () => {
+      await renderEditor();
+
+      const siblingGroup = screen.getByRole("group", { name: "兄弟の順序" });
+      const group = screen.getByRole("group", { name: "階層" });
+      const hint = screen.getByText((content) => content.startsWith("枝をコピー: Ctrl/Cmd+C"));
+      expect(siblingGroup.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(group.compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it("未選択なら「上げる」「下げる」をどちらも無効にする", async () => {
+      await renderEditor({ storage: createTestStorageSession({ initialJson: parentWithTwoChildrenJson }) });
+
+      expect(outdentButton()).toBeDisabled();
+      expect(indentButton()).toBeDisabled();
+    });
+
+    it("R は両方無効、A は「上げる」だけ有効、B は両方有効にする", async () => {
+      await renderEditor({ storage: createTestStorageSession({ initialJson: parentWithTwoChildrenJson }) });
+
+      selectNode(0, 3);
+      expect(outdentButton()).toBeDisabled();
+      expect(indentButton()).toBeDisabled();
+
+      selectNode(1, 3);
+      expect(outdentButton()).toBeEnabled();
+      expect(indentButton()).toBeDisabled();
+
+      selectNode(2, 3);
+      expect(outdentButton()).toBeEnabled();
+      expect(indentButton()).toBeEnabled();
+    });
+
+    it("B で「下げる」を押すと A の子にし、操作通知バーに位置を出す", async () => {
+      await renderEditor({ storage: createTestStorageSession({ initialJson: parentWithTwoChildrenJson }) });
+      selectNode(2, 3);
+
+      fireEvent.click(indentButton());
+
+      expect(screen.getByTestId("operation-notices"))
+        .toHaveTextContent("枝の階層を下げました（「A」の子、第3階層）。");
+    });
+
+    it("B で「上げる」を押すと R の兄弟（ルート）にし、操作通知バーに位置を出す", async () => {
+      await renderEditor({ storage: createTestStorageSession({ initialJson: parentWithTwoChildrenJson }) });
+      selectNode(2, 3);
+
+      fireEvent.click(outdentButton());
+
+      expect(screen.getByTestId("operation-notices"))
+        .toHaveTextContent("枝の階層を上げました（ルート、第1階層）。");
+    });
+  });
+
   describe("箇条書きから追加", () => {
     it("「箇条書きから追加」をクリップボードの案内の後、「JSON書き出し」の前に置く", async () => {
       await renderEditor();

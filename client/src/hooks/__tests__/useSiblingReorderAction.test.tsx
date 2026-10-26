@@ -1,11 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
-import { useNodeDuplicationAction } from "@/hooks/useNodeDuplicationAction";
 import { useSiblingReorderAction } from "@/hooks/useSiblingReorderAction";
 import type {
   ReorderSiblingResult,
   SiblingReorderRequest,
 } from "@/domain/nodes/nodeSiblingOrder";
 import { createTestNode } from "@/testing/createTestNode";
+import type { OperationNotice } from "@/types/operationNotice";
 
 const NODES = [
   createTestNode({ id: 1 }),
@@ -33,23 +33,25 @@ type HookProps = {
   selectedNodeId: number | null;
   nodes?: typeof NODES;
   visibleNodeIds?: ReadonlySet<number>;
-  documentRevision?: number;
   reorderSibling?: ReturnType<typeof createReorderSibling>;
+  publishNotice?: jest.Mock<void, [OperationNotice]>;
 };
 
 function renderAction(initial: HookProps) {
   const defaultReorder = createReorderSibling();
-  return renderHook(
+  const defaultPublishNotice = jest.fn<void, [OperationNotice]>();
+  const rendered = renderHook(
     (props: HookProps) =>
       useSiblingReorderAction({
         selectedNodeId: props.selectedNodeId,
         nodes: props.nodes ?? NODES,
         visibleNodeIds: props.visibleNodeIds ?? ALL_VISIBLE,
-        documentRevision: props.documentRevision ?? 0,
         reorderSibling: props.reorderSibling ?? defaultReorder,
+        publishNotice: props.publishNotice ?? defaultPublishNotice,
       }),
     { initialProps: initial },
   );
+  return { ...rendered, publishNotice: initial.publishNotice ?? defaultPublishNotice };
 }
 
 describe("useSiblingReorderAction", () => {
@@ -121,12 +123,12 @@ describe("useSiblingReorderAction", () => {
 
     it("未選択なら moveSelected は reorderSibling も通知も呼ばない", () => {
       const reorderSibling = createReorderSibling();
-      const { result } = renderAction({ selectedNodeId: null, reorderSibling });
+      const { result, publishNotice } = renderAction({ selectedNodeId: null, reorderSibling });
 
       act(() => result.current.moveSelected("up"));
 
       expect(reorderSibling).not.toHaveBeenCalled();
-      expect(result.current.notice).toBeNull();
+      expect(publishNotice).not.toHaveBeenCalled();
     });
 
     it("reorder は渡された nodeId と request でそのまま reorderSibling を呼ぶ", () => {
@@ -146,9 +148,10 @@ describe("useSiblingReorderAction", () => {
 
   describe("通知", () => {
     it("成功すると移動先の位置を通知する", () => {
-      const { result } = renderAction({ selectedNodeId: 3 });
+      const { result, publishNotice } = renderAction({ selectedNodeId: 3 });
       act(() => result.current.moveSelected("up"));
-      expect(result.current.notice).toEqual({
+      expect(publishNotice).toHaveBeenCalledTimes(1);
+      expect(publishNotice).toHaveBeenCalledWith({
         kind: "status",
         message: "枝を上へ移動しました（見えている兄弟の3件中1番目）。",
       });
@@ -162,9 +165,10 @@ describe("useSiblingReorderAction", () => {
         hiddenBeyond: false,
         isRoot: false,
       });
-      const { result } = renderAction({ selectedNodeId: 2, reorderSibling });
+      const { result, publishNotice } = renderAction({ selectedNodeId: 2, reorderSibling });
       act(() => result.current.moveSelected("up"));
-      expect(result.current.notice).toEqual({
+      expect(publishNotice).toHaveBeenCalledTimes(1);
+      expect(publishNotice).toHaveBeenCalledWith({
         kind: "status",
         message: "これ以上上へ移動できません（見えている兄弟の先頭です）。",
       });
@@ -172,49 +176,13 @@ describe("useSiblingReorderAction", () => {
 
     it("invalid-target はエラーを通知する", () => {
       const reorderSibling = createReorderSibling({ ok: false, reason: "invalid-target" });
-      const { result } = renderAction({ selectedNodeId: 3, reorderSibling });
+      const { result, publishNotice } = renderAction({ selectedNodeId: 3, reorderSibling });
       act(() => result.current.moveSelected("up"));
-      expect(result.current.notice).toEqual({
+      expect(publishNotice).toHaveBeenCalledTimes(1);
+      expect(publishNotice).toHaveBeenCalledWith({
         kind: "error",
         message: "枝の順序を変更できませんでした。",
       });
-    });
-
-    it("documentRevision が変わると通知を消す", () => {
-      const { result, rerender } = renderAction({ selectedNodeId: 3, documentRevision: 0 });
-      act(() => result.current.moveSelected("up"));
-      expect(result.current.notice).not.toBeNull();
-
-      rerender({ selectedNodeId: 3, documentRevision: 1 });
-
-      expect(result.current.notice).toBeNull();
-    });
-
-    it("別の useRevisionScopedNotice の通知を消さない", () => {
-      const reorderSibling = createReorderSibling();
-      const { result } = renderHook(() => ({
-        reorder: useSiblingReorderAction({
-          selectedNodeId: 3,
-          nodes: NODES,
-          visibleNodeIds: ALL_VISIBLE,
-          documentRevision: 0,
-          reorderSibling,
-        }),
-        duplication: useNodeDuplicationAction({
-          selectedNodeId: 3,
-          documentRevision: 0,
-          duplicateSubtree: () => 10,
-        }),
-      }));
-
-      act(() => result.current.duplication.duplicateSelected());
-      const duplicationNotice = result.current.duplication.notice;
-      expect(duplicationNotice).not.toBeNull();
-
-      act(() => result.current.reorder.moveSelected("up"));
-
-      expect(result.current.reorder.notice).not.toBeNull();
-      expect(result.current.duplication.notice).toBe(duplicationNotice);
     });
   });
 });

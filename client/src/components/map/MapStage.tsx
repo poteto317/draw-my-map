@@ -28,10 +28,12 @@ import { useNodeFocusRequest } from "@/components/map/useNodeFocusRequest";
 import { useRenderedMapScene } from "@/components/map/useRenderedMapScene";
 import { useSiblingReorderDragEscape } from "@/components/map/useSiblingReorderDragEscape";
 import { useSiblingReorderShortcut } from "@/components/map/useSiblingReorderShortcut";
+import { useNodeIndentShortcut } from "@/components/map/useNodeIndentShortcut";
 import { useIllustrationTextures } from "@/components/map/useIllustrationTextures";
 import { useViewportScaleNotification } from "@/components/map/useViewportScaleNotification";
 import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
 import type { SiblingReorderRequest } from "@/domain/nodes/nodeSiblingOrder";
+import type { NodeIndentDirection } from "@/domain/nodes/nodeIndent";
 import type {
   SubtreeClipboardData,
   SubtreeClipboardResult,
@@ -62,6 +64,8 @@ type MapStageProps = {
   layoutMode: NodeLayoutMode;
   // ショートカットとドラッグの並べ替えの要求。結果の通知は呼び出し元が出す
   onReorderSibling: (nodeId: number, request: SiblingReorderRequest) => void;
+  // ショートカットの上げ下げの要求。結果の通知と展開は呼び出し元が行う
+  onChangeNodeIndent: (nodeId: number, direction: NodeIndentDirection) => void;
   onDeleteNode: (id: number) => void;
   // copy/pasteイベントで呼ぶ。枝データの生成と挿入はHome側、結果の通知もHomeへ返す
   onCopySubtree: (sourceId: number) => SubtreeClipboardResult<string>;
@@ -93,6 +97,7 @@ export function MapStage({
   onConnectNodes,
   layoutMode,
   onReorderSibling,
+  onChangeNodeIndent,
   onDeleteNode,
   onCopySubtree,
   onPasteSubtree,
@@ -252,6 +257,14 @@ export function MapStage({
     hasActiveGesture,
     enabled: shortcutsEnabled,
     onReorderSibling,
+  });
+
+  useNodeIndentShortcut({
+    selectedNodeId,
+    isEditing: editing.editingNodeId !== null,
+    hasActiveGesture,
+    enabled: shortcutsEnabled,
+    onChangeNodeIndent,
   });
 
   useMapClipboardEvents({

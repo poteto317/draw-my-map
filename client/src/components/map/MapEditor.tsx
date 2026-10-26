@@ -10,6 +10,7 @@ import { MapImageExportControls } from "@/components/layout/MapImageExportContro
 import { MapHistoryControls } from "@/components/layout/MapHistoryControls";
 import { NodeCollapseControl } from "@/components/layout/NodeCollapseControl";
 import { NodeDuplicateControl } from "@/components/layout/NodeDuplicateControl";
+import { NodeIndentControl } from "@/components/layout/NodeIndentControl";
 import { NodeSiblingOrderControl } from "@/components/layout/NodeSiblingOrderControl";
 import { MapPersistenceControls } from "@/components/layout/MapPersistenceControls";
 import { MapOperationNotice } from "@/components/layout/MapOperationNotice";
@@ -34,6 +35,7 @@ import { useBranchCollapse } from "@/hooks/useBranchCollapse";
 import { useNodeSearchNavigation } from "@/hooks/useNodeSearchNavigation";
 import { useOutlineImport } from "@/hooks/useOutlineImport";
 import { useSiblingReorderAction } from "@/hooks/useSiblingReorderAction";
+import { useNodeIndentAction } from "@/hooks/useNodeIndentAction";
 import type { MapStorageSession } from "@/types/mapStorageSession";
 
 const CLIPBOARD_OPERATION_HINT = "枝をコピー: Ctrl/Cmd+C ／ 貼り付け: Ctrl/Cmd+V（新しいルートとして追加）";
@@ -76,6 +78,7 @@ export function MapEditor({
     pasteSubtree,
     insertForest,
     reorderSibling,
+    changeNodeIndent,
     deleteNode,
     setLayoutMode,
     replaceMap,
@@ -149,6 +152,11 @@ export function MapEditor({
     notice: clipboardNotice,
     publishNotice: publishClipboardNotice,
   } = useRevisionScopedNotice(documentRevision);
+  // 枝の構造の変更の通知（兄弟の順序変更・階層の上げ下げ）。8系統目
+  const {
+    notice: treeEditNotice,
+    publishNotice: publishTreeEditNotice,
+  } = useRevisionScopedNotice(documentRevision);
   const outlineImport = useOutlineImport({
     selectedNodeId,
     documentRevision,
@@ -159,12 +167,23 @@ export function MapEditor({
     selectedNodeId,
     nodes,
     visibleNodeIds: displayState.visibleNodeIds,
-    documentRevision,
     reorderSibling,
+    publishNotice: publishTreeEditNotice,
+  });
+  const nodeIndent = useNodeIndentAction({
+    selectedNodeId,
+    nodes,
+    visibleNodeIds: displayState.visibleNodeIds,
+    changeNodeIndent,
+    expandNodes: branchCollapse.expandNodes,
+    publishNotice: publishTreeEditNotice,
   });
   const { moveSelected: moveSelectedSibling } = siblingReorder;
   const moveSelectedSiblingUp = useCallback(() => moveSelectedSibling("up"), [moveSelectedSibling]);
   const moveSelectedSiblingDown = useCallback(() => moveSelectedSibling("down"), [moveSelectedSibling]);
+  const { changeSelected: changeSelectedIndent } = nodeIndent;
+  const outdentSelected = useCallback(() => changeSelectedIndent("outdent"), [changeSelectedIndent]);
+  const indentSelected = useCallback(() => changeSelectedIndent("indent"), [changeSelectedIndent]);
   // 下の effect の依存配列に入れるため、値と関数を取り出しておく
   const { focusRequest: outlineFocusRequest, consumeFocusRequest: consumeOutlineFocusRequest } = outlineImport;
   const outlineImportButtonRef = useRef<HTMLButtonElement>(null);
@@ -237,6 +256,12 @@ export function MapEditor({
                 onMoveUp={moveSelectedSiblingUp}
                 onMoveDown={moveSelectedSiblingDown}
               />
+              <NodeIndentControl
+                canOutdent={nodeIndent.canOutdent}
+                canIndent={nodeIndent.canIndent}
+                onOutdent={outdentSelected}
+                onIndent={indentSelected}
+              />
               <span className="text-sm text-zinc-600 dark:text-zinc-400">
                 {CLIPBOARD_OPERATION_HINT}
               </span>
@@ -262,7 +287,7 @@ export function MapEditor({
             && clipboardNotice === null
             && nodeSearchNavigation.notice === null
             && outlineImport.notice === null
-            && siblingReorder.notice === null
+            && treeEditNotice === null
             && !displayState.layoutFailed
             ? null
             : (
@@ -291,8 +316,8 @@ export function MapEditor({
                 {outlineImport.notice !== null && (
                   <MapOperationNotice notice={outlineImport.notice} />
                 )}
-                {siblingReorder.notice !== null && (
-                  <MapOperationNotice notice={siblingReorder.notice} />
+                {treeEditNotice !== null && (
+                  <MapOperationNotice notice={treeEditNotice} />
                 )}
               </>
             )}
@@ -315,6 +340,7 @@ export function MapEditor({
               onConnectNodes={connectNodes}
               layoutMode={layoutMode}
               onReorderSibling={siblingReorder.reorder}
+              onChangeNodeIndent={nodeIndent.change}
               onDeleteNode={deleteNode}
               onCopySubtree={copySubtree}
               onPasteSubtree={pasteSubtree}
