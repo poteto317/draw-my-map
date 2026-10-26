@@ -210,6 +210,16 @@ describe("changeNodeIndent（配列）", () => {
     expect(findNode(successNodes(result), T).parentId).toBe(2);
   });
 
+  it("I3: 新しい親に子が2つ以上あれば、T を配列で最後の子の直後へ置く", () => {
+    const nodes = [node(R, null), node(A, R), node(A1, A), node(A3, A), node(T, R)];
+
+    const result = indent(nodes, T);
+
+    expect(ids(result)).toEqual([1, 2, 5, 9, 4]);
+    const relations = buildNodeForestRelations(successNodes(result))!;
+    expect(relations.childrenByParent.get(2)?.map((item) => item.id)).toEqual([5, 9, 4]);
+  });
+
   it("I4: 隠れた兄弟を飛び越えて、見えている直前の兄弟の子になる", () => {
     const nodes = [node(R, null), node(A, R), node(H, R), node(T, R)];
 

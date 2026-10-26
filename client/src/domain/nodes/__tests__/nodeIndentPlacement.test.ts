@@ -223,6 +223,13 @@ describe("calculateIndentTranslation", () => {
     expect(calculateIndentTranslation(nodes, 4, 2)).toBeNull();
   });
 
+  it("丸めで x の間隔が 120 を下回れば null", () => {
+    // 右端は 1e17 + 112、目的の x は 1e17 + 224 に丸まり、間隔は 112 になる
+    const nodes = replaceNode(createM2(), 2, { x: 1e17 + 16 });
+
+    expect(calculateIndentTranslation(nodes, 4, 2)).toBeNull();
+  });
+
   it("例 M8: 新しい親の右端が桁落ちすれば null", () => {
     const nodes = replaceNode(createM2(), 2, { x: Number.MAX_VALUE });
 
@@ -379,6 +386,13 @@ describe("calculateOutdentTranslation", () => {
       dx: -220,
       dy: 400,
     });
+  });
+
+  it("丸めで親の枝の下端との間隔が 40 を下回れば null", () => {
+    // 親の枝の下端は 1e17 + 64、目的の上端は 1e17 + 96 に丸まり、間隔は 32 になる
+    const nodes = replaceNode(createM4(), 9, { y: 1e17 });
+
+    expect(calculateOutdentTranslation(nodes, 4, 2)).toBeNull();
   });
 
   it("親が T の子孫（循環）なら null", () => {
