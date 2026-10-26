@@ -28,25 +28,41 @@ describe("formatNodeIndentNotice", () => {
     expect(formatNodeIndentNotice(result)).toEqual(expected);
   });
 
-  const indentWith = (newParentLabel: string | null): ChangeNodeIndentResult => ({
+  const successWith = (
+    direction: "indent" | "outdent",
+    newParentLabel: string | null,
+  ): ChangeNodeIndentResult => ({
     ok: true,
-    direction: "indent",
+    direction,
     newParentId: 2,
     newParentLabel,
     depth: 2,
   });
 
-  it.each<[string, string | null, string]>([
+  const labelCases: [string, string, string][] = [
     ["空文字は「新しいノード」", "", "新しいノード"],
-    ["null は「新しいノード」", null, "新しいノード"],
     ["20コードポイントはそのまま", "あ".repeat(20), "あ".repeat(20)],
     ["21コードポイントは先頭20に…", "あ".repeat(21), `${"あ".repeat(20)}…`],
     ["サロゲートペア20個はそのまま", "😀".repeat(20), "😀".repeat(20)],
     ["サロゲートペア21個は先頭20に…", "😀".repeat(21), `${"😀".repeat(20)}…`],
-  ])("親のラベル: %s", (_name, label, shown) => {
-    expect(formatNodeIndentNotice(indentWith(label))).toEqual({
+  ];
+
+  describe.each<["indent" | "outdent", string]>([
+    ["indent", "枝の階層を下げました"],
+    ["outdent", "枝の階層を上げました"],
+  ])("親のラベル（%s）", (direction, prefix) => {
+    it.each(labelCases)("%s", (_name, label, shown) => {
+      expect(formatNodeIndentNotice(successWith(direction, label))).toEqual({
+        kind: "status",
+        message: `${prefix}（「${shown}」の子、第2階層）。`,
+      });
+    });
+  });
+
+  it("下げる: null は「新しいノード」", () => {
+    expect(formatNodeIndentNotice(successWith("indent", null))).toEqual({
       kind: "status",
-      message: `枝の階層を下げました（「${shown}」の子、第2階層）。`,
+      message: "枝の階層を下げました（「新しいノード」の子、第2階層）。",
     });
   });
 
