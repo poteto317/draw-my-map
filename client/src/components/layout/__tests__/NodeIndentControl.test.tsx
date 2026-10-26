@@ -174,6 +174,20 @@ describe("NodeIndentControl", () => {
       expect(getIndentButton()).not.toHaveFocus();
     });
 
+    it.each([
+      ["階層を上げる", getOutdentButton, { canOutdent: false }],
+      ["階層を下げる", getIndentButton, { canIndent: false }],
+    ] as const)("%sから外へ出て body に戻った後に無効になっても、フォーカスを移さない", (_label, getButton, disabled) => {
+      const { rerender } = render(<NodeIndentControl {...createProps()} />);
+      getButton().focus();
+      getButton().blur();
+      expect(document.body).toHaveFocus();
+
+      rerender(<NodeIndentControl {...createProps(disabled)} />);
+
+      expect(document.body).toHaveFocus();
+    });
+
     it("フォーカスがほかの要素にあるときは移さない", () => {
       const { rerender } = render(
         <>

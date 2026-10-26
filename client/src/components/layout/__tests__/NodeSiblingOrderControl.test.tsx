@@ -164,6 +164,20 @@ describe("NodeSiblingOrderControl", () => {
       expect(getDownButton()).not.toHaveFocus();
     });
 
+    it.each([
+      ["上へ", getUpButton, { canMoveUp: false }],
+      ["下へ", getDownButton, { canMoveDown: false }],
+    ] as const)("%sから外へ出て body に戻った後に無効になっても、フォーカスを移さない", (_label, getButton, disabled) => {
+      const { rerender } = render(<NodeSiblingOrderControl {...createProps()} />);
+      getButton().focus();
+      getButton().blur();
+      expect(document.body).toHaveFocus();
+
+      rerender(<NodeSiblingOrderControl {...createProps(disabled)} />);
+
+      expect(document.body).toHaveFocus();
+    });
+
     it("フォーカスがほかの要素にあるときは移さない", () => {
       const { rerender } = render(
         <>

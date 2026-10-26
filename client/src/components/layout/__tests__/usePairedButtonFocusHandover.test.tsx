@@ -43,6 +43,19 @@ describe("usePairedButtonFocusHandover", () => {
     expect(document.activeElement).toBe(getFirst());
   });
 
+  it("一が無効になって二へ移した後、二を押して二も端で無効になったら、一へ戻す", () => {
+    const { rerender } = render(<Pair first second />);
+    getFirst().focus();
+
+    rerender(<Pair first={false} second />);
+    expect(document.activeElement).toBe(getSecond());
+
+    // 移した先の二をそのまま押すと、二が端に着いて無効になり、一が有効に戻る
+    rerender(<Pair first second={false} />);
+
+    expect(document.activeElement).toBe(getFirst());
+  });
+
   it("両方が無効になったら移さず、記録も捨てて、後で二が有効になっても奪わない", () => {
     const { rerender } = render(<Pair first second />);
     getFirst().focus();

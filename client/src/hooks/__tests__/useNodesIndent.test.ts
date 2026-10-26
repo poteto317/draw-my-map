@@ -162,6 +162,21 @@ describe("useNodes の階層の上げ下げ", () => {
     expect(byId(result.current.nodes, 1)).toMatchObject({ x: rootBefore.x, y: rootBefore.y });
   });
 
+  it("自動配置では手動配置の座標の検査をせず、新しい親の子が遠く離れていても下げられる", () => {
+    // 読み込んだ直後など、座標が配置の結果どおりでない自動配置のマップ。手動配置なら M7 で失敗する
+    const { result } = renderNodes({ ...cancellationMap(), layoutMode: "auto" });
+    const rootBefore = byId(result.current.nodes, 1);
+
+    const outcome = changeIndent(result.current, 4, "indent");
+
+    expect(outcome).toEqual({ ok: true, direction: "indent", newParentId: 2, newParentLabel: "A", depth: 3 });
+    expect(byId(result.current.nodes, 4).parentId).toBe(2);
+    expect(jest.mocked(layoutNodeForest)).toHaveBeenCalledTimes(1);
+    const candidate = jest.mocked(layoutNodeForest).mock.calls.at(-1)![0];
+    expect(result.current.nodes).toEqual(layoutNodeForest(candidate));
+    expect(byId(result.current.nodes, 1)).toMatchObject({ x: rootBefore.x, y: rootBefore.y });
+  });
+
   it("成功は1回の commit で、Undo 1回で戻り Redo で下げた直後に戻る", () => {
     const { result } = renderNodes(manualMap());
     const before = result.current.nodes;
