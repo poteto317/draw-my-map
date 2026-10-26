@@ -15,7 +15,7 @@ Draw My Map のフロントエンドおよびエッジバックエンドの主�
    - 解像度フィルタリングと枝の折りたたみ・展開に連動する、滑らかなフェードイン・フェードアウト可視性アニメーション。
 2. **UI 操作・インタラクション (React 19 & Tailwind CSS 4)**:
    - ツールバー、プロパティパネル、インラインテキスト編集、コンテキストメニューなどの DOM オーバーレイ UI。
-   - キーボードショートカット（`Tab` で子ノード作成、`Enter` で兄弟ノード作成、`Delete`/`Backspace` で削除、`Alt`（`Option`）+ `↑` / `↓` で兄弟の順序変更など）。
+   - キーボードショートカット（`Tab` で子ノード作成、`Enter` で兄弟ノード作成、`Delete`/`Backspace` で削除、`Alt`（`Option`）+ `↑` / `↓` で兄弟の順序変更、`Alt`（`Option`）+ `←` / `→` で階層の上げ下げなど）。
    - 編集履歴（ヘッダーの「元に戻す」「やり直す」と、`Ctrl`/`Cmd`+`Z`、`Ctrl`/`Cmd`+`Shift`+`Z`、`Ctrl`+`Y`）。最大100操作をメモリ上に保持し、リロードや JSON 読み込みで消去されます。
    - 枝の複製（ヘッダーの「枝を複製」）。選択ノードと全子孫（表示フィルターや折りたたみで隠れた子孫を含む）をアプリ内で複製し、複製全体を 1 操作として Undo / Redo できます。
    - 枝のコピー＆ペースト（`Ctrl`/`Cmd`+`C`、`Ctrl`/`Cmd`+`V`）。選択ノードと全子孫を専用形式でクリップボードへコピーし、別タブや別マップを含めて新しいルートとして貼り付けます。コピーは隠れた子孫を含み、複製・貼り付けとも折りたたみ指定は引き継がず展開した状態で追加します。入力欄や文字選択中はブラウザの動作を優先し、貼り付け全体を 1 操作として Undo / Redo できます。
@@ -24,7 +24,8 @@ Draw My Map のフロントエンドおよびエッジバックエンドの主�
    - 重要度フィルタリングの手動切り替えやレイアウトモード切り替え（手動配置 / ツリー自動配置）。
    - 複数マップ（Phase 12）。ヘッダーの「マップ一覧」「新しいマップ」から開くモーダルダイアログで、名前を付けたマップの作成・一覧からの切り替え・名前変更・削除（確認付き）を行います。最上位の `Home`（シェル）が `useMapLibrary` で一覧と切り替えを持ち、編集画面の `MapEditor` を `key={マップの id}` で作り直すため、切り替えると編集履歴・表示状態・エディタ内の非同期処理の結果は前のマップから引き継ぎません。ダイアログの表示中は `MapEditor` を `inert` にし、マップのショートカットを止めます（詳細は [features.md の 12 章](../docs/specifications/features.md#12-複数マップ)）。
    - 箇条書きからの追加（Phase 13）。ヘッダーの「箇条書きから追加」で開くダイアログで、インデント付きの箇条書きテキストを解析し（`domain/outline/` の `parseOutlineText`。タブ・半角スペース・全角スペースの深さ、行頭の記号と番号の除去、階層の補正と警告、1,000,000文字・空行を除いて10,000行の上限）、先頭200件のプレビューを確かめてから、新しいルート（森）または開いた時点で選択していたノードの子として追加します。挿入は `domain/nodes/nodeForestInsertion.ts` の `insertNodeForest` で、`useNodes.insertForest` が `applyTreeChange` を1回だけ呼ぶため、取り込み全体を 1 操作として Undo / Redo できます。ダイアログの状態は `useOutlineImport` が持ち、表示中は `MapEditor` を `inert` にしてショートカットを止めます。成功は操作通知バーの7系統目、失敗はダイアログの中に出します（詳細は [features.md の 13 章](../docs/specifications/features.md#13-箇条書きからの追加)）。
-   - 兄弟ノードの順序変更（Phase 14）。ヘッダーの「上へ」「下へ」と `Alt`（`Option`）+ `↑` / `↓` で、選択ノードの枝を同じ親の見えている兄弟（ルート同士を含む）の中で1つ上・1つ下へ移し、自動配置ではノードのドラッグで兄弟の間へ移します（挿入位置に青い線）。規則は `domain/nodes/nodeSiblingOrder.ts`（`reorderSiblingNodes`）と、手動配置の縦位置の入れ替えの `nodeSiblingSwapPlacement.ts`（`swapSiblingBranchPositions`）で、`useNodes.reorderSibling` が `applyTreeChange` を1回だけ呼ぶため、1回の並べ替えを 1 操作として Undo / Redo できます。ボタンの状態と通知は `useSiblingReorderAction` が持ち、通知は操作通知バーの8系統目に出します（詳細は [features.md の 14 章](../docs/specifications/features.md#14-兄弟ノードの順序変更)）。
+   - 兄弟ノードの順序変更（Phase 14）。ヘッダーの「上へ」「下へ」と `Alt`（`Option`）+ `↑` / `↓` で、選択ノードの枝を同じ親の見えている兄弟（ルート同士を含む）の中で1つ上・1つ下へ移し、自動配置ではノードのドラッグで兄弟の間へ移します（挿入位置に青い線）。規則は `domain/nodes/nodeSiblingOrder.ts`（`reorderSiblingNodes`）と、手動配置の縦位置の入れ替えの `nodeSiblingSwapPlacement.ts`（`swapSiblingBranchPositions`）で、`useNodes.reorderSibling` が `applyTreeChange` を1回だけ呼ぶため、1回の並べ替えを 1 操作として Undo / Redo できます。ボタンの状態は `useSiblingReorderAction` が持ち、通知は `MapEditor` が持つ操作通知バーの8系統目の枠（枝の構造の変更の通知。並べ替えと階層の上げ下げで共有）へ `publishNotice` で出します（詳細は [features.md の 14 章](../docs/specifications/features.md#14-兄弟ノードの順序変更)）。
+   - 階層の上げ下げ（Phase 14）。ヘッダーの「階層を上げる」「階層を下げる」と `Alt`（`Option`）+ `←` / `→` で、選択ノードの枝を、元の親の兄弟（元の親の直後）にするか、見えている直前の兄弟の子の末尾にします。規則は `domain/nodes/nodeIndent.ts`（`changeNodeIndent`。兄弟の走査は並べ替えと共通の `nodeSiblingNeighbors.ts`）と、手動配置の平行移動の `nodeIndentPlacement.ts` で、`useNodes.changeNodeIndent` が `applyTreeChange` を1回だけ呼ぶため、1回の上げ下げを 1 操作として Undo / Redo できます。ボタンの状態、下げたときの新しい親の展開、通知の発行は `useNodeIndentAction` が持ち、通知は並べ替えと共有する操作通知バーの8系統目（枝の構造の変更の通知）に出します（詳細は [features.md の 15 章](../docs/specifications/features.md#15-階層の上げ下げ)）。
 3. **データ永続化とエクスポート (Domain & Services)**:
    - `localStorage` へのマップごとのリアルタイム自動保存と復元。マップの一覧（インデックス）を `draw-my-map.maps.v1`、各マップの本体（Version 3 の JSON）を `draw-my-map.maps.v1.doc.<id>` に保存し、`localStorage` を直接読み書きするのは `services/persistence/mapLibraryStorage.ts` だけです。Phase 11 までの単一のキー `draw-my-map.map.v1` は、起動時に1件のマップとして移行し、次の起動で消します。保存はセッション番号で照合し、切り替えの後に前のマップの保存待ちが届いても書き込みません。
    - `MapDocument` JSON 形式でのインポート / エクスポート（旧バージョン互換性・自動マイグレーション対応）。
@@ -71,7 +72,7 @@ client/src/
 │   ├── illustration/     # イラストのトリミング、プロンプト加工、データ URL 処理
 │   ├── imageExport/      # PNG / SVG エクスポート用の境界計算、ベクター座標計算
 │   ├── mapLibrary/       # 複数マップのインデックスの型・解析・更新、起動の計画、マップ名とファイル名の規則、通知の文言
-│   ├── nodes/            # ノードツリー操作、重なり判定、自動レイアウト、重要度判定、枝の折りたたみと表示用の配置、手動配置の共通規則、箇条書きの森の挿入、兄弟ノードの順序変更（並べ替え・手動配置の縦位置の入れ替え・通知の文言）
+│   ├── nodes/            # ノードツリー操作、重なり判定、自動レイアウト、重要度判定、枝の折りたたみと表示用の配置、手動配置の共通規則、箇条書きの森の挿入、兄弟ノードの順序変更（並べ替え・手動配置の縦位置の入れ替え・通知の文言）、階層の上げ下げ（規則・手動配置の平行移動・通知の文言。兄弟の走査は並べ替えと共有）
 │   ├── outline/          # 箇条書きのテキストの解析（上限・行の分割・ラベル・階層）、プレビュー用の木、文言
 │   ├── search/           # ノードラベルの正規化・索引化・部分一致検索、検索結果の祖先展開の判定
 │   └── persistence/      # MapDocument スキーマ定義、エンコード/デコード、移行処理
@@ -176,6 +177,7 @@ Draw My Map では、コードの信頼性と保守性を維持するため、�
   - `src/testing/createTestStorageSession.ts` / `src/testing/mapLibraryTestStorage.ts`: フックのテスト用の偽の `MapStorageSession`、ページのテスト用にインデックスと本体を書き込む `seedMapLibrary`・現在のマップの本体を読む `readActiveMapJson`・書き込みの順序を記録する偽の `Storage`。
   - `src/components/map/pixi/testing/pixiTestHarness.ts`: WebGL 非対応の JSDOM 上で Pixi.js シーン構築・ストローク・イベント発火を検証するフェイク Pixi ランタイム。
   - `src/components/map/testing/mapStageTestRuntime.tsx` / `AutoLayoutMapStageHarness.tsx`: `MapStage` コンポーネント結合テスト用のランタイム注入・自動レイアウト検証ハーネス。
+  - `src/components/map/testing/treeEditShortcutTargets.ts`: 兄弟の順序・階層のショートカットの共通ガードの target の条件を確かめるテストで共有する、キー入力の送り先の要素の補助（`insideOf`・`buttonInsideMarkedElement`）。
 
 ### 3. 検証コマンドの一括実行 (`npm run verify`)
 - コードを変更した後は、必ず `client` ディレクトリで以下の検証コマンドを実行してください:

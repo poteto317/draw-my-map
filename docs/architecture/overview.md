@@ -91,7 +91,7 @@ client/src/
 │   ├── layout/      #    ヘッダー、セレクター、通知、右サイドパネル等の HTML/DOM コンポーネント
 │   └── map/         #    Pixi.js ステージ、ジェスチャー制御、DOM オーバーレイ、ステージ用テストハーネス
 │       ├── pixi/    #    Pixi.js シーン描画・ポインタ/タッチジェスチャー・Tween アニメーター・Pixi 単体ハーネス
-│       └── testing/ #    MapStage 統合テスト用ランタイム & 自動レイアウト統合ハーネス
+│       └── testing/ #    MapStage 統合テスト用ランタイム & 自動レイアウト統合ハーネス & 兄弟の順序・階層のショートカットの target の要素の補助
 ├── hooks/           # 3. Application State & Coordination Layer (カスタムフック)
 ├── services/        # 4. Application Services Layer (ブラウザ API・副作用の抽象化)
 ├── domain/          # 5. Domain Layer (純粋ビジネスロジック・幾何演算・スキーマ検証)
@@ -116,15 +116,17 @@ client/src/
 #### 2. UI Layer (Components) (`src/components/layout/`, `src/components/map/`)
 - **責務**: ユーザーに対するプレゼンテーション、DOM イベントの捕捉、および Pixi.js Canvas ステージと DOM オーバーレイの統合。
 - **構成モジュール**:
-  - **レイアウト UI (`src/components/layout/` 全 33 ファイル)**:
-    - `AppHeader.tsx`: タイトル、マップの操作（必須の `mapControls`。タイトルの直後）、ノード検索、レイアウトモード切替、操作ヒント、重要度・解像度フィルタ切替、枝の折りたたみ・展開ボタンと非表示件数（`NodeCollapseControl`）、元に戻す／やり直すボタン、枝を複製ボタン、兄弟の順序の「上へ」「下へ」ボタン、枝のコピー＆ペーストの常設案内、「箇条書きから追加」ボタン、JSON/画像エクスポートボタン、操作通知バーを統合するヘッダー（操作のボタン群と通知は `MapEditor` が `operationControls`・`operationNotices` として渡す）。
+  - **レイアウト UI (`src/components/layout/` 全 35 ファイル)**:
+    - `AppHeader.tsx`: タイトル、マップの操作（必須の `mapControls`。タイトルの直後）、ノード検索、レイアウトモード切替、操作ヒント、重要度・解像度フィルタ切替、枝の折りたたみ・展開ボタンと非表示件数（`NodeCollapseControl`）、元に戻す／やり直すボタン、枝を複製ボタン、兄弟の順序の「上へ」「下へ」ボタン、階層の「階層を上げる」「階層を下げる」ボタン、枝のコピー＆ペーストの常設案内、「箇条書きから追加」ボタン、JSON/画像エクスポートボタン、操作通知バーを統合するヘッダー（操作のボタン群と通知は `MapEditor` が `operationControls`・`operationNotices` として渡す）。
     - `NodeSearchBox.tsx`, `nodeSearchKeyAction.ts`: ARIA combobox/listbox による検索欄と最大50件の候補一覧、および矢印・Enter・Escape・IME変換中のキー判定。
     - `AppWorkspace.tsx`: ヘッダー下の 2 カラム（メインキャンバス領域 + 右サイドパネル）レイアウト。
     - `LayoutModeSelector.tsx`: `手動配置` / `自動配置` 切り替えボタングループ（`role="group"`, `aria-label="レイアウトモード"`）。
     - `NodeCollapseControl.tsx`: 選択中の親ノードの枝を折りたたみ・展開するボタン、非表示件数（選択中の親が閉じている間はその全子孫数。未選択・葉・展開中は 0件）、保存・画像出力と表示用配置の説明を表示する。
     - `MapHistoryControls.tsx`: ヘッダーの `元に戻す` / `やり直す` ボタン（履歴の有無に応じて `disabled`）。
     - `NodeDuplicateControl.tsx`: ヘッダーの `枝を複製` ボタン（ノード未選択時は `disabled`）。クリックごとに 1 回複製し、押したあともフォーカスを移さない。`Enter` の押し続け（`repeat`）だけ `preventDefault()` で抑止する。
-    - `NodeSiblingOrderControl.tsx`: ヘッダーの `上へ` / `下へ` ボタン（`role="group"`, `aria-label="兄弟の順序"`。`aria-label` は `枝を上へ移動` / `枝を下へ移動`、`aria-keyshortcuts` は `Alt+ArrowUp` / `Alt+ArrowDown`）。必須の props `canMoveUp`・`canMoveDown`・`onMoveUp`・`onMoveDown` を受け取り、動かせない向きは `disabled`。`Enter` の押し続けを `preventDefault()` する。両方のボタンに `data-sibling-reorder-button` 属性（`siblingReorderShortcut.ts` の `SIBLING_REORDER_BUTTON_ATTRIBUTE`）を付け、フォーカスがあっても `Alt+↑/↓` のショートカットが働くようにする（ボタン自身は `Alt+↑/↓` を処理しないので二重に動かない）。押したボタンが端で無効になったときは、フォーカスがそのボタンか `body` にあれば、もう一方の有効なボタンへ移す（`MapHistoryControls` と同じ仕組み）。
+    - `NodeSiblingOrderControl.tsx`: ヘッダーの `上へ` / `下へ` ボタン（`role="group"`, `aria-label="兄弟の順序"`。`aria-label` は `枝を上へ移動` / `枝を下へ移動`、`aria-keyshortcuts` は `Alt+ArrowUp` / `Alt+ArrowDown`）。必須の props `canMoveUp`・`canMoveDown`・`onMoveUp`・`onMoveDown` を受け取り、動かせない向きは `disabled`。`Enter` の押し続けを `preventDefault()` する。両方のボタンに `data-tree-edit-shortcut-button` 属性（`treeEditShortcutGuard.ts` の `TREE_EDIT_SHORTCUT_BUTTON_ATTRIBUTE`）を付け、フォーカスがあっても `Alt+↑/↓` のショートカットが働くようにする（ボタン自身は `Alt+↑/↓` を処理しないので二重に動かない）。押したボタンが端で無効になったときは、フォーカスがそのボタンか `body` にあれば、もう一方の有効なボタンへ移す（`usePairedButtonFocusHandover`。`MapHistoryControls` と同じ仕組み）。
+    - `NodeIndentControl.tsx`: ヘッダーの `階層を上げる` / `階層を下げる` ボタン（`role="group"`, `aria-label="階層"`。`aria-label` は `枝の階層を上げる` / `枝の階層を下げる`、`aria-keyshortcuts` は `Alt+ArrowLeft` / `Alt+ArrowRight`）。`NodeSiblingOrderControl` の右隣に置く。必須の props `canOutdent`・`canIndent`・`onOutdent`・`onIndent` を受け取り、動かせない向きは `disabled`。`Enter` の押し続けを `preventDefault()` する。両方のボタンに `data-tree-edit-shortcut-button` 属性を付け、フォーカスがあっても `Alt+←/→` と `Alt+↑/↓` のショートカットが働くようにする（ボタン自身はこれらのキーを処理しない）。フォーカスの引き継ぎは `usePairedButtonFocusHandover` を使う。
+    - `usePairedButtonFocusHandover.ts`: 2つのボタンの片方が無効になったときのフォーカスの引き継ぎ（`usePairedButtonFocusHandover(firstEnabled, secondEnabled)`。`firstRef`・`secondRef`・`handleFocus`・`handleBlur` を返す）。押したボタンが無効になり、フォーカスがそのボタンか `body` にあれば、もう一方が有効ならそちらへ移す。移せる先が無ければ記録を捨てる。`NodeSiblingOrderControl` と `NodeIndentControl` が使う。
     - `LayoutModeOperationHint.tsx`: 現在の `layoutMode` に応じた操作ガイド文字列の表示。
     - `NodeImportanceSelector.tsx`: 選択中ノードの重要度（`高` / `中` / `低`）切り替えボタングループ（`role="group"`, `aria-label="重要度"`）。
     - `ResolutionFilterSelector.tsx`: 表示フィルタ（`自動` / `高のみ` / `中以上` / `すべて`）切り替えボタングループ（`role="group"`, `aria-label="表示"`）および自動時の現在レベル表示。
@@ -143,12 +145,12 @@ client/src/
     - `outlineParentCandidate.ts`: プレビューの画面に渡す親の候補（`OutlineParentCandidate`）を、開いた時点で控えた `parentCandidateId` と `parentCandidateStale` と今の `nodes` から引く純関数 `resolveOutlineParentCandidate`（未選択は `none`、マップが置き換わった後と見つからないときは `missing`、見つかれば `getNodeDisplayLabel` の先頭40コードポイント）。`MapEditor` が呼ぶ。
     - `useDialogFocusTrap.ts`: ダイアログのフォーカスの閉じ込め（`document` の `focusin` で外へ出たフォーカスを戻す、背景の `pointerdown`・`mousedown` を `preventDefault()`）、Tab の循環（無効なボタンを除いて毎回数え直す `listFocusableElements`）、`window` の capture の `keydown` での Escape（IME 変換中と `repeat` は無視）。
     - `useReannouncedNotice.ts`: 常設のライブリージョンに出す値を入れ直す共通フック。`sequence` が変わるたびに一度 null にし、`requestAnimationFrame` で次のフレームに値を入れる。アンマウントや次の変更ではフレームを `cancelAnimationFrame` で取り消す。`MapLibraryNoticeRegion`、`MapLibraryDialog`、`OutlineImportDialog`、`OutlineImportInputScreen` が使う。
-  - **マップステージ・DOM オーバーレイ・座標/イベント補助 (`src/components/map/` コンポーネント 4 ファイル + 補助モジュール 20 ファイル)**:
-    - `MapEditor.tsx`: 1つのマップの編集画面（Phase 11 までの `page.tsx` の中身）。必須の props `mapId`、`mapName`、`storageSession`、`mapControls`、`shortcutsEnabled`、`dialogMouseClickedAtRef`（シェルが持つ、ダイアログ内で最後にマウスでクリックした時刻の ref。そのまま `MapStage` へ渡し、直後の `dblclick` を無視させる）を受け取り、`useNodes` から `MapStage` までを組み立てる。シェルが `key={mapId}` で描画するため、切り替えで履歴・表示状態・エディタ内の通知・保存待ちのタイマーごと破棄される。`shortcutsEnabled` が `false`（ダイアログ表示中）の間は根に `inert` を付け、ショートカットのフックへ `enabled: false` を渡す。`useOutlineImport` を呼び、ヘッダーの「箇条書きから追加」、操作通知バーの7系統目（取り込みの成功）、`OutlineImportDialog` を配線する。`useSiblingReorderAction` を呼び、ヘッダーの「上へ」「下へ」（`NodeSiblingOrderControl`）、`MapStage` の `layoutMode`・`onReorderSibling`、操作通知バーの8系統目（兄弟の順序変更）を配線する。`editorShortcutsEnabled = shortcutsEnabled && outlineImport.screen === "closed"` を作り、根の `inert`、`useMapHistoryShortcuts`、`MapStage` の `shortcutsEnabled` のすべてに渡す。返す値はフラグメントで、ダイアログは根の `<div data-map-id>` の兄弟（`inert` の外）に描く。プレビューの画面に出す親の候補を `resolveOutlineParentCandidate`（`outlineParentCandidate.ts`）で作り、閉じたときの `focusRequest: "header"` を `useLayoutEffect` でヘッダーのボタンへ当てる。
-    - `MapStage.tsx`: Pixi.js キャンバス要素と DOM オーバーレイ（`NodeLabelEditor`, `NodeContextMenu`）を統合するステージ親コンポーネント。必須の props `layoutMode`・`onReorderSibling` を受け取り、`useMapStageInteractions`（ドラッグの分岐）、`useSiblingReorderShortcut`（`enabled` は `shortcutsEnabled`）、`useSiblingReorderDragEscape` へ渡す。`shortcutsEnabled` が false になると、`cancelActiveGesture()` で進行中のジェスチャーを中止する。
+  - **マップステージ・DOM オーバーレイ・座標/イベント補助 (`src/components/map/` コンポーネント 4 ファイル + 補助モジュール 22 ファイル)**:
+    - `MapEditor.tsx`: 1つのマップの編集画面（Phase 11 までの `page.tsx` の中身）。必須の props `mapId`、`mapName`、`storageSession`、`mapControls`、`shortcutsEnabled`、`dialogMouseClickedAtRef`（シェルが持つ、ダイアログ内で最後にマウスでクリックした時刻の ref。そのまま `MapStage` へ渡し、直後の `dblclick` を無視させる）を受け取り、`useNodes` から `MapStage` までを組み立てる。シェルが `key={mapId}` で描画するため、切り替えで履歴・表示状態・エディタ内の通知・保存待ちのタイマーごと破棄される。`shortcutsEnabled` が `false`（ダイアログ表示中）の間は根に `inert` を付け、ショートカットのフックへ `enabled: false` を渡す。`useOutlineImport` を呼び、ヘッダーの「箇条書きから追加」、操作通知バーの7系統目（取り込みの成功）、`OutlineImportDialog` を配線する。枝の構造の変更の通知の枠（`useRevisionScopedNotice` 1つ。操作通知バーの8系統目）を持ち、その `publishNotice` を `useSiblingReorderAction` と `useNodeIndentAction` の両方へ渡す。`useSiblingReorderAction` を呼び、ヘッダーの「上へ」「下へ」（`NodeSiblingOrderControl`）と `MapStage` の `layoutMode`・`onReorderSibling` を配線する。`useNodeIndentAction`（`expandNodes` は `useBranchCollapse` のもの）を呼び、ヘッダーの「階層を上げる」「階層を下げる」（`NodeIndentControl`）と `MapStage` の `onChangeNodeIndent` を配線する。`editorShortcutsEnabled = shortcutsEnabled && outlineImport.screen === "closed"` を作り、根の `inert`、`useMapHistoryShortcuts`、`MapStage` の `shortcutsEnabled` のすべてに渡す。返す値はフラグメントで、ダイアログは根の `<div data-map-id>` の兄弟（`inert` の外）に描く。プレビューの画面に出す親の候補を `resolveOutlineParentCandidate`（`outlineParentCandidate.ts`）で作り、閉じたときの `focusRequest: "header"` を `useLayoutEffect` でヘッダーのボタンへ当てる。
+    - `MapStage.tsx`: Pixi.js キャンバス要素と DOM オーバーレイ（`NodeLabelEditor`, `NodeContextMenu`）を統合するステージ親コンポーネント。必須の props `layoutMode`・`onReorderSibling`・`onChangeNodeIndent` を受け取り、`useMapStageInteractions`（ドラッグの分岐）、`useSiblingReorderShortcut`（`enabled` は `shortcutsEnabled`）、`useSiblingReorderDragEscape`、`useNodeIndentShortcut`（`enabled` は `shortcutsEnabled`）へ渡す。`shortcutsEnabled` が false になると、`cancelActiveGesture()` で進行中のジェスチャーを中止する。
     - `NodeLabelEditor.tsx`, `nodeLabelEditorLayout.ts`: ノードテキストインライン編集用 `<input>` DOM オーバーレイと、ビューポート倍率およびイラスト有無（`topInset`）に応じた配置矩形算出。
     - `NodeContextMenu.tsx`, `nodeContextMenuLayout.ts`, `nodeContextMenuDom.ts`, `nodeContextMenuStaleness.ts`, `nodeContextMenuTarget.ts`, `mapContextMenuAction.ts`, `menuActivationDoubleClick.ts`: 右クリックコンテキストメニュー DOM オーバーレイ、176×44px クランプ配置、メニュー内外 DOM 判定、失効（Stale）判定、右クリック時のアクション解決、メニュー項目の実行後、またはダイアログ内のマウスのクリックの後 500ms 以内のダブルクリック誤発火防止（`isDoubleClickFromOverlayActivation`）。
-    - `mapViewport.ts`, `mapGeometry.ts`, `mapDoubleClickAction.ts`, `nodeViewportFocus.ts`, `viewportFocusShortcut.ts`, `wheelZoom.ts`, `textEntryTarget.ts`, `editableTarget.ts`, `interactiveTarget.ts`, `mapHistoryShortcut.ts`, `siblingReorderShortcut.ts`, `siblingReorderDropSlot.ts`, `browserMapVisibilityEnvironment.ts`: ビューポート座標変換・クランプ、ノードヒットテスト（`findNodeAtPoint`）、ダブルクリックアクション分岐、ノード中央フォーカス計算、ホイールズームデルタ正規化、テキスト入力要素判定（`textEntryTarget.ts`）、編集可能要素（input・textarea・select・contenteditable）の判定（`editableTarget.ts`）、対話要素（`button, input, textarea, select, a[href], [contenteditable]`）の内側かの判定（`interactiveTarget.ts`。`useNodeKeyboardShortcuts` と兄弟の順序変更のショートカットで共有）、元に戻す・やり直すのショートカットの判定（`mapHistoryShortcut.ts`）、兄弟の順序変更のショートカットの判定（`siblingReorderShortcut.ts` の `resolveSiblingReorderShortcut`。対話要素の内側では止めるが、`SIBLING_REORDER_BUTTON_ATTRIBUTE` を持つ「上へ」「下へ」ボタンの内側だけは止めない）、ドラッグの挿入位置・挿入先・線の位置の判定（`siblingReorderDropSlot.ts` の `resolveSiblingReorderDrop`。型 `SiblingReorderIndicator`・`SiblingReorderPreview`）、`requestAnimationFrame` / `prefers-reduced-motion` ブラウザ環境アダプタ。
+    - `mapViewport.ts`, `mapGeometry.ts`, `mapDoubleClickAction.ts`, `nodeViewportFocus.ts`, `viewportFocusShortcut.ts`, `wheelZoom.ts`, `textEntryTarget.ts`, `editableTarget.ts`, `interactiveTarget.ts`, `mapHistoryShortcut.ts`, `treeEditShortcutGuard.ts`, `siblingReorderShortcut.ts`, `nodeIndentShortcut.ts`, `siblingReorderDropSlot.ts`, `browserMapVisibilityEnvironment.ts`: ビューポート座標変換・クランプ、ノードヒットテスト（`findNodeAtPoint`）、ダブルクリックアクション分岐、ノード中央フォーカス計算、ホイールズームデルタ正規化、テキスト入力要素判定（`textEntryTarget.ts`）、編集可能要素（input・textarea・select・contenteditable）の判定（`editableTarget.ts`）、対話要素（`button, input, textarea, select, a[href], [contenteditable]`）の内側かの判定（`interactiveTarget.ts`。`useNodeKeyboardShortcuts` と兄弟の順序変更・階層の上げ下げのショートカットで共有）、元に戻す・やり直すのショートカットの判定（`mapHistoryShortcut.ts`）、兄弟の順序変更と階層の上げ下げのショートカットの共通の条件（`treeEditShortcutGuard.ts`。目印の属性 `TREE_EDIT_SHORTCUT_BUTTON_ATTRIBUTE`、入力の型 `TreeEditShortcutInput`、キーの条件 `passesTreeEditKeyGuard` とキー以外のすべての条件 `passesTreeEditShortcutGuard`、`KeyboardEvent` と呼び出し元の状態（`isEditing`・`selectedNodeId`・`hasActiveGesture`）から入力を作る `createTreeEditShortcutInput`（`useSiblingReorderShortcut`・`useNodeIndentShortcut` で共有））、兄弟の順序変更のショートカットの判定（`siblingReorderShortcut.ts` の `resolveSiblingReorderShortcut`。キー以外の条件は `treeEditShortcutGuard.ts` の `passesTreeEditShortcutGuard`。対話要素の内側では止めるが、`data-tree-edit-shortcut-button`（`TREE_EDIT_SHORTCUT_BUTTON_ATTRIBUTE`）を持つボタンの内側だけは止めない）、階層の上げ下げのショートカットの判定（`nodeIndentShortcut.ts` の `resolveNodeIndentShortcut`。`→` で `"indent"`、`←` で `"outdent"`。条件は並べ替えと同じ `passesTreeEditShortcutGuard`）と、Windows・Linux の「戻る」「進む」（`Alt+←/→`）を止めるかの判定（`shouldSuppressAltArrowNavigation`。`passesTreeEditKeyGuard` を満たし、文字入力欄（`isEditableTarget`）の外なら止める）、ドラッグの挿入位置・挿入先・線の位置の判定（`siblingReorderDropSlot.ts` の `resolveSiblingReorderDrop`。型 `SiblingReorderIndicator`・`SiblingReorderPreview`）、`requestAnimationFrame` / `prefers-reduced-motion` ブラウザ環境アダプタ。
   - **Pixi.js 描画・ジェスチャーエンジン (`src/components/map/pixi/` 全 25 ファイル — うち `usePixiApplication.ts` は Hooks としても機能)**:
     - シーン描画: `renderMapScene.ts`, `renderMapNodes.ts`, `renderMapEdges.ts`, `renderSiblingReorderIndicator.ts`（並べ替えのドラッグの挿入位置の線）, `clearMapScene.ts`, `applyViewportTransform.ts`, `illustrationTextureLoader.ts`, `pixiTypes.ts`。
     - 可視性トランジション: `mapVisibilityAnimator.ts`, `mapVisibilityTween.ts`, `mapVisibilityKeys.ts`, `pixiVisibilityTarget.ts`。
@@ -158,8 +160,8 @@ client/src/
 #### 3. Application State & Coordination Layer (Hooks) (`src/hooks/`, `src/components/map/use*.ts`)
 - **責務**: アプリケーション状態の保持（React State / Ref / Reducer）、ライフサイクル制御、および Domain / Services 層の呼び出し調停。
 - **構成モジュール**:
-  - **アプリケーション状態フック (`src/hooks/` 全 27 ファイル)**:
-    - `useNodes.ts`, `useNodeLayoutState.ts`: ノードツリーの CRUD・選択・重要度・イラスト更新・枝の複製（`duplicateSubtree`）・枝のコピー（`copySubtree`）と貼り付け（`pasteSubtree`）・箇条書きの森の追加（`insertForest`）・兄弟の順序変更（`reorderSibling`。`applyTreeChange` を1回だけ呼ぶ）と、手動/自動レイアウトモードの状態管理（複製・貼り付け・森の追加の挿入処理は内部関数 `applySubtreeInsertion` を共有する）・ツリー変更時の `layoutNodeForest` 自動整列トリガー。
+  - **アプリケーション状態フック (`src/hooks/` 全 28 ファイル)**:
+    - `useNodes.ts`, `useNodeLayoutState.ts`: ノードツリーの CRUD・選択・重要度・イラスト更新・枝の複製（`duplicateSubtree`）・枝のコピー（`copySubtree`）と貼り付け（`pasteSubtree`）・箇条書きの森の追加（`insertForest`）・兄弟の順序変更（`reorderSibling`。`applyTreeChange` を1回だけ呼ぶ）・階層の上げ下げ（`changeNodeIndent`。`applyTreeChange` を1回だけ呼び、結果 `ChangeNodeIndentResult` を返す）と、手動/自動レイアウトモードの状態管理（複製・貼り付け・森の追加の挿入処理は内部関数 `applySubtreeInsertion` を共有する）・ツリー変更時の `layoutNodeForest` 自動整列トリガー。
     - `useMapResolutionFilter.ts`, `mapResolutionFilterState.ts`: ズーム倍率・ヒステリシス・手動/自動モード遷移・マップ置換時の `pendingResetScale` 同期に基づく可視ノードフィルタリング状態管理。
     - `useMapLibrary.ts`: シェルの状態と操作。起動の判定を1回だけ確定させ（`startupRef`）、インデックス・現在のマップ・保護モード・起動時の通知を持つ。作成（`createMap`）・切り替え（`switchMap`）・名前変更（`renameMap`）・削除（`deleteMap`）を、`localStorage` を先に書いて成功したときだけ状態を更新する順で行い、結果を `MapLibraryOperationResult` で返す。現在のマップが変わるたびにセッション番号を進めて `MapStorageSession` を作り直し、`writeBody` と `registerFlush` をセッション番号で照合する。flush の登録先も持つ。
     - `useMapLibraryDialogState.ts`: ダイアログの画面遷移（`closed | list | create | rename | delete`）、操作の結果のダイアログ内の通知とシェルの通知への振り分け、フォーカスの戻し先（ダイアログ内の `focusTarget` と、再マウント後のヘッダーの `headerFocusRequest`）。起動時の通知を1回だけシェルの通知にする。
@@ -167,8 +169,9 @@ client/src/
     - `useMapImageExport.ts`, `useMapPngExport.ts`, `useMapSvgExport.ts`: PNG / SVG 画像エクスポート処理（ファイル名に `mapName` を使い、PNG は書き出しを始めた時点の名前）、空マップ警告、PNG 書き出し中フラグ（`isExportingPng`）と通知状態管理。PNG はアンマウント後にラスタライズが終わった結果を捨てる。
     - `useIllustrationGeneration.ts`: 非同期 AI イラスト生成のステートマシン管理（`idle` / `generating` / `succeeded` / `failed`）、同時 1 件制限、および `AbortController` による中断制御。
     - `useNodeDuplicationAction.ts`: 選択ノードの枝を `useNodes.duplicateSubtree` で複製し、成功 / 失敗の通知を `useRevisionScopedNotice` へ渡す。
-    - `useRevisionScopedNotice.ts`: 操作結果の通知を、次の通知か `documentRevision` の変化まで残す。通知を出した時点の `documentRevision` と組にして保持し、現在の値と違う通知を隠す。`useNodeDuplicationAction.ts`（複製の通知）、`MapEditor.tsx`（コピー／貼り付けの通知）、`useOutlineImport.ts`（箇条書きからの追加の成功の通知）、`useSiblingReorderAction.ts`（兄弟の順序変更の通知）がそれぞれ別の枠として呼ぶ。
-    - `useSiblingReorderAction.ts`: ヘッダーのボタンの有効・無効（`canMoveUp` / `canMoveDown`。`getSiblingReorderAvailability` を `useMemo` で1回）、選択中のノードの移動（`moveSelected`）、`MapStage` からの要求（`reorder`。ショートカットとドラッグ）を受け持つ。`useNodes.reorderSibling` の結果を `formatSiblingReorderNotice` で文言にし、`useRevisionScopedNotice` の別の枠へ必ず1回出す（操作通知バーの8系統目）。
+    - `useRevisionScopedNotice.ts`: 操作結果の通知を、次の通知か `documentRevision` の変化まで残す。通知を出した時点の `documentRevision` と組にして保持し、現在の値と違う通知を隠す。`useNodeDuplicationAction.ts`（複製の通知）、`MapEditor.tsx`（コピー／貼り付けの通知）、`useOutlineImport.ts`（箇条書きからの追加の成功の通知）、`MapEditor.tsx`（枝の構造の変更の通知。兄弟の順序変更と階層の上げ下げで共有し、`publishNotice` を `useSiblingReorderAction.ts`・`useNodeIndentAction.ts` へ渡す）がそれぞれ別の枠として呼ぶ。
+    - `useSiblingReorderAction.ts`: ヘッダーのボタンの有効・無効（`canMoveUp` / `canMoveDown`。`getSiblingReorderAvailability` を `useMemo` で1回）、選択中のノードの移動（`moveSelected`）、`MapStage` からの要求（`reorder`。ショートカットとドラッグ）を受け持つ。`useNodes.reorderSibling` の結果を `formatSiblingReorderNotice` で文言にし、必須の引数 `publishNotice`（`MapEditor` が持つ枝の構造の変更の通知の枠。操作通知バーの8系統目）へ必ず1回出す。通知の状態は持たない。
+    - `useNodeIndentAction.ts`: ヘッダーのボタンの有効・無効（`canOutdent` / `canIndent`。`getNodeIndentAvailability` を `useMemo` で1回。`nodes`・選択・表示集合のすべてを依存にする）、選択中のノードの上げ下げ（`changeSelected`）、`MapStage` からの要求（`change`。ショートカット）を受け持つ。`useNodes.changeNodeIndent` の結果が成功した下げ（`direction: "indent"`）のときだけ `expandNodes([newParentId])` で新しい親を展開し、結果を `formatNodeIndentNotice` で文言にして、必須の引数 `publishNotice`（並べ替えと共有する8系統目の枠）へ必ず1回出す。
     - `useOutlineImport.ts`: 箇条書きからの追加のダイアログの状態（`closed | input | preview`、テキスト、入力のエラーと `sequence`、解析の結果、開いた時点の親の候補と `documentRevision`、追加する位置、ダイアログ内の通知、フォーカスの要求）と操作（`open`・`close`・`setText`・`requestPreview`・`back`・`setTarget`・`submit`・`consumeFocusRequest`）。解析（`parseOutlineText`）は「プレビュー」のイベントで1回だけ行い、入力中は文字数の上限だけを判定する。`submit` は子として追加する場合に開いた時点から `documentRevision` が変わっていれば `insertForest` を呼ばずに失敗にし、成功したときだけ（子として追加したなら）`expandNodes([parentId])` を呼び、成功の通知を `useRevisionScopedNotice` で出し、テキストを空にして閉じる。プレビューの木は解析の結果から `useMemo` で作る派生値で、状態には持たない（解析の結果と同時に作られ、同時に無くなる）。引数（`selectedNodeId`・`documentRevision`・`insertForest`・`expandNodes`）は必須で、`useLayoutEffect` で同期する ref から読み、操作の関数の参照を変えない。
     - `useNodeLabelSearch.ts`: `nodes` の参照が変わったときに検索索引を作り直し、入力ごとに同期検索して可視性を付加した候補を返す。
     - `useNodeSearchNavigation.ts`: 選択時にノードIDの実在を再確認し、隠れている場合は閉じた祖先の展開（`expandNodes`）と必要な解像度表示への切り替えを行って通知し（両方のときは通知文を半角空白で連結）、選択と中央移動要求を発行する。検索操作では `documentRevision` を増やさない。
@@ -176,7 +179,7 @@ client/src/
     - `useMapDisplayState.ts`: 折りたたみ可視集合と解像度可視集合を統合し、自動配置時の表示用投影座標を返す。正本 `nodes` は変更しない。
     - `useMapHistory.ts`: 編集履歴（Undo / Redo）の ref 管理と React state への反映。`useNodeLayoutState` から呼ばれる。
     - `useResettingMapReplacement.ts`: マップ置換時に `resetRevision` をインクリメントし、ステージ・コンテキストメニュー・解像度フィルタを同期リセットするフック（イラスト生成は `documentRevision` で失効する）。
-  - **マップステージ制御フック (`src/components/map/use*.ts` 21 ファイル + `pixi/usePixiApplication.ts`)**:
+  - **マップステージ制御フック (`src/components/map/use*.ts` 22 ファイル + `pixi/usePixiApplication.ts`)**:
     - `pixi/usePixiApplication.ts`: Pixi.js `Application` の非同期初期化・リサイズ追従・アンマウント時破棄。
     - `useRenderedMapScene.ts`, `useIllustrationTextures.ts`, `useMapVisibilityTransition.ts`: React 状態から Pixi シーンへの差分描画同期、`PixiRuntime` ごとのイラスト `Texture` セッションキャッシュと `destroy(true)` 解放、160ms フェード Tween 調停。
     - `useMapViewport.ts`, `useViewportScaleNotification.ts`, `useMapWheelZoom.ts`, `useMapViewportShortcut.ts`: ビューポート状態管理、親への `scale` 変更通知、ホイールズーム登録、`F` キー中央フォーカスショートカット。
@@ -187,7 +190,8 @@ client/src/
     - `useDocumentRestoreInteractionReset.ts`: `documentRevision`（マップ置換・成功した Undo / Redo）の更新時に、編集中のラベル・進行中のジェスチャー・コンテキストメニューを閉じる（viewport は維持）。
     - `useMapHistoryShortcuts.ts`: Undo / Redo のキーボードショートカット登録。
     - `useSiblingReorderShortcut.ts`, `useSiblingReorderDragEscape.ts`: `Alt`（`Option`）+ `↑` / `↓` の `window` の `keydown` の登録（判定は `resolveSiblingReorderShortcut`。働いたときだけ `preventDefault` して `onReorderSibling(selectedNodeId, { kind: "step", direction })` を呼ぶ）と、並べ替えのジェスチャー中（自動配置でノードを押してから離すまで。しきい値の 4px に達する前を含む）の Escape による中止（`isSiblingReorderActive` が真のときだけ `cancelActiveGesture` と `preventDefault`。中止しか行わないので `enabled` を受け取らない）。
-    - `window` にキーやクリップボードのイベントを登録する `useMapHistoryShortcuts`・`useNodeKeyboardShortcuts`・`useMapViewportShortcut`・`useSiblingReorderShortcut`・`useMapClipboardEvents`・`useNodeContextMenuDismissal` は、必須の引数 `enabled` を受け取る。登録は1回のままで、`enabled` は `useLayoutEffect` で同期する ref から読み、`false`（マップのダイアログか箇条書きからの追加のダイアログの表示中）のときはハンドラが何もせずに戻る（`preventDefault` もしない）。
+    - `useNodeIndentShortcut.ts`: `Alt`（`Option`）+ `←` / `→` の `window` の `keydown` の登録（判定は `resolveNodeIndentShortcut`。働いたときは端でも `preventDefault` して `onChangeNodeIndent(selectedNodeId, direction)` を呼ぶ。働かないときも `shouldSuppressAltArrowNavigation` が真なら `preventDefault` だけして、ブラウザの「戻る」「進む」を止める）。`enabled` が `false` のときは「戻る」「進む」の抑止も行わない。
+    - `window` にキーやクリップボードのイベントを登録する `useMapHistoryShortcuts`・`useNodeKeyboardShortcuts`・`useMapViewportShortcut`・`useSiblingReorderShortcut`・`useNodeIndentShortcut`・`useMapClipboardEvents`・`useNodeContextMenuDismissal` は、必須の引数 `enabled` を受け取る。登録は1回のままで、`enabled` は `useLayoutEffect` で同期する ref から読み、`false`（マップのダイアログか箇条書きからの追加のダイアログの表示中）のときはハンドラが何もせずに戻る（`preventDefault` もしない）。
     - `useNodeFocusRequest.ts`: 検索から渡された `NodeFocusRequest` を、`documentRevision` が一致し、対象が描画中の `nodes`（自動配置の折りたたみ中は表示用座標）に存在し、screen が準備できたときに 1 回だけ中央移動へ反映する。進行中のジェスチャーは先に中断する。
     - `useMapClipboardEvents.ts`: `window` の `copy` / `paste` イベントを 1 回だけ登録し、選択ノードの枝のコピーとクリップボードの枝の貼り付けを仲介する。対象判定（イベント対象とフォーカス要素が編集可能、DOM の範囲選択、ラベル編集中、ジェスチャー中、`defaultPrevented` のときはブラウザに任せる）、`clipboardData` の読み書き、`subtreeClipboardCodec` による検証、通知の生成だけを担い、スナップショット生成と挿入は `MapStage` の props（`onCopySubtree` / `onPasteSubtree`）に委ねる。コピー失敗時は `preventDefault` しない。最新の props を ref 経由で使い、アンマウント時にリスナーを解除する。
 - **依存可能レイヤー**: Services, Domain, Config, Types。UI は `import type` のみ（`useMapLibraryDialogState.ts` → `MapLibraryNoticeRegion.tsx` の `ShellNotice`）
@@ -215,9 +219,9 @@ client/src/
 
 #### 5. Domain Layer (`src/domain/`)
 - **責務**: システムの中核となる純粋なビジネスルール、数学・幾何計算、ツリー操作アルゴリズム、データ検証・変換。**React や Pixi.js、DOM、ブラウザ固有 API（window, document, localStorage 等）には一切依存しない純粋関数群**。
-- **構成サブパッケージ（全 67 ファイル）**:
-  - `domain/nodes/` (31 ファイル):
-    - `nodeAutoLayout.ts`, `nodeLayoutForest.ts`, `nodeLayoutForestRelations.ts`, `nodeLayoutForestTraversal.ts`, `nodeLayoutGeometry.ts`, `nodeLayoutMetrics.ts`, `nodeLayoutPlacement.ts`, `nodeLayoutSpacing.ts`, `nodeLayoutArithmetic.ts`: 木構造・森構造の幾何配置計算（親子関係とルート抽出 `buildNodeForestRelations`、非再帰トラバーサルとサイクル検出 `traverseNodeForest`、フォレストインデックス化 `indexNodeForest`、座標展開 `calculateNodePositions`、深さ別列 X 座標とサブツリー垂直スパン計測 `calculateNodeLayoutMetrics`、双方向垂直中央揃え配置 `placeNodeForest`、数値オーバーフロー・浮動小数点 ULP 精度劣化防御および最小間隔判定 `checkedAdd`/`checkedSubtract`/`checkedMultiply`/`calculateRoundingTolerance`/`hasSufficientGap`、垂直間隔検証 `hasValidVerticalSpacing`）。
+- **構成サブパッケージ（全 71 ファイル）**:
+  - `domain/nodes/` (35 ファイル):
+    - `nodeAutoLayout.ts`, `nodeLayoutForest.ts`, `nodeLayoutForestRelations.ts`, `nodeLayoutForestTraversal.ts`, `nodeLayoutGeometry.ts`, `nodeLayoutMetrics.ts`, `nodeLayoutPlacement.ts`, `nodeLayoutSpacing.ts`, `nodeLayoutArithmetic.ts`: 木構造・森構造の幾何配置計算（親子関係とルート抽出 `buildNodeForestRelations`、非再帰トラバーサルとサイクル検出 `traverseNodeForest`、フォレストインデックス化 `indexNodeForest`、座標展開 `calculateNodePositions`、深さ別列 X 座標とサブツリー垂直スパン計測 `calculateNodeLayoutMetrics`、双方向垂直中央揃え配置 `placeNodeForest`、数値オーバーフロー・浮動小数点 ULP 精度劣化防御および最小間隔判定 `checkedAdd`/`checkedSubtract`/`checkedMultiply`/`calculateRoundingTolerance`/`calculateGapRoundingTolerance`/`hasSufficientGap`、垂直間隔検証 `hasValidVerticalSpacing`）。
     - `nodeTree.ts`: ノード親子付け替え（`connectNodeTree`）、**自己接続・存在しないノード・循環参照検出（`canConnectNodes`）**、部分木 ID 収集（`collectSubtreeIds`。親子の隣接表と queue による非再帰・線形の走査で、親子が循環した入力でも停止する）、部分木連動移動（`moveNodeSubtree`）。
     - `nodePlacement.ts`: 新規ルートノード（`createRootNode`）、子ノード（`createChildNode`。位置は `nodeManualPlacement.ts` の `calculateChildPlacement`）、兄弟ノード（`createSiblingNode`）の初期座標算出。
     - `nodeManualPlacement.ts`: 手動配置の共通の規則。マップ全体の下端から `SIBLING_VERTICAL_GAP` だけ空けた位置への真下の平行移動量（`calculateManualOffsetY`。枝の複製・貼り付けと箇条書きの新しいルートの追加で共有）と、子を追加するときの左上の位置（`calculateChildPlacement`。`createChildNode` と箇条書きの子としての追加で共有。兄弟の下端の最大値はスプレッドを使わずループで求める）。
@@ -225,9 +229,13 @@ client/src/
     - `nodeSubtreeDuplication.ts`: 選択ノードと全子孫の複製候補を生成する純粋関数（`duplicateNodeSubtree`）。複製元の部分木を `nodeTree.collectSubtreeIds` で集め、挿入・配置・採番は `nodeSubtreeInsertion.ts` の `insertNodeSubtree` に委ねる（複製根は複製元と同じ親）。
     - `nodeSubtreeInsertion.ts`: 部分木を新しい ID で既存ノード配列へ挿入する純粋関数（`insertNodeSubtree`）。枝の複製（`nodeSubtreeDuplication.ts`）と枝の貼り付けで共有する。ID 対応表による親子の付け替え、手動配置での真下への平行移動（既存ノードがあるときのみ。空マップではコピー時の座標を維持）、非有限値・丸めによる配置不能時の `null` 返却、自動配置での既存レイアウトへの受け渡しを担う。手動配置の検査はすべて採番より前に済ませ、ID は `NodeIdAllocator.nextAvailableIds` で 1 回だけ一括採番する。手動配置の平行移動量は `nodeManualPlacement.ts` の `calculateManualOffsetY` を使う。
     - `nodeForestInsertion.ts`: 箇条書きの項目（`ForestItem`）を森として既存ノード配列の末尾へ入力の順で追加する純粋関数（`insertNodeForest`）。追加先は新しいルート（`{ kind: "root" }`）か既存ノードの子（`{ kind: "child", parentId }`）。手動配置では、取り込む森だけを `layoutNodeForest` で並べてから、新しいルートならマップの左端・下端の下へ、子なら `calculateChildPlacement` の位置へ平行移動する。自動配置では仮の座標を入れ、全体の再配置は `applyTreeChange` に任せる。項目の形・親の存在・座標の検査をすべて済ませてから `allocateIds` を1回だけ呼び、結果を `{ ok: true, nodes, rootIds } | { ok: false, reason: "parent-missing" | "invalid-items" | "placement-failed" }` で返す。`domain/outline` は参照しない。
+    - `nodeSiblingNeighbors.ts`: 兄弟の列の走査（`scanSiblingNeighbors(nodes, nodeId, visibleNodeIds)`。型 `SiblingNeighbors`・`SiblingNeighborsScan`）。`nodes` を1回走査して、対象に最も近い見えている直前・直後の兄弟（`previousVisibleId`・`nextVisibleId`）と、対象より前に隠れた兄弟があるか（`hiddenBefore`）、対象と直後の見えている兄弟の間（無ければ末尾まで）に隠れた兄弟があるか（`hiddenAfter`）を返す。対象が無い・見えていないときは `node-missing`・`node-hidden`。兄弟の順序変更（`nodeSiblingOrder.ts`）と階層の上げ下げ（`nodeIndent.ts`）で共有する。
     - `nodeSiblingOrder.ts`: 兄弟ノードの順序変更の型（`SiblingReorderDirection`、`SiblingReorderTarget`、`SiblingReorderRequest`、`SiblingReorderResult`、`useNodes.reorderSibling` の戻り値 `ReorderSiblingResult` など）と、見えている隣の兄弟の解決（`findSiblingReorderTarget`）、ボタンの有効・無効（`getSiblingReorderAvailability`。走査は1回）、要求ごとの並べ替え（`reorderSiblingByRequest`。`step` は挿入先へ解決し、端では `direction` を足した `at-edge` を返す）、並べ替え（`reorderSiblingNodes`。`nodes` を1回走査して根ノード1つだけを anchor の前後へ移した新しい配列を作り、`splice` と添字の計算を使わない。手動配置では `swapSiblingBranchPositions`、自動配置では先頭のルートが変わるときの座標の引き継ぎ）。
     - `nodeSiblingSwapPlacement.ts`: 手動配置の縦位置の入れ替え（`swapSiblingBranchPositions`）。2つの組の枝（隠れた子孫を含む）の外接範囲を `checkedAdd` / `checkedSubtract` で求め、上側の上端と間隔（負なら `SIBLING_VERTICAL_GAP`）を保って `y` だけを平行移動する。途中まで動いた配列は返さない。
     - `nodeSiblingOrderMessages.ts`: 兄弟の順序変更の通知の文言（`formatSiblingReorderNotice`。成功・端は `status`、失敗は `error`）。
+    - `nodeIndent.ts`: 階層の上げ下げの型（`NodeIndentDirection`、`NodeIndentAvailability`、`NodeIndentFailureReason`、`NodeIndentResult`、`useNodes.changeNodeIndent` の戻り値 `ChangeNodeIndentResult`）と、ボタンの有効・無効（`getNodeIndentAvailability`。走査は `scanSiblingNeighbors` の1回）、上げ下げ（`changeNodeIndent(nodes, nodeId, direction, visibleNodeIds, mode)`。下げるときは見えている直前の兄弟の子の末尾へ、上げるときは元の親の直後へ、T の根ノード1つだけを1回の走査で移した新しい配列を作り、`splice` と添字の計算を使わない。子孫の `parentId` と配列位置は変えない。手動配置では `nodeIndentPlacement.ts` で枝を平行移動し、自動配置では座標を変えない）。
+    - `nodeIndentPlacement.ts`: 手動配置の上げ下げの平行移動量（`calculateIndentTranslation`。子の追加の規則 `calculateChildPlacement` と同じ式。`calculateOutdentTranslation`。元の親の枝から T の枝を除いた下端の 40px 下へ枝の上端を合わせる）と枝の平行移動（`translateBranch`）。`checkedAdd` / `checkedSubtract` と `hasSufficientGap` で検査し、目的の座標と今の座標の差が丸めの許容誤差以下なら差を 0 にする。失敗は `null`（途中まで動いた配列は返さない）。
+    - `nodeIndentMessages.ts`: 階層の上げ下げの通知の文言（`formatNodeIndentNotice`。成功・端は `status`、失敗は `error`。新しい親のラベルは21コードポイント以上なら先頭20コードポイントに「…」を付ける。`NODE_INDENT_NOTICE_LABEL_MAX_CODE_POINTS` = 20）。
     - `nodeDisplayLabel.ts`: 空文字ラベル時に `FALLBACK_NODE_LABEL`（`"新しいノード"`）を返す表示用ラベル解決（`getNodeDisplayLabel`）。
     - `nodeIllustration.ts`, `nodeIllustrationUpdate.ts`: イラスト描画矩形（`getNodeIllustrationRect`）、ラベル中心Yオフセット（`getNodeLabelCenterOffset`）、イラスト付きノードの最小高さ保証（`getIllustratedNodeMinHeight`）およびイラストの紐付け・解除更新（`replaceNodeIllustration`, `clearNodeIllustration`）。
     - `nodeImportance.ts`, `nodeImportanceUpdate.ts`: 重要度（`"high" | "medium" | "low"`, デフォルト `"medium"`）のドメインルールと更新（`replaceNodeImportance`）。
@@ -575,7 +583,7 @@ sequenceDiagram
 
 1. **`useNodes`**:
    - アプリケーションの基本データ構造であるノード配列（`Node[]`）、現在選択中のノード ID（`selectedNodeId`）、現在のレイアウトモード（`manual` / `auto`）を保持。
-   - `useNodeLayoutState` を内部で利用し、非構造的変更（ラベル・重要度）と構造的変更（追加・削除・親子接続・枝の複製・枝の貼り付け・箇条書きからの追加・兄弟の順序変更）を適切に分離して更新。
+   - `useNodeLayoutState` を内部で利用し、非構造的変更（ラベル・重要度）と構造的変更（追加・削除・親子接続・枝の複製・枝の貼り付け・箇条書きからの追加・兄弟の順序変更・階層の上げ下げ）を適切に分離して更新。
    - `useNodeLayoutState` 経由で `useMapHistory` を保持し、ノード編集・移動・レイアウトモード変更の履歴（最大100操作）と `undo` / `redo` / `canUndo` / `canRedo` を `useNodes` が公開。履歴の呼び出し元は `useNodeLayoutState` で、画面側（ヘッダーのボタンとショートカット）は公開された関数を呼ぶだけ。
    - `documentRevision` を保持し、成功した Undo / Redo と `replaceMap` で増加させる。
 2. **`useNodeLayoutState`**:
@@ -593,17 +601,19 @@ sequenceDiagram
 6. **`useNodeDuplicationAction`**:
    - 選択ノードの枝の複製を呼び、結果の通知を `useRevisionScopedNotice` で保持する。`documentRevision` が変わると古い通知を隠す。
 7. **`useRevisionScopedNotice`**:
-   - 操作結果の通知を、通知を出した時点の `documentRevision` と組にして保持し、`documentRevision` が変わると古い通知を隠す。`useNodeDuplicationAction` が複製の通知に、`MapEditor.tsx` が `MapStage` の `useMapClipboardEvents` からのコピー／貼り付けの通知に、`useOutlineImport` が箇条書きからの追加の成功の通知に、`useSiblingReorderAction` が兄弟の順序変更の通知に、それぞれ別の枠として使う。
+   - 操作結果の通知を、通知を出した時点の `documentRevision` と組にして保持し、`documentRevision` が変わると古い通知を隠す。`useNodeDuplicationAction` が複製の通知に、`MapEditor.tsx` が `MapStage` の `useMapClipboardEvents` からのコピー／貼り付けの通知に、`useOutlineImport` が箇条書きからの追加の成功の通知に、`MapEditor.tsx` が枝の構造の変更の通知（兄弟の順序変更・階層の上げ下げで共有し、`publishNotice` を `useSiblingReorderAction` と `useNodeIndentAction` へ渡す）に、それぞれ別の枠として使う。
 8. **`useNodeLabelSearch` / `useNodeSearchNavigation`**:
    - `nodes` から作った索引を入力のたびに同期検索し、最終可視集合（折りたたみと解像度フィルターの積集合）と合わせて候補を構成する。
    - 候補選択時はノードIDの実在を確認し、閉じた祖先だけを展開し、必要なら表示モードを切り替えてから選択と `NodeFocusRequest` を発行する。検索、祖先の展開、表示切り替え、選択、viewport移動は編集履歴へ記録せず、`documentRevision` も増やさない。
 9. **`useBranchCollapse` / `useMapDisplayState`**:
-   - `useBranchCollapse` は表示専用の折りたたみ集合を `documentRevision` と組にして保持し、折りたたみによる可視集合 C、閉じたノードごとの全子孫数、`toggle` / `expandNodes` を返す。`documentRevision` が変わると全展開へ戻す。閉じた親へ `Tab` で子を追加できたときは、`MapEditor.tsx` が `expandNodes` でその親を展開する。
+   - `useBranchCollapse` は表示専用の折りたたみ集合を `documentRevision` と組にして保持し、折りたたみによる可視集合 C、閉じたノードごとの全子孫数、`toggle` / `expandNodes` を返す。`documentRevision` が変わると全展開へ戻す。閉じた親へ `Tab` で子を追加できたときは、`MapEditor.tsx` が `expandNodes` でその親を展開する。閉じた兄弟の下へ階層を下げられたときは、`useNodeIndentAction` が `expandNodes` で新しい親を展開する。
    - `useMapDisplayState` は C と 3 番の解像度可視集合 R から最終可視集合 V = C ∩ R を作り、自動配置で折りたたみ中だけ表示用座標の `displayNodes` を返す。MapStage はこの `displayNodes` と V を受け取る。正本 `nodes` は変更しない。
 10. **`useOutlineImport`**:
    - 箇条書きからの追加のダイアログの画面・テキスト・解析の結果・追加先の候補・ダイアログ内の通知・フォーカスの要求を持ち、成功の通知を `useRevisionScopedNotice` で保持する。`MapEditor.tsx` は `screen` から `editorShortcutsEnabled` を作り、エディタの入口をまとめて止める（後述「箇条書きからの追加の流れ」）。
 11. **`useSiblingReorderAction`**:
-   - ヘッダーの「上へ」「下へ」の有効・無効、選択中のノードの移動、`MapStage` からのショートカット・ドラッグの要求を受け、`useNodes.reorderSibling` を呼んで結果の通知を `useRevisionScopedNotice` で保持する（後述「兄弟の順序変更の流れ」）。
+   - ヘッダーの「上へ」「下へ」の有効・無効、選択中のノードの移動、`MapStage` からのショートカット・ドラッグの要求を受け、`useNodes.reorderSibling` を呼んで結果の通知を、`MapEditor` から受け取った `publishNotice`（枝の構造の変更の通知の枠）へ出す（後述「兄弟の順序変更の流れ」）。
+12. **`useNodeIndentAction`**:
+   - ヘッダーの「階層を上げる」「階層を下げる」の有効・無効、選択中のノードの上げ下げ、`MapStage` からのショートカットの要求を受け、`useNodes.changeNodeIndent` を呼ぶ。成功した下げのときだけ新しい親を `expandNodes` で展開し、結果の通知を並べ替えと同じ `publishNotice` へ出す（後述「階層の上げ下げの流れ」）。
 
 #### 複数マップと切り替えの流れ
 
@@ -622,7 +632,7 @@ sequenceDiagram
 - **ドラッグのグループ**: Pixi 側はドラッグの閾値を越えた最初の有効な移動を通知する直前に `onBeginNodeMove` を呼んで履歴グループのリースを受け取り（クリックだけでは履歴を開始しない）、移動のたびに有効かを確認する。ドラッグ全体が1操作になり、Undo / Redo / 別編集 / マップ置換でリースは失効し、遅れて届いた古い移動通知は無視される。自動配置の並べ替えのドラッグはグループを開かず、離したときの `reorderSibling` の1回の commit だけが履歴になる。
 - **二種類のリビジョン**:
   - `resetRevision`: JSON 読み込みと初回復元による**マップ置換**で増加する（マップの切り替えでは増やさず、`MapEditor` ごと作り直す）。ステージの viewport 初期化、解像度フィルターのリセットなど、マップを開き直したときの初期化に使う。
-  - `documentRevision`: マップ置換に加えて、**成功した Undo / Redo** でも増加する。編集中の状態・ジェスチャー・コンテキストメニューを閉じ、進行中のイラスト生成と既存プレビュー、枝の複製の通知、枝のコピー／貼り付けの通知、ノード検索の通知と中央移動要求、箇条書きからの追加の成功の通知、兄弟の順序変更の通知を失効させ、枝の折りたたみを全展開へ戻す。箇条書きからの追加のダイアログは、開いた時点の `documentRevision` と比べて、控えた追加先の親が古くなったかを判定する。viewport と表示フィルターは維持する。
+  - `documentRevision`: マップ置換に加えて、**成功した Undo / Redo** でも増加する。編集中の状態・ジェスチャー・コンテキストメニューを閉じ、進行中のイラスト生成と既存プレビュー、枝の複製の通知、枝のコピー／貼り付けの通知、ノード検索の通知と中央移動要求、箇条書きからの追加の成功の通知、枝の構造の変更の通知（兄弟の順序変更・階層の上げ下げ）を失効させ、枝の折りたたみを全展開へ戻す。箇条書きからの追加のダイアログは、開いた時点の `documentRevision` と比べて、控えた追加先の親が古くなったかを判定する。viewport と表示フィルターは維持する。
 - **保存**: 復元後のマップは通常の 300ms デバウンス自動保存に流れる。履歴は保存しない。
 
 #### 枝の複製の流れ
@@ -652,8 +662,17 @@ sequenceDiagram
 - **責務の分担**: 並べ替えの規則は純関数（`domain/nodes/nodeSiblingOrder.ts`、手動配置の縦位置の入れ替えは `domain/nodes/nodeSiblingSwapPlacement.ts`、通知の文言は `domain/nodes/nodeSiblingOrderMessages.ts`）、ショートカットとドロップ位置の判定は純関数（`components/map/siblingReorderShortcut.ts`、`components/map/siblingReorderDropSlot.ts`）、1回の commit は `useNodes.reorderSibling`、ボタンの状態と通知は `useSiblingReorderAction`、配線は `MapEditor`、表示と操作は部品（`NodeSiblingOrderControl`）と Pixi のジェスチャー（`createSiblingReorderGesture`）・描画（`renderSiblingReorderIndicator`）が受け持つ。domain は hooks・components を import しない（`ReorderSiblingResult` は domain に置く）。
 - **入口**: ヘッダーの「上へ」「下へ」は `useSiblingReorderAction.moveSelected(direction)`、`Alt`（`Option`）+ `↑` / `↓` は `useSiblingReorderShortcut` から、自動配置のドラッグは `createSiblingReorderGesture` の解放から、それぞれ `MapStage` の `onReorderSibling` を通じて `useSiblingReorderAction.reorder(nodeId, request)` に届く。ボタンとショートカットは `{ kind: "step", direction }`、ドラッグは `{ kind: "drop", target }`（anchor の ID と前後）を渡し、配列の添字は渡さない。
 - **commit**: `reorder` は `useNodes.reorderSibling(nodeId, request, visibleNodeIds)` を呼ぶ。`reorderSibling` は `applyTreeChange` を1回だけ呼び、そのコールバックの中で最新の `currentNodes` と `mode` を使って、`reorderSiblingByRequest` を実行する（`step` なら `findSiblingReorderTarget` で挿入先へ解決してから `reorderSiblingNodes`、`drop` なら受け取った挿入先のまま `reorderSiblingNodes`）。並べ替えは正本の全 `nodes` に対して行い、隠れた兄弟を消さない。自動配置では、この後に `applyTreeChange` が `layoutNodeForest` で全体を配置し直す。配列の順・手動配置の平行移動・自動配置の再配置が1回の履歴になる。端・失敗（`node-missing`・`node-hidden`・`invalid-target`・`placement-failed`。自動配置の失敗も `placement-failed`）ではノード・選択・履歴・Redo を変えない。成功しても選択と `documentRevision` は変えない（折りたたみを保つ）。
-- **通知**: `reorder` は結果を `formatSiblingReorderNotice` で文言にし、`useRevisionScopedNotice(documentRevision)` の別の枠へ必ず1回出す。`MapEditor` はこれを操作通知バーの8系統目として表示する。ドラッグで元の位置へ落とした・中止した場合は `reorder` を呼ばないので、通知も変わらない。
+- **通知**: `reorder` は結果を `formatSiblingReorderNotice` で文言にし、`MapEditor` から受け取った `publishNotice` へ必ず1回出す。`MapEditor` は `useRevisionScopedNotice(documentRevision)` の1つの枠（枝の構造の変更の通知）を持ち、操作通知バーの8系統目として表示する。この枠は階層の上げ下げと共有する。ドラッグで元の位置へ落とした・中止した場合は `reorder` を呼ばないので、通知も変わらない。
 - **止める場面**: ダイアログを開いている間は、根の `inert` でボタンとキャンバスが押せず、ショートカットは `MapStage` の `shortcutsEnabled`（`editorShortcutsEnabled`）で止まる。開いた時点で進行中の並べ替えのドラッグは、`shortcutsEnabled` が false になったことを受けて中止する。ドラッグ中の Escape は `shortcutsEnabled` によらず中止だけを行う。
+
+#### 階層の上げ下げの流れ
+
+- **責務の分担**: 上げ下げの規則は純関数（`domain/nodes/nodeIndent.ts`。兄弟の走査は並べ替えと共通の `domain/nodes/nodeSiblingNeighbors.ts`、手動配置の平行移動は `domain/nodes/nodeIndentPlacement.ts`、通知の文言は `domain/nodes/nodeIndentMessages.ts`）、ショートカットの判定は純関数（`components/map/nodeIndentShortcut.ts`。共通の条件は `components/map/treeEditShortcutGuard.ts`）、1回の commit は `useNodes.changeNodeIndent`、ボタンの状態・新しい親の展開・通知の発行は `useNodeIndentAction`、通知の枠と配線は `MapEditor`、表示と操作は部品（`NodeIndentControl`。フォーカスの引き継ぎは `usePairedButtonFocusHandover`）が受け持つ。domain は hooks・components を import しない（`ChangeNodeIndentResult` は domain に置く）。
+- **入口**: ヘッダーの「階層を上げる」「階層を下げる」は `useNodeIndentAction.changeSelected(direction)`、`Alt`（`Option`）+ `←` / `→` は `useNodeIndentShortcut` から `MapStage` の `onChangeNodeIndent` を通じて `useNodeIndentAction.change(nodeId, direction)` に届く。どちらも対象はノードの ID と向き（`"indent"` / `"outdent"`）で渡し、配列の添字や新しい親の ID は渡さない。ドラッグの入口は無い。
+- **commit**: `change` は `useNodes.changeNodeIndent(nodeId, direction, visibleNodeIds)` を呼ぶ。`changeNodeIndent` は `applyTreeChange` を1回だけ呼び、そのコールバックの中で最新の `currentNodes` と `mode` を使って、domain の `changeNodeIndent` を実行する（新しい親はこの時点の配列で解決する）。上げ下げは正本の全 `nodes` に対して行い、隠れた兄弟を消さない・並びを変えない。自動配置では、この後に `applyTreeChange` が `layoutNodeForest` で全体を配置し直す（先頭のルートは変わらないので座標の引き継ぎは無い）。`parentId` の変更・配列の位置・手動配置の平行移動・自動配置の再配置が1回の履歴になる。端・失敗（`node-missing`・`node-hidden`・`invalid-structure`・`placement-failed`。自動配置の失敗も `placement-failed`）ではノード・選択・履歴・Redo を変えない。成功しても選択と `documentRevision` は変えない（折りたたみを保つ）。
+- **展開**: `change` は、結果が成功した下げ（`ok` かつ `direction: "indent"`）のときだけ `expandNodes([newParentId])` を呼び、閉じていた新しい親を開く。commit と同じイベントの中で行うので、T が隠れた状態は描画されない。上げたとき・端・失敗では展開しない。
+- **通知**: `change` は結果を `formatNodeIndentNotice` で文言にし、`MapEditor` から受け取った `publishNotice` へ必ず1回出す。兄弟の順序変更と同じ枠（操作通知バーの8系統目「枝の構造の変更の通知」）なので、並べ替えの通知の後に上げ下げをすると置き換わり、逆も同じ。`documentRevision` が変わると消える。
+- **止める場面**: ダイアログを開いている間は、根の `inert` でボタンが押せず、ショートカットは `MapStage` の `shortcutsEnabled`（`editorShortcutsEnabled`）で止まる。このときは「戻る」「進む」の抑止も行わない（既知の制限）。上げ下げにドラッグは無いので、ダイアログを開いたときに中止するジェスチャーは増えない。
 
 #### ノード検索と移動の流れ
 
@@ -762,7 +781,7 @@ Draw My Map では、レイヤードアーキテクチャの利点を最大限�
 
 ### 5.2 テストハーネスと共通フィクスチャの階層設計
 
-Pixi.js は WebGL / Canvas コンテキストを必要とするため、通常の Node.js / jsdom 環境ではそのまま初期化できません。Draw My Map ではテストの粒度に応じて **3 種類の専用テストハーネス**と **共通テストヘルパー**を明確に使い分けています。
+Pixi.js は WebGL / Canvas コンテキストを必要とするため、通常の Node.js / jsdom 環境ではそのまま初期化できません。Draw My Map ではテストの粒度に応じて **3 種類の専用テストハーネス**、**ツリー編集ショートカットの target の補助**と **共通テストヘルパー**を明確に使い分けています。
 
 #### 1. Pixi シーン描画単体テスト用ハーネス (`src/components/map/pixi/testing/pixiTestHarness.ts`)
 - **役割**: `renderMapScene`、`renderMapNodes`、`renderMapEdges`、`clearMapScene` など、`src/components/map/pixi/` 内の描画関数を React コンポーネントから切り離して単体検証するための軽量スタブハーネス（`createPixiTestHarness`）です。
@@ -780,7 +799,11 @@ Pixi.js は WebGL / Canvas コンテキストを必要とするため、通常�
 #### 3. 自動整列統合テスト用ハーネス (`src/components/map/testing/AutoLayoutMapStageHarness.tsx`)
 - **役割**: `useNodes` フック（`layoutMode: "auto"`）と `<MapStage />` を実際に結合し、初期ルートノード生成・選択・自動整列モード移行後のキーボード操作やステージ操作による状態変化を `<output data-testid="node-state">` / `<output data-testid="selected-node-id">` 経由で統合検証するハーネスコンポーネントです。
 
-#### 4. アプリケーション共通テストヘルパー (`src/testing/`)
+#### 4. ツリー編集ショートカットの target の補助 (`src/components/map/testing/treeEditShortcutTargets.ts`)
+- **役割**: 兄弟の順序変更・階層の上げ下げのショートカットの共通ガード（`passesTreeEditShortcutGuard`）の target の条件を確かめる3つのテスト（`treeEditShortcutGuard.test.ts`・`siblingReorderShortcut.test.ts`・`nodeIndentShortcut.test.ts`）で共有する、キー入力の送り先の要素の補助です。
+- **提供するユーティリティ**: `insideOf(tag, attributes)`（指定した要素の内側の span）、`buttonInsideMarkedElement()`（目印 `TREE_EDIT_SHORTCUT_BUTTON_ATTRIBUTE` 付きの div の中の、目印の無い button）。
+
+#### 5. アプリケーション共通テストヘルパー (`src/testing/`)
 - `src/testing/createTestNode.ts` (`createTestNode`): デフォルト値（`id: 1, parentId: null, x: 0, y: 0, width: 100, height: 60, label: "", importance: "medium"`）を持ち、任意のフィールドを `Partial<Node>` でオーバーライドできるテスト用ノード生成ファクトリ。
 - `src/testing/createTestMapHistoryLease.ts` (`createTestMapHistoryLease`, `createMapHistoryLeaseSpy`): 常に有効な `MapHistoryGroupLease` と、開始・終了・失効を記録する spy を生成する。`onBeginNodeMove` 用の lease が必要なテストで共通に使う。
 - `src/testing/createTestStorageSession.ts` (`createTestStorageSession`): フックのテスト用の偽の `MapStorageSession`。書き込みの結果を `saved`・`failed`・`inactive` に切り替えられ（`failed`・`inactive` では本物と同じく書かない）、書けた内容の履歴と flush の登録を記録する。

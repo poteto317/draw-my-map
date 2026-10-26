@@ -17,6 +17,7 @@
    - 2.5 [画像エクスポート型](#25-画像エクスポート型)
    - 2.6 [箇条書きからの追加の型](#26-箇条書きからの追加の型)
    - 2.7 [兄弟ノードの順序変更の型](#27-兄弟ノードの順序変更の型)
+   - 2.8 [階層の上げ下げの型](#28-階層の上げ下げの型)
 3. [MapDocument JSON スキーマ仕様](#3-mapdocument-json-スキーマ仕様)
    - 3.1 [Version 1 スキーマ（Phase 5 初期）](#31-version-1-スキーマphase-5-初期)
    - 3.2 [Version 2 スキーマ（Phase 6）](#32-version-2-スキーマphase-6)
@@ -85,6 +86,7 @@ Root Node B (id: 5, parentId: null)
    - 自動配置モード時でも、計算されたレイアウト座標はそのまま各ノードの `x`, `y` に反映され、保存されます。
    - 箇条書きからの追加（Phase 13）は、解析の結果（`ParsedOutline`）を通常の `Node` として `nodes` の末尾に足すだけで、`Node` 型、`NodeMapState`、編集履歴、V3 の保存形式、JSON の形式に項目を足しません（2.6 節）。
    - 兄弟ノードの順序変更（Phase 14）は、`nodes` 配列の中で移動する枝の根ノード1つの位置を変える（手動配置では縦位置も変える）だけで、順序のフィールドや保存形式・JSON・編集履歴の項目を足しません（2.7 節）。
+   - 階層の上げ下げ（Phase 14）は、上げ下げする枝の根ノード1つの `parentId` と `nodes` 配列内の位置を変える（手動配置では枝の座標も平行移動する）だけで、保存形式・JSON・編集履歴の項目を足しません（2.8 節）。
    - 枝の折りたたみ（Phase 11）は画面表示専用の状態で、`NodeMapState`、編集履歴、JSON、`localStorage` に含めません。自動配置で折りたたみ中に使う表示用の座標（`displayNodes`）も保存せず、正本の `nodes` の `x`, `y` は変えません。import、自動復元、成功した Undo / Redo の後は全展開に戻ります。
 
 ---
@@ -143,6 +145,7 @@ export type Node = {
 ```
 
 - 兄弟とルートの順は `nodes` 配列の相対順です（同じ `parentId` を持つノード同士の、配列の中の前後）。並べ替えは根ノード1つの配列内の位置を変え、子孫の位置は変えません。順序のフィールド（`order` など）は持ちません。親子は `parentId` で表すので、子が親より前にあってもかまいません（[features.md の 14 章](./features.md#14-兄弟ノードの順序変更)）。
+- `parentId` は接続（`Shift` + ドラッグ）に加えて、階層の上げ下げ（[features.md の 15 章](./features.md#15-階層の上げ下げ)）でも変わります。上げ下げは、上げ下げする枝の根 T の `parentId` と、T の根ノード1つの配列内の位置を変え、子孫の `parentId` と位置は変えません（下げて新しい親に子が無いときは T の位置も変えません）。
 
 #### `NodeImportance` (`client/src/types/nodeImportance.ts`)
 ノードの重要度を表現するユニオン型です。解像度フィルタリングの基準となります。
@@ -430,6 +433,62 @@ export type ReorderSiblingResult =
   | { ok: false; reason: SiblingReorderFailureReason };
 ```
 - `applyTreeChange` を1回だけ呼びます。成功したときだけ1回の commit になり、選択と `documentRevision` は変えません。端と失敗ではノード・選択・履歴・「やり直す」を変えません。自動配置の `layoutNodeForest` が失敗したときは `placement-failed` です。
+
+### 2.8 階層の上げ下げの型
+
+階層の上げ下げ（Phase 14。[features.md の 15 章](./features.md#15-階層の上げ下げ)）で受け渡す型です。定義元はすべて `client/src/domain/nodes/nodeIndent.ts` です。いずれもメモリ上だけで使い、保存形式（V3）・JSON・`localStorage`・編集履歴には現れません。`useNodes.changeNodeIndent` の戻り値の型も、domain の `formatNodeIndentNotice`（`client/src/domain/nodes/nodeIndentMessages.ts`）から参照するため、`hooks/useNodes.ts` ではなく domain に置きます。
+
+#### `NodeIndentDirection` / `NodeIndentAvailability` (`client/src/domain/nodes/nodeIndent.ts`)
+
+```typescript
+export type NodeIndentDirection = "indent" | "outdent"; // indent = 階層を下げる、outdent = 階層を上げる
+
+export type NodeIndentAvailability = { indent: boolean; outdent: boolean };
+```
+- `getNodeIndentAvailability(nodes, nodeId, visibleNodeIds): NodeIndentAvailability` が、ヘッダーのボタンの有効・無効を返します。未選択（`nodeId` が `null`）・対象が無い・見えていないときは両方 `false`、それ以外は `indent` が「見えている直前の兄弟があるか」、`outdent` が「ルートでないか」です。座標の失敗や不正なデータはここでは予測しません。
+
+#### `NodeIndentFailureReason` / `NodeIndentResult` (`client/src/domain/nodes/nodeIndent.ts`)
+`changeNodeIndent(nodes, nodeId, direction, visibleNodeIds, mode): NodeIndentResult` の結果の型です。
+
+```typescript
+export type NodeIndentFailureReason =
+  | "node-missing" // T が無い
+  | "node-hidden" // T が見えていない
+  | "invalid-structure" // 不正なデータ。下げるとき新しい親が T の子孫か、新しい親の祖先の鎖に循環がある。上げるとき親または祖父母が配列に無い。移した後の T の祖先の鎖が途切れる・循環している（深さが求められない）
+  | "placement-failed"; // 手動配置の座標が有限でない・桁落ちする・間隔が取れない。useNodes.changeNodeIndent ではそれに加えて自動配置の失敗も含む
+
+type NodeIndentSuccess = {
+  ok: true;
+  direction: NodeIndentDirection;
+  newParentId: number | null; // 上げてルートになったら null
+  newParentLabel: string | null; // 新しい親の label（生の値。空文字もそのまま）。ルートなら null
+  depth: number; // 移した後の T の深さ。ルートが 1
+};
+
+type NodeIndentAtEdge =
+  | { ok: false; reason: "at-edge"; direction: "indent"; hiddenBeyond: boolean; isRoot: boolean }
+  | { ok: false; reason: "at-edge"; direction: "outdent" }; // 上げられないのはルートだけ
+
+export type NodeIndentResult =
+  | (NodeIndentSuccess & { nodes: Node[] })
+  | NodeIndentAtEdge
+  | { ok: false; reason: NodeIndentFailureReason };
+```
+- 下げる `at-edge` の `hiddenBeyond` は、T より前に隠れた兄弟が1つ以上あるとき `true`、`isRoot` は T がルートのとき `true` です。
+- 成功時の `nodes` は、`nodes` を1回走査して作った新しい配列です。T 以外のノードは、座標を変えなければ同じオブジェクトのままです。手動配置では `calculateIndentTranslation` / `calculateOutdentTranslation` と `translateBranch`（`client/src/domain/nodes/nodeIndentPlacement.ts`）で T の枝を平行移動し、自動配置では座標を変えません（呼び出し元の `applyTreeChange` が `layoutNodeForest` で配置し直します）。
+- `NodeIndentSuccess` と `NodeIndentAtEdge` は export しない内部の型で、`NodeIndentResult` と `ChangeNodeIndentResult` の部品です。
+
+#### `ChangeNodeIndentResult` (`client/src/domain/nodes/nodeIndent.ts`)
+`useNodes.changeNodeIndent(nodeId, direction, visibleNodeIds): ChangeNodeIndentResult` の戻り値の型です。
+
+```typescript
+export type ChangeNodeIndentResult =
+  | NodeIndentSuccess
+  | NodeIndentAtEdge
+  | { ok: false; reason: NodeIndentFailureReason };
+```
+- `applyTreeChange` を1回だけ呼び、新しい親はそのコールバックの中で最新のノード配列から解決します。成功したときだけ1回の commit になり、選択と `documentRevision` は変えません。端と失敗ではノード・選択・履歴・「やり直す」を変えません。自動配置の `layoutNodeForest` が失敗したときは `placement-failed` です。
+- 下げたときの新しい親の展開は、この型を受け取った `useNodeIndentAction` が、成功した下げのときだけ `expandNodes([newParentId])` で行います。
 
 ---
 
