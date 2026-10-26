@@ -272,6 +272,19 @@ describe("calculateOutdentTranslation", () => {
     });
   });
 
+  it("例 M4: 最も下の兄弟が配列の前にあっても、親の枝の下端の最大値を使う", () => {
+    const m4 = createM4();
+    const a3 = m4.find((item) => item.id === 9) as Node;
+    const nodes = [a3, ...m4.filter((item) => item.id !== 9)];
+
+    expect(calculateOutdentTranslation(nodes, 4, 2)).toEqual({
+      rootX: 220,
+      rootY: 300,
+      dx: -220,
+      dy: 200,
+    });
+  });
+
   it("例 M5: 上げてルートになる", () => {
     expect(calculateOutdentTranslation(createM5(), 4, 1)).toEqual({
       rootX: 0,
