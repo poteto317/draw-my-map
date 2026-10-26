@@ -1,8 +1,9 @@
 import {
-  SIBLING_REORDER_BUTTON_ATTRIBUTE,
   resolveSiblingReorderShortcut,
   type SiblingReorderShortcutInput,
 } from "@/components/map/siblingReorderShortcut";
+import { buttonInsideMarkedElement, insideOf } from "@/components/map/testing/treeEditShortcutTargets";
+import { TREE_EDIT_SHORTCUT_BUTTON_ATTRIBUTE } from "@/components/map/treeEditShortcutGuard";
 
 const baseInput: SiblingReorderShortcutInput = {
   key: "ArrowUp",
@@ -18,23 +19,6 @@ const baseInput: SiblingReorderShortcutInput = {
   selectedNodeId: 1,
   hasActiveGesture: false,
 };
-
-function insideOf(tag: string, attributes: Record<string, string> = {}): HTMLElement {
-  const outer = document.createElement(tag);
-  for (const [name, value] of Object.entries(attributes)) outer.setAttribute(name, value);
-  const inner = document.createElement("span");
-  outer.appendChild(inner);
-  return inner;
-}
-
-// 目印を付けた div の中にある普通のボタン。目印はボタン自身に付いていないので止める
-function buttonInsideMarkedElement(): HTMLElement {
-  const outer = document.createElement("div");
-  outer.setAttribute(SIBLING_REORDER_BUTTON_ATTRIBUTE, "");
-  const button = document.createElement("button");
-  outer.appendChild(button);
-  return button;
-}
 
 describe("resolveSiblingReorderShortcut", () => {
   it("Alt+ArrowUp は up", () => {
@@ -71,11 +55,11 @@ describe("resolveSiblingReorderShortcut", () => {
   });
 
   describe("「上へ」「下へ」ボタンにフォーカスがあるとき", () => {
-    const markedButton = () => insideOf("button", { [SIBLING_REORDER_BUTTON_ATTRIBUTE]: "" });
+    const markedButton = () => insideOf("button", { [TREE_EDIT_SHORTCUT_BUTTON_ATTRIBUTE]: "" });
 
     it("ボタンそのものへの Alt+ArrowUp / Alt+ArrowDown は働く", () => {
       const button = document.createElement("button");
-      button.setAttribute(SIBLING_REORDER_BUTTON_ATTRIBUTE, "");
+      button.setAttribute(TREE_EDIT_SHORTCUT_BUTTON_ATTRIBUTE, "");
       expect(resolveSiblingReorderShortcut({ ...baseInput, target: button })).toBe("up");
       expect(resolveSiblingReorderShortcut({ ...baseInput, key: "ArrowDown", keyCode: 40, target: button })).toBe("down");
     });

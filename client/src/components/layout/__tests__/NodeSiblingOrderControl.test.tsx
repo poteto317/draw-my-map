@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NodeSiblingOrderControl } from "@/components/layout/NodeSiblingOrderControl";
-import { SIBLING_REORDER_BUTTON_ATTRIBUTE } from "@/components/map/siblingReorderShortcut";
+import { TREE_EDIT_SHORTCUT_BUTTON_ATTRIBUTE } from "@/components/map/treeEditShortcutGuard";
 
 type Props = Parameters<typeof NodeSiblingOrderControl>[0];
 
@@ -93,11 +93,11 @@ describe("NodeSiblingOrderControl", () => {
     expect(fireEvent.keyDown(button, { key: " ", repeat: true })).toBe(true);
   });
 
-  it("両方のボタンにAlt+↑/↓のショートカットを通す目印を付ける", () => {
+  it("両方のボタンにショートカットを通す目印（data-tree-edit-shortcut-button）を付ける", () => {
     render(<NodeSiblingOrderControl {...createProps()} />);
-    expect(getUpButton()).toHaveAttribute(SIBLING_REORDER_BUTTON_ATTRIBUTE);
-    expect(getDownButton()).toHaveAttribute(SIBLING_REORDER_BUTTON_ATTRIBUTE);
-    expect(screen.getByRole("group", { name: "兄弟の順序" })).not.toHaveAttribute(SIBLING_REORDER_BUTTON_ATTRIBUTE);
+    expect(getUpButton()).toHaveAttribute(TREE_EDIT_SHORTCUT_BUTTON_ATTRIBUTE);
+    expect(getDownButton()).toHaveAttribute(TREE_EDIT_SHORTCUT_BUTTON_ATTRIBUTE);
+    expect(screen.getByRole("group", { name: "兄弟の順序" })).not.toHaveAttribute(TREE_EDIT_SHORTCUT_BUTTON_ATTRIBUTE);
   });
 
   it.each([

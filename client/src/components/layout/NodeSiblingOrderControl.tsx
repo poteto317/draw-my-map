@@ -1,5 +1,6 @@
-import { useLayoutEffect, useRef, type FocusEvent, type KeyboardEvent } from "react";
-import { SIBLING_REORDER_BUTTON_ATTRIBUTE } from "@/components/map/siblingReorderShortcut";
+import type { KeyboardEvent } from "react";
+import { TREE_EDIT_SHORTCUT_BUTTON_ATTRIBUTE } from "@/components/map/treeEditShortcutGuard";
+import { usePairedButtonFocusHandover } from "@/components/layout/usePairedButtonFocusHandover";
 
 export type NodeSiblingOrderControlProps = {
   canMoveUp: boolean;
@@ -16,42 +17,15 @@ export function NodeSiblingOrderControl({
   onMoveUp,
   onMoveDown,
 }: NodeSiblingOrderControlProps) {
-  const upButtonRef = useRef<HTMLButtonElement>(null);
-  const downButtonRef = useRef<HTMLButtonElement>(null);
-  // 直前にフォーカスしていたボタン。無効化でbodyへフォーカスが戻るブラウザでも、どちらを押していたか分かるよう残す
-  const focusedButtonRef = useRef<HTMLButtonElement | null>(null);
-
-  useLayoutEffect(() => {
-    const focusedButton = focusedButtonRef.current;
-    if (!focusedButton?.disabled) return;
-    const activeElement = document.activeElement;
-    if (activeElement !== focusedButton && activeElement !== document.body && activeElement !== null) return;
-    const otherButton = focusedButton === upButtonRef.current ? downButtonRef.current : upButtonRef.current;
-    if (!otherButton || otherButton.disabled) {
-      // 移せる先が無いなら記録を捨てる。残すと、後で別の理由でボタンが有効になったときに誤ってフォーカスを奪う
-      focusedButtonRef.current = null;
-      return;
-    }
-    // 端に着いて押したボタンが無効になってもキーボードのフォーカスを失わないよう、もう一方の有効なボタンへ移す
-    otherButton.focus();
-  }, [canMoveUp, canMoveDown]);
-
-  function handleFocus(event: FocusEvent<HTMLButtonElement>) {
-    focusedButtonRef.current = event.currentTarget;
-  }
-
-  function handleBlur(event: FocusEvent<HTMLButtonElement>) {
-    // 無効化によるblurでは記録を残し、ほかの要素へ移ったときだけ消す
-    if (!event.currentTarget.disabled) focusedButtonRef.current = null;
-  }
+  const { firstRef, secondRef, handleFocus, handleBlur } = usePairedButtonFocusHandover(canMoveUp, canMoveDown);
 
   function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
     // Enterの押し続けで移動が連続し、フォーカス移動後に逆の操作が起きないよう、リピートのclick合成を止める
     if (event.key === "Enter" && event.repeat) event.preventDefault();
   }
 
-  // 目印を付けたボタンでは、windowのAlt+↑/↓のショートカットが働く。ここでは処理しないので二重には動かない
-  const shortcutTargetProps = { [SIBLING_REORDER_BUTTON_ATTRIBUTE]: "" };
+  // 目印を付けたボタンでは、windowのAlt+↑/↓/←/→のショートカットが働く。ここでは処理しないので二重には動かない
+  const shortcutTargetProps = { [TREE_EDIT_SHORTCUT_BUTTON_ATTRIBUTE]: "" };
 
   // clickはevent.detailで弾かない。ダブルクリックは2回の移動として扱う。
   // pointerdownの既定動作は止めない。編集中のラベル入力をblurで確定してから移動させるため
@@ -60,7 +34,7 @@ export function NodeSiblingOrderControl({
       <button
         type="button"
         className={buttonClassName}
-        ref={upButtonRef}
+        ref={firstRef}
         aria-label="枝を上へ移動"
         aria-keyshortcuts="Alt+ArrowUp"
         title="枝を上へ移動（Alt/Option+↑）"
@@ -76,7 +50,7 @@ export function NodeSiblingOrderControl({
       <button
         type="button"
         className={buttonClassName}
-        ref={downButtonRef}
+        ref={secondRef}
         aria-label="枝を下へ移動"
         aria-keyshortcuts="Alt+ArrowDown"
         title="枝を下へ移動（Alt/Option+↓）"
