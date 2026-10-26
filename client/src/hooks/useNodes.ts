@@ -35,6 +35,11 @@ import {
   type ReorderSiblingResult,
   type SiblingReorderRequest,
 } from "@/domain/nodes/nodeSiblingOrder";
+import {
+  changeNodeIndent as computeNodeIndent,
+  type ChangeNodeIndentResult,
+  type NodeIndentDirection,
+} from "@/domain/nodes/nodeIndent";
 import { replaceNodeImportance } from "@/domain/nodes/nodeImportanceUpdate";
 import { clearNodeIllustration, replaceNodeIllustration } from "@/domain/nodes/nodeIllustrationUpdate";
 import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
@@ -77,6 +82,12 @@ type UseNodesReturn = {
     request: SiblingReorderRequest,
     visibleNodeIds: ReadonlySet<number>,
   ) => ReorderSiblingResult;
+  // 見えている直前の兄弟の子にする／親の兄弟にする。applyTreeChange を1回だけ呼び、選択と documentRevision は変えない。失敗時は何も変えない
+  changeNodeIndent: (
+    nodeId: number,
+    direction: NodeIndentDirection,
+    visibleNodeIds: ReadonlySet<number>,
+  ) => ChangeNodeIndentResult;
   deleteNode: (id: number) => void;
   setLayoutMode: (mode: NodeLayoutMode) => void;
   replaceMap: (state: NodeMapState) => void;
@@ -306,6 +317,31 @@ export function useNodes(): UseNodesReturn {
     return settled;
   }, [applyTreeChange]);
 
+  // 新しい親は描画時の配列ではなく、確定時点の最新の配列から解決する。
+  // 上げ下げは編集中の折りたたみや通知を保つため、documentRevision を上げない
+  const changeNodeIndent = useCallback((
+    nodeId: number,
+    direction: NodeIndentDirection,
+    visibleNodeIds: ReadonlySet<number>,
+  ): ChangeNodeIndentResult => {
+    let outcome: ChangeNodeIndentResult | null = null;
+    const applied = applyTreeChange((currentNodes, mode) => {
+      const changed = computeNodeIndent(currentNodes, nodeId, direction, visibleNodeIds, mode);
+      if (!changed.ok) {
+        outcome = changed;
+        return null;
+      }
+      const { nodes: changedNodes, ...summary } = changed;
+      outcome = summary;
+      return changedNodes;
+    });
+    // 候補を作れた後に失敗するのは、全体の自動配置だけ
+    const settled = outcome as ChangeNodeIndentResult | null;
+    if (applied && settled?.ok) return settled;
+    if (settled === null || settled.ok) return { ok: false, reason: "placement-failed" };
+    return settled;
+  }, [applyTreeChange]);
+
   const deleteNode = useCallback((id: number) => {
     let subtreeIds = new Set<number>();
     const applied = applyTreeChange((currentNodes) => {
@@ -339,6 +375,7 @@ export function useNodes(): UseNodesReturn {
     pasteSubtree,
     insertForest,
     reorderSibling,
+    changeNodeIndent,
     deleteNode,
     setLayoutMode,
     replaceMap,

@@ -30,6 +30,17 @@ export function calculateRoundingTolerance(
   );
 }
 
+// 間隔の判定に使う丸めの許容誤差。上限は間隔の 1e-9 倍にし、大きな座標で意味のある不足を隠さない
+const GAP_ROUNDING_LIMIT_RATIO = 1e-9;
+
+export function calculateGapRoundingTolerance(
+  first: number,
+  second: number,
+  gap: number,
+): number {
+  return calculateRoundingTolerance(first, second, gap * GAP_ROUNDING_LIMIT_RATIO);
+}
+
 export function hasSufficientGap(
   start: number,
   end: number,
@@ -39,6 +50,6 @@ export function hasSufficientGap(
   if (actualGap === null || actualGap < 0) return false;
   // Independently rounded boundaries can differ by a few ULPs, but large
   // coordinates must not hide a meaningful shortfall in the required gap.
-  const tolerance = calculateRoundingTolerance(start, end, requiredGap * 1e-9);
+  const tolerance = calculateGapRoundingTolerance(start, end, requiredGap);
   return requiredGap - actualGap <= tolerance;
 }

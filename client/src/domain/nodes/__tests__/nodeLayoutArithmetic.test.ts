@@ -1,4 +1,5 @@
 import {
+  calculateGapRoundingTolerance,
   calculateRoundingTolerance,
   checkedAdd,
   checkedMultiply,
@@ -62,5 +63,16 @@ describe("calculateRoundingTolerance", () => {
 
   it("大座標でも意味のある不足を許容しないよう上限を守る", () => {
     expect(calculateRoundingTolerance(1e12, 1e12 + 100, 4e-8)).toBe(4e-8);
+  });
+});
+
+describe("calculateGapRoundingTolerance", () => {
+  it("小さな座標では4 ULP相当の許容差を返す", () => {
+    expect(calculateGapRoundingTolerance(2, -8, 40)).toBe(calculateRoundingTolerance(2, -8, 4e-8));
+  });
+
+  it("大きな座標では間隔の1e-9倍を上限にする", () => {
+    expect(calculateGapRoundingTolerance(1e12, 1e12 + 100, 40)).toBe(40 * 1e-9);
+    expect(calculateGapRoundingTolerance(1e12, 1e12 + 100, 120)).toBe(120 * 1e-9);
   });
 });
