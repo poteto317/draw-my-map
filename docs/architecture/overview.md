@@ -117,7 +117,7 @@ client/src/
 - **責務**: ユーザーに対するプレゼンテーション、DOM イベントの捕捉、および Pixi.js Canvas ステージと DOM オーバーレイの統合。
 - **構成モジュール**:
   - **レイアウト UI (`src/components/layout/` 全 36 ファイル)**:
-    - `AppHeader.tsx`: タイトル、マップの操作（必須の `mapControls`。タイトルの直後）、ノード検索、レイアウトモード切替、操作ヒント、重要度・解像度フィルタ切替、枝の折りたたみ・展開ボタンと非表示件数（`NodeCollapseControl`）、元に戻す／やり直すボタン、枝を複製ボタン、兄弟の順序の「上へ」「下へ」ボタン、階層の「階層を上げる」「階層を下げる」ボタン、枝のコピー＆ペーストの常設案内、「箇条書きから追加」ボタン、JSON/画像エクスポートボタン、操作通知バーを統合するヘッダー（操作のボタン群と通知は `MapEditor` が `operationControls`・`operationNotices` として渡す）。
+    - `AppHeader.tsx`: タイトル、マップの操作（必須の `mapControls`。タイトルの直後）、ノード検索、レイアウトモード切替、操作ヒント、重要度・解像度フィルタ切替、枝の折りたたみ・展開ボタンと非表示件数（`NodeCollapseControl`）、元に戻す／やり直すボタン、枝を複製ボタン、兄弟の順序の「上へ」「下へ」ボタン、階層の「階層を上げる」「階層を下げる」ボタン、「親を挿入」ボタン、枝のコピー＆ペーストの常設案内、「箇条書きから追加」ボタン、JSON/画像エクスポートボタン、操作通知バーを統合するヘッダー（操作のボタン群と通知は `MapEditor` が `operationControls`・`operationNotices` として渡す）。
     - `NodeSearchBox.tsx`, `nodeSearchKeyAction.ts`: ARIA combobox/listbox による検索欄と最大50件の候補一覧、および矢印・Enter・Escape・IME変換中のキー判定。
     - `AppWorkspace.tsx`: ヘッダー下の 2 カラム（メインキャンバス領域 + 右サイドパネル）レイアウト。
     - `LayoutModeSelector.tsx`: `手動配置` / `自動配置` 切り替えボタングループ（`role="group"`, `aria-label="レイアウトモード"`）。
