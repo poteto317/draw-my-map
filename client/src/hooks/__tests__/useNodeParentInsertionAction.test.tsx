@@ -120,4 +120,16 @@ describe("useNodeParentInsertionAction", () => {
     view.rerender({ ...initial, documentRevision: 4 });
     expect(view.result.current.labelEditRequest).toBeNull();
   });
+
+  it("世代が変わった後の成功では、sequence が前の値の次になり、documentRevision が新しい値になる", () => {
+    const { view, initial, insertParentNode } = setup();
+    insertParentNode.mockReturnValueOnce({ ok: true, insertedId: 50 });
+    act(() => view.result.current.insert(4));
+    expect(view.result.current.labelEditRequest).toEqual({ nodeId: 50, sequence: 1, documentRevision: 3 });
+
+    view.rerender({ ...initial, documentRevision: 4 });
+    insertParentNode.mockReturnValueOnce({ ok: true, insertedId: 51 });
+    act(() => view.result.current.insert(4));
+    expect(view.result.current.labelEditRequest).toEqual({ nodeId: 51, sequence: 2, documentRevision: 4 });
+  });
 });

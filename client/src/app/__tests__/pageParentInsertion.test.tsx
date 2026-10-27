@@ -273,6 +273,7 @@ describe("ページの親の挿入（ボタン）", () => {
 
     await user.click(redoButton());
     await user.click(redoButton());
+    expect(screen.queryByTestId("node-label-input")).toBeNull();
     const redone = exportedMap().nodes;
     expect(redone.find((node) => node.id === inserted.id)).toMatchObject({ parentId: 1, label: "分類" });
     expect(redone.find((node) => node.id === 3)).toMatchObject({ parentId: inserted.id, x: 440, y: 200 });
