@@ -62,6 +62,7 @@ Draw My Map のフロントエンドおよびエッジバックエンドの主�
 ```text
 client/src/
 ├── app/                  # Next.js App Router (ページ、レイアウト、Route Handler)
+│   └── testing/          # ページ (Home) の結合テストの共通ヘルパーと jest.mock 用のモックの中身 (pageTestHelpers, pageModuleMocks)
 ├── components/           # React UI コンポーネント (DOM オーバーレイ & Pixi キャンバス)
 │   ├── layout/           # アプリケーション全体のレイアウト、ヘッダー、パネル、ダイアログ
 │   └── map/              # キャンバスコンテナ、Pixi シーンレンダラー、操作コーディネーター
@@ -83,7 +84,7 @@ client/src/
 │   ├── illustration/     # Route Handler クライアント、サムネイル縮小処理
 │   ├── imageExport/      # DOM Canvas / SVG のラスタライズとファイルダウンロード
 │   └── persistence/      # localStorage 読み書き（mapLibraryStorage.ts だけ）、起動の実行、マップ id の生成、JSON ファイルリーダー/ダウンローダー
-├── testing/              # テスト用ヘルパー、モック、フィクスチャ (createTestNode, jpegFixture, createTestStorageSession, mapLibraryTestStorage)
+├── testing/              # テスト用ヘルパー、モック、フィクスチャ (createTestNode, jpegFixture, createTestStorageSession, mapLibraryTestStorage)。ページの結合テスト専用のものは app/testing/
 └── types/                # アプリケーション共通の TypeScript 型定義
 ```
 
@@ -178,6 +179,8 @@ Draw My Map では、コードの信頼性と保守性を維持するため、�
   - `src/components/map/pixi/testing/pixiTestHarness.ts`: WebGL 非対応の JSDOM 上で Pixi.js シーン構築・ストローク・イベント発火を検証するフェイク Pixi ランタイム。
   - `src/components/map/testing/mapStageTestRuntime.tsx` / `AutoLayoutMapStageHarness.tsx`: `MapStage` コンポーネント結合テスト用のランタイム注入・自動レイアウト検証ハーネス。
   - `src/components/map/testing/treeEditShortcutTargets.ts`: 兄弟の順序・階層のショートカットの共通ガードの target の条件を確かめるテストで共有する、キー入力の送り先の要素の補助（`insideOf`・`buttonInsideMarkedElement`）。
+  - `src/app/testing/pageTestHelpers.tsx`: `Home` を本物の `MapEditor`・`MapStage` まで通すページの結合テストで共有する補助。描画してキャンバスの枠を固定する `renderPage`、`stageContainer`・`undoButton`・`redoButton`・`dialog`・`headerButton`、ノードを選択する `selectNode`、JSON 書き出しと保存の本体を読む `exportedMap`（`downloadMapJson` のモックを引数で受け取る）・`storedMap`、V3 の JSON を作る `v3Json`・`v3JsonFromLabels` と型 `ExportedNode`・`ExportedMap`。
+  - `src/app/testing/pageModuleMocks.ts`: ページの結合テストの `jest.mock` のファクトリから `jest.requireActual` で読むモックの中身（Pixi の標準形 `createPagePixiModuleMock`、文字幅の測定 `createMapTextMeasurementModuleMock`）。`jest.mock` は巻き上げられるため、ファクトリは `jest.requireActual` 経由でだけ外部の関数を使える。`@/app/page`・`pixi.js` を import しない。
 
 ### 3. 検証コマンドの一括実行 (`npm run verify`)
 - コードを変更した後は、必ず `client` ディレクトリで以下の検証コマンドを実行してください:
