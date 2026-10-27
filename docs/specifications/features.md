@@ -243,6 +243,7 @@ Pixi.js による高速な 2D キャンバス描画と、React 19 による宣�
 - **編集開始**: 可視ノードを**ダブルクリック**する、または `Tab` / `Enter` キーで子・兄弟ノードを新規作成する。
 - **エディタ UI とレイアウト追従** (`NodeLabelEditor.tsx`, `nodeLabelEditorLayout.ts`):
   - `getNodeLabelEditorLayout(node, viewport)` により、現在のビューポートのパン・ズーム（`viewport.scale`）に完全追従した座標・サイズ・フォントサイズ（`14 * viewport.scale`）で HTML `<input type="text">` 要素が DOM オーバーレイ表示されます。
+  - 入力欄には `aria-label="ノードのラベル"` を付けて、スクリーンリーダーが名前を読めるようにします。名前は、開いた操作（ダブルクリックでの編集、`Tab` での子の追加、`Enter` での兄弟の追加）によらず同じです（入力欄の役割は、どの操作でも「選択中のノードのラベルを入力する」で同じなため）。`placeholder` は付けず、見た目は変えません。`data-testid="node-label-input"` はテスト用に残します。
   - **イラスト領域の回避 (`topInset`)**: `topInset = getNodeLabelCenterOffset(node) * 2 - node.height` により、イラストなしノードでは `topInset = 0`（ノード全体 `100×60px` に重畳）、イラスト付きノード（高さ `116px`）では `topInset = 56px`（`ILLUSTRATION_AREA_HEIGHT`）となり、上部のイラスト表示領域を避けて**下部 `60px` のラベル領域のみ**に `<input>` が重畳されます。
   - 編集開始時は既存のラベルテキスト（`node.label`）が入力欄にセットされた状態で**自動フォーカス（`autoFocus`）**されます（テキスト全選択は行いません）。
 - **確定とキャンセル**:
@@ -893,6 +894,8 @@ sequenceDiagram
   - 選択中ノードのラベル表示部は `line-clamp-3 break-words` により最大 3 行で省略表示され、全文は `title={selectedNode.label || undefined}` 属性でツールチップ参照可能です。
   - 生成進行中のテキスト（「生成中です」）には `role="status"`、エラーメッセージには `role="alert"` が付与され、スクリーンリーダーへ即座に通知されます。
   - `IllustrationImage.tsx` は Data URL（`data:image/jpeg;base64,...`）を直接描画するため、`next/image` ではなくネイティブの `<img src={src} alt={alt} />` 要素を使用します。
+- **ノードのラベル編集 (`NodeLabelEditor.tsx`)**:
+  - 入力欄に `aria-label="ノードのラベル"` を付けます（3.4 節）。
 - **マップの操作 (`MapLibraryControls.tsx`)**:
   - 現在のマップ名の要素に `data-testid="current-map-name"` と `title={mapName}` を付け、`max-w-[16rem] truncate` で省略表示します。
   - 「マップ一覧」ボタンに `aria-haspopup="dialog"` と、一覧の画面を表示している間だけ `true` になる `aria-expanded` を付けます。「新しいマップ」ボタンには `aria-haspopup="dialog"` を付けます。
