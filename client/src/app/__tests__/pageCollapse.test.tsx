@@ -222,6 +222,14 @@ it("閉親Tab成功で展開し新規ノードを編集でき、Undo一回で追
   expect(JSON.parse(exported()).nodes).toHaveLength(5);
 });
 
+it("Tabで開いたラベル編集の入力欄は「ノードのラベル」という名前で取れ、フォーカスを持つ", async () => {
+  await start(); select(1); fireEvent.keyDown(window, { key: "Tab" });
+  const input = screen.getByRole("textbox", { name: "ノードのラベル" });
+  expect(input).toBe(screen.getByTestId("node-label-input"));
+  expect(input).toBe(document.activeElement);
+  fireEvent.keyDown(input, { key: "Escape" });
+});
+
 it("閉親Tabはその親だけを展開し、ほかの閉じた枝は閉じたまま", async () => {
   await start(); select(1); toggle(); select(0); toggle();
   fireEvent.keyDown(window, { key: "Tab" });

@@ -29,6 +29,7 @@ export function NodeLabelEditor({ node, viewport, value, onChange, onCommit, onC
     <input
       data-testid="node-label-input"
       type="text"
+      aria-label="ノードのラベル"
       value={value}
       onChange={(event) => onChange(event.target.value)}
       onDoubleClick={(event) => event.stopPropagation()}

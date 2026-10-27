@@ -33,6 +33,12 @@ function renderEditor() {
 }
 
 describe("NodeLabelEditor", () => {
+  it("exposes the input as a textbox named ノードのラベル", () => {
+    const { input } = renderEditor();
+
+    expect(screen.getByRole("textbox", { name: "ノードのラベル" })).toBe(input);
+  });
+
   it("forwards text changes and commits on Enter", () => {
     const { input, onChange, onCommit } = renderEditor();
 
