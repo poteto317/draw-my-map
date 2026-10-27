@@ -29,6 +29,8 @@ import { useRenderedMapScene } from "@/components/map/useRenderedMapScene";
 import { useSiblingReorderDragEscape } from "@/components/map/useSiblingReorderDragEscape";
 import { useSiblingReorderShortcut } from "@/components/map/useSiblingReorderShortcut";
 import { useNodeIndentShortcut } from "@/components/map/useNodeIndentShortcut";
+import { useNodeParentInsertionShortcut } from "@/components/map/useNodeParentInsertionShortcut";
+import { useNodeLabelEditRequest } from "@/components/map/useNodeLabelEditRequest";
 import { useIllustrationTextures } from "@/components/map/useIllustrationTextures";
 import { useViewportScaleNotification } from "@/components/map/useViewportScaleNotification";
 import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
@@ -42,6 +44,7 @@ import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 import type { OperationNotice } from "@/types/operationNotice";
 import type { NodeFocusRequest } from "@/types/nodeFocusRequest";
+import type { NodeLabelEditRequest } from "@/types/nodeLabelEditRequest";
 
 type MapStageProps = {
   nodes: readonly Node[];
@@ -66,6 +69,10 @@ type MapStageProps = {
   onReorderSibling: (nodeId: number, request: SiblingReorderRequest) => void;
   // ショートカットの上げ下げの要求。結果の通知と展開は呼び出し元が行う
   onChangeNodeIndent: (nodeId: number, direction: NodeIndentDirection) => void;
+  // ショートカットの親の挿入の要求。結果の通知とラベルの編集の要求は呼び出し元が行う
+  onInsertParentNode: (nodeId: number) => void;
+  // 呼び出し元からのラベルの編集の要求（親の挿入の後）。documentRevision が違う要求は無視する
+  labelEditRequest: NodeLabelEditRequest | null;
   onDeleteNode: (id: number) => void;
   // copy/pasteイベントで呼ぶ。枝データの生成と挿入はHome側、結果の通知もHomeへ返す
   onCopySubtree: (sourceId: number) => SubtreeClipboardResult<string>;
@@ -98,6 +105,8 @@ export function MapStage({
   layoutMode,
   onReorderSibling,
   onChangeNodeIndent,
+  onInsertParentNode,
+  labelEditRequest,
   onDeleteNode,
   onCopySubtree,
   onPasteSubtree,
@@ -239,6 +248,15 @@ export function MapStage({
     onFocusNode: focusNode,
   });
 
+  useNodeLabelEditRequest({
+    request: labelEditRequest,
+    documentRevision,
+    nodes,
+    hasActiveGesture,
+    cancelActiveGesture,
+    startEditing: editing.startEditing,
+  });
+
   useViewportScaleNotification(viewport.scale, onViewportScaleChange);
 
   useNodeKeyboardShortcuts({
@@ -265,6 +283,14 @@ export function MapStage({
     hasActiveGesture,
     enabled: shortcutsEnabled,
     onChangeNodeIndent,
+  });
+
+  useNodeParentInsertionShortcut({
+    selectedNodeId,
+    isEditing: editing.editingNodeId !== null,
+    hasActiveGesture,
+    enabled: shortcutsEnabled,
+    onInsertParentNode,
   });
 
   useMapClipboardEvents({

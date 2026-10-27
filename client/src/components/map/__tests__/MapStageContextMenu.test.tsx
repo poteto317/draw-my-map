@@ -42,6 +42,8 @@ const defaultProps = {
   layoutMode: "manual" as const,
   onReorderSibling: jest.fn(),
   onChangeNodeIndent: jest.fn(),
+  onInsertParentNode: jest.fn(),
+  labelEditRequest: null,
 };
 
 const sampleNodes: Node[] = [

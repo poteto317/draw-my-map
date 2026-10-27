@@ -36,6 +36,7 @@ import { useNodeSearchNavigation } from "@/hooks/useNodeSearchNavigation";
 import { useOutlineImport } from "@/hooks/useOutlineImport";
 import { useSiblingReorderAction } from "@/hooks/useSiblingReorderAction";
 import { useNodeIndentAction } from "@/hooks/useNodeIndentAction";
+import { useNodeParentInsertionAction } from "@/hooks/useNodeParentInsertionAction";
 import type { MapStorageSession } from "@/types/mapStorageSession";
 
 const CLIPBOARD_OPERATION_HINT = "枝をコピー: Ctrl/Cmd+C ／ 貼り付け: Ctrl/Cmd+V（新しいルートとして追加）";
@@ -79,6 +80,7 @@ export function MapEditor({
     insertForest,
     reorderSibling,
     changeNodeIndent,
+    insertParentNode,
     deleteNode,
     setLayoutMode,
     replaceMap,
@@ -152,10 +154,11 @@ export function MapEditor({
     notice: clipboardNotice,
     publishNotice: publishClipboardNotice,
   } = useRevisionScopedNotice(documentRevision);
-  // 枝の構造の変更の通知（兄弟の順序変更・階層の上げ下げ）。8系統目
+  // 枝の構造の変更の通知（兄弟の順序変更・階層の上げ下げ・親の挿入）。8系統目
   const {
     notice: treeEditNotice,
     publishNotice: publishTreeEditNotice,
+    clearNotice: clearTreeEditNotice,
   } = useRevisionScopedNotice(documentRevision);
   const outlineImport = useOutlineImport({
     selectedNodeId,
@@ -177,6 +180,15 @@ export function MapEditor({
     changeNodeIndent,
     expandNodes: branchCollapse.expandNodes,
     publishNotice: publishTreeEditNotice,
+  });
+  const nodeParentInsertion = useNodeParentInsertionAction({
+    selectedNodeId,
+    nodes,
+    visibleNodeIds: displayState.visibleNodeIds,
+    documentRevision,
+    insertParentNode,
+    publishNotice: publishTreeEditNotice,
+    clearNotice: clearTreeEditNotice,
   });
   const { moveSelected: moveSelectedSibling } = siblingReorder;
   const moveSelectedSiblingUp = useCallback(() => moveSelectedSibling("up"), [moveSelectedSibling]);
@@ -341,6 +353,8 @@ export function MapEditor({
               layoutMode={layoutMode}
               onReorderSibling={siblingReorder.reorder}
               onChangeNodeIndent={nodeIndent.change}
+              onInsertParentNode={nodeParentInsertion.insert}
+              labelEditRequest={nodeParentInsertion.labelEditRequest}
               onDeleteNode={deleteNode}
               onCopySubtree={copySubtree}
               onPasteSubtree={pasteSubtree}

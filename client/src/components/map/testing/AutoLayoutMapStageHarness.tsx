@@ -23,6 +23,7 @@ export function AutoLayoutMapStageHarness({ shortcutsEnabled = true }: AutoLayou
     layoutMode,
     reorderSibling,
     changeNodeIndent,
+    insertParentNode,
     documentRevision,
   } = useNodes();
   const initializedRef = useRef(false);
@@ -58,6 +59,10 @@ export function AutoLayoutMapStageHarness({ shortcutsEnabled = true }: AutoLayou
         onChangeNodeIndent={(nodeId, direction) => {
           changeNodeIndent(nodeId, direction, new Set(nodes.map((node) => node.id)));
         }}
+        onInsertParentNode={(nodeId) => {
+          insertParentNode(nodeId, new Set(nodes.map((node) => node.id)));
+        }}
+        labelEditRequest={null}
         onDeleteNode={deleteNode}
         onCopySubtree={copySubtree}
         onPasteSubtree={pasteSubtree}

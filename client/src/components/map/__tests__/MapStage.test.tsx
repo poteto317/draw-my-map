@@ -56,6 +56,8 @@ const defaultProps = {
   layoutMode: "manual" as const,
   onReorderSibling: jest.fn(),
   onChangeNodeIndent: jest.fn(),
+  onInsertParentNode: jest.fn(),
+  labelEditRequest: null,
 };
 
 const sampleNodes: Node[] = [
@@ -113,6 +115,8 @@ function KeyboardCreationHarness({ initiallySelected = true }: { initiallySelect
         layoutMode="manual"
         onReorderSibling={() => {}}
         onChangeNodeIndent={() => {}}
+        onInsertParentNode={() => {}}
+        labelEditRequest={null}
       />
       <output data-testid="node-state">{JSON.stringify(nodes)}</output>
       <output data-testid="selected-node-id">{selectedNodeId}</output>
@@ -170,6 +174,8 @@ function MouseConnectionHarness() {
         layoutMode="manual"
         onReorderSibling={() => {}}
         onChangeNodeIndent={() => {}}
+        onInsertParentNode={() => {}}
+        labelEditRequest={null}
       />
       <output data-testid="node-state">{JSON.stringify(nodes)}</output>
       <output data-testid="selected-node-id">{selectedNodeId}</output>
@@ -228,6 +234,8 @@ function SubtreeMoveHarness() {
         layoutMode="manual"
         onReorderSibling={() => {}}
         onChangeNodeIndent={() => {}}
+        onInsertParentNode={() => {}}
+        labelEditRequest={null}
       />
       <output data-testid="node-state">{JSON.stringify(nodes)}</output>
     </>
@@ -942,6 +950,104 @@ describe("MapStage boundary", () => {
 
       expect(onChangeNodeIndent).not.toHaveBeenCalled();
       expect(notCanceled).toBe(false);
+    });
+  });
+
+  describe("親の挿入のショートカットとラベルの編集の要求", () => {
+    it("Alt+Enter で選択中のノードへの親の挿入を onInsertParentNode へ渡し、兄弟は足さず、既定動作を止める", async () => {
+      const onInsertParentNode = jest.fn();
+      defaultProps.onAddSiblingNode.mockClear();
+      await renderReady(
+        <MapStage {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onInsertParentNode={onInsertParentNode} />,
+      );
+
+      const notCanceled = fireEvent.keyDown(document.body, { key: "Enter", altKey: true });
+
+      expect(onInsertParentNode).toHaveBeenCalledTimes(1);
+      expect(onInsertParentNode).toHaveBeenCalledWith(1);
+      expect(notCanceled).toBe(false);
+      expect(defaultProps.onAddSiblingNode).not.toHaveBeenCalled();
+    });
+
+    it("修飾キーなしの Enter では兄弟を足し、onInsertParentNode を呼ばない", async () => {
+      const onInsertParentNode = jest.fn();
+      const onAddSiblingNode = jest.fn(() => null);
+      await renderReady(
+        <MapStage
+          {...defaultProps}
+          nodes={sampleNodes}
+          selectedNodeId={1}
+          onAddSiblingNode={onAddSiblingNode}
+          onInsertParentNode={onInsertParentNode}
+        />,
+      );
+
+      fireEvent.keyDown(document.body, { key: "Enter" });
+
+      expect(onAddSiblingNode).toHaveBeenCalledWith(1);
+      expect(onInsertParentNode).not.toHaveBeenCalled();
+    });
+
+    it("shortcutsEnabled が false なら Alt+Enter で onInsertParentNode を呼ばず、既定動作も止めない", async () => {
+      const onInsertParentNode = jest.fn();
+      await renderReady(
+        <MapStage
+          {...defaultProps}
+          nodes={sampleNodes}
+          selectedNodeId={1}
+          shortcutsEnabled={false}
+          onInsertParentNode={onInsertParentNode}
+        />,
+      );
+
+      const notCanceled = fireEvent.keyDown(document.body, { key: "Enter", altKey: true });
+
+      expect(onInsertParentNode).not.toHaveBeenCalled();
+      expect(notCanceled).toBe(true);
+    });
+
+    it("ラベル編集中は Alt+Enter で onInsertParentNode を呼ばない", async () => {
+      const onInsertParentNode = jest.fn();
+      const { getByTestId } = await renderReady(
+        <MapStage {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onInsertParentNode={onInsertParentNode} />,
+      );
+      const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+      mockStageBounds(container);
+      fireEvent.doubleClick(container, { clientX: 100, clientY: 60 });
+      const input = getByTestId("node-label-input");
+
+      // 入力欄の Alt+Enter はラベルを確定して編集を終えるので、編集中の body への送出を先に確かめる
+      fireEvent.keyDown(document.body, { key: "Enter", altKey: true });
+      fireEvent.keyDown(input, { key: "Enter", altKey: true });
+
+      expect(onInsertParentNode).not.toHaveBeenCalled();
+    });
+
+    it("labelEditRequest を受けると、そのノードのラベルを空の入力欄で編集し始め、入力欄へフォーカスを移す", async () => {
+      const { getByTestId } = await renderReady(
+        <MapStage
+          {...defaultProps}
+          nodes={sampleNodes}
+          labelEditRequest={{ nodeId: 1, sequence: 1, documentRevision: 0 }}
+        />,
+      );
+
+      const input = getByTestId("node-label-input");
+      expect(input).toHaveValue("");
+      expect(document.activeElement).toBe(input);
+    });
+
+    it("documentRevision が違う labelEditRequest では編集を始めない", async () => {
+      const { queryByTestId } = await renderReady(
+        <MapStage
+          {...defaultProps}
+          nodes={sampleNodes}
+          documentRevision={1}
+          labelEditRequest={{ nodeId: 1, sequence: 1, documentRevision: 0 }}
+        />,
+      );
+
+      expect(queryByTestId("node-label-input")).toBeNull();
     });
   });
 

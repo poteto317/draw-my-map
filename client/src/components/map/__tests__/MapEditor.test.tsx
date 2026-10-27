@@ -47,7 +47,7 @@ jest.mock("@/services/imageExport/mapPngRasterizer", () => ({
   rasterizeMapSvgToPng: jest.fn(),
 }));
 
-type ExportedMap = { nodes: Array<{ id: number; label: string }> };
+type ExportedMap = { nodes: Array<{ id: number; label: string; parentId: number | null }> };
 
 const savedJson = `${JSON.stringify({
   version: 3,
@@ -367,6 +367,44 @@ describe("MapEditor", () => {
 
       expect(screen.getByTestId("operation-notices"))
         .toHaveTextContent("枝の階層を上げました（ルート、第1階層）。");
+    });
+  });
+
+  describe("親の挿入", () => {
+    const parentWithTwoChildrenJson = `${JSON.stringify({
+      version: 3,
+      layoutMode: "manual",
+      nodes: [
+        { id: 1, parentId: null, label: "R", importance: "medium", x: 0, y: 100, width: 100, height: 60 },
+        { id: 2, parentId: 1, label: "A", importance: "medium", x: 220, y: 0, width: 100, height: 60 },
+        { id: 3, parentId: 1, label: "B", importance: "medium", x: 220, y: 200, width: 100, height: 60 },
+      ],
+    })}\n`;
+
+    // 直近の描画で登録されたノードのpointerdownで選択し、同じpointerで離す（indexはnodes配列の順）
+    function selectNode(index: number, nodeCount: number) {
+      act(() => {
+        mockNodePointerHandlers.at(index - nodeCount)?.pointerdown?.(pointer(300, 200));
+        mockStageHandlers.pointerup?.(pointer(300, 200));
+      });
+    }
+
+    it("A で Alt+Enter を押すと A の親を挿入し、新しいノードのラベルを空の入力欄で編集し始め、通知は出さない", async () => {
+      await renderEditor({ storage: createTestStorageSession({ initialJson: parentWithTwoChildrenJson }) });
+      selectNode(1, 3);
+
+      fireEvent.keyDown(document.body, { key: "Enter", altKey: true });
+
+      const input = screen.getByTestId("node-label-input");
+      expect(document.activeElement).toBe(input);
+      expect(input).toHaveValue("");
+      // 「JSON書き出し」も操作通知バーに通知を出すので、書き出す前に確かめる
+      expect(screen.queryByTestId("operation-notices")).toBeNull();
+      const exported = exportedMap();
+      expect(exported.nodes).toHaveLength(4);
+      const inserted = exported.nodes.find((node) => node.id !== 1 && node.id !== 2 && node.id !== 3)!;
+      expect(inserted.parentId).toBe(1);
+      expect(exported.nodes.find((node) => node.id === 2)!.parentId).toBe(inserted.id);
     });
   });
 

@@ -72,6 +72,8 @@ function HistoryHarness({ apiRef, setup, visibleNodeIds }: HistoryHarnessProps) 
       layoutMode="manual"
       onReorderSibling={() => {}}
       onChangeNodeIndent={() => {}}
+      onInsertParentNode={() => {}}
+      labelEditRequest={null}
     />
   );
 }
