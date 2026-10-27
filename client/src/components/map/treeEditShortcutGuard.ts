@@ -2,8 +2,8 @@ import { isInteractiveTarget } from "@/components/map/interactiveTarget";
 
 const IME_PROCESSING_KEY_CODE = 229;
 
-// 兄弟の順序と階層のボタンに付ける目印。このボタンはショートカットを案内しているので、
-// フォーカスがあっても Alt+↑/↓/←/→ を止めない
+// 兄弟の順序・階層・親の挿入のボタンに付ける目印。このボタンはショートカットを案内しているので、
+// フォーカスがあっても Alt+↑/↓/←/→/Enter を止めない
 export const TREE_EDIT_SHORTCUT_BUTTON_ATTRIBUTE = "data-tree-edit-shortcut-button";
 
 export type TreeEditShortcutInput = {
