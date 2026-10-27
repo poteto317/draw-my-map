@@ -1,24 +1,26 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import Home from "@/app/page";
+import {
+  exportedMap,
+  redoButton,
+  renderPage,
+  storedMap,
+  undoButton,
+} from "@/app/testing/pageTestHelpers";
 import {
   mockNodePointerHandlers,
-  mockStageBounds,
   mockStageHandlers,
   pointer,
-  renderReady,
   resetMapStageTestRuntime,
 } from "@/components/map/testing/mapStageTestRuntime";
-import { readActiveMapJson, seedMapLibrary } from "@/testing/mapLibraryTestStorage";
+import { seedMapLibrary } from "@/testing/mapLibraryTestStorage";
 
 // Pixi・イラスト生成・ダウンロード・画像化だけを差し替え、Home から MapEditor・ヘッダー・
 // MapStage のジェスチャー・useNodes・履歴・保存までは本物を通す
-jest.mock("pixi.js", () => {
-  const runtime = jest.requireActual<typeof import("@/components/map/testing/mapStageTestRuntime")>(
-    "@/components/map/testing/mapStageTestRuntime",
-  );
-  return runtime.createMockPixiModule();
-});
+jest.mock("pixi.js", () => (
+  jest.requireActual<typeof import("@/app/testing/pageModuleMocks")>("@/app/testing/pageModuleMocks")
+    .createPagePixiModuleMock()
+));
 
 jest.mock("@/services/illustration/illustrationGeneration", () => {
   const actual = jest.requireActual("@/services/illustration/illustrationGeneration");
@@ -35,9 +37,10 @@ jest.mock("@/services/persistence/mapJsonDownload", () => {
 });
 
 // jsdomはcanvasの2D contextを持たないため、文字幅の測定・PNG化・ダウンロードだけを差し替える
-jest.mock("@/services/imageExport/mapTextMeasurement", () => ({
-  createMapTextMeasurer: () => (text: string) => text.length * 8,
-}));
+jest.mock("@/services/imageExport/mapTextMeasurement", () => (
+  jest.requireActual<typeof import("@/app/testing/pageModuleMocks")>("@/app/testing/pageModuleMocks")
+    .createMapTextMeasurementModuleMock()
+));
 
 jest.mock("@/services/imageExport/mapImageDownload", () => ({
   downloadMapImage: jest.fn(),
@@ -48,15 +51,6 @@ jest.mock("@/services/imageExport/mapPngRasterizer", () => ({
 }));
 
 const MOVED_DOWN_MESSAGE = "枝を下へ移動しました（見えている兄弟の3件中2番目）。";
-
-type ExportedNode = {
-  id: number;
-  parentId: number | null;
-  label: string;
-  x: number;
-  y: number;
-};
-type ExportedMap = { version: number; layoutMode: string; nodes: ExportedNode[] };
 
 // 自動配置の R の子 A・B・C。座標は layoutNodeForest の結果と一致する。A の中心は (520, 100)
 function storeAutoLayoutChildren() {
@@ -71,24 +65,6 @@ function storeAutoLayoutChildren() {
       { ...node, id: 4, parentId: 1, label: "C", x: 470, y: 270 },
     ],
   }, null, 2)}\n` }]);
-}
-
-function stageContainer(): HTMLElement {
-  return document.querySelector<HTMLElement>(".cursor-crosshair")!;
-}
-
-async function renderPage() {
-  const rendered = await renderReady(<Home />);
-  mockStageBounds(stageContainer());
-  return rendered;
-}
-
-function undoButton() {
-  return screen.getByRole("button", { name: "元に戻す" });
-}
-
-function redoButton() {
-  return screen.getByRole("button", { name: "やり直す" });
 }
 
 // 直近の描画で登録されたハンドラは nodes 配列の順（R, A, B, C）
@@ -111,18 +87,8 @@ function dragA(toY: number) {
   stagePointer("pointerup", 520, toY);
 }
 
-function exportedMap(): ExportedMap {
-  fireEvent.click(screen.getByRole("button", { name: "JSON書き出し" }));
-  return JSON.parse(mockDownloadMapJson.mock.lastCall![0] as string) as ExportedMap;
-}
-
 function exportedIds(): number[] {
-  return exportedMap().nodes.map((node) => node.id);
-}
-
-function storedMap(): ExportedMap | null {
-  const stored = readActiveMapJson(window.localStorage);
-  return stored === null ? null : JSON.parse(stored) as ExportedMap;
+  return exportedMap(mockDownloadMapJson).nodes.map((node) => node.id);
 }
 
 // 300ms の自動保存を待ち、保存された本体の nodes の ID・座標を確かめる
@@ -156,7 +122,7 @@ describe("ページの自動配置のドラッグによる兄弟の並べ替え"
     expect(screen.getByText(MOVED_DOWN_MESSAGE)).toHaveAttribute("role", "status");
 
     await user.click(undoButton());
-    expect(exportedMap().nodes.map((node) => [node.id, node.x, node.y])).toEqual([
+    expect(exportedMap(mockDownloadMapJson).nodes.map((node) => [node.id, node.x, node.y])).toEqual([
       [1, 250, 170], [2, 470, 70], [3, 470, 170], [4, 470, 270],
     ]);
     expect(undoButton()).toBeDisabled();
@@ -241,12 +207,12 @@ describe("ページの自動配置のドラッグによる兄弟の並べ替え"
     storeAutoLayoutChildren();
     await renderPage();
     await user.click(within(screen.getByRole("group", { name: "レイアウトモード" })).getByRole("button", { name: "手動配置" }));
-    const nodesBefore = exportedMap().nodes;
+    const nodesBefore = exportedMap(mockDownloadMapJson).nodes;
 
     // 開く前に動かし、履歴のグループを開いた状態にする（A は (470, 70) から 30 下へ）
     nodePointerDown(1, 520, 100);
     stagePointer("pointermove", 520, 130);
-    expect(exportedMap().nodes[1]).toMatchObject({ id: 2, x: 470, y: 100 });
+    expect(exportedMap(mockDownloadMapJson).nodes[1]).toMatchObject({ id: 2, x: 470, y: 100 });
     within(screen.getByRole("banner")).getByRole("button", { name: "マップ一覧" }).focus();
     await user.keyboard("{Enter}");
     within(screen.getByRole("dialog")).getByRole("button", { name: "閉じる" }).focus();
@@ -255,9 +221,9 @@ describe("ページの自動配置のドラッグによる兄弟の並べ替え"
     stagePointer("pointermove", 520, 250);
     stagePointer("pointerup", 520, 250);
 
-    expect(exportedMap().nodes[1]).toMatchObject({ id: 2, x: 470, y: 100 });
+    expect(exportedMap(mockDownloadMapJson).nodes[1]).toMatchObject({ id: 2, x: 470, y: 100 });
     await user.click(undoButton());
-    expect(exportedMap().nodes).toEqual(nodesBefore);
+    expect(exportedMap(mockDownloadMapJson).nodes).toEqual(nodesBefore);
   });
 
   it("手動配置に切り替えると、同じドラッグはノードの移動になり並びを変えない", async () => {
@@ -268,7 +234,7 @@ describe("ページの自動配置のドラッグによる兄弟の並べ替え"
 
     dragA(250);
 
-    const nodes = exportedMap().nodes;
+    const nodes = exportedMap(mockDownloadMapJson).nodes;
     expect(nodes.map((node) => node.id)).toEqual(ORIGINAL_IDS);
     expect(nodes[1]).toMatchObject({ id: 2, x: 470, y: 220 });
     expect(screen.queryByText(MOVED_DOWN_MESSAGE)).not.toBeInTheDocument();
@@ -283,7 +249,7 @@ describe("ページの自動配置のドラッグによる兄弟の並べ替え"
     stagePointer("pointerup", 520, 300);
 
     // 既存の接続の規則どおり、ドラッグ元が親、落とした先が子になる
-    const nodes = exportedMap().nodes;
+    const nodes = exportedMap(mockDownloadMapJson).nodes;
     expect(nodes.find((node) => node.id === 4)?.parentId).toBe(2);
     expect(nodes.find((node) => node.id === 2)?.parentId).toBe(1);
     expect(screen.queryByText(MOVED_DOWN_MESSAGE)).not.toBeInTheDocument();

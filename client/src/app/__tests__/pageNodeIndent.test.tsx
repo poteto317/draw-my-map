@@ -1,25 +1,32 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import Home from "@/app/page";
+import {
+  exportedMap,
+  type ExportedNode,
+  headerButton,
+  redoButton,
+  renderPage,
+  selectNode,
+  stageContainer,
+  storedMap,
+  undoButton,
+  v3Json,
+} from "@/app/testing/pageTestHelpers";
 import {
   mockContainers,
   mockNodePointerHandlers,
-  mockStageBounds,
   mockStageHandlers,
   pointer,
-  renderReady,
   resetMapStageTestRuntime,
 } from "@/components/map/testing/mapStageTestRuntime";
-import { readActiveMapJson, seedMapLibrary } from "@/testing/mapLibraryTestStorage";
+import { seedMapLibrary } from "@/testing/mapLibraryTestStorage";
 
 // Pixi・イラスト生成・ダウンロード・画像化だけを差し替え、Home から MapEditor・ヘッダー・
 // MapStage のショートカット・useNodes・折りたたみ・履歴・保存までは本物を通す
-jest.mock("pixi.js", () => {
-  const runtime = jest.requireActual<typeof import("@/components/map/testing/mapStageTestRuntime")>(
-    "@/components/map/testing/mapStageTestRuntime",
-  );
-  return runtime.createMockPixiModule();
-});
+jest.mock("pixi.js", () => (
+  jest.requireActual<typeof import("@/app/testing/pageModuleMocks")>("@/app/testing/pageModuleMocks")
+    .createPagePixiModuleMock()
+));
 
 jest.mock("@/services/illustration/illustrationGeneration", () => {
   const actual = jest.requireActual("@/services/illustration/illustrationGeneration");
@@ -36,9 +43,10 @@ jest.mock("@/services/persistence/mapJsonDownload", () => {
 });
 
 // jsdomはcanvasの2D contextを持たないため、文字幅の測定・PNG化・ダウンロードだけを差し替える
-jest.mock("@/services/imageExport/mapTextMeasurement", () => ({
-  createMapTextMeasurer: () => (text: string) => text.length * 8,
-}));
+jest.mock("@/services/imageExport/mapTextMeasurement", () => (
+  jest.requireActual<typeof import("@/app/testing/pageModuleMocks")>("@/app/testing/pageModuleMocks")
+    .createMapTextMeasurementModuleMock()
+));
 
 jest.mock("@/services/imageExport/mapImageDownload", () => ({
   downloadMapImage: jest.fn(),
@@ -57,38 +65,6 @@ const INDENT_EDGE_MESSAGE = "これ以上階層を下げられません（見え
 const INDENT_HIDDEN_EDGE_MESSAGE = INDENT_EDGE_MESSAGE
   + "隠れている兄弟の子にするには、表示を『すべて』に切り替えてください。";
 const B_MOVED_UP_MESSAGE = "枝を上へ移動しました（見えている兄弟の2件中1番目）。";
-
-type ExportedNode = {
-  id: number;
-  parentId: number | null;
-  label: string;
-  importance: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
-type ExportedMap = { version: number; layoutMode: string; nodes: ExportedNode[] };
-
-function v3Json(
-  nodes: Array<Partial<ExportedNode> & { id: number }>,
-  layoutMode: "manual" | "auto" = "manual",
-): string {
-  return `${JSON.stringify({
-    version: 3,
-    layoutMode,
-    nodes: nodes.map((node) => ({
-      parentId: null,
-      x: 250,
-      y: 170,
-      width: 100,
-      height: 60,
-      label: "",
-      importance: "medium",
-      ...node,
-    })),
-  }, null, 2)}\n`;
-}
 
 // R の子 A・B。中心は R (50, 130)、A (270, 30)、B (270, 230)
 const BASIC_NODES: Array<Partial<ExportedNode> & { id: number }> = [
@@ -120,42 +96,12 @@ function storeThreeRoots() {
   ]) }]);
 }
 
-function stageContainer(): HTMLElement {
-  return document.querySelector<HTMLElement>(".cursor-crosshair")!;
-}
-
-async function renderPage() {
-  const rendered = await renderReady(<Home />);
-  mockStageBounds(stageContainer());
-  return rendered;
-}
-
-function headerButton(name: string) {
-  return within(screen.getByRole("banner")).getByRole("button", { name });
-}
-
 function outdentButton() {
   return headerButton("枝の階層を上げる");
 }
 
 function indentButton() {
   return headerButton("枝の階層を下げる");
-}
-
-function undoButton() {
-  return screen.getByRole("button", { name: "元に戻す" });
-}
-
-function redoButton() {
-  return screen.getByRole("button", { name: "やり直す" });
-}
-
-// 直近の描画で登録されたノードのpointerdownで選択し、同じpointerで離す（indexは nodes 配列の順（折りたたみや表示レベルで隠れたノードも数える））
-function selectNode(index: number, nodeCount: number, x: number, y: number) {
-  act(() => {
-    mockNodePointerHandlers.at(index - nodeCount)?.pointerdown?.(pointer(x, y));
-    mockStageHandlers.pointerup?.(pointer(x, y));
-  });
 }
 
 function selectB() {
@@ -184,18 +130,8 @@ function pressAlt(
   return fireEvent.keyDown(target, { key, altKey: true, ...init });
 }
 
-function exportedMap(): ExportedMap {
-  fireEvent.click(screen.getByRole("button", { name: "JSON書き出し" }));
-  return JSON.parse(mockDownloadMapJson.mock.lastCall![0] as string) as ExportedMap;
-}
-
 function exportedNode(id: number): ExportedNode | undefined {
-  return exportedMap().nodes.find((node) => node.id === id);
-}
-
-function storedMap(): ExportedMap | null {
-  const stored = readActiveMapJson(window.localStorage);
-  return stored === null ? null : JSON.parse(stored) as ExportedMap;
+  return exportedMap(mockDownloadMapJson).nodes.find((node) => node.id === id);
 }
 
 // 300ms の自動保存を待ち、保存された本体の nodes の [id, parentId] の並びを確かめる
@@ -239,7 +175,7 @@ describe("ページの階層の上げ下げ（ボタン）", () => {
     expect(indentButton()).toBeDisabled();
     expect(outdentButton()).toBeEnabled();
     // JSON 書き出しの nodes の順も保存と同じ
-    expect(exportedMap().nodes).toEqual(storedMap()!.nodes);
+    expect(exportedMap(mockDownloadMapJson).nodes).toEqual(storedMap()!.nodes);
 
     await user.click(outdentButton());
 
@@ -275,7 +211,7 @@ describe("ページの階層の上げ下げ（ボタン）", () => {
     expect(indentButton()).toBeDisabled();
     fireEvent.click(indentButton());
     expect(screen.queryByTestId("operation-notices")).not.toBeInTheDocument();
-    expect(exportedMap().nodes.map((node) => node.parentId)).toEqual([null, 1, 1]);
+    expect(exportedMap(mockDownloadMapJson).nodes.map((node) => node.parentId)).toEqual([null, 1, 1]);
   });
 });
 
@@ -406,7 +342,7 @@ describe("ページの階層の上げ下げ（ショートカット）", () => {
     selectNode(1, 3, 270, 30);
     pressAlt("ArrowRight");
     expect(within(noticeBar()).getByText(INDENT_EDGE_MESSAGE)).toBeInTheDocument();
-    expect(exportedMap().nodes.map((node) => node.parentId)).toEqual([null, 1, 1]);
+    expect(exportedMap(mockDownloadMapJson).nodes.map((node) => node.parentId)).toEqual([null, 1, 1]);
     expect(undoButton()).toBeDisabled();
   });
 });

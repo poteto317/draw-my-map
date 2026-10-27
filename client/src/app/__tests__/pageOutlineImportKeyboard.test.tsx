@@ -1,25 +1,25 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import Home from "@/app/page";
+import {
+  dialog,
+  type ExportedMap,
+  type ExportedNode,
+  renderPage,
+  selectNode,
+  stageContainer,
+} from "@/app/testing/pageTestHelpers";
 import {
   lastWorldContainer,
-  mockNodePointerHandlers,
-  mockStageBounds,
-  mockStageHandlers,
-  pointer,
-  renderReady,
   resetMapStageTestRuntime,
 } from "@/components/map/testing/mapStageTestRuntime";
 import { readActiveMapJson, seedMapLibrary } from "@/testing/mapLibraryTestStorage";
 
 // Pixi・イラスト生成・ダウンロード・画像化だけを差し替え、Home から MapEditor・ヘッダー・
 // 箇条書きの取り込みのダイアログ・ショートカット・クリップボードのイベントまでは本物を通す
-jest.mock("pixi.js", () => {
-  const runtime = jest.requireActual<typeof import("@/components/map/testing/mapStageTestRuntime")>(
-    "@/components/map/testing/mapStageTestRuntime",
-  );
-  return runtime.createMockPixiModule();
-});
+jest.mock("pixi.js", () => (
+  jest.requireActual<typeof import("@/app/testing/pageModuleMocks")>("@/app/testing/pageModuleMocks")
+    .createPagePixiModuleMock()
+));
 
 jest.mock("@/services/illustration/illustrationGeneration", () => {
   const actual = jest.requireActual("@/services/illustration/illustrationGeneration");
@@ -35,9 +35,10 @@ jest.mock("@/services/persistence/mapJsonDownload", () => {
   };
 });
 
-jest.mock("@/services/imageExport/mapTextMeasurement", () => ({
-  createMapTextMeasurer: () => (text: string) => text.length * 8,
-}));
+jest.mock("@/services/imageExport/mapTextMeasurement", () => (
+  jest.requireActual<typeof import("@/app/testing/pageModuleMocks")>("@/app/testing/pageModuleMocks")
+    .createMapTextMeasurementModuleMock()
+));
 
 jest.mock("@/services/imageExport/mapImageDownload", () => ({
   downloadMapImage: jest.fn(),
@@ -46,9 +47,6 @@ jest.mock("@/services/imageExport/mapImageDownload", () => ({
 jest.mock("@/services/imageExport/mapPngRasterizer", () => ({
   rasterizeMapSvgToPng: jest.fn(),
 }));
-
-type ExportedNode = { id: number; parentId: number | null; label: string; x: number; y: number };
-type ExportedMap = { nodes: ExportedNode[] };
 
 // 親（画面上の中心300,200）と子（中心450,200）の2ノード
 function seedParentAndChild() {
@@ -62,22 +60,8 @@ function seedParentAndChild() {
   }, null, 2)}\n` }]);
 }
 
-function stageContainer(): HTMLElement {
-  return document.querySelector<HTMLElement>(".cursor-crosshair")!;
-}
-
-async function renderHome() {
-  const rendered = await renderReady(<Home />);
-  mockStageBounds(stageContainer());
-  return rendered;
-}
-
 function outlineButton(): HTMLElement {
   return within(screen.getByRole("banner")).getByRole("button", { name: "箇条書きから追加" });
-}
-
-function dialog() {
-  return within(screen.getByRole("dialog"));
 }
 
 function textarea(): HTMLTextAreaElement {
@@ -97,13 +81,6 @@ function selectedLabel(): string | null {
   const panel = within(screen.getByRole("complementary", { name: "イラスト" }));
   if (panel.queryByText("ノードを選択してください") !== null) return null;
   return panel.getByText("対象ノード").nextElementSibling!.textContent;
-}
-
-function selectNode(index: number, nodeCount: number) {
-  act(() => {
-    mockNodePointerHandlers.at(index - nodeCount)?.pointerdown?.(pointer(0, 0));
-    mockStageHandlers.pointerup?.(pointer(0, 0));
-  });
 }
 
 function exportedNodes(): ExportedNode[] {
@@ -159,7 +136,7 @@ describe("箇条書きから追加のダイアログのキーボード操作", (
     // 「親」を選択してからダイアログを開き、フォーカスを body に置く
     async function openWithBodyFocus(user: ReturnType<typeof userEvent.setup>) {
       seedParentAndChild();
-      await renderHome();
+      await renderPage();
       fireEvent.doubleClick(stageContainer(), { clientX: 600, clientY: 450 });
       expect(exportedLabels()).toEqual(["親", "子", ""]);
       selectNode(0, 3);
@@ -222,7 +199,7 @@ describe("箇条書きから追加のダイアログのキーボード操作", (
   describe("Escape と戻し先", () => {
     it("入力の画面の Escape で閉じ、フォーカスを「箇条書きから追加」へ戻す", async () => {
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
       await user.click(outlineButton());
 
       await user.keyboard("{Escape}");
@@ -233,7 +210,7 @@ describe("箇条書きから追加のダイアログのキーボード操作", (
 
     it("プレビューの画面の Escape で入力の画面へ戻り、テキストを残して入力欄へフォーカスを当てる", async () => {
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
       await openPreview(user, "- A\n- B");
 
       await user.keyboard("{Escape}");
@@ -246,7 +223,7 @@ describe("箇条書きから追加のダイアログのキーボード操作", (
 
   it("開いたときは入力欄の末尾にカーソルを置き、プレビューへ進むとプレビューの領域へフォーカスを当てる", async () => {
     const user = userEvent.setup();
-    await renderHome();
+    await renderPage();
     await user.click(outlineButton());
     fireEvent.change(textarea(), { target: { value: "- 前回の入力" } });
     await user.click(dialog().getByRole("button", { name: "キャンセル" }));
@@ -264,7 +241,7 @@ describe("箇条書きから追加のダイアログのキーボード操作", (
 
   it("入力欄の Tab はタブを入れずに次の要素へ移り、最後の要素の Tab で最初の要素へ戻る", async () => {
     const user = userEvent.setup();
-    await renderHome();
+    await renderPage();
     await user.click(outlineButton());
     await waitFor(() => expect(textarea()).toHaveFocus());
     fireEvent.change(textarea(), { target: { value: "- A" } });
@@ -287,7 +264,7 @@ describe("箇条書きから追加のダイアログのキーボード操作", (
   it("プレビューの画面の Tab は、追加する位置のラジオのうち選ばれている1つにだけ止まる", async () => {
     const user = userEvent.setup();
     seedParentAndChild();
-    await renderHome();
+    await renderPage();
     selectNode(0, 2);
     expect(selectedLabel()).toBe("親");
     await openPreview(user, "- A");
@@ -328,7 +305,7 @@ describe("箇条書きから追加のダイアログのキーボード操作", (
   describe("押し続け（L-408）", () => {
     it("Escape で閉じた直後の「箇条書きから追加」に押し続けの Enter が届いても、開き直さない", async () => {
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
       outlineButton().focus();
       await user.keyboard("{Enter}");
       expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -345,7 +322,7 @@ describe("箇条書きから追加のダイアログのキーボード操作", (
 
     it("「プレビュー」を Enter で押した直後の押し続けの Enter は、プレビューの領域に届き、「マップに追加」を押さない", async () => {
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
       await user.click(outlineButton());
       fireEvent.change(textarea(), { target: { value: "- A" } });
       dialog().getByRole("button", { name: "プレビュー" }).focus();
@@ -365,7 +342,7 @@ describe("箇条書きから追加のダイアログのキーボード操作", (
     // 2回目が開いたままのダイアログへ届く場合の detail > 1 の判定は、次のテストで確かめる
     it("「マップに追加」をダブルクリックすると、1回目で閉じるので1回だけ追加する", async () => {
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
       await openPreview(user, "- A");
 
       await user.dblClick(dialog().getByRole("button", { name: "マップに追加" }));
@@ -375,7 +352,7 @@ describe("箇条書きから追加のダイアログのキーボード操作", (
 
     it("「プレビュー」のダブルクリックの2回目が「マップに追加」に届いても追加しない", async () => {
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
       await user.click(outlineButton());
       fireEvent.change(textarea(), { target: { value: "- A" } });
 
@@ -389,7 +366,7 @@ describe("箇条書きから追加のダイアログのキーボード操作", (
     it("ノードを選択して「プレビュー」をダブルクリックし、2回目が追加先のラベルに届いても、追加先は「新しいルート」のまま", async () => {
       seedParentAndChild();
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
       selectNode(0, 2);
       await user.click(outlineButton());
       fireEvent.change(textarea(), { target: { value: "- A" } });
@@ -404,7 +381,7 @@ describe("箇条書きから追加のダイアログのキーボード操作", (
 
     it("「戻る」のダブルクリックの2回目が入力の画面の「キャンセル」に届いても閉じない", async () => {
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
       await openPreview(user, "- A");
 
       fireEvent.click(dialog().getByRole("button", { name: "戻る" }), { detail: 1 });
@@ -416,7 +393,7 @@ describe("箇条書きから追加のダイアログのキーボード操作", (
     it("「マップに追加」の1回目のクリックで閉じた後、キャンバスへ届いた500ms以内の dblclick ではノードを追加しない", async () => {
       const user = userEvent.setup();
       const now = jest.spyOn(Date, "now").mockReturnValue(10_000);
-      await renderHome();
+      await renderPage();
       await openPreview(user, "- A");
 
       // 開いた時刻と区別できるよう、時刻をずらしてから押す（「マップに追加」のクリックが時刻を記録したことを確かめる）
@@ -437,7 +414,7 @@ describe("箇条書きから追加のダイアログのキーボード操作", (
   it("ノードのラベルの編集中に「箇条書きから追加」を押すと、入力中のラベルを確定してから開く（L-473）", async () => {
     seedParentAndChild();
     const user = userEvent.setup();
-    await renderHome();
+    await renderPage();
     fireEvent.doubleClick(stageContainer(), { clientX: 300, clientY: 200 });
     const input = screen.getByTestId("node-label-input");
     await user.clear(input);
