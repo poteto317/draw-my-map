@@ -36,9 +36,10 @@ const mockDownloadMapJson = jest.fn();
 jest.mock("@/services/persistence/mapJsonDownload", () => ({
   downloadMapJson: (json: string, mapName: string) => mockDownloadMapJson(json, mapName),
 }));
-jest.mock("@/services/imageExport/mapTextMeasurement", () => ({
-  createMapTextMeasurer: () => (text: string) => text.length * 8,
-}));
+jest.mock("@/services/imageExport/mapTextMeasurement", () => (
+  jest.requireActual<typeof import("@/app/testing/pageModuleMocks")>("@/app/testing/pageModuleMocks")
+    .createMapTextMeasurementModuleMock()
+));
 const mockDownloadImage = jest.fn();
 jest.mock("@/services/imageExport/mapImageDownload", () => ({ downloadMapImage: (...args: unknown[]) => mockDownloadImage(...args) }));
 const mockRasterizePng = jest.fn();

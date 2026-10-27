@@ -2,16 +2,24 @@ import { StrictMode } from "react";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import Home from "@/app/page";
+import {
+  dialog,
+  type ExportedMap,
+  type ExportedNode,
+  headerButton,
+  renderPage,
+  selectNode,
+  stageContainer,
+  undoButton,
+} from "@/app/testing/pageTestHelpers";
 import { INITIAL_VIEWPORT } from "@/components/map/mapViewport";
 import { MENU_ACTIVATION_DOUBLE_CLICK_WINDOW_MS } from "@/components/map/menuActivationDoubleClick";
 import {
   lastWorldContainer,
-  mockNodePointerHandlers,
   mockStage,
   mockStageBounds,
   mockStageHandlers,
   pointer,
-  renderReady,
   resetMapStageTestRuntime,
 } from "@/components/map/testing/mapStageTestRuntime";
 import { AUTO_SAVE_FAILURE_MESSAGE } from "@/domain/mapLibrary/mapLibraryMessages";
@@ -23,12 +31,10 @@ import { readActiveMapJson, readMapIndex, seedMapLibrary } from "@/testing/mapLi
 
 // Pixi・イラスト生成・ダウンロード・画像化だけを差し替え、Home から useMapLibrary・MapEditor・
 // ヘッダー・ダイアログ・通知領域までは本物を通す
-jest.mock("pixi.js", () => {
-  const runtime = jest.requireActual<typeof import("@/components/map/testing/mapStageTestRuntime")>(
-    "@/components/map/testing/mapStageTestRuntime",
-  );
-  return runtime.createMockPixiModule();
-});
+jest.mock("pixi.js", () => (
+  jest.requireActual<typeof import("@/app/testing/pageModuleMocks")>("@/app/testing/pageModuleMocks")
+    .createPagePixiModuleMock()
+));
 
 jest.mock("@/services/illustration/illustrationGeneration", () => {
   const actual = jest.requireActual("@/services/illustration/illustrationGeneration");
@@ -44,9 +50,10 @@ jest.mock("@/services/persistence/mapJsonDownload", () => {
   };
 });
 
-jest.mock("@/services/imageExport/mapTextMeasurement", () => ({
-  createMapTextMeasurer: () => (text: string) => text.length * 8,
-}));
+jest.mock("@/services/imageExport/mapTextMeasurement", () => (
+  jest.requireActual<typeof import("@/app/testing/pageModuleMocks")>("@/app/testing/pageModuleMocks")
+    .createMapTextMeasurementModuleMock()
+));
 
 const mockDownloadMapImage = jest.fn();
 jest.mock("@/services/imageExport/mapImageDownload", () => ({
@@ -69,8 +76,6 @@ const CREATE_FLUSH_FAILURE =
 const IMAGE = "data:image/jpeg;base64,TkVX";
 
 type SeedNode = { id: number; label: string; parentId?: number | null; x?: number; y?: number };
-type ExportedNode = { id: number; label: string; illustration?: string };
-type ExportedMap = { nodes: ExportedNode[] };
 
 type Deferred<T> = { promise: Promise<T>; resolve: (value: T) => void };
 
@@ -133,30 +138,12 @@ async function settle() {
   });
 }
 
-function stageContainer(): HTMLElement {
-  return document.querySelector<HTMLElement>(".cursor-crosshair")!;
-}
-
-async function renderHome(ui = <Home />) {
-  const rendered = await renderReady(ui);
-  mockStageBounds(stageContainer());
-  return rendered;
-}
-
 function currentMapName(): HTMLElement {
   return screen.getByTestId("current-map-name");
 }
 
 function banner() {
   return within(screen.getByRole("banner"));
-}
-
-function headerButton(name: "マップ一覧" | "新しいマップ"): HTMLElement {
-  return banner().getByRole("button", { name });
-}
-
-function dialog() {
-  return within(screen.getByRole("dialog"));
 }
 
 async function openList(user: ReturnType<typeof userEvent.setup>) {
@@ -208,18 +195,6 @@ async function addLabeledNodeAt(user: ReturnType<typeof userEvent.setup>, x: num
   // 1回目は空き領域で追加し、2回目は追加したノードの上でラベルの編集を開く
   fireEvent.doubleClick(stageContainer(), { clientX: x, clientY: y });
   await user.type(screen.getByTestId("node-label-input"), `${label}{Enter}`);
-}
-
-// 最新の描画のノードを、表示順の index で選択する
-function selectNode(index: number, count: number) {
-  act(() => {
-    mockNodePointerHandlers.at(-count + index)?.pointerdown?.(pointer(0, 0));
-    mockStageHandlers.pointerup?.(pointer(0, 0));
-  });
-}
-
-function undoButton() {
-  return screen.getByRole("button", { name: "元に戻す" });
 }
 
 function resolutionButton(label: "自動" | "すべて"): HTMLElement {
@@ -289,7 +264,7 @@ describe("マップの切り替えと混在の防止", () => {
     seedTwoMaps();
     const setItem = jest.spyOn(Storage.prototype, "setItem");
     const user = setupUser();
-    await renderHome();
+    await renderPage();
     addNodeAt(500, 400);
     advance(100);
     expect(bodyLabels("a")).toEqual(["A1"]);
@@ -307,7 +282,7 @@ describe("マップの切り替えと混在の防止", () => {
   it("切り替えた後は前のマップの操作を元に戻せず、A と B の本体はそれぞれの編集だけを含む", async () => {
     seedTwoMaps();
     const user = setupUser();
-    await renderHome();
+    await renderPage();
     await addLabeledNodeAt(user, 500, 400, "A2");
     expect(undoButton()).toBeEnabled();
 
@@ -333,7 +308,7 @@ describe("マップの切り替えと混在の防止", () => {
       v3Json([{ id: 1, label: "親B" }, { id: 2, label: "子B", parentId: 1, x: 300 }]),
     );
     const user = setupUser();
-    await renderHome();
+    await renderPage();
     selectNode(0, 2);
     await user.click(screen.getByRole("button", { name: "枝を折りたたむ" }));
     await user.click(resolutionButton("すべて"));
@@ -355,7 +330,7 @@ describe("マップの切り替えと混在の防止", () => {
   it("ズームとパンをしたビューポートは、切り替えると初期値に戻る", async () => {
     seedTwoMaps();
     const user = setupUser();
-    await renderHome();
+    await renderPage();
     const canvas = document.querySelector("canvas")!;
     mockStageBounds(canvas);
     await act(async () => {
@@ -391,7 +366,7 @@ describe("マップの切り替えと混在の防止", () => {
     const request = deferred<string>();
     mockGenerateIllustrationThumbnail.mockReturnValueOnce(request.promise);
     const user = setupUser();
-    await renderHome();
+    await renderPage();
     selectNode(0, 1);
     await user.click(screen.getByRole("button", { name: "イラストを生成" }));
     expect(mockGenerateIllustrationThumbnail).toHaveBeenCalledWith("りんご", expect.anything());
@@ -417,7 +392,7 @@ describe("マップの切り替えと混在の防止", () => {
     const request = deferred<string>();
     mockGenerateIllustrationThumbnail.mockReturnValueOnce(request.promise);
     const user = setupUser();
-    await renderHome();
+    await renderPage();
     selectNode(0, 1);
     await user.click(screen.getByRole("button", { name: "イラストを生成" }));
 
@@ -433,7 +408,7 @@ describe("マップの切り替えと混在の防止", () => {
     seedTwoMaps();
     const setItem = jest.spyOn(Storage.prototype, "setItem");
     const user = setupUser();
-    await renderHome();
+    await renderPage();
     addNodeAt(500, 400);
     advance(100);
 
@@ -458,7 +433,7 @@ describe("マップの切り替えと混在の防止", () => {
     let failBodyA = true;
     failSetItemFor(mapBodyKey("a"), () => failBodyA);
     const user = setupUser();
-    await renderHome();
+    await renderPage();
     addNodeAt(500, 400);
     advance(300);
     expect(banner().getByText(AUTO_SAVE_FAILURE_MESSAGE)).toBeInTheDocument();
@@ -506,7 +481,7 @@ describe("マップの切り替えと混在の防止", () => {
     seedTwoMaps();
     failSetItemFor(mapBodyKey("a"), () => true);
     const user = setupUser();
-    await renderHome();
+    await renderPage();
     addNodeAt(500, 400);
     advance(100);
     // タイマーはまだ動いていないので、操作通知バーには何も出ていない
@@ -529,7 +504,7 @@ describe("マップの切り替えと混在の防止", () => {
     const raster = deferred<Blob>();
     mockRasterizeMapSvgToPng.mockReturnValueOnce(raster.promise);
     const user = setupUser();
-    await renderHome();
+    await renderPage();
     await user.click(screen.getByRole("button", { name: "PNG書き出し" }));
     expect(mockRasterizeMapSvgToPng).toHaveBeenCalledTimes(1);
 
@@ -545,7 +520,7 @@ describe("マップの切り替えと混在の防止", () => {
     seedTwoMaps();
     const text = deferred<string>();
     const user = setupUser();
-    await renderHome();
+    await renderPage();
     await user.upload(fileInput(), jsonFile(text.promise));
 
     await switchTo(user, "B");
@@ -563,7 +538,7 @@ describe("マップの切り替えと混在の防止", () => {
     seedTwoMaps();
     const text = deferred<string>();
     const user = setupUser();
-    await renderHome();
+    await renderPage();
     await user.upload(fileInput(), jsonFile(text.promise));
 
     text.resolve(v3Json([{ id: 9, label: "読込" }]));
@@ -577,7 +552,7 @@ describe("マップの切り替えと混在の防止", () => {
   it("コンテキストメニューを開いたままヘッダーから一覧を開くと、メニューを閉じる", async () => {
     seedTwoMaps();
     const user = setupUser();
-    await renderHome();
+    await renderPage();
     fireEvent.contextMenu(stageContainer(), { clientX: 150, clientY: 130 });
     expect(screen.getByRole("menu")).toBeInTheDocument();
 
@@ -612,7 +587,7 @@ describe("名前の変更と書き出しのファイル名", () => {
       jsonFileNames.push(this.download);
     });
     const user = setupUser();
-    await renderHome();
+    await renderPage();
 
     const list = await openList(user);
     await user.click(list.getByRole("button", { name: "名前を変更: A" }));
@@ -640,7 +615,7 @@ describe("移行と保護モード", () => {
   it("StrictMode で旧キーだけから起動すると、内容を表示し、旧キーはその起動では残る", async () => {
     window.localStorage.setItem(MAP_STORAGE_KEY, A_JSON);
 
-    await renderHome(<StrictMode><Home /></StrictMode>);
+    await renderPage(<StrictMode><Home /></StrictMode>);
     advance(300);
 
     expect(currentMapName()).toHaveTextContent("マップ: 無題のマップ");
@@ -657,7 +632,7 @@ describe("移行と保護モード", () => {
     // 旧キーと本体の2つは入らないが、本体とインデックスは入る容量
     limitStorageCapacity(MAP_STORAGE_KEY.length + largeJson.length + 1000);
 
-    await renderHome();
+    await renderPage();
     advance(300);
 
     expect(currentMapName()).toHaveTextContent("マップ: 無題のマップ");
@@ -680,7 +655,7 @@ describe("移行と保護モード", () => {
       original.call(this, key, value);
     });
 
-    await renderHome();
+    await renderPage();
 
     expect(exportedLabels()).toEqual(["A1"]);
     expect(headerButton("マップ一覧")).toBeDisabled();
@@ -700,7 +675,7 @@ describe("移行と保護モード", () => {
   it("StrictMode で壊れた旧キーから起動すると、旧キーを残し、起動時の warning が消えずに残る", async () => {
     window.localStorage.setItem(MAP_STORAGE_KEY, "{");
 
-    await renderHome(<StrictMode><Home /></StrictMode>);
+    await renderPage(<StrictMode><Home /></StrictMode>);
     const notices = within(screen.getByTestId("map-library-notices"));
     await waitFor(() => expect(notices.getByRole("alert")).toHaveTextContent(LEGACY_CORRUPT_WARNING));
     advance(1000);
@@ -720,7 +695,7 @@ describe("移行と保護モード", () => {
     });
 
     try {
-      await renderHome();
+      await renderPage();
       addNodeAt(500, 400);
       advance(300);
 

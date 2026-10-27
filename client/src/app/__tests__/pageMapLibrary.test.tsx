@@ -3,8 +3,15 @@ import userEvent from "@testing-library/user-event";
 import { renderToString } from "react-dom/server";
 import Home from "@/app/page";
 import {
-  mockStageBounds,
-  renderReady,
+  dialog,
+  type ExportedMap,
+  headerButton,
+  renderPage,
+  stageContainer,
+  undoButton,
+  v3JsonFromLabels,
+} from "@/app/testing/pageTestHelpers";
+import {
   resetMapStageTestRuntime,
 } from "@/components/map/testing/mapStageTestRuntime";
 import type { MapIndexV1 } from "@/domain/mapLibrary/mapIndex";
@@ -17,12 +24,10 @@ import { readActiveMapJson, readMapIndex, seedMapLibrary } from "@/testing/mapLi
 
 // Pixi・イラスト生成・ダウンロード・画像化だけを差し替え、Home から useMapLibrary・MapEditor・
 // ヘッダー・ダイアログ・通知領域までは本物を通す
-jest.mock("pixi.js", () => {
-  const runtime = jest.requireActual<typeof import("@/components/map/testing/mapStageTestRuntime")>(
-    "@/components/map/testing/mapStageTestRuntime",
-  );
-  return runtime.createMockPixiModule();
-});
+jest.mock("pixi.js", () => (
+  jest.requireActual<typeof import("@/app/testing/pageModuleMocks")>("@/app/testing/pageModuleMocks")
+    .createPagePixiModuleMock()
+));
 
 jest.mock("@/services/illustration/illustrationGeneration", () => {
   const actual = jest.requireActual("@/services/illustration/illustrationGeneration");
@@ -38,9 +43,10 @@ jest.mock("@/services/persistence/mapJsonDownload", () => {
   };
 });
 
-jest.mock("@/services/imageExport/mapTextMeasurement", () => ({
-  createMapTextMeasurer: () => (text: string) => text.length * 8,
-}));
+jest.mock("@/services/imageExport/mapTextMeasurement", () => (
+  jest.requireActual<typeof import("@/app/testing/pageModuleMocks")>("@/app/testing/pageModuleMocks")
+    .createMapTextMeasurementModuleMock()
+));
 
 const mockDownloadMapImage = jest.fn();
 jest.mock("@/services/imageExport/mapImageDownload", () => ({
@@ -51,34 +57,15 @@ jest.mock("@/services/imageExport/mapPngRasterizer", () => ({
   rasterizeMapSvgToPng: jest.fn(),
 }));
 
-type ExportedMap = { nodes: Array<{ label: string }> };
-
 const UNAVAILABLE_WARNING =
   "ブラウザの保存領域を使えないため、このマップは保存されません。必要な場合はJSONで書き出してください。";
 const REBUILD_WARNING =
   "マップの一覧を読み取れなかったため、保存済みのマップから一覧を作り直しました。マップ名は「復元したマップ」になっています。";
 
-function v3Json(labels: readonly string[]): string {
-  return `${JSON.stringify({
-    version: 3,
-    layoutMode: "manual",
-    nodes: labels.map((label, i) => ({
-      id: i + 1,
-      parentId: null,
-      x: 100 + i * 200,
-      y: 100,
-      width: 100,
-      height: 60,
-      label,
-      importance: "medium",
-    })),
-  }, null, 2)}\n`;
-}
-
 function seedTwoMaps() {
   return seedMapLibrary(window.localStorage, [
-    { id: "a", name: "A", json: v3Json(["A1"]), updatedAt: "2026-01-02T00:00:00.000Z" },
-    { id: "b", name: "B", json: v3Json(["B1"]), updatedAt: "2026-01-01T00:00:00.000Z" },
+    { id: "a", name: "A", json: v3JsonFromLabels(["A1"]), updatedAt: "2026-01-02T00:00:00.000Z" },
+    { id: "b", name: "B", json: v3JsonFromLabels(["B1"]), updatedAt: "2026-01-01T00:00:00.000Z" },
   ], { currentMapId: "a" });
 }
 
@@ -86,13 +73,6 @@ function readIndex(): MapIndexV1 {
   const index = readMapIndex(window.localStorage);
   if (index === null) throw new Error("インデックスを読めません。");
   return index;
-}
-
-async function renderHome() {
-  const rendered = await renderReady(<Home />);
-  const stage = document.querySelector<HTMLElement>(".cursor-crosshair");
-  if (stage !== null) mockStageBounds(stage);
-  return rendered;
 }
 
 function currentMapName(): HTMLElement {
@@ -103,18 +83,10 @@ function shellNotices() {
   return within(screen.getByTestId("map-library-notices"));
 }
 
-function headerButton(name: "マップ一覧" | "新しいマップ"): HTMLElement {
-  return within(screen.getByRole("banner")).getByRole("button", { name });
-}
-
 function exportedLabels(): string[] {
   fireEvent.click(screen.getByRole("button", { name: "JSON書き出し" }));
   const map = JSON.parse(mockDownloadMapJson.mock.lastCall![0] as string) as ExportedMap;
   return map.nodes.map((node) => node.label);
-}
-
-function dialog() {
-  return within(screen.getByRole("dialog"));
 }
 
 async function openList(user: ReturnType<typeof userEvent.setup>) {
@@ -124,12 +96,8 @@ async function openList(user: ReturnType<typeof userEvent.setup>) {
 
 // 空き領域のダブルクリックでノードを追加し、元に戻せる状態にする
 function addNodeByDoubleClick() {
-  const stage = document.querySelector<HTMLElement>(".cursor-crosshair")!;
+  const stage = stageContainer();
   fireEvent.doubleClick(stage, { clientX: 600, clientY: 400 });
-}
-
-function undoButton(): HTMLElement {
-  return screen.getByRole("button", { name: "元に戻す" });
 }
 
 async function createFromHeader(user: ReturnType<typeof userEvent.setup>, name: string) {
@@ -161,7 +129,7 @@ describe("Home とマップの一覧の結合", () => {
   });
 
   it("空の localStorage で起動すると「無題のマップ」を開き、インデックスを作る", async () => {
-    await renderHome();
+    await renderPage();
 
     expect(currentMapName()).toHaveTextContent("マップ: 無題のマップ");
     const index = readIndex();
@@ -174,7 +142,7 @@ describe("Home とマップの一覧の結合", () => {
     it("名前を入れて作成すると空のマップに切り替わり、シェルに通知してヘッダーの「マップ一覧」へフォーカスを戻す", async () => {
       seedTwoMaps();
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
       expect(exportedLabels()).toEqual(["A1"]);
 
       await createFromHeader(user, "旅行");
@@ -193,7 +161,7 @@ describe("Home とマップの一覧の結合", () => {
     it("空欄で作成すると「無題のマップ」になる", async () => {
       seedTwoMaps();
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
 
       await createFromHeader(user, "");
 
@@ -204,7 +172,7 @@ describe("Home とマップの一覧の結合", () => {
     it("51文字ではエラーを出して作成しない", async () => {
       seedTwoMaps();
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
 
       await createFromHeader(user, "あ".repeat(51));
 
@@ -217,7 +185,7 @@ describe("Home とマップの一覧の結合", () => {
 
     it("同じ名前のマップを2つ作れる", async () => {
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
 
       await createFromHeader(user, "旅行");
       await createFromHeader(user, "旅行");
@@ -230,7 +198,7 @@ describe("Home とマップの一覧の結合", () => {
   it("一覧から別のマップを開くと、そのマップの内容に切り替わり、インデックスの現在のマップも変わる", async () => {
     seedTwoMaps();
     const user = userEvent.setup();
-    await renderHome();
+    await renderPage();
     expect(exportedLabels()).toEqual(["A1"]);
 
     const list = await openList(user);
@@ -239,14 +207,14 @@ describe("Home とマップの一覧の結合", () => {
     expect(currentMapName()).toHaveTextContent("マップ: B");
     expect(exportedLabels()).toEqual(["B1"]);
     expect(readIndex().currentMapId).toBe("b");
-    expect(readActiveMapJson(window.localStorage)).toBe(v3Json(["B1"]));
+    expect(readActiveMapJson(window.localStorage)).toBe(v3JsonFromLabels(["B1"]));
   });
 
   describe("名前の変更", () => {
     it("一覧とヘッダーに反映し、ダイアログに通知して行の「名前を変更」へフォーカスを戻す。本体と更新日時は変えない", async () => {
       const seeded = seedTwoMaps();
       const user = userEvent.setup();
-      const { unmount } = await renderHome();
+      const { unmount } = await renderPage();
 
       const list = await openList(user);
       await user.click(list.getByRole("button", { name: "名前を変更: A" }));
@@ -261,17 +229,17 @@ describe("Home とマップの一覧の結合", () => {
       await waitFor(() => expect(dialog().getByRole("button", { name: "名前を変更: 新A" })).toHaveFocus());
       const renamed = readIndex().maps.find((map) => map.id === "a");
       expect(renamed).toEqual({ ...seeded.maps[0], name: "新A" });
-      expect(window.localStorage.getItem(mapBodyKey("a"))).toBe(v3Json(["A1"]));
+      expect(window.localStorage.getItem(mapBodyKey("a"))).toBe(v3JsonFromLabels(["A1"]));
 
       unmount();
-      await renderHome();
+      await renderPage();
       expect(currentMapName()).toHaveTextContent("マップ: 新A");
     });
 
     it("書き出す JSON と画像のファイル名に、変更後の名前を使う", async () => {
       seedTwoMaps();
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
 
       const list = await openList(user);
       await user.click(list.getByRole("button", { name: "名前を変更: A" }));
@@ -282,7 +250,7 @@ describe("Home とマップの一覧の結合", () => {
       await user.click(dialog().getByRole("button", { name: "閉じる" }));
 
       await user.click(screen.getByRole("button", { name: "JSON書き出し" }));
-      expect(mockDownloadMapJson).toHaveBeenLastCalledWith(v3Json(["A1"]), "新A");
+      expect(mockDownloadMapJson).toHaveBeenLastCalledWith(v3JsonFromLabels(["A1"]), "新A");
       await user.click(screen.getByRole("button", { name: "SVG書き出し" }));
       await waitFor(() => expect(mockDownloadMapImage).toHaveBeenCalledTimes(1));
       expect(mockDownloadMapImage.mock.lastCall![1]).toMatch(/^新A-\d{8}-\d{6}\.svg$/);
@@ -291,7 +259,7 @@ describe("Home とマップの一覧の結合", () => {
     it("開いているマップの名前を変えても、エディタを作り直さず、元に戻す履歴が残る", async () => {
       seedTwoMaps();
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
       addNodeByDoubleClick();
       expect(exportedLabels()).toHaveLength(2);
       expect(undoButton()).toBeEnabled();
@@ -321,7 +289,7 @@ describe("Home とマップの一覧の結合", () => {
     it("開いていないマップは一覧から消え、開いているマップはそのまま", async () => {
       seedTwoMaps();
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
 
       await deleteFromList(user, "B");
 
@@ -336,7 +304,7 @@ describe("Home とマップの一覧の結合", () => {
     it("開いていないマップを消しても、エディタを作り直さず、元に戻す履歴が残る", async () => {
       seedTwoMaps();
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
       addNodeByDoubleClick();
       expect(exportedLabels()).toHaveLength(2);
       expect(undoButton()).toBeEnabled();
@@ -352,12 +320,12 @@ describe("Home とマップの一覧の結合", () => {
 
     it("開いているマップを消すと、最後に更新した別のマップを開く", async () => {
       seedMapLibrary(window.localStorage, [
-        { id: "a", name: "A", json: v3Json(["A1"]), updatedAt: "2026-01-03T00:00:00.000Z" },
-        { id: "b", name: "B", json: v3Json(["B1"]), updatedAt: "2026-01-01T00:00:00.000Z" },
-        { id: "c", name: "C", json: v3Json(["C1"]), updatedAt: "2026-01-02T00:00:00.000Z" },
+        { id: "a", name: "A", json: v3JsonFromLabels(["A1"]), updatedAt: "2026-01-03T00:00:00.000Z" },
+        { id: "b", name: "B", json: v3JsonFromLabels(["B1"]), updatedAt: "2026-01-01T00:00:00.000Z" },
+        { id: "c", name: "C", json: v3JsonFromLabels(["C1"]), updatedAt: "2026-01-02T00:00:00.000Z" },
       ], { currentMapId: "a" });
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
 
       await deleteFromList(user, "A");
 
@@ -369,9 +337,9 @@ describe("Home とマップの一覧の結合", () => {
     });
 
     it("最後の1つを消すと、新しい「無題のマップ」を開く", async () => {
-      seedMapLibrary(window.localStorage, [{ id: "a", name: "A", json: v3Json(["A1"]) }]);
+      seedMapLibrary(window.localStorage, [{ id: "a", name: "A", json: v3JsonFromLabels(["A1"]) }]);
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
 
       await deleteFromList(user, "A");
 
@@ -387,7 +355,7 @@ describe("Home とマップの一覧の結合", () => {
     it("確認の「キャンセル」では何も変えない", async () => {
       const seeded = seedTwoMaps();
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
 
       const list = await openList(user);
       await user.click(list.getByRole("button", { name: "削除: B" }));
@@ -395,19 +363,19 @@ describe("Home とマップの一覧の結合", () => {
 
       expect(dialog().getByRole("button", { name: "B" })).toBeInTheDocument();
       expect(readIndex()).toEqual(seeded);
-      expect(window.localStorage.getItem(mapBodyKey("b"))).toBe(v3Json(["B1"]));
+      expect(window.localStorage.getItem(mapBodyKey("b"))).toBe(v3JsonFromLabels(["B1"]));
     });
   });
 
   it("切り替えた後に再読み込みすると、切り替えたマップを開く", async () => {
     seedTwoMaps();
     const user = userEvent.setup();
-    const { unmount } = await renderHome();
+    const { unmount } = await renderPage();
 
     const list = await openList(user);
     await user.click(list.getByRole("button", { name: "B" }));
     unmount();
-    await renderHome();
+    await renderPage();
 
     expect(currentMapName()).toHaveTextContent("マップ: B");
     expect(exportedLabels()).toEqual(["B1"]);
@@ -417,7 +385,7 @@ describe("Home とマップの一覧の結合", () => {
     jest.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
       throw new DOMException("blocked", "SecurityError");
     });
-    await renderHome();
+    await renderPage();
 
     await waitFor(() => expect(shellNotices().getByRole("alert")).toHaveTextContent(UNAVAILABLE_WARNING));
     expect(headerButton("マップ一覧")).toBeDisabled();
@@ -435,7 +403,7 @@ describe("Home とマップの一覧の結合", () => {
     });
 
     try {
-      await renderHome();
+      await renderPage();
 
       await waitFor(() => expect(shellNotices().getByRole("alert")).toHaveTextContent(UNAVAILABLE_WARNING));
       expect(currentMapName()).toHaveTextContent("マップ: 無題のマップ");
@@ -447,8 +415,8 @@ describe("Home とマップの一覧の結合", () => {
 
   it("壊れたインデックスは退避して作り直し、起動時の警告をシェルに出す", async () => {
     window.localStorage.setItem(MAP_INDEX_STORAGE_KEY, "{");
-    window.localStorage.setItem(mapBodyKey("a"), v3Json(["A1"]));
-    await renderHome();
+    window.localStorage.setItem(mapBodyKey("a"), v3JsonFromLabels(["A1"]));
+    await renderPage();
 
     await waitFor(() => expect(shellNotices().getByRole("alert")).toHaveTextContent(REBUILD_WARNING));
     expect(window.localStorage.getItem(MAP_INDEX_BACKUP_STORAGE_KEY)).toBe("{");

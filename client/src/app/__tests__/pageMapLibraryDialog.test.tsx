@@ -1,25 +1,27 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import Home from "@/app/page";
+import {
+  dialog,
+  type ExportedMap,
+  headerButton,
+  renderPage,
+  selectNode,
+  stageContainer,
+  v3JsonFromLabels,
+} from "@/app/testing/pageTestHelpers";
 import {
   lastWorldContainer,
-  mockNodePointerHandlers,
   mockStageBounds,
-  mockStageHandlers,
-  pointer,
-  renderReady,
   resetMapStageTestRuntime,
 } from "@/components/map/testing/mapStageTestRuntime";
 import { readMapIndex, seedMapLibrary } from "@/testing/mapLibraryTestStorage";
 
 // Pixi・イラスト生成・ダウンロード・画像化だけを差し替え、Home から useMapLibrary・MapEditor・
 // ヘッダー・ダイアログ・通知領域までは本物を通す
-jest.mock("pixi.js", () => {
-  const runtime = jest.requireActual<typeof import("@/components/map/testing/mapStageTestRuntime")>(
-    "@/components/map/testing/mapStageTestRuntime",
-  );
-  return runtime.createMockPixiModule();
-});
+jest.mock("pixi.js", () => (
+  jest.requireActual<typeof import("@/app/testing/pageModuleMocks")>("@/app/testing/pageModuleMocks")
+    .createPagePixiModuleMock()
+));
 
 jest.mock("@/services/illustration/illustrationGeneration", () => {
   const actual = jest.requireActual("@/services/illustration/illustrationGeneration");
@@ -35,9 +37,10 @@ jest.mock("@/services/persistence/mapJsonDownload", () => {
   };
 });
 
-jest.mock("@/services/imageExport/mapTextMeasurement", () => ({
-  createMapTextMeasurer: () => (text: string) => text.length * 8,
-}));
+jest.mock("@/services/imageExport/mapTextMeasurement", () => (
+  jest.requireActual<typeof import("@/app/testing/pageModuleMocks")>("@/app/testing/pageModuleMocks")
+    .createMapTextMeasurementModuleMock()
+));
 
 jest.mock("@/services/imageExport/mapImageDownload", () => ({
   downloadMapImage: jest.fn(),
@@ -47,42 +50,13 @@ jest.mock("@/services/imageExport/mapPngRasterizer", () => ({
   rasterizeMapSvgToPng: jest.fn(),
 }));
 
-type ExportedMap = { nodes: Array<{ label: string }> };
-
-function v3Json(labels: readonly string[]): string {
-  return `${JSON.stringify({
-    version: 3,
-    layoutMode: "manual",
-    nodes: labels.map((label, i) => ({
-      id: i + 1,
-      parentId: null,
-      x: 100 + i * 200,
-      y: 100,
-      width: 100,
-      height: 60,
-      label,
-      importance: "medium",
-    })),
-  }, null, 2)}\n`;
-}
-
 // 表示順（更新日時の新しい順）は A, B, C
 function seedThreeMaps() {
   return seedMapLibrary(window.localStorage, [
-    { id: "a", name: "A", json: v3Json(["A1"]), updatedAt: "2026-01-03T00:00:00.000Z" },
-    { id: "b", name: "B", json: v3Json(["B1"]), updatedAt: "2026-01-02T00:00:00.000Z" },
-    { id: "c", name: "C", json: v3Json(["C1"]), updatedAt: "2026-01-01T00:00:00.000Z" },
+    { id: "a", name: "A", json: v3JsonFromLabels(["A1"]), updatedAt: "2026-01-03T00:00:00.000Z" },
+    { id: "b", name: "B", json: v3JsonFromLabels(["B1"]), updatedAt: "2026-01-02T00:00:00.000Z" },
+    { id: "c", name: "C", json: v3JsonFromLabels(["C1"]), updatedAt: "2026-01-01T00:00:00.000Z" },
   ], { currentMapId: "a" });
-}
-
-function stageContainer(): HTMLElement {
-  return document.querySelector<HTMLElement>(".cursor-crosshair")!;
-}
-
-async function renderHome() {
-  const rendered = await renderReady(<Home />);
-  mockStageBounds(stageContainer());
-  return rendered;
 }
 
 function currentMapName(): HTMLElement {
@@ -91,14 +65,6 @@ function currentMapName(): HTMLElement {
 
 function shellNotices() {
   return within(screen.getByTestId("map-library-notices"));
-}
-
-function headerButton(name: "マップ一覧" | "新しいマップ"): HTMLElement {
-  return within(screen.getByRole("banner")).getByRole("button", { name });
-}
-
-function dialog() {
-  return within(screen.getByRole("dialog"));
 }
 
 async function openList(user: ReturnType<typeof userEvent.setup>) {
@@ -110,14 +76,6 @@ function exportedLabels(): string[] {
   fireEvent.click(screen.getByRole("button", { name: "JSON書き出し" }));
   const map = JSON.parse(mockDownloadMapJson.mock.lastCall![0] as string) as ExportedMap;
   return map.nodes.map((node) => node.label);
-}
-
-// 最新の描画のノードを、表示順の index で選択する
-function selectNode(index: number, count: number) {
-  act(() => {
-    mockNodePointerHandlers.at(-count + index)?.pointerdown?.(pointer(0, 0));
-    mockStageHandlers.pointerup?.(pointer(0, 0));
-  });
 }
 
 function editorRoot(): HTMLElement {
@@ -139,7 +97,7 @@ describe("マップの一覧のダイアログのキーボード操作", () => {
     it("一覧は開いているマップの「開く」、作成・名前変更は入力欄、削除の確認は「キャンセル」", async () => {
       seedThreeMaps();
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
 
       const list = await openList(user);
       await waitFor(() => expect(list.getByRole("button", { name: "A（開いています）" })).toHaveFocus());
@@ -158,7 +116,7 @@ describe("マップの一覧のダイアログのキーボード操作", () => {
 
     it("ヘッダーの「新しいマップ」から開いた作成は入力欄", async () => {
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
 
       await user.click(headerButton("新しいマップ"));
 
@@ -170,7 +128,7 @@ describe("マップの一覧のダイアログのキーボード操作", () => {
     it("一覧はヘッダーの「マップ一覧」へ戻す", async () => {
       seedThreeMaps();
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
       await openList(user);
 
       await user.keyboard("{Escape}");
@@ -182,7 +140,7 @@ describe("マップの一覧のダイアログのキーボード操作", () => {
     it("ヘッダーから開いた作成はヘッダーの「新しいマップ」へ戻す", async () => {
       seedThreeMaps();
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
       await user.click(headerButton("新しいマップ"));
 
       await user.keyboard("{Escape}");
@@ -194,7 +152,7 @@ describe("マップの一覧のダイアログのキーボード操作", () => {
     it("一覧から開いた作成・名前変更・削除は、一覧の元のボタンへ戻す", async () => {
       seedThreeMaps();
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
       const list = await openList(user);
 
       await user.click(list.getByRole("button", { name: "新しいマップ" }));
@@ -215,7 +173,7 @@ describe("マップの一覧のダイアログのキーボード操作", () => {
   it("Tab は中で循環し、ダイアログの外へ出たフォーカスは中へ戻る", async () => {
     seedThreeMaps();
     const user = userEvent.setup();
-    await renderHome();
+    await renderPage();
     const list = await openList(user);
     const create = list.getByRole("button", { name: "新しいマップ" });
     const close = list.getByRole("button", { name: "閉じる" });
@@ -237,9 +195,9 @@ describe("マップの一覧のダイアログのキーボード操作", () => {
   });
 
   it("ダイアログの表示中はショートカットが動かず、エディタの根が inert になり、閉じると元どおり動く", async () => {
-    seedMapLibrary(window.localStorage, [{ id: "a", name: "A", json: v3Json(["A1"]) }]);
+    seedMapLibrary(window.localStorage, [{ id: "a", name: "A", json: v3JsonFromLabels(["A1"]) }]);
     const user = userEvent.setup();
-    await renderHome();
+    await renderPage();
     fireEvent.doubleClick(stageContainer(), { clientX: 500, clientY: 400 });
     selectNode(0, 2);
     const world = lastWorldContainer()!;
@@ -276,7 +234,7 @@ describe("マップの一覧のダイアログのキーボード操作", () => {
   it("開いていないマップを削除すると、次の行の「開く」へフォーカスを移す", async () => {
     seedThreeMaps();
     const user = userEvent.setup();
-    await renderHome();
+    await renderPage();
     const list = await openList(user);
 
     await user.click(list.getByRole("button", { name: "削除: B" }));
@@ -289,12 +247,12 @@ describe("マップの一覧のダイアログのキーボード操作", () => {
   it("開いているマップの削除の確認が示すマップと、削除の後に実際に開くマップが一致する", async () => {
     // 配列の順（C, A, B）と表示順（B, C, A）を変え、配列の順で次を選ぶ誤りを見分ける（L-170）
     seedMapLibrary(window.localStorage, [
-      { id: "c", name: "C", json: v3Json(["C1"]), updatedAt: "2026-01-01T02:00:00.000Z" },
-      { id: "a", name: "A", json: v3Json(["A1"]), updatedAt: "2026-01-01T01:00:00.000Z" },
-      { id: "b", name: "B", json: v3Json(["B1"]), updatedAt: "2026-01-01T03:00:00.000Z" },
+      { id: "c", name: "C", json: v3JsonFromLabels(["C1"]), updatedAt: "2026-01-01T02:00:00.000Z" },
+      { id: "a", name: "A", json: v3JsonFromLabels(["A1"]), updatedAt: "2026-01-01T01:00:00.000Z" },
+      { id: "b", name: "B", json: v3JsonFromLabels(["B1"]), updatedAt: "2026-01-01T03:00:00.000Z" },
     ], { currentMapId: "a" });
     const user = userEvent.setup();
-    await renderHome();
+    await renderPage();
     const list = await openList(user);
 
     await user.click(list.getByRole("button", { name: "削除: A" }));
@@ -314,7 +272,7 @@ describe("マップの一覧のダイアログのキーボード操作", () => {
   it("削除の確認は「キャンセル」に最初のフォーカスが当たり、一覧の「削除」で Enter を続けて押しても削除されない", async () => {
     seedThreeMaps();
     const user = userEvent.setup();
-    await renderHome();
+    await renderPage();
     const list = await openList(user);
     list.getByRole("button", { name: "削除: B" }).focus();
 
@@ -331,7 +289,7 @@ describe("ダイアログを閉じる操作の続きの入力", () => {
   it("ヘッダーの「新しいマップ」を Enter で開いた直後に、入力欄へ押し続けの Enter が届いても作成せず、押し直した Enter では作成する", async () => {
     seedThreeMaps();
     const user = userEvent.setup();
-    await renderHome();
+    await renderPage();
     headerButton("新しいマップ").focus();
     await user.keyboard("{Enter}");
     const input = dialog().getByRole("textbox", { name: "マップ名" });
@@ -409,7 +367,7 @@ describe("ダイアログを閉じる操作の続きの入力", () => {
   ])("$name をダブルクリックしても、閉じた後のキャンバスの空き領域にノードを追加しない", async ({ press, mapName, labels }) => {
     seedThreeMaps();
     const user = userEvent.setup();
-    await renderHome();
+    await renderPage();
     const button = await press(user);
 
     await doubleClickThroughDialog(button, 500, 400);
@@ -421,7 +379,7 @@ describe("ダイアログを閉じる操作の続きの入力", () => {
   it("一覧の名前をダブルクリックしても、閉じた後のキャンバスのノードのラベル編集を始めない", async () => {
     seedThreeMaps();
     const user = userEvent.setup();
-    await renderHome();
+    await renderPage();
     const list = await openList(user);
 
     await doubleClickThroughDialog(list.getByRole("button", { name: "B" }), 110, 110);
@@ -443,7 +401,7 @@ describe("ダイアログを閉じる操作の続きの入力", () => {
     const user = userEvent.setup();
     const now = jest.spyOn(Date, "now").mockReturnValue(10_000);
     try {
-      await renderHome();
+      await renderPage();
       const list = await openList(user);
       fireEvent.click(list.getByRole("button", { name: "閉じる" }), { detail: 1 });
 
