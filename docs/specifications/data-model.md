@@ -18,6 +18,7 @@
    - 2.6 [箇条書きからの追加の型](#26-箇条書きからの追加の型)
    - 2.7 [兄弟ノードの順序変更の型](#27-兄弟ノードの順序変更の型)
    - 2.8 [階層の上げ下げの型](#28-階層の上げ下げの型)
+   - 2.9 [途中への親ノード挿入の型](#29-途中への親ノード挿入の型)
 3. [MapDocument JSON スキーマ仕様](#3-mapdocument-json-スキーマ仕様)
    - 3.1 [Version 1 スキーマ（Phase 5 初期）](#31-version-1-スキーマphase-5-初期)
    - 3.2 [Version 2 スキーマ（Phase 6）](#32-version-2-スキーマphase-6)
@@ -87,13 +88,14 @@ Root Node B (id: 5, parentId: null)
    - 箇条書きからの追加（Phase 13）は、解析の結果（`ParsedOutline`）を通常の `Node` として `nodes` の末尾に足すだけで、`Node` 型、`NodeMapState`、編集履歴、V3 の保存形式、JSON の形式に項目を足しません（2.6 節）。
    - 兄弟ノードの順序変更（Phase 14）は、`nodes` 配列の中で移動する枝の根ノード1つの位置を変える（手動配置では縦位置も変える）だけで、順序のフィールドや保存形式・JSON・編集履歴の項目を足しません（2.7 節）。
    - 階層の上げ下げ（Phase 14）は、上げ下げする枝の根ノード1つの `parentId` と `nodes` 配列内の位置を変える（手動配置では枝の座標も平行移動する）だけで、保存形式・JSON・編集履歴の項目を足しません（2.8 節）。
+   - 親の挿入（Phase 14）は、新しいノードを1つ足し、T（選択中のノード）の `parentId` を変える（手動配置では T の枝を平行移動する）だけで、保存形式・JSON・編集履歴の項目を足しません（2.9 節）。新しいノードは通常の `Node` です。
    - 枝の折りたたみ（Phase 11）は画面表示専用の状態で、`NodeMapState`、編集履歴、JSON、`localStorage` に含めません。自動配置で折りたたみ中に使う表示用の座標（`displayNodes`）も保存せず、正本の `nodes` の `x`, `y` は変えません。import、自動復元、成功した Undo / Redo の後は全展開に戻ります。
 
 ---
 
 ## 2. TypeScript 型定義リファレンス
 
-システムの中核を構成する共有型定義は `client/src/types/` 配下の全 13 ファイルに集約されています。
+システムの中核を構成する共有型定義は `client/src/types/` 配下の全 14 ファイルに集約されています。
 
 | ファイルパス | エクスポートされる型名 | 役割・用途 |
 | :--- | :--- | :--- |
@@ -108,6 +110,7 @@ Root Node B (id: 5, parentId: null)
 | `client/src/types/mapImageExport.ts` | `CreateSvgExport`, `DownloadImage`, `RasterizePng` | SVG / PNG 画像エクスポート処理の依存注入用関数シグネチャ型 |
 | `client/src/types/nodeSearch.ts` | `NodeSearchListItem` | ノード検索の候補（一致結果 `NodeSearchMatch` に、現在の表示で隠れているかの `hidden` を加えたもの） |
 | `client/src/types/nodeFocusRequest.ts` | `NodeFocusRequest` | 検索からの中央移動要求（`nodeId`, `sequence`, `documentRevision`） |
+| `client/src/types/nodeLabelEditRequest.ts` | `NodeLabelEditRequest` | 親の挿入の後のラベルの編集の開始要求（`nodeId`, `sequence`, `documentRevision`。2.9 節） |
 | `client/src/types/mapStorageSession.ts` | `MapStorageSession`, `MapBodyWriteResult`, `MapFlushResult` | 開いているマップの本体の読み書きと flush の登録（5.5 節） |
 | `client/src/types/mapLibraryDialog.ts` | `MapLibraryDialogScreen`, `OpenMapLibraryDialogScreen`, `MapLibraryRowAction`, `MapLibraryDialogFocusTarget`, `MapLibraryDialogNotices` | マップのダイアログの画面、行の操作、フォーカス先、ダイアログ内の通知 |
 
@@ -146,6 +149,7 @@ export type Node = {
 
 - 兄弟とルートの順は `nodes` 配列の相対順です（同じ `parentId` を持つノード同士の、配列の中の前後）。並べ替えは根ノード1つの配列内の位置を変え、子孫の位置は変えません。順序のフィールド（`order` など）は持ちません。親子は `parentId` で表すので、子が親より前にあってもかまいません（[features.md の 14 章](./features.md#14-兄弟ノードの順序変更)）。
 - `parentId` は接続（`Shift` + ドラッグ）に加えて、階層の上げ下げ（[features.md の 15 章](./features.md#15-階層の上げ下げ)）でも変わります。上げ下げは、上げ下げする枝の根 T の `parentId` と、T の根ノード1つの配列内の位置を変え、子孫の `parentId` と位置は変えません（下げて新しい親に子が無いときは T の位置も変えません）。
+- `parentId` は途中への親ノード挿入（[features.md の 16 章](./features.md#16-途中への親ノード挿入)）でも変わります。挿入は、新しいノード N を T の直前の配列の位置に足し、T の `parentId` を N の ID に変えます。N の `parentId` は T の元の親（T がルートなら `null`）です。子孫の `parentId` と位置は変えません。
 
 #### `NodeImportance` (`client/src/types/nodeImportance.ts`)
 ノードの重要度を表現するユニオン型です。解像度フィルタリングの基準となります。
@@ -489,6 +493,53 @@ export type ChangeNodeIndentResult =
 ```
 - `applyTreeChange` を1回だけ呼び、新しい親はそのコールバックの中で最新のノード配列から解決します。成功したときだけ1回の commit になり、選択と `documentRevision` は変えません。端と失敗ではノード・選択・履歴・「やり直す」を変えません。自動配置の `layoutNodeForest` が失敗したときは `placement-failed` です。
 - 下げたときの新しい親の展開は、この型を受け取った `useNodeIndentAction` が、成功した下げのときだけ `expandNodes([newParentId])` で行います。
+
+### 2.9 途中への親ノード挿入の型
+
+途中への親ノード挿入（Phase 14。[features.md の 16 章](./features.md#16-途中への親ノード挿入)）で受け渡す型です。いずれもメモリ上だけで使い、保存形式（V3）・JSON・`localStorage`・編集履歴には現れません。`useNodes.insertParentNode` の戻り値の型も、domain の `formatNodeParentInsertionFailureNotice`（`client/src/domain/nodes/nodeParentInsertionMessages.ts`）から参照するため、`hooks/useNodes.ts` ではなく domain に置き、`hooks/useNodes.ts` から再 export しません（2.8 節と同じ）。
+
+#### `NodeParentInsertionFailureReason` / `NodeParentInsertionResult` (`client/src/domain/nodes/nodeParentInsertion.ts`)
+`insertParentNode(nodes, nodeId, newNodeId, visibleNodeIds, mode): NodeParentInsertionResult` の結果の型です。
+
+```typescript
+export type NodeParentInsertionFailureReason =
+  | "node-missing" // T が無い
+  | "node-hidden" // T が見えていない
+  | "invalid-structure" // T の親が配列に無い、T が自分自身を親にしている
+  | "id-conflict" // 渡された新しい ID が既存のノードと重なる
+  | "placement-failed"; // 手動配置の座標が有限でない・桁落ちする・間隔が取れない。useNodes.insertParentNode ではそれに加えて自動配置の失敗も含む
+
+export type NodeParentInsertionResult =
+  | { ok: true; nodes: Node[]; insertedId: number }
+  | { ok: false; reason: NodeParentInsertionFailureReason };
+```
+- 検査はこの順で行い、最初に当たった理由を返します。端（`at-edge`）はありません（見えているノードなら、ルートを含めて必ず親を入れられます）。
+- 成功時の `nodes` は、`nodes` を1回走査して作った新しい配列です。新しいノード N（`createParentNode(T, newNodeId)`。`client/src/domain/nodes/nodePlacement.ts`）を T の直前に積み、T を `parentId: newNodeId` に置き換えます。T 以外のノード（子孫を含む）は同じオブジェクトのままです。手動配置では `calculateIndentTranslation` と `translateBranch`（`client/src/domain/nodes/nodeIndentPlacement.ts`）で T の枝を平行移動し、自動配置では座標を変えません（呼び出し元の `applyTreeChange` が `layoutNodeForest` で配置し直します）。
+- ヘッダーのボタンの有効・無効は `canInsertParentNode(nodes, nodeId, visibleNodeIds): boolean` が返します。未選択（`nodeId` が `null`）・見えていない・対象が無いときは `false` です。座標の失敗や不正なデータはここでは予測しません。
+
+#### `InsertParentNodeResult` (`client/src/domain/nodes/nodeParentInsertion.ts`)
+`useNodes.insertParentNode(nodeId, visibleNodeIds): InsertParentNodeResult` の戻り値の型です。
+
+```typescript
+export type InsertParentNodeResult =
+  | { ok: true; insertedId: number }
+  | { ok: false; reason: NodeParentInsertionFailureReason };
+```
+- `applyTreeChange` を1回だけ呼び、T と新しい ID（`nodeIdAllocator.nextAvailableId`）はそのコールバックの中で最新のノード配列から解決・採番します。成功したときだけ1回の commit になり、N を選択します。`documentRevision` は変えません。失敗ではノード・選択・履歴・「やり直す」を変えません。自動配置の `layoutNodeForest` が失敗したときは `placement-failed` です。
+- この型を受け取った `useNodeParentInsertionAction` が、成功したときだけ通知の枠を空にし（`clearNotice`）、ラベルの編集の要求を出します。失敗したときだけ `formatNodeParentInsertionFailureNotice(reason)`（理由によらず `{ kind: "error", message: "親ノードを挿入できませんでした。" }`）を通知します。
+
+#### `NodeLabelEditRequest` (`client/src/types/nodeLabelEditRequest.ts`)
+親の挿入の後に、`MapEditor` から `MapStage` へラベルの編集の開始を頼む要求です。検索の `NodeFocusRequest` と同じ形です。
+
+```typescript
+export type NodeLabelEditRequest = {
+  nodeId: number;
+  sequence: number;
+  documentRevision: number;
+};
+```
+- `useNodeParentInsertionAction` が、挿入が成功するたびに `sequence` を1増やして作ります。要求の `documentRevision` が今の値と等しいときだけ `labelEditRequest` として返し、違えば `null` を返します（成功した Undo / Redo・マップの置き換えの後に古い要求で編集を始めない）。
+- `MapStage` の `useNodeLabelEditRequest` が受け取り、まだ処理していない `sequence` で、`documentRevision` が一致し、ノードがあるときだけ `startEditing(nodeId, "")` を1回呼びます。保存・書き出しの対象ではありません。
 
 ---
 
