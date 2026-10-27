@@ -1,24 +1,30 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import Home from "@/app/page";
+import {
+  exportedMap,
+  type ExportedMap,
+  redoButton,
+  renderPage,
+  stageContainer,
+  storedMap,
+  undoButton,
+  v3Json,
+} from "@/app/testing/pageTestHelpers";
 import {
   lastWorldContainer,
   mockNodePointerHandlers,
   mockStageBounds,
   mockStageHandlers,
   pointer,
-  renderReady,
   resetMapStageTestRuntime,
 } from "@/components/map/testing/mapStageTestRuntime";
-import { activeMapBodyKey, readActiveMapJson, seedMapLibrary } from "@/testing/mapLibraryTestStorage";
+import { activeMapBodyKey, seedMapLibrary } from "@/testing/mapLibraryTestStorage";
 
 // Pixiだけを差し替え、MapStage・NodeLabelEditor・useNodes・履歴・保存hookは本物を通す
-jest.mock("pixi.js", () => {
-  const runtime = jest.requireActual<typeof import("@/components/map/testing/mapStageTestRuntime")>(
-    "@/components/map/testing/mapStageTestRuntime",
-  );
-  return runtime.createMockPixiModule();
-});
+jest.mock("pixi.js", () => (
+  jest.requireActual<typeof import("@/app/testing/pageModuleMocks")>("@/app/testing/pageModuleMocks")
+    .createPagePixiModuleMock()
+));
 
 const mockGenerateIllustrationThumbnail = jest.fn();
 jest.mock("@/services/illustration/illustrationGeneration", () => {
@@ -41,9 +47,10 @@ jest.mock("@/services/persistence/mapJsonDownload", () => {
 });
 
 // jsdomはcanvasの2D contextを持たないため、文字幅の測定・PNG化・ダウンロードだけを差し替える
-jest.mock("@/services/imageExport/mapTextMeasurement", () => ({
-  createMapTextMeasurer: () => (text: string) => text.length * 8,
-}));
+jest.mock("@/services/imageExport/mapTextMeasurement", () => (
+  jest.requireActual<typeof import("@/app/testing/pageModuleMocks")>("@/app/testing/pageModuleMocks")
+    .createMapTextMeasurementModuleMock()
+));
 
 const mockDownloadMapImage = jest.fn();
 jest.mock("@/services/imageExport/mapImageDownload", () => ({
@@ -76,26 +83,6 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve, reject };
 }
 
-type ExportedNode = { id: number; label: string; x: number; y: number; illustration?: string };
-type ExportedMap = { version: number; layoutMode: string; nodes: ExportedNode[] };
-
-function v3Json(nodes: Array<Partial<ExportedNode> & { id: number }>): string {
-  return `${JSON.stringify({
-    version: 3,
-    layoutMode: "manual",
-    nodes: nodes.map((node) => ({
-      parentId: null,
-      x: 250,
-      y: 170,
-      width: 100,
-      height: 60,
-      label: "",
-      importance: "medium",
-      ...node,
-    })),
-  }, null, 2)}\n`;
-}
-
 function jsonFile(text: Promise<string> | string): File {
   const file = new File(["{}"], "map.json", { type: "application/json" });
   Object.defineProperty(file, "text", {
@@ -114,26 +101,8 @@ function failingFile(): File {
   return file;
 }
 
-function stageContainer(): HTMLElement {
-  return document.querySelector<HTMLElement>(".cursor-crosshair")!;
-}
-
-async function renderPage() {
-  const rendered = await renderReady(<Home />);
-  mockStageBounds(stageContainer());
-  return rendered;
-}
-
 function fileInput(container: HTMLElement): HTMLInputElement {
   return container.querySelector<HTMLInputElement>('input[type="file"]')!;
-}
-
-function undoButton() {
-  return screen.getByRole("button", { name: "元に戻す" });
-}
-
-function redoButton() {
-  return screen.getByRole("button", { name: "やり直す" });
 }
 
 // 空き領域のダブルクリックで、その位置を中心にノードを追加する
@@ -153,16 +122,6 @@ function selectNodeAt(x: number, y: number) {
     mockNodePointerHandlers.at(-1)?.pointerdown?.(pointer(x, y));
     mockStageHandlers.pointerup?.(pointer(x, y));
   });
-}
-
-function exportedMap(): ExportedMap {
-  fireEvent.click(screen.getByRole("button", { name: "JSON書き出し" }));
-  return JSON.parse(mockDownloadMapJson.mock.lastCall![0] as string) as ExportedMap;
-}
-
-function storedMap(): ExportedMap | null {
-  const stored = readActiveMapJson(window.localStorage);
-  return stored === null ? null : JSON.parse(stored) as ExportedMap;
 }
 
 function readBlobText(blob: Blob): Promise<string> {
@@ -204,17 +163,17 @@ describe("ページの元に戻す・やり直す", () => {
     expect(redoButton()).toBeDisabled();
 
     addNodeAt(300, 200);
-    const [created] = exportedMap().nodes;
+    const [created] = exportedMap(mockDownloadMapJson).nodes;
     expect(undoButton()).toBeEnabled();
     expect(redoButton()).toBeDisabled();
 
     await user.click(undoButton());
-    expect(exportedMap().nodes).toEqual([]);
+    expect(exportedMap(mockDownloadMapJson).nodes).toEqual([]);
     expect(undoButton()).toBeDisabled();
     expect(redoButton()).toBeEnabled();
 
     await user.click(redoButton());
-    expect(exportedMap().nodes).toEqual([created]);
+    expect(exportedMap(mockDownloadMapJson).nodes).toEqual([created]);
     expect(undoButton()).toBeEnabled();
     expect(redoButton()).toBeDisabled();
   });
@@ -230,7 +189,7 @@ describe("ページの元に戻す・やり直す", () => {
 
     await user.keyboard(keys);
 
-    expect(exportedMap().nodes).toEqual([]);
+    expect(exportedMap(mockDownloadMapJson).nodes).toEqual([]);
     expect(redoButton()).toBeEnabled();
   });
 
@@ -241,12 +200,12 @@ describe("ページの元に戻す・やり直す", () => {
     const user = userEvent.setup();
     await renderPage();
     addNodeAt(300, 200);
-    const [created] = exportedMap().nodes;
+    const [created] = exportedMap(mockDownloadMapJson).nodes;
     await user.click(undoButton());
 
     await user.keyboard(keys);
 
-    expect(exportedMap().nodes).toEqual([created]);
+    expect(exportedMap(mockDownloadMapJson).nodes).toEqual([created]);
     expect(redoButton()).toBeDisabled();
   });
 
@@ -258,7 +217,7 @@ describe("ページの元に戻す・やり直す", () => {
     screen.getByRole("button", { name: "JSON書き出し" }).focus();
     await user.keyboard("{Control>}z{/Control}");
 
-    expect(exportedMap().nodes).toEqual([]);
+    expect(exportedMap(mockDownloadMapJson).nodes).toEqual([]);
   });
 
   it("空履歴の対象キーは既定動作を止めるが、マップを変えない", async () => {
@@ -267,7 +226,7 @@ describe("ページの元に戻す・やり直す", () => {
     const allowed = fireEvent.keyDown(document.body, { key: "z", ctrlKey: true });
 
     expect(allowed).toBe(false);
-    expect(exportedMap().nodes).toEqual([]);
+    expect(exportedMap(mockDownloadMapJson).nodes).toEqual([]);
     expect(undoButton()).toBeDisabled();
   });
 
@@ -318,13 +277,13 @@ describe("ラベル編集と履歴ボタン", () => {
     await user.click(undoButton());
 
     expect(screen.queryByTestId("node-label-input")).not.toBeInTheDocument();
-    const nodes = exportedMap().nodes;
+    const nodes = exportedMap(mockDownloadMapJson).nodes;
     expect(nodes).toHaveLength(1);
     expect(nodes[0].label).toBe("");
     expect(redoButton()).toBeEnabled();
 
     await user.click(undoButton());
-    expect(exportedMap().nodes).toEqual([]);
+    expect(exportedMap(mockDownloadMapJson).nodes).toEqual([]);
   });
 
   it("入力中のCtrl+Zはブラウザに任せ、マップを戻さない", async () => {
@@ -340,7 +299,7 @@ describe("ラベル編集と履歴ボタン", () => {
     expect(allowed).toBe(true);
     expect(screen.getByTestId("node-label-input")).toHaveFocus();
     fireEvent.keyDown(input, { key: "Escape" });
-    expect(exportedMap().nodes).toHaveLength(1);
+    expect(exportedMap(mockDownloadMapJson).nodes).toHaveLength(1);
   });
 
   it("Redoがあっても、blurで実変更を確定するとRedoは何もしない", async () => {
@@ -356,10 +315,10 @@ describe("ラベル編集と履歴ボタン", () => {
     await user.type(input, "上書き");
     await user.click(redoButton());
 
-    expect(exportedMap().nodes[0].label).toBe("上書き");
+    expect(exportedMap(mockDownloadMapJson).nodes[0].label).toBe("上書き");
     expect(redoButton()).toBeDisabled();
     await user.click(undoButton());
-    expect(exportedMap().nodes[0].label).toBe("");
+    expect(exportedMap(mockDownloadMapJson).nodes[0].label).toBe("");
   });
 
   it("blurで変更がなければ、既存のRedoを実行できる", async () => {
@@ -373,7 +332,7 @@ describe("ラベル編集と履歴ボタン", () => {
     await user.click(redoButton());
 
     expect(screen.queryByTestId("node-label-input")).not.toBeInTheDocument();
-    expect(exportedMap().nodes[0].label).toBe("最初");
+    expect(exportedMap(mockDownloadMapJson).nodes[0].label).toBe("最初");
   });
 
   it.each([
@@ -391,11 +350,11 @@ describe("ラベル編集と履歴ボタン", () => {
 
     await commit(user);
     expect(screen.queryByTestId("node-label-input")).not.toBeInTheDocument();
-    expect(exportedMap().nodes[0].label).toBe("変更後");
+    expect(exportedMap(mockDownloadMapJson).nodes[0].label).toBe("変更後");
     expect(undoButton()).toBeEnabled();
 
     await user.click(undoButton());
-    expect(exportedMap().nodes[0].label).toBe("保存済み");
+    expect(exportedMap(mockDownloadMapJson).nodes[0].label).toBe("保存済み");
     expect(undoButton()).toBeDisabled();
   });
 });
@@ -458,11 +417,11 @@ describe("保存・出力と履歴", () => {
     const input = openLabelEditor(300, 200);
     await user.clear(input);
     await user.type(input, "取り消す値{Enter}");
-    expect(exportedMap().nodes[0].label).toBe("取り消す値");
+    expect(exportedMap(mockDownloadMapJson).nodes[0].label).toBe("取り消す値");
 
     await user.click(undoButton());
 
-    const json = exportedMap();
+    const json = exportedMap(mockDownloadMapJson);
     expect(Object.keys(json).sort()).toEqual(["layoutMode", "nodes", "version"]);
     expect(json.nodes.map((node) => node.label)).toEqual(["現在値"]);
     expect(mockDownloadMapJson.mock.lastCall![0]).not.toContain("取り消す値");
@@ -554,7 +513,7 @@ describe("イラスト生成と履歴", () => {
     await user.click(screen.getByRole("button", { name: "ノードに設定" }));
 
     expect(screen.queryByRole("button", { name: "ノードに設定" })).not.toBeInTheDocument();
-    expect(exportedMap().nodes[0].illustration).toBe(OLD_IMAGE);
+    expect(exportedMap(mockDownloadMapJson).nodes[0].illustration).toBe(OLD_IMAGE);
   });
 });
 
@@ -564,11 +523,11 @@ describe("マップの置換と履歴", () => {
     const user = userEvent.setup();
     await renderPage();
 
-    expect(exportedMap().nodes.map((node) => node.label)).toEqual(["保存済み"]);
+    expect(exportedMap(mockDownloadMapJson).nodes.map((node) => node.label)).toEqual(["保存済み"]);
     expect(undoButton()).toBeDisabled();
     expect(redoButton()).toBeDisabled();
     await user.keyboard("{Control>}z{/Control}");
-    expect(exportedMap().nodes.map((node) => node.label)).toEqual(["保存済み"]);
+    expect(exportedMap(mockDownloadMapJson).nodes.map((node) => node.label)).toEqual(["保存済み"]);
   });
 
   it("V3の読み込みに成功すると、過去と未来の履歴を消す", async () => {
@@ -583,7 +542,7 @@ describe("マップの置換と履歴", () => {
     await user.upload(fileInput(container), jsonFile(v3Json([{ id: 9, label: "読込" }])));
 
     await waitFor(() => expect(screen.getByText("マップを読み込みました。")).toBeInTheDocument());
-    expect(exportedMap().nodes.map((node) => node.id)).toEqual([9]);
+    expect(exportedMap(mockDownloadMapJson).nodes.map((node) => node.id)).toEqual([9]);
     expect(undoButton()).toBeDisabled();
     expect(redoButton()).toBeDisabled();
   });
@@ -597,19 +556,19 @@ describe("マップの置換と履歴", () => {
     addNodeAt(300, 200);
     addNodeAt(500, 400);
     await user.click(undoButton());
-    const before = exportedMap();
+    const before = exportedMap(mockDownloadMapJson);
 
     await user.upload(fileInput(container), file());
 
     await waitFor(() => expect(within(screen.getByRole("banner")).getByRole("alert")).toHaveTextContent("現在のマップは変更されていません。"));
-    expect(exportedMap()).toEqual(before);
+    expect(exportedMap(mockDownloadMapJson)).toEqual(before);
     expect(undoButton()).toBeEnabled();
     expect(redoButton()).toBeEnabled();
     await user.click(redoButton());
-    expect(exportedMap().nodes).toHaveLength(2);
+    expect(exportedMap(mockDownloadMapJson).nodes).toHaveLength(2);
     await user.click(undoButton());
     await user.click(undoButton());
-    expect(exportedMap().nodes).toEqual([]);
+    expect(exportedMap(mockDownloadMapJson).nodes).toEqual([]);
   });
 
   it("読み込み待ち中にUndoしても、最新の読み込みが成功すればそれが新しい起点になる", async () => {
@@ -621,13 +580,13 @@ describe("マップの置換と履歴", () => {
 
     await user.upload(fileInput(container), jsonFile(pendingText.promise));
     await user.click(undoButton());
-    expect(exportedMap().nodes).toHaveLength(1);
+    expect(exportedMap(mockDownloadMapJson).nodes).toHaveLength(1);
     expect(redoButton()).toBeEnabled();
 
     pendingText.resolve(v3Json([{ id: 9, label: "読込" }]));
     await waitFor(() => expect(screen.getByText("マップを読み込みました。")).toBeInTheDocument());
 
-    expect(exportedMap().nodes.map((node) => node.id)).toEqual([9]);
+    expect(exportedMap(mockDownloadMapJson).nodes.map((node) => node.id)).toEqual([9]);
     expect(undoButton()).toBeDisabled();
     expect(redoButton()).toBeDisabled();
   });

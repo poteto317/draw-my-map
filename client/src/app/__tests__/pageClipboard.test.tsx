@@ -1,26 +1,33 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import Home from "@/app/page";
+import {
+  exportedMap,
+  type ExportedMap,
+  type ExportedNode,
+  redoButton,
+  renderPage,
+  selectNode,
+  stageContainer,
+  storedMap,
+  undoButton,
+  v3Json,
+} from "@/app/testing/pageTestHelpers";
 import {
   lastWorldContainer,
   mockNodePointerHandlers,
-  mockStageBounds,
   mockStageHandlers,
   pointer,
-  renderReady,
   resetMapStageTestRuntime,
 } from "@/components/map/testing/mapStageTestRuntime";
 import { ILLUSTRATED_NODE_HEIGHT, SIBLING_VERTICAL_GAP } from "@/config/shapes";
 import { createJpegDataUrl } from "@/testing/jpegFixture";
-import { activeMapBodyKey, readActiveMapJson, seedMapLibrary } from "@/testing/mapLibraryTestStorage";
+import { activeMapBodyKey, seedMapLibrary } from "@/testing/mapLibraryTestStorage";
 
 // Pixiだけを差し替え、MapStage・useMapClipboardEvents・codec・useNodes・履歴・保存hookは本物を通す
-jest.mock("pixi.js", () => {
-  const runtime = jest.requireActual<typeof import("@/components/map/testing/mapStageTestRuntime")>(
-    "@/components/map/testing/mapStageTestRuntime",
-  );
-  return runtime.createMockPixiModule();
-});
+jest.mock("pixi.js", () => (
+  jest.requireActual<typeof import("@/app/testing/pageModuleMocks")>("@/app/testing/pageModuleMocks")
+    .createPagePixiModuleMock()
+));
 
 const mockGenerateIllustrationThumbnail = jest.fn();
 jest.mock("@/services/illustration/illustrationGeneration", () => {
@@ -43,9 +50,10 @@ jest.mock("@/services/persistence/mapJsonDownload", () => {
 });
 
 // jsdomはcanvasの2D contextを持たないため、文字幅の測定・PNG化・ダウンロードだけを差し替える
-jest.mock("@/services/imageExport/mapTextMeasurement", () => ({
-  createMapTextMeasurer: () => (text: string) => text.length * 8,
-}));
+jest.mock("@/services/imageExport/mapTextMeasurement", () => (
+  jest.requireActual<typeof import("@/app/testing/pageModuleMocks")>("@/app/testing/pageModuleMocks")
+    .createMapTextMeasurementModuleMock()
+));
 
 const mockDownloadMapImage = jest.fn();
 jest.mock("@/services/imageExport/mapImageDownload", () => ({
@@ -65,36 +73,6 @@ const PASTE_MESSAGE = "枝を貼り付けました。Fキーで選択ノード�
 const INVALID_MESSAGE = "貼り付ける枝データが無効です。";
 const DUPLICATE_MESSAGE = "枝を複製しました。Fキーで選択ノードへ移動できます。";
 const HINT = "枝をコピー: Ctrl/Cmd+C ／ 貼り付け: Ctrl/Cmd+V（新しいルートとして追加）";
-
-type ExportedNode = {
-  id: number;
-  parentId: number | null;
-  label: string;
-  importance: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  illustration?: string;
-};
-type ExportedMap = { version: number; layoutMode: string; nodes: ExportedNode[] };
-
-function v3Json(nodes: Array<Partial<ExportedNode> & { id: number }>): string {
-  return `${JSON.stringify({
-    version: 3,
-    layoutMode: "manual",
-    nodes: nodes.map((node) => ({
-      parentId: null,
-      x: 250,
-      y: 170,
-      width: 100,
-      height: 60,
-      label: "",
-      importance: "medium",
-      ...node,
-    })),
-  }, null, 2)}\n`;
-}
 
 // 親（画面上の中心300,200）と子（中心450,200）の2ノード
 function storeParentAndChild(overrides: { parent?: Partial<ExportedNode>; child?: Partial<ExportedNode> } = {}) {
@@ -137,54 +115,18 @@ function paste(clipboard: Clipboard, target: Element = document.activeElement ??
   return fireEvent.paste(target, { clipboardData: clipboard.data });
 }
 
-function stageContainer(): HTMLElement {
-  return document.querySelector<HTMLElement>(".cursor-crosshair")!;
-}
-
-async function renderPage() {
-  const rendered = await renderReady(<Home />);
-  mockStageBounds(stageContainer());
-  return rendered;
-}
-
 function duplicateButton() {
   return screen.getByRole("button", { name: "枝を複製" });
-}
-
-function undoButton() {
-  return screen.getByRole("button", { name: "元に戻す" });
-}
-
-function redoButton() {
-  return screen.getByRole("button", { name: "やり直す" });
 }
 
 function filterButton(label: string) {
   return screen.getByRole("button", { name: `表示 ${label}` });
 }
 
-// 直近の描画で登録されたノードのpointerdownで選択し、同じpointerで離す（indexはnodes配列の順）
-function selectNode(index: number, nodeCount: number, x = 300, y = 200) {
-  act(() => {
-    mockNodePointerHandlers.at(index - nodeCount)?.pointerdown?.(pointer(x, y));
-    mockStageHandlers.pointerup?.(pointer(x, y));
-  });
-}
-
 // ノード上のダブルクリックで、本物のNodeLabelEditorを開く
 function openLabelEditor(x: number, y: number): HTMLInputElement {
   fireEvent.doubleClick(stageContainer(), { clientX: x, clientY: y });
   return screen.getByTestId("node-label-input") as HTMLInputElement;
-}
-
-function exportedMap(): ExportedMap {
-  fireEvent.click(screen.getByRole("button", { name: "JSON書き出し" }));
-  return JSON.parse(mockDownloadMapJson.mock.lastCall![0] as string) as ExportedMap;
-}
-
-function storedMap(): ExportedMap | null {
-  const stored = readActiveMapJson(window.localStorage);
-  return stored === null ? null : JSON.parse(stored) as ExportedMap;
 }
 
 function worldPosition() {
@@ -204,7 +146,7 @@ function byPosition(nodes: readonly ExportedNode[]): ExportedNode[] {
 }
 
 function exportedByPosition(): ExportedNode[] {
-  return byPosition(exportedMap().nodes);
+  return byPosition(exportedMap(mockDownloadMapJson).nodes);
 }
 
 function clipboardNodes(clipboard: Clipboard): ExportedNode[] {
@@ -265,7 +207,7 @@ describe("ページの枝のコピーと貼り付け", () => {
     expect(paste(clipboard)).toBe(false);
     expect(screen.getByText(PASTE_MESSAGE)).toHaveAttribute("role", "status");
     expect(screen.queryByText(COPY_MESSAGE)).not.toBeInTheDocument();
-    const pasted = exportedMap().nodes;
+    const pasted = exportedMap(mockDownloadMapJson).nodes;
     expect(byPosition(pasted)).toEqual([PARENT, CHILD, PASTED_PARENT, PASTED_CHILD]);
     expect(worldPosition()).toEqual(viewportBefore);
     // 新しい根を選択している。Fキーで、貼り付けた根の中心(300,300)を画面800x600の中央へ置く
@@ -277,7 +219,7 @@ describe("ページの枝のコピーと貼り付け", () => {
     expect(screen.queryByText(PASTE_MESSAGE)).not.toBeInTheDocument();
 
     await user.click(redoButton());
-    expect(exportedMap().nodes).toEqual(pasted);
+    expect(exportedMap(mockDownloadMapJson).nodes).toEqual(pasted);
     expect(screen.queryByText(PASTE_MESSAGE)).not.toBeInTheDocument();
   });
 
@@ -425,12 +367,12 @@ describe("ページの枝のコピーと貼り付けの通知", () => {
     copy(clipboard);
     expect(screen.getByText(COPY_MESSAGE)).toBeInTheDocument();
 
-    const before = exportedMap();
+    const before = exportedMap(mockDownloadMapJson);
     const invalid = createClipboard("ただの文章");
     expect(paste(invalid, document.body)).toBe(false);
     expect(within(screen.getByRole("banner")).getByRole("alert")).toHaveTextContent(INVALID_MESSAGE);
     expect(screen.queryByText(COPY_MESSAGE)).not.toBeInTheDocument();
-    expect(exportedMap()).toEqual(before);
+    expect(exportedMap(mockDownloadMapJson)).toEqual(before);
     expect(undoButton()).toBeDisabled();
 
     // ラベル入力欄への貼り付けは対象外で、ブラウザの既定動作に任せる
@@ -484,7 +426,7 @@ describe("ページの枝のコピーと貼り付けの境界", () => {
     await renderPage();
     selectNode(0, 2);
     copy(clipboard);
-    const before = exportedMap();
+    const before = exportedMap(mockDownloadMapJson);
     clipboard.data.setData.mockClear();
 
     const input = openLabelEditor(300, 200);
@@ -496,7 +438,7 @@ describe("ページの枝のコピーと貼り付けの境界", () => {
 
     expect(clipboard.data.setData).not.toHaveBeenCalled();
     await user.keyboard("{Escape}");
-    expect(exportedMap()).toEqual(before);
+    expect(exportedMap(mockDownloadMapJson)).toEqual(before);
   });
 
   it("ドラッグ中のコピー・貼り付けはマップを変えず、中間座標を取り込まない", async () => {
@@ -510,17 +452,17 @@ describe("ページの枝のコピーと貼り付けの境界", () => {
       mockNodePointerHandlers.at(-2)?.pointerdown?.(pointer(300, 200));
       mockStageHandlers.pointermove?.(pointer(340, 240));
     });
-    const moved = exportedMap();
+    const moved = exportedMap(mockDownloadMapJson);
 
     expect(copy(clipboard, document.body)).toBe(true);
     expect(paste(clipboard, document.body)).toBe(true);
 
     expect(clipboard.store.get("text/plain")).toBe(copied);
-    expect(exportedMap()).toEqual(moved);
+    expect(exportedMap(mockDownloadMapJson)).toEqual(moved);
     act(() => {
       mockStageHandlers.pointerup?.(pointer(340, 240));
     });
-    expect(exportedMap().nodes).toHaveLength(2);
+    expect(exportedMap(mockDownloadMapJson).nodes).toHaveLength(2);
   });
 
   it("DOMの文字選択があるときはブラウザに任せる", async () => {
@@ -538,7 +480,7 @@ describe("ページの枝のコピーと貼り付けの境界", () => {
     expect(paste(clipboard, document.body)).toBe(true);
 
     expect(clipboard.data.setData).not.toHaveBeenCalled();
-    expect(exportedMap().nodes).toHaveLength(2);
+    expect(exportedMap(mockDownloadMapJson).nodes).toHaveLength(2);
     expect(screen.queryByText(COPY_MESSAGE)).not.toBeInTheDocument();
   });
 });
@@ -578,7 +520,7 @@ describe("ページの貼り付けた枝の保存", () => {
     unmount();
     resetMapStageTestRuntime();
     await renderPage();
-    expect(exportedMap().nodes).toEqual(written.nodes);
+    expect(exportedMap(mockDownloadMapJson).nodes).toEqual(written.nodes);
   });
 
   it("貼り付けた枝をJSONへ書き出し、親子関係と画像を維持する", async () => {
@@ -589,7 +531,7 @@ describe("ページの貼り付けた枝の保存", () => {
     copy(clipboard);
     paste(clipboard);
 
-    const exported = exportedMap();
+    const exported = exportedMap(mockDownloadMapJson);
 
     expect(exported).toMatchObject({ version: 3, layoutMode: "manual" });
     expect(byPosition(exported.nodes)).toEqual(ILLUSTRATED_BRANCH);

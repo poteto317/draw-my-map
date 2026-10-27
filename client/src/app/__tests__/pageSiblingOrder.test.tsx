@@ -1,24 +1,24 @@
-import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import Home from "@/app/page";
 import {
-  mockNodePointerHandlers,
-  mockStageBounds,
-  mockStageHandlers,
-  pointer,
-  renderReady,
-  resetMapStageTestRuntime,
-} from "@/components/map/testing/mapStageTestRuntime";
-import { readActiveMapJson, seedMapLibrary } from "@/testing/mapLibraryTestStorage";
+  exportedMap,
+  redoButton,
+  renderPage,
+  selectNode,
+  stageContainer,
+  storedMap,
+  undoButton,
+  v3Json,
+} from "@/app/testing/pageTestHelpers";
+import { resetMapStageTestRuntime } from "@/components/map/testing/mapStageTestRuntime";
+import { seedMapLibrary } from "@/testing/mapLibraryTestStorage";
 
 // Pixi・イラスト生成・ダウンロード・画像化だけを差し替え、Home から MapEditor・ヘッダー・
 // MapStage のショートカット・useNodes・履歴・保存までは本物を通す
-jest.mock("pixi.js", () => {
-  const runtime = jest.requireActual<typeof import("@/components/map/testing/mapStageTestRuntime")>(
-    "@/components/map/testing/mapStageTestRuntime",
-  );
-  return runtime.createMockPixiModule();
-});
+jest.mock("pixi.js", () => (
+  jest.requireActual<typeof import("@/app/testing/pageModuleMocks")>("@/app/testing/pageModuleMocks")
+    .createPagePixiModuleMock()
+));
 
 jest.mock("@/services/illustration/illustrationGeneration", () => {
   const actual = jest.requireActual("@/services/illustration/illustrationGeneration");
@@ -35,9 +35,10 @@ jest.mock("@/services/persistence/mapJsonDownload", () => {
 });
 
 // jsdomはcanvasの2D contextを持たないため、文字幅の測定・PNG化・ダウンロードだけを差し替える
-jest.mock("@/services/imageExport/mapTextMeasurement", () => ({
-  createMapTextMeasurer: () => (text: string) => text.length * 8,
-}));
+jest.mock("@/services/imageExport/mapTextMeasurement", () => (
+  jest.requireActual<typeof import("@/app/testing/pageModuleMocks")>("@/app/testing/pageModuleMocks")
+    .createMapTextMeasurementModuleMock()
+));
 
 jest.mock("@/services/imageExport/mapImageDownload", () => ({
   downloadMapImage: jest.fn(),
@@ -55,35 +56,6 @@ const ROOT_TOP_EDGE_MESSAGE = "これ以上上へ移動できません（見え�
 const HIDDEN_SKIPPED_MESSAGE = "枝を上へ移動しました（見えている兄弟の2件中1番目）。";
 const HIDDEN_BEYOND_MESSAGE = "これ以上下へ移動できません（見えている兄弟の末尾です）。"
   + "隠れている兄弟と入れ替えるには、表示を『すべて』に切り替えてください。";
-
-type ExportedNode = {
-  id: number;
-  parentId: number | null;
-  label: string;
-  importance: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
-type ExportedMap = { version: number; layoutMode: string; nodes: ExportedNode[] };
-
-function v3Json(nodes: Array<Partial<ExportedNode> & { id: number }>): string {
-  return `${JSON.stringify({
-    version: 3,
-    layoutMode: "manual",
-    nodes: nodes.map((node) => ({
-      parentId: null,
-      x: 250,
-      y: 170,
-      width: 100,
-      height: 60,
-      label: "",
-      importance: "medium",
-      ...node,
-    })),
-  }, null, 2)}\n`;
-}
 
 // 縦に並んだ3つのルート。id 2 の中心は画面上の (300, 230)
 function storeThreeRoots() {
@@ -104,16 +76,6 @@ function storeHiddenSibling() {
   ]) }]);
 }
 
-function stageContainer(): HTMLElement {
-  return document.querySelector<HTMLElement>(".cursor-crosshair")!;
-}
-
-async function renderPage() {
-  const rendered = await renderReady(<Home />);
-  mockStageBounds(stageContainer());
-  return rendered;
-}
-
 function upButton() {
   return within(screen.getByRole("banner")).getByRole("button", { name: "枝を上へ移動" });
 }
@@ -122,42 +84,16 @@ function downButton() {
   return within(screen.getByRole("banner")).getByRole("button", { name: "枝を下へ移動" });
 }
 
-function undoButton() {
-  return screen.getByRole("button", { name: "元に戻す" });
-}
-
-function redoButton() {
-  return screen.getByRole("button", { name: "やり直す" });
-}
-
-// 直近の描画で登録されたノードのpointerdownで選択し、同じpointerで離す（indexはnodes配列の順）
-function selectNode(index: number, nodeCount: number, x = 300, y = 200) {
-  act(() => {
-    mockNodePointerHandlers.at(index - nodeCount)?.pointerdown?.(pointer(x, y));
-    mockStageHandlers.pointerup?.(pointer(x, y));
-  });
-}
-
 function pressAlt(key: "ArrowUp" | "ArrowDown", target: Element = document.body, init: { shiftKey?: boolean } = {}) {
   fireEvent.keyDown(target, { key, altKey: true, ...init });
 }
 
-function exportedMap(): ExportedMap {
-  fireEvent.click(screen.getByRole("button", { name: "JSON書き出し" }));
-  return JSON.parse(mockDownloadMapJson.mock.lastCall![0] as string) as ExportedMap;
-}
-
 function exportedIds(): number[] {
-  return exportedMap().nodes.map((node) => node.id);
+  return exportedMap(mockDownloadMapJson).nodes.map((node) => node.id);
 }
 
 function exportedPositions(): Array<[number, number, number]> {
-  return exportedMap().nodes.map((node) => [node.id, node.x, node.y]);
-}
-
-function storedMap(): ExportedMap | null {
-  const stored = readActiveMapJson(window.localStorage);
-  return stored === null ? null : JSON.parse(stored) as ExportedMap;
+  return exportedMap(mockDownloadMapJson).nodes.map((node) => [node.id, node.x, node.y]);
 }
 
 // 300ms の自動保存を待ち、保存された本体の nodes の ID の並びを確かめる
@@ -462,7 +398,7 @@ describe("ページの兄弟の並べ替え（隠れた兄弟）", () => {
 
     pressAlt("ArrowDown");
     expect(screen.getByText(HIDDEN_BEYOND_MESSAGE)).toBeInTheDocument();
-    const nodes = exportedMap().nodes;
+    const nodes = exportedMap(mockDownloadMapJson).nodes;
     expect(nodes.map((node) => node.id)).toEqual([1, 2, 4, 3]);
     // 隠れた L は消えずに残る
     expect(nodes.filter((node) => node.label === "L")).toEqual([
@@ -485,7 +421,7 @@ describe("ページの兄弟の並べ替え（保存と書き出し）", () => {
     const stored = storedMap()!;
     expect(Object.keys(stored).sort()).toEqual(["layoutMode", "nodes", "version"]);
     expect(stored).toMatchObject({ version: 3, layoutMode: "manual" });
-    const exported = exportedMap();
+    const exported = exportedMap(mockDownloadMapJson);
     expect(exported).toMatchObject({ version: 3, layoutMode: "manual" });
     expect(exported.nodes).toEqual(stored.nodes);
   });

@@ -1,26 +1,33 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import Home from "@/app/page";
+import {
+  exportedMap,
+  type ExportedMap,
+  type ExportedNode,
+  redoButton,
+  renderPage,
+  selectNode,
+  stageContainer,
+  storedMap,
+  undoButton,
+  v3Json,
+} from "@/app/testing/pageTestHelpers";
 import {
   lastWorldContainer,
   mockNodePointerHandlers,
-  mockStageBounds,
   mockStageHandlers,
   pointer,
-  renderReady,
   resetMapStageTestRuntime,
 } from "@/components/map/testing/mapStageTestRuntime";
 import { ILLUSTRATED_NODE_HEIGHT, SIBLING_VERTICAL_GAP } from "@/config/shapes";
 import { createJpegDataUrl } from "@/testing/jpegFixture";
-import { activeMapBodyKey, readActiveMapJson, seedMapLibrary } from "@/testing/mapLibraryTestStorage";
+import { activeMapBodyKey, seedMapLibrary } from "@/testing/mapLibraryTestStorage";
 
 // Pixiだけを差し替え、MapStage・NodeLabelEditor・useNodes・履歴・保存hookは本物を通す
-jest.mock("pixi.js", () => {
-  const runtime = jest.requireActual<typeof import("@/components/map/testing/mapStageTestRuntime")>(
-    "@/components/map/testing/mapStageTestRuntime",
-  );
-  return runtime.createMockPixiModule();
-});
+jest.mock("pixi.js", () => (
+  jest.requireActual<typeof import("@/app/testing/pageModuleMocks")>("@/app/testing/pageModuleMocks")
+    .createPagePixiModuleMock()
+));
 
 const mockGenerateIllustrationThumbnail = jest.fn();
 jest.mock("@/services/illustration/illustrationGeneration", () => {
@@ -43,9 +50,10 @@ jest.mock("@/services/persistence/mapJsonDownload", () => {
 });
 
 // jsdomはcanvasの2D contextを持たないため、文字幅の測定・PNG化・ダウンロードだけを差し替える
-jest.mock("@/services/imageExport/mapTextMeasurement", () => ({
-  createMapTextMeasurer: () => (text: string) => text.length * 8,
-}));
+jest.mock("@/services/imageExport/mapTextMeasurement", () => (
+  jest.requireActual<typeof import("@/app/testing/pageModuleMocks")>("@/app/testing/pageModuleMocks")
+    .createMapTextMeasurementModuleMock()
+));
 
 const mockDownloadMapImage = jest.fn();
 jest.mock("@/services/imageExport/mapImageDownload", () => ({
@@ -64,19 +72,6 @@ const OLD_IMAGE = "data:image/jpeg;base64,T0xE";
 const SUCCESS_MESSAGE = "枝を複製しました。Fキーで選択ノードへ移動できます。";
 const FAILURE_MESSAGE = "枝を複製できませんでした。";
 
-type ExportedNode = {
-  id: number;
-  parentId: number | null;
-  label: string;
-  importance: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  illustration?: string;
-};
-type ExportedMap = { version: number; layoutMode: string; nodes: ExportedNode[] };
-
 type Deferred<T> = {
   promise: Promise<T>;
   resolve: (value: T) => void;
@@ -88,23 +83,6 @@ function deferred<T>(): Deferred<T> {
     resolve = onResolve;
   });
   return { promise, resolve };
-}
-
-function v3Json(nodes: Array<Partial<ExportedNode> & { id: number }>): string {
-  return `${JSON.stringify({
-    version: 3,
-    layoutMode: "manual",
-    nodes: nodes.map((node) => ({
-      parentId: null,
-      x: 250,
-      y: 170,
-      width: 100,
-      height: 60,
-      label: "",
-      importance: "medium",
-      ...node,
-    })),
-  }, null, 2)}\n`;
 }
 
 // 親（画面上の中心300,200）と子（中心450,200）の2ノード
@@ -124,50 +102,14 @@ function jsonFile(text: string): File {
   return file;
 }
 
-function stageContainer(): HTMLElement {
-  return document.querySelector<HTMLElement>(".cursor-crosshair")!;
-}
-
-async function renderPage() {
-  const rendered = await renderReady(<Home />);
-  mockStageBounds(stageContainer());
-  return rendered;
-}
-
 function duplicateButton() {
   return screen.getByRole("button", { name: "枝を複製" });
-}
-
-function undoButton() {
-  return screen.getByRole("button", { name: "元に戻す" });
-}
-
-function redoButton() {
-  return screen.getByRole("button", { name: "やり直す" });
-}
-
-// 直近の描画で登録されたノードのpointerdownで選択し、同じpointerで離す（indexはnodes配列の順）
-function selectNode(index: number, nodeCount: number, x = 300, y = 200) {
-  act(() => {
-    mockNodePointerHandlers.at(index - nodeCount)?.pointerdown?.(pointer(x, y));
-    mockStageHandlers.pointerup?.(pointer(x, y));
-  });
 }
 
 // ノード上のダブルクリックで、本物のNodeLabelEditorを開く
 function openLabelEditor(x: number, y: number): HTMLInputElement {
   fireEvent.doubleClick(stageContainer(), { clientX: x, clientY: y });
   return screen.getByTestId("node-label-input") as HTMLInputElement;
-}
-
-function exportedMap(): ExportedMap {
-  fireEvent.click(screen.getByRole("button", { name: "JSON書き出し" }));
-  return JSON.parse(mockDownloadMapJson.mock.lastCall![0] as string) as ExportedMap;
-}
-
-function storedMap(): ExportedMap | null {
-  const stored = readActiveMapJson(window.localStorage);
-  return stored === null ? null : JSON.parse(stored) as ExportedMap;
 }
 
 function worldPosition() {
@@ -194,7 +136,7 @@ function byPosition(nodes: readonly ExportedNode[]): ExportedNode[] {
 }
 
 function exportedByPosition(): ExportedNode[] {
-  return byPosition(exportedMap().nodes);
+  return byPosition(exportedMap(mockDownloadMapJson).nodes);
 }
 
 const PARENT = { id: 0, parentId: null, label: "親", importance: "high", x: 250, y: 170, width: 100, height: 60 };
@@ -370,20 +312,20 @@ describe("ページの枝の複製の境界", () => {
       mockNodePointerHandlers.at(-2)?.pointerdown?.(pointer(300, 200));
       mockStageHandlers.pointermove?.(pointer(340, 240));
     });
-    const moved = exportedMap().nodes;
+    const moved = exportedMap(mockDownloadMapJson).nodes;
     expect(moved[0]).toMatchObject({ x: 290, y: 210 });
 
     await user.click(duplicateButton());
-    const duplicated = exportedMap().nodes;
+    const duplicated = exportedMap(mockDownloadMapJson).nodes;
     expect(duplicated).toHaveLength(4);
     act(() => {
       mockStageHandlers.pointermove?.(pointer(500, 500));
       mockStageHandlers.pointerup?.(pointer(500, 500));
     });
 
-    expect(exportedMap().nodes).toEqual(duplicated);
+    expect(exportedMap(mockDownloadMapJson).nodes).toEqual(duplicated);
     await user.click(undoButton());
-    expect(exportedMap().nodes).toEqual(moved);
+    expect(exportedMap(mockDownloadMapJson).nodes).toEqual(moved);
   });
 
   it("生成中に複製しても、旧生成結果を複製先へ添付・表示しない", async () => {
@@ -402,7 +344,7 @@ describe("ページの枝の複製の境界", () => {
 
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "ノードに設定" })).not.toBeInTheDocument();
-    expect(exportedMap().nodes.every((node) => node.illustration === undefined)).toBe(true);
+    expect(exportedMap(mockDownloadMapJson).nodes.every((node) => node.illustration === undefined)).toBe(true);
   });
 
   it("複製できないときは失敗通知を出し、マップ・選択・履歴を変えない", async () => {
@@ -411,13 +353,13 @@ describe("ページの枝の複製の境界", () => {
     seedMapLibrary(window.localStorage, [{ json: v3Json([{ id: 1, label: "唯一", y: 1e300 }]) }]);
     await renderPage();
     selectNode(0, 1);
-    const before = exportedMap();
+    const before = exportedMap(mockDownloadMapJson);
 
     await user.click(duplicateButton());
 
     expect(within(screen.getByRole("banner")).getByRole("alert")).toHaveTextContent(FAILURE_MESSAGE);
     expect(screen.queryByText(SUCCESS_MESSAGE)).not.toBeInTheDocument();
-    expect(exportedMap()).toEqual(before);
+    expect(exportedMap(mockDownloadMapJson)).toEqual(before);
     expect(undoButton()).toBeDisabled();
     expect(duplicateButton()).toBeEnabled();
     expect(screen.queryByText("ノードを選択してください")).not.toBeInTheDocument();
@@ -436,14 +378,14 @@ describe("ページの枝の複製の境界", () => {
     selectNode(0, 3);
     await user.click(duplicateButton());
     expect(screen.getByText(SUCCESS_MESSAGE)).toBeInTheDocument();
-    expect(exportedMap().nodes).toHaveLength(4);
+    expect(exportedMap(mockDownloadMapJson).nodes).toHaveLength(4);
 
     selectNode(1, 4, 450, 200);
     await user.click(duplicateButton());
 
     expect(screen.queryByText(SUCCESS_MESSAGE)).not.toBeInTheDocument();
     expect(within(screen.getByRole("banner")).getByRole("alert")).toHaveTextContent(FAILURE_MESSAGE);
-    expect(exportedMap().nodes).toHaveLength(4);
+    expect(exportedMap(mockDownloadMapJson).nodes).toHaveLength(4);
   });
 
   it("複製した枝をV3としてlocalStorageへ1回保存し、再表示後も維持する", async () => {
@@ -473,7 +415,7 @@ describe("ページの枝の複製の境界", () => {
     unmount();
     resetMapStageTestRuntime();
     await renderPage();
-    expect(exportedMap().nodes).toEqual(written.nodes);
+    expect(exportedMap(mockDownloadMapJson).nodes).toEqual(written.nodes);
   });
 
   it("複製した枝をJSONへ書き出し、読み込み後も親子関係と画像を維持する", async () => {
@@ -482,7 +424,7 @@ describe("ページの枝の複製の境界", () => {
     const { unmount } = await renderPage();
     selectNode(0, 2);
     await user.click(duplicateButton());
-    const exported = exportedMap();
+    const exported = exportedMap(mockDownloadMapJson);
     const json = mockDownloadMapJson.mock.lastCall![0] as string;
     expect(exported).toMatchObject({ version: 3, layoutMode: "manual" });
     expect(byPosition(exported.nodes)).toEqual(ILLUSTRATED_BRANCH);
@@ -494,6 +436,6 @@ describe("ページの枝の複製の境界", () => {
     await user.upload(container.querySelector<HTMLInputElement>('input[type="file"]')!, jsonFile(json));
 
     await waitFor(() => expect(screen.getByText("マップを読み込みました。")).toBeInTheDocument());
-    expect(exportedMap()).toEqual(exported);
+    expect(exportedMap(mockDownloadMapJson)).toEqual(exported);
   });
 });
