@@ -1,25 +1,30 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import Home from "@/app/page";
+import {
+  dialog,
+  exportedMap,
+  type ExportedNode,
+  redoButton,
+  renderPage,
+  selectNode,
+  storedMap,
+  undoButton,
+  type V3LayoutMode,
+  type V3SeedNode,
+  v3Json,
+} from "@/app/testing/pageTestHelpers";
 import {
   lastWorldContainer,
-  mockNodePointerHandlers,
-  mockStageBounds,
-  mockStageHandlers,
-  pointer,
-  renderReady,
   resetMapStageTestRuntime,
 } from "@/components/map/testing/mapStageTestRuntime";
-import { readActiveMapJson, seedMapLibrary } from "@/testing/mapLibraryTestStorage";
+import { seedMapLibrary } from "@/testing/mapLibraryTestStorage";
 
 // Pixi・イラスト生成・ダウンロード・画像化だけを差し替え、Home から MapEditor・ヘッダー・
 // 箇条書きの取り込みのダイアログ・useNodes・履歴・保存までは本物を通す
-jest.mock("pixi.js", () => {
-  const runtime = jest.requireActual<typeof import("@/components/map/testing/mapStageTestRuntime")>(
-    "@/components/map/testing/mapStageTestRuntime",
-  );
-  return runtime.createMockPixiModule();
-});
+jest.mock("pixi.js", () => (
+  jest.requireActual<typeof import("@/app/testing/pageModuleMocks")>("@/app/testing/pageModuleMocks")
+    .createPagePixiModuleMock()
+));
 
 jest.mock("@/services/illustration/illustrationGeneration", () => {
   const actual = jest.requireActual("@/services/illustration/illustrationGeneration");
@@ -35,9 +40,10 @@ jest.mock("@/services/persistence/mapJsonDownload", () => {
   };
 });
 
-jest.mock("@/services/imageExport/mapTextMeasurement", () => ({
-  createMapTextMeasurer: () => (text: string) => text.length * 8,
-}));
+jest.mock("@/services/imageExport/mapTextMeasurement", () => (
+  jest.requireActual<typeof import("@/app/testing/pageModuleMocks")>("@/app/testing/pageModuleMocks")
+    .createMapTextMeasurementModuleMock()
+));
 
 jest.mock("@/services/imageExport/mapImageDownload", () => ({
   downloadMapImage: jest.fn(),
@@ -47,39 +53,7 @@ jest.mock("@/services/imageExport/mapPngRasterizer", () => ({
   rasterizeMapSvgToPng: jest.fn(),
 }));
 
-type ExportedNode = {
-  id: number;
-  parentId: number | null;
-  label: string;
-  importance: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
-type ExportedMap = { version: number; layoutMode: string; nodes: ExportedNode[] };
-
 const SUCCESS_MESSAGE_TAIL = "件のノードを追加しました。Fキーで選択ノードへ移動できます。";
-
-function v3Json(
-  nodes: Array<Partial<ExportedNode> & { id: number }>,
-  layoutMode: "manual" | "auto" = "manual",
-): string {
-  return `${JSON.stringify({
-    version: 3,
-    layoutMode,
-    nodes: nodes.map((node) => ({
-      parentId: null,
-      x: 250,
-      y: 170,
-      width: 100,
-      height: 60,
-      label: "",
-      importance: "medium",
-      ...node,
-    })),
-  }, null, 2)}\n`;
-}
 
 // 旅行（子: 準備）と仕事の2本の木
 const TRAVEL_MAP = [
@@ -88,26 +62,12 @@ const TRAVEL_MAP = [
   { id: 3, label: "仕事", y: 300 },
 ];
 
-function seed(nodes: Array<Partial<ExportedNode> & { id: number }>, layoutMode: "manual" | "auto" = "manual") {
+function seed(nodes: readonly V3SeedNode[], layoutMode: V3LayoutMode = "manual") {
   seedMapLibrary(window.localStorage, [{ json: v3Json(nodes, layoutMode) }]);
-}
-
-function stageContainer(): HTMLElement {
-  return document.querySelector<HTMLElement>(".cursor-crosshair")!;
-}
-
-async function renderHome() {
-  const rendered = await renderReady(<Home />);
-  mockStageBounds(stageContainer());
-  return rendered;
 }
 
 function outlineButton(): HTMLElement {
   return within(screen.getByRole("banner")).getByRole("button", { name: "箇条書きから追加" });
-}
-
-function dialog() {
-  return within(screen.getByRole("dialog"));
 }
 
 function textarea(): HTMLTextAreaElement {
@@ -125,14 +85,6 @@ function previewRegion(): HTMLElement {
   return dialog().getByRole("region", { name: "変換結果のプレビュー" });
 }
 
-function undoButton() {
-  return screen.getByRole("button", { name: "元に戻す" });
-}
-
-function redoButton() {
-  return screen.getByRole("button", { name: "やり直す" });
-}
-
 function operationNotices() {
   return screen.queryByTestId("operation-notices");
 }
@@ -148,29 +100,11 @@ async function openPreview(user: ReturnType<typeof userEvent.setup>, text: strin
   expect(dialog().getByRole("heading", { name: "変換結果の確認" })).toBeInTheDocument();
 }
 
-// 直近の描画で登録されたノードの pointerdown で選択し、同じ pointer で離す（index は nodes 配列の順）
-function selectNode(index: number, nodeCount: number) {
-  act(() => {
-    mockNodePointerHandlers.at(index - nodeCount)?.pointerdown?.(pointer(0, 0));
-    mockStageHandlers.pointerup?.(pointer(0, 0));
-  });
-}
-
 // 側面のパネルの「対象ノード」に、選択中のノードの表示名が出る
 function selectedLabel(): string | null {
   const panel = within(screen.getByRole("complementary", { name: "イラスト" }));
   if (panel.queryByText("ノードを選択してください") !== null) return null;
   return panel.getByText("対象ノード").nextElementSibling!.textContent;
-}
-
-function exportedMap(): ExportedMap {
-  fireEvent.click(screen.getByRole("button", { name: "JSON書き出し" }));
-  return JSON.parse(mockDownloadMapJson.mock.lastCall![0] as string) as ExportedMap;
-}
-
-function storedMap(): ExportedMap | null {
-  const stored = readActiveMapJson(window.localStorage);
-  return stored === null ? null : JSON.parse(stored) as ExportedMap;
 }
 
 function byLabel(nodes: readonly ExportedNode[], label: string): ExportedNode {
@@ -193,7 +127,7 @@ describe("ページの箇条書きから追加", () => {
   it("手動配置のマップで、プレビューしてから新しいルートとしてマップの下へ追加し、保存する", async () => {
     seed([{ id: 1, label: "既存" }]);
     const user = userEvent.setup();
-    await renderHome();
+    await renderPage();
 
     await user.click(outlineButton());
     await user.type(textarea(), "- 果物\n  - りんご\n  - みかん\n- 野菜");
@@ -237,7 +171,7 @@ describe("ページの箇条書きから追加", () => {
   it("追加の直後は先頭のルートを選択し、「枝を複製」でその枝を複製する（L-170）", async () => {
     seed([{ id: 1, label: "既存" }]);
     const user = userEvent.setup();
-    await renderHome();
+    await renderPage();
     await openPreview(user, "- 果物\n  - りんご\n  - みかん\n- 野菜");
     await user.click(dialog().getByRole("button", { name: "マップに追加" }));
 
@@ -245,7 +179,7 @@ describe("ページの箇条書きから追加", () => {
     expect(duplicate).toBeEnabled();
     await user.click(duplicate);
 
-    const nodes = exportedMap().nodes;
+    const nodes = exportedMap(mockDownloadMapJson).nodes;
     expect(nodes.map((node) => node.label)).toEqual([
       "既存", "果物", "りんご", "みかん", "野菜", "果物", "りんご", "みかん",
     ]);
@@ -262,12 +196,12 @@ describe("ページの箇条書きから追加", () => {
       { id: 3, label: "B" },
     ], "auto");
     const user = userEvent.setup();
-    await renderHome();
+    await renderPage();
     await openPreview(user, "- X\n- Y\n  - Y1\n- Z");
 
     await user.click(dialog().getByRole("button", { name: "マップに追加" }));
 
-    const nodes = exportedMap().nodes;
+    const nodes = exportedMap(mockDownloadMapJson).nodes;
     expect(nodes).toHaveLength(7);
     const existingMaxY = Math.max(...nodes.slice(0, 3).map((node) => node.y));
     const imported = nodes.slice(3);
@@ -281,7 +215,7 @@ describe("ページの箇条書きから追加", () => {
     it("ノードを選択して開くと、選んだノードの子として追加でき、深さ0の項目がすべてその子になる", async () => {
       seed(TRAVEL_MAP);
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
       selectNode(0, 3);
       await openPreview(user, "- 京都\n  - 清水寺\n- 大阪");
 
@@ -290,7 +224,7 @@ describe("ページの箇条書きから追加", () => {
       await user.click(asChild);
       await user.click(dialog().getByRole("button", { name: "マップに追加" }));
 
-      const nodes = exportedMap().nodes;
+      const nodes = exportedMap(mockDownloadMapJson).nodes;
       expect(nodes).toHaveLength(6);
       expect(byLabel(nodes, "京都").parentId).toBe(1);
       expect(byLabel(nodes, "大阪").parentId).toBe(1);
@@ -300,7 +234,7 @@ describe("ページの箇条書きから追加", () => {
     it("選択していないときは選択肢を出さず、新しいルートとして追加すると伝える", async () => {
       seed(TRAVEL_MAP);
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
 
       await openPreview(user, "- 京都");
 
@@ -311,7 +245,7 @@ describe("ページの箇条書きから追加", () => {
     it("折りたたんだノードの子として追加すると、そのノードを展開する", async () => {
       seed(TRAVEL_MAP);
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
       selectNode(0, 3);
       await user.click(screen.getByRole("button", { name: "枝を折りたたむ" }));
       expect(screen.getByRole("button", { name: "枝を展開" })).toHaveAttribute("aria-expanded", "false");
@@ -319,7 +253,7 @@ describe("ページの箇条書きから追加", () => {
       await openPreview(user, "- 京都");
       await user.click(dialog().getByRole("radio", { name: "選択中のノード「旅行」の子として追加" }));
       await user.click(dialog().getByRole("button", { name: "マップに追加" }));
-      expect(byLabel(exportedMap().nodes, "京都").parentId).toBe(1);
+      expect(byLabel(exportedMap(mockDownloadMapJson).nodes, "京都").parentId).toBe(1);
       // 追加の後は取り込んだ先頭のノードが選択されるので、旅行を選び直して確かめる
       selectNode(0, 4);
 
@@ -334,11 +268,11 @@ describe("ページの箇条書きから追加", () => {
       { id: 3, label: "B" },
     ], "auto");
     const user = userEvent.setup();
-    await renderHome();
-    const before = exportedMap().nodes;
+    await renderPage();
+    const before = exportedMap(mockDownloadMapJson).nodes;
     await openPreview(user, "- X\n  - X1\n- Y");
     await user.click(dialog().getByRole("button", { name: "マップに追加" }));
-    const after = exportedMap().nodes;
+    const after = exportedMap(mockDownloadMapJson).nodes;
     expect(after).toHaveLength(6);
     // 自動配置の全体の再配置で既存のノードも動く。Undo でその移動も戻ることを確かめるための前提
     expect(after.slice(0, 3)).not.toEqual(before);
@@ -346,18 +280,18 @@ describe("ページの箇条書きから追加", () => {
 
     await user.click(undoButton());
 
-    expect(exportedMap().nodes).toEqual(before);
+    expect(exportedMap(mockDownloadMapJson).nodes).toEqual(before);
     expect(screen.queryByText(new RegExp(SUCCESS_MESSAGE_TAIL))).not.toBeInTheDocument();
 
     await user.click(redoButton());
 
-    expect(exportedMap().nodes).toEqual(after);
+    expect(exportedMap(mockDownloadMapJson).nodes).toEqual(after);
   });
 
   it("キャンセルで閉じてもテキストを残し、追加に成功した後は空にする", async () => {
     seed([{ id: 1, label: "既存" }]);
     const user = userEvent.setup();
-    await renderHome();
+    await renderPage();
     await openWithText(user, "- 残す");
     await user.click(dialog().getByRole("button", { name: "キャンセル" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -375,7 +309,7 @@ describe("ページの箇条書きから追加", () => {
   it("開いた後にマップが置き換わって選択していたノードが無くなると、追加せずダイアログ内で知らせる（L-002・L-037）", async () => {
     seed([{ id: 1, label: "旅行" }]);
     const user = userEvent.setup();
-    await renderHome();
+    await renderPage();
     let resolveText!: (text: string) => void;
     const file = new File(["{}"], "map.json", { type: "application/json" });
     Object.defineProperty(file, "text", {
@@ -394,7 +328,7 @@ describe("ページの箇条書きから追加", () => {
       resolveText(v3Json([{ id: 10, label: "別1" }, { id: 11, label: "別2", x: 400 }]));
     });
     await waitFor(() => expect(screen.getByText("マップを読み込みました。")).toBeInTheDocument());
-    const replaced = exportedMap().nodes;
+    const replaced = exportedMap(mockDownloadMapJson).nodes;
     expect(replaced.map((node) => node.label)).toEqual(["別1", "別2"]);
     // 置き換えで外れた選択を、置き換わったマップのノードで選び直しておく
     selectNode(0, 2);
@@ -409,7 +343,7 @@ describe("ページの箇条書きから追加", () => {
       "選択していたノードが見つからないため、追加できませんでした。「新しいルートとして追加」を選び直してください。",
     ));
     expect(dialog().getByRole("heading", { name: "変換結果の確認" })).toBeInTheDocument();
-    expect(exportedMap().nodes).toEqual(replaced);
+    expect(exportedMap(mockDownloadMapJson).nodes).toEqual(replaced);
     expect((undoButton() as HTMLButtonElement).disabled).toBe(undoDisabled);
     expect(selectedLabel()).toBe("別1");
   });
@@ -417,7 +351,7 @@ describe("ページの箇条書きから追加", () => {
   describe("入力のエラー", () => {
     it("空のまま「プレビュー」を押すと、入力欄にエラーを出してプレビューへ進まない", async () => {
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
       await user.click(outlineButton());
 
       await user.click(dialog().getByRole("button", { name: "プレビュー" }));
@@ -431,7 +365,7 @@ describe("ページの箇条書きから追加", () => {
 
     it("空行を除いて10,001行ならエラーでプレビューへ進まず、10,000行ならプレビューの先頭200件を表示する", async () => {
       const user = userEvent.setup();
-      await renderHome();
+      await renderPage();
       await openWithText(user, "A\n".repeat(10_001));
 
       await user.click(dialog().getByRole("button", { name: "プレビュー" }));
