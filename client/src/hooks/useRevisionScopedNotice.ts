@@ -15,5 +15,10 @@ export function useRevisionScopedNotice(documentRevision: number) {
     setStored({ notice: next, revision: documentRevision });
   }, [documentRevision]);
 
-  return { notice, publishNotice };
+  // 成功した操作の後に、前の通知を残さないために枠を空にする
+  const clearNotice = useCallback(() => {
+    setStored(null);
+  }, []);
+
+  return { notice, publishNotice, clearNotice };
 }

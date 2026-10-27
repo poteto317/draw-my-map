@@ -53,4 +53,23 @@ describe("useRevisionScopedNotice", () => {
     act(() => result.current.publishNotice(ERROR));
     expect(result.current.notice).toEqual(ERROR);
   });
+
+  it("clearNoticeで枠を空にし、続けて出した通知は表示する", () => {
+    const { result } = renderNotice(0);
+    act(() => result.current.publishNotice(STATUS));
+
+    act(() => result.current.clearNotice());
+    expect(result.current.notice).toBeNull();
+
+    act(() => result.current.publishNotice(ERROR));
+    expect(result.current.notice).toEqual(ERROR);
+  });
+
+  it("clearNoticeの参照はdocumentRevisionが変わっても同じ", () => {
+    const { result, rerender } = renderNotice(0);
+    const before = result.current.clearNotice;
+
+    rerender({ revision: 1 });
+    expect(result.current.clearNotice).toBe(before);
+  });
 });
