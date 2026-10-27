@@ -496,7 +496,7 @@ export type ChangeNodeIndentResult =
 
 ### 2.9 途中への親ノード挿入の型
 
-途中への親ノード挿入（Phase 14。[features.md の 16 章](./features.md#16-途中への親ノード挿入)）で受け渡す型です。いずれもメモリ上だけで使い、保存形式（V3）・JSON・`localStorage`・編集履歴には現れません。`useNodes.insertParentNode` の戻り値の型も、domain の `formatNodeParentInsertionFailureNotice`（`client/src/domain/nodes/nodeParentInsertionMessages.ts`）から参照するため、`hooks/useNodes.ts` ではなく domain に置き、`hooks/useNodes.ts` から再 export しません（2.8 節と同じ）。
+途中への親ノード挿入（Phase 14。[features.md の 16 章](./features.md#16-途中への親ノード挿入)）で受け渡す型です。いずれもメモリ上だけで使い、保存形式（V3）・JSON・`localStorage`・編集履歴には現れません。`useNodes.insertParentNode` の戻り値の型 `InsertParentNodeResult` も、挿入の型を1か所にまとめるため `hooks/useNodes.ts` ではなく domain に置き、`hooks/useNodes.ts` から再 export しません。`useNodes` と `useNodeParentInsertionAction` はどちらも domain から import します。domain の `formatNodeParentInsertionFailureNotice`（`client/src/domain/nodes/nodeParentInsertionMessages.ts`）は `NodeParentInsertionFailureReason` だけを参照し、hooks を import しません。
 
 #### `NodeParentInsertionFailureReason` / `NodeParentInsertionResult` (`client/src/domain/nodes/nodeParentInsertion.ts`)
 `insertParentNode(nodes, nodeId, newNodeId, visibleNodeIds, mode): NodeParentInsertionResult` の結果の型です。
