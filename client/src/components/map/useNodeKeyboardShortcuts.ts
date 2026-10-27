@@ -37,7 +37,8 @@ export function useNodeKeyboardShortcuts({
       if (event.key === "Tab") {
         event.preventDefault();
         createdId = onAddChildNode(selectedNodeId);
-      } else if (event.key === "Enter") {
+      } else if (event.key === "Enter" && !event.altKey) {
+        // Alt を含む Enter は親の挿入のショートカットに任せる。兄弟を足さず、既定動作も止めない
         event.preventDefault();
         createdId = onAddSiblingNode(selectedNodeId);
       } else if (event.key === "Delete" || event.key === "Backspace") {

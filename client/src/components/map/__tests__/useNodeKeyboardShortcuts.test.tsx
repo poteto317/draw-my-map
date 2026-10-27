@@ -35,6 +35,12 @@ function dispatchKey(key: string) {
   return event;
 }
 
+function dispatchKeyWith(init: KeyboardEventInit) {
+  const event = new KeyboardEvent("keydown", { cancelable: true, ...init });
+  window.dispatchEvent(event);
+  return event;
+}
+
 describe("useNodeKeyboardShortcuts", () => {
   afterEach(() => jest.restoreAllMocks());
 
@@ -186,5 +192,43 @@ describe("useNodeKeyboardShortcuts", () => {
     expect(options.onAddChildNode).toHaveBeenCalledWith(1);
     expect(addListener.mock.calls.filter(([type]) => type === "keydown")).toHaveLength(1);
     addListener.mockRestore();
+  });
+
+  it.each([
+    { key: "Enter", altKey: true },
+    { key: "Enter", altKey: true, ctrlKey: true },
+    { key: "Enter", altKey: true, shiftKey: true },
+  ])("Alt を含む Enter %j は兄弟を足さず既定動作も止めない", (init) => {
+    const options = createOptions();
+    render(<ShortcutHarness {...options} />);
+
+    const event = dispatchKeyWith(init);
+
+    expect(options.onAddSiblingNode).not.toHaveBeenCalled();
+    expect(options.onStartEditing).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it.each([{ key: "Enter", shiftKey: true }, { key: "Enter", ctrlKey: true }, { key: "Enter", metaKey: true }])(
+    "Alt なしの修飾キー付き Enter %j は従来どおり兄弟を足す",
+    (init) => {
+      const options = createOptions();
+      render(<ShortcutHarness {...options} />);
+
+      const event = dispatchKeyWith(init);
+
+      expect(options.onAddSiblingNode).toHaveBeenCalledWith(1);
+      expect(options.onStartEditing).toHaveBeenCalledWith(3, "");
+      expect(event.defaultPrevented).toBe(true);
+    },
+  );
+
+  it("Alt+Tab は従来どおり子を足す", () => {
+    const options = createOptions();
+    render(<ShortcutHarness {...options} />);
+
+    dispatchKeyWith({ key: "Tab", altKey: true });
+
+    expect(options.onAddChildNode).toHaveBeenCalledWith(1);
   });
 });

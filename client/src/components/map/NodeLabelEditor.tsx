@@ -34,6 +34,11 @@ export function NodeLabelEditor({ node, viewport, value, onChange, onCommit, onC
       onChange={(event) => onChange(event.target.value)}
       onDoubleClick={(event) => event.stopPropagation()}
       onKeyDown={(event) => {
+        // 入力欄が開く前から押し続けていた Enter のリピートで確定しない（押し続けで追加と確定が繰り返されるのを防ぐ）
+        if (event.key === "Enter" && event.repeat) {
+          event.preventDefault();
+          return;
+        }
         if (event.key === "Enter") {
           event.currentTarget.blur();
         } else if (event.key === "Escape") {

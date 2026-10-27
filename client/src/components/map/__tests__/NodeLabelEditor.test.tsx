@@ -142,4 +142,34 @@ describe("NodeLabelEditor", () => {
       fontSize: "28px",
     });
   });
+
+  it("リピートの Enter は確定せず、続く通常の Enter で一度だけ確定する", () => {
+    const { input, onCommit } = renderEditor();
+
+    const notPrevented = fireEvent.keyDown(input, { key: "Enter", repeat: true });
+
+    expect(notPrevented).toBe(false);
+    expect(onCommit).not.toHaveBeenCalled();
+    expect(input).toBeInTheDocument();
+
+    fireEvent.keyDown(input, { key: "Enter", repeat: false });
+
+    expect(onCommit).toHaveBeenCalledTimes(1);
+  });
+
+  it("Alt 付きの Enter（リピートなし）でも確定する", () => {
+    const { input, onCommit } = renderEditor();
+
+    fireEvent.keyDown(input, { key: "Enter", altKey: true });
+
+    expect(onCommit).toHaveBeenCalledTimes(1);
+  });
+
+  it("リピートの Escape は通常どおり取り消す", () => {
+    const { input, onCancel } = renderEditor();
+
+    fireEvent.keyDown(input, { key: "Escape", repeat: true });
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
 });
