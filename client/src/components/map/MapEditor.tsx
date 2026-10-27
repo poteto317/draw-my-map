@@ -11,6 +11,7 @@ import { MapHistoryControls } from "@/components/layout/MapHistoryControls";
 import { NodeCollapseControl } from "@/components/layout/NodeCollapseControl";
 import { NodeDuplicateControl } from "@/components/layout/NodeDuplicateControl";
 import { NodeIndentControl } from "@/components/layout/NodeIndentControl";
+import { NodeParentInsertControl } from "@/components/layout/NodeParentInsertControl";
 import { NodeSiblingOrderControl } from "@/components/layout/NodeSiblingOrderControl";
 import { MapPersistenceControls } from "@/components/layout/MapPersistenceControls";
 import { MapOperationNotice } from "@/components/layout/MapOperationNotice";
@@ -273,6 +274,10 @@ export function MapEditor({
                 canIndent={nodeIndent.canIndent}
                 onOutdent={outdentSelected}
                 onIndent={indentSelected}
+              />
+              <NodeParentInsertControl
+                canInsert={nodeParentInsertion.canInsert}
+                onInsert={nodeParentInsertion.insertSelected}
               />
               <span className="text-sm text-zinc-600 dark:text-zinc-400">
                 {CLIPBOARD_OPERATION_HINT}

@@ -389,6 +389,46 @@ describe("MapEditor", () => {
       });
     }
 
+    function insertButton() {
+      return screen.getByRole("button", { name: "選択中のノードに親を挿入" });
+    }
+
+    it("「親を挿入」を階層のグループの後、クリップボードの案内の前に置く", async () => {
+      await renderEditor({ storage: createTestStorageSession({ initialJson: parentWithTwoChildrenJson }) });
+
+      const group = screen.getByRole("group", { name: "階層" });
+      const hint = screen.getByText((content) => content.startsWith("枝をコピー: Ctrl/Cmd+C"));
+      expect(group.compareDocumentPosition(insertButton()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(insertButton().compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it("未選択では「親を挿入」が無効", async () => {
+      await renderEditor({ storage: createTestStorageSession({ initialJson: parentWithTwoChildrenJson }) });
+
+      expect(insertButton()).toBeDisabled();
+    });
+
+    it("A の選択では挿入が有効で階層を下げるは無効、R の選択では挿入が有効で階層を上げるは無効（canInsert と canIndent を取り違えない）", async () => {
+      await renderEditor({ storage: createTestStorageSession({ initialJson: parentWithTwoChildrenJson }) });
+
+      selectNode(1, 3);
+      expect(insertButton()).toBeEnabled();
+      expect(screen.getByRole("button", { name: "枝の階層を下げる" })).toBeDisabled();
+
+      selectNode(0, 3);
+      expect(insertButton()).toBeEnabled();
+      expect(screen.getByRole("button", { name: "枝の階層を上げる" })).toBeDisabled();
+    });
+
+    it("A を選んで「親を挿入」をクリックすると、ラベルの入力欄にフォーカスが移る", async () => {
+      await renderEditor({ storage: createTestStorageSession({ initialJson: parentWithTwoChildrenJson }) });
+      selectNode(1, 3);
+
+      await userEvent.click(insertButton());
+
+      expect(document.activeElement).toBe(screen.getByTestId("node-label-input"));
+    });
+
     it("A で Alt+Enter を押すと A の親を挿入し、新しいノードのラベルを空の入力欄で編集し始め、通知は出さない", async () => {
       await renderEditor({ storage: createTestStorageSession({ initialJson: parentWithTwoChildrenJson }) });
       selectNode(1, 3);
