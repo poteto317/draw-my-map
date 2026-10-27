@@ -1,5 +1,6 @@
 import {
   createChildNode,
+  createParentNode,
   createRootNode,
   createSiblingNode,
 } from "@/domain/nodes/nodePlacement";
@@ -106,3 +107,44 @@ describe("node placement", () => {
     });
   });
 });
+
+describe("createParentNode", () => {
+  const target = createTestNode({
+    id: 4,
+    parentId: 1,
+    x: 220,
+    y: 100,
+    width: 140,
+    height: 116,
+    label: "T",
+    importance: "high",
+    illustration: "data:image/png;base64,AAAA",
+  });
+
+  it("copies parent, position and importance, and uses default size and label", () => {
+    const before = JSON.parse(JSON.stringify(target));
+    const result = createParentNode(target, 50);
+
+    expect(result).toEqual({
+      id: 50,
+      parentId: 1,
+      x: 220,
+      y: 100,
+      width: 100,
+      height: 60,
+      label: "",
+      importance: "high",
+    });
+    expect("illustration" in result).toBe(false);
+    expect(target).toEqual(before);
+  });
+
+  it("copies a low importance", () => {
+    expect(createParentNode({ ...target, importance: "low" }, 50).importance).toBe("low");
+  });
+
+  it("keeps a null parent for a root target", () => {
+    expect(createParentNode({ ...target, parentId: null }, 50).parentId).toBeNull();
+  });
+});
+
