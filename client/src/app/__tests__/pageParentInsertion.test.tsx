@@ -1,24 +1,28 @@
-import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import Home from "@/app/page";
 import {
-  mockNodePointerHandlers,
-  mockStageBounds,
-  mockStageHandlers,
-  pointer,
-  renderReady,
-  resetMapStageTestRuntime,
-} from "@/components/map/testing/mapStageTestRuntime";
-import { readActiveMapJson, seedMapLibrary } from "@/testing/mapLibraryTestStorage";
+  exportedMap,
+  type ExportedNode,
+  headerButton,
+  redoButton,
+  renderPage,
+  selectNode,
+  stageContainer,
+  storedMap,
+  undoButton,
+  v3Json,
+  type V3LayoutMode,
+  type V3SeedNode,
+} from "@/app/testing/pageTestHelpers";
+import { resetMapStageTestRuntime } from "@/components/map/testing/mapStageTestRuntime";
+import { seedMapLibrary } from "@/testing/mapLibraryTestStorage";
 
 // Pixi・イラスト生成・ダウンロード・画像化だけを差し替え、Home から MapEditor・ヘッダー・
 // MapStage のショートカット・useNodes・折りたたみ・履歴・保存までは本物を通す
-jest.mock("pixi.js", () => {
-  const runtime = jest.requireActual<typeof import("@/components/map/testing/mapStageTestRuntime")>(
-    "@/components/map/testing/mapStageTestRuntime",
-  );
-  return runtime.createMockPixiModule();
-});
+jest.mock("pixi.js", () => (
+  jest.requireActual<typeof import("@/app/testing/pageModuleMocks")>("@/app/testing/pageModuleMocks")
+    .createPagePixiModuleMock()
+));
 
 jest.mock("@/services/illustration/illustrationGeneration", () => {
   const actual = jest.requireActual("@/services/illustration/illustrationGeneration");
@@ -35,9 +39,10 @@ jest.mock("@/services/persistence/mapJsonDownload", () => {
 });
 
 // jsdomはcanvasの2D contextを持たないため、文字幅の測定・PNG化・ダウンロードだけを差し替える
-jest.mock("@/services/imageExport/mapTextMeasurement", () => ({
-  createMapTextMeasurer: () => (text: string) => text.length * 8,
-}));
+jest.mock("@/services/imageExport/mapTextMeasurement", () => (
+  jest.requireActual<typeof import("@/app/testing/pageModuleMocks")>("@/app/testing/pageModuleMocks")
+    .createMapTextMeasurementModuleMock()
+));
 
 jest.mock("@/services/imageExport/mapImageDownload", () => ({
   downloadMapImage: jest.fn(),
@@ -52,40 +57,8 @@ const INSERT_FAILED_MESSAGE = "親ノードを挿入できませんでした。"
 const B_MOVED_UP_MESSAGE = "枝を上へ移動しました（見えている兄弟の3件中1番目）。";
 const BASIC_IDS = [1, 2, 3, 4, 5];
 
-type ExportedNode = {
-  id: number;
-  parentId: number | null;
-  label: string;
-  importance: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
-type ExportedMap = { version: number; layoutMode: string; nodes: ExportedNode[] };
-
-function v3Json(
-  nodes: Array<Partial<ExportedNode> & { id: number }>,
-  layoutMode: "manual" | "auto" = "manual",
-): string {
-  return `${JSON.stringify({
-    version: 3,
-    layoutMode,
-    nodes: nodes.map((node) => ({
-      parentId: null,
-      x: 250,
-      y: 170,
-      width: 100,
-      height: 60,
-      label: "",
-      importance: "medium",
-      ...node,
-    })),
-  }, null, 2)}\n`;
-}
-
 // R の子 A・B・C と、C の子 C1。中心は R (50, 230)、A (270, 30)、B (270, 230)、C (270, 430)、C1 (490, 430)
-const BASIC_NODES: Array<Partial<ExportedNode> & { id: number }> = [
+const BASIC_NODES: V3SeedNode[] = [
   { id: 1, label: "R", x: 0, y: 200 },
   { id: 2, parentId: 1, label: "A", x: 220, y: 0 },
   { id: 3, parentId: 1, label: "B", x: 220, y: 200 },
@@ -93,7 +66,7 @@ const BASIC_NODES: Array<Partial<ExportedNode> & { id: number }> = [
   { id: 5, parentId: 4, label: "C1", x: 440, y: 400 },
 ];
 
-function storeMap(nodes: Array<Partial<ExportedNode> & { id: number }>, layoutMode: "manual" | "auto" = "manual") {
+function storeMap(nodes: readonly V3SeedNode[], layoutMode: V3LayoutMode = "manual") {
   seedMapLibrary(window.localStorage, [{ json: v3Json(nodes, layoutMode) }]);
 }
 
@@ -101,38 +74,8 @@ function storeBasicMap() {
   storeMap(BASIC_NODES);
 }
 
-function stageContainer(): HTMLElement {
-  return document.querySelector<HTMLElement>(".cursor-crosshair")!;
-}
-
-async function renderPage() {
-  const rendered = await renderReady(<Home />);
-  mockStageBounds(stageContainer());
-  return rendered;
-}
-
-function headerButton(name: string) {
-  return within(screen.getByRole("banner")).getByRole("button", { name });
-}
-
 function insertButton() {
   return headerButton(INSERT_BUTTON_NAME);
-}
-
-function undoButton() {
-  return screen.getByRole("button", { name: "元に戻す" });
-}
-
-function redoButton() {
-  return screen.getByRole("button", { name: "やり直す" });
-}
-
-// 直近の描画で登録されたノードのpointerdownで選択し、同じpointerで離す（indexは nodes 配列の順（折りたたみや表示レベルで隠れたノードも数える））
-function selectNode(index: number, nodeCount: number, x: number, y: number) {
-  act(() => {
-    mockNodePointerHandlers.at(index - nodeCount)?.pointerdown?.(pointer(x, y));
-    mockStageHandlers.pointerup?.(pointer(x, y));
-  });
 }
 
 function selectBasicB() {
@@ -158,18 +101,8 @@ function expectLabelInputFocused() {
   expect(document.activeElement?.getAttribute("data-testid")).toBe("node-label-input");
 }
 
-function exportedMap(): ExportedMap {
-  fireEvent.click(screen.getByRole("button", { name: "JSON書き出し" }));
-  return JSON.parse(mockDownloadMapJson.mock.lastCall![0] as string) as ExportedMap;
-}
-
 function exportedNodeCount(): number {
-  return exportedMap().nodes.length;
-}
-
-function storedMap(): ExportedMap | null {
-  const stored = readActiveMapJson(window.localStorage);
-  return stored === null ? null : JSON.parse(stored) as ExportedMap;
+  return exportedMap(mockDownloadMapJson).nodes.length;
 }
 
 function storedNode(id: number): ExportedNode | undefined {
@@ -229,7 +162,7 @@ describe("ページの親の挿入（ボタン）", () => {
     expect(labelInput().value).toBe("");
     expect(screen.queryByTestId("operation-notices")).not.toBeInTheDocument();
     // JSON 書き出しの nodes の順も保存と同じ（書き出しは別の枠に通知を出すので、通知バーを確かめた後に行う）
-    expect(exportedMap().nodes.map((node) => node.id)).toEqual([1, 2, inserted.id, 3, 4, 5]);
+    expect(exportedMap(mockDownloadMapJson).nodes.map((node) => node.id)).toEqual([1, 2, inserted.id, 3, 4, 5]);
 
     const input = labelInput();
     fireEvent.change(input, { target: { value: "分類" } });
@@ -263,10 +196,10 @@ describe("ページの親の挿入（ボタン）", () => {
     const [inserted] = storedNewNodes(BASIC_IDS);
 
     await user.click(undoButton());
-    expect(exportedMap().nodes.find((node) => node.id === inserted.id)?.label).toBe("");
+    expect(exportedMap(mockDownloadMapJson).nodes.find((node) => node.id === inserted.id)?.label).toBe("");
 
     await user.click(undoButton());
-    const undone = exportedMap().nodes;
+    const undone = exportedMap(mockDownloadMapJson).nodes;
     expect(undone).toHaveLength(5);
     expect(undone.find((node) => node.id === 3)).toMatchObject({ parentId: 1, x: 220, y: 200 });
     await expectStoredParents(BASIC_IDS, [[1, null], [2, 1], [3, 1], [4, 1], [5, 4]]);
@@ -274,7 +207,7 @@ describe("ページの親の挿入（ボタン）", () => {
     await user.click(redoButton());
     await user.click(redoButton());
     expect(screen.queryByTestId("node-label-input")).toBeNull();
-    const redone = exportedMap().nodes;
+    const redone = exportedMap(mockDownloadMapJson).nodes;
     expect(redone.find((node) => node.id === inserted.id)).toMatchObject({ parentId: 1, label: "分類" });
     expect(redone.find((node) => node.id === 3)).toMatchObject({ parentId: inserted.id, x: 440, y: 200 });
     await expectStoredParents(BASIC_IDS, [[1, null], [2, 1], ["new", 1], [3, "new"], [4, 1], [5, 4]]);
@@ -385,7 +318,7 @@ describe("ページの親の挿入（止まる場面。L-061）", () => {
     pressAltEnter(labelInput());
 
     expect(exportedNodeCount()).toBe(5);
-    expect(exportedMap().nodes.find((node) => node.id === 3)?.parentId).toBe(1);
+    expect(exportedMap(mockDownloadMapJson).nodes.find((node) => node.id === 3)?.parentId).toBe(1);
   });
 
   it("検索の入力欄への Alt+Enter では挿入しない", async () => {
@@ -523,7 +456,7 @@ describe("ページの親の挿入（自動配置）", () => {
       { id: 2, label: "二", x: 600, y: 500 },
     ], "auto");
     await renderPage();
-    const first = exportedMap().nodes.find((node) => node.id === 1)!;
+    const first = exportedMap(mockDownloadMapJson).nodes.find((node) => node.id === 1)!;
     selectNode(0, 2, first.x + 50, first.y + 30);
 
     pressAltEnter();
