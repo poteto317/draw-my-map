@@ -1,3 +1,4 @@
+import { useLayoutEffect } from "react";
 import { renderHook } from "@testing-library/react";
 import { useNodeLabelEditRequest } from "@/components/map/useNodeLabelEditRequest";
 import { createTestNode } from "@/testing/createTestNode";
@@ -97,5 +98,78 @@ describe("useNodeLabelEditRequest", () => {
     });
     expect(startEditing).toHaveBeenCalledTimes(1);
     expect(cancelActiveGesture).not.toHaveBeenCalled();
+  });
+
+  it("コールバックが変わるだけでは要求を処理し直さず、次の要求では最新のコールバックを使う", () => {
+    const nodes = [rootNode, childNode];
+    const firstStartEditing = jest.fn();
+    const nextStartEditing = jest.fn();
+    const nextCancelActiveGesture = jest.fn();
+    const hasActiveGesture = jest.fn(() => false);
+    const nextHasActiveGesture = jest.fn(() => true);
+    type CallbackProps = HookProps & {
+      hasActiveGesture: () => boolean;
+      cancelActiveGesture: () => void;
+      startEditing: (nodeId: number, initialText?: string) => void;
+    };
+    const request = { nodeId: 2, sequence: 1, documentRevision: 0 };
+    const { rerender } = renderHook((props: CallbackProps) => useNodeLabelEditRequest(props), {
+      initialProps: {
+        request,
+        documentRevision: 0,
+        nodes,
+        hasActiveGesture,
+        cancelActiveGesture: jest.fn(),
+        startEditing: firstStartEditing,
+      },
+    });
+    expect(firstStartEditing).toHaveBeenCalledTimes(1);
+
+    const nextCallbacks = {
+      hasActiveGesture: nextHasActiveGesture,
+      cancelActiveGesture: nextCancelActiveGesture,
+      startEditing: nextStartEditing,
+    };
+    rerender({ request, documentRevision: 0, nodes, ...nextCallbacks });
+    expect(nextStartEditing).not.toHaveBeenCalled();
+
+    rerender({ request: { ...request, nodeId: 1, sequence: 2 }, documentRevision: 0, nodes, ...nextCallbacks });
+    expect(firstStartEditing).toHaveBeenCalledTimes(1);
+    expect(nextCancelActiveGesture).toHaveBeenCalledTimes(1);
+    expect(nextStartEditing).toHaveBeenCalledWith(1, "");
+  });
+
+  it("世代が違う要求を捨てた後でも、同じ世代の新しい要求は処理する", () => {
+    const nodes = [rootNode, childNode];
+    const { rerender, startEditing } = setup({
+      request: { nodeId: 2, sequence: 1, documentRevision: 0 },
+      documentRevision: 1,
+      nodes,
+    });
+    expect(startEditing).not.toHaveBeenCalled();
+
+    rerender({ request: { nodeId: 2, sequence: 2, documentRevision: 1 }, documentRevision: 1, nodes });
+    expect(startEditing).toHaveBeenCalledTimes(1);
+    expect(startEditing).toHaveBeenCalledWith(2, "");
+  });
+
+  it("useLayoutEffectで処理するので、同じコミットの後ろのlayout effectの時点で編集が始まっている", () => {
+    const startEditing = jest.fn();
+    const calledAtLayoutEffect = jest.fn();
+    renderHook(() => {
+      useNodeLabelEditRequest({
+        request: { nodeId: 2, sequence: 1, documentRevision: 0 },
+        documentRevision: 0,
+        nodes: [rootNode, childNode],
+        hasActiveGesture: () => false,
+        cancelActiveGesture: jest.fn(),
+        startEditing,
+      });
+      useLayoutEffect(() => {
+        calledAtLayoutEffect(startEditing.mock.calls.length);
+      }, []);
+    });
+
+    expect(calledAtLayoutEffect).toHaveBeenCalledWith(1);
   });
 });

@@ -1037,6 +1037,24 @@ describe("MapStage boundary", () => {
       expect(document.activeElement).toBe(input);
     });
 
+    it("ジェスチャー中に labelEditRequest を受けると、ジェスチャーを中止して編集を始める", async () => {
+      const onMoveNode = jest.fn();
+      const props = { ...defaultProps, nodes: sampleNodes, onMoveNode };
+      const { rerender, getByTestId } = await renderReady(<MapStage {...props} />);
+
+      act(() => {
+        mockNodePointerHandlers.at(-2)?.pointerdown?.(pointer(100, 60));
+      });
+      rerender(<MapStage {...props} labelEditRequest={{ nodeId: 1, sequence: 1, documentRevision: 0 }} />);
+      act(() => {
+        mockStageHandlers.pointermove?.(pointer(140, 100));
+        mockStageHandlers.pointerup?.(pointer(140, 100));
+      });
+
+      expect(getByTestId("node-label-input")).toHaveValue("");
+      expect(onMoveNode).not.toHaveBeenCalled();
+    });
+
     it("documentRevision が違う labelEditRequest では編集を始めない", async () => {
       const { queryByTestId } = await renderReady(
         <MapStage

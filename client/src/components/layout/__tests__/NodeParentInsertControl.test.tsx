@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NodeParentInsertControl } from "@/components/layout/NodeParentInsertControl";
+import { resolveNodeParentInsertionShortcut } from "@/components/map/nodeParentInsertionShortcut";
 import { TREE_EDIT_SHORTCUT_BUTTON_ATTRIBUTE } from "@/components/map/treeEditShortcutGuard";
 
 type Props = Parameters<typeof NodeParentInsertControl>[0];
@@ -77,5 +78,29 @@ describe("NodeParentInsertControl", () => {
   it("pointerdownの既定動作を止めない", () => {
     render(<NodeParentInsertControl {...createProps()} />);
     expect(fireEvent.pointerDown(getButton())).toBe(true);
+  });
+
+  it("aria-keyshortcutsで案内するキーは、windowのショートカットの判定で挿入になる", () => {
+    render(<NodeParentInsertControl {...createProps()} />);
+    const shortcut = getButton().getAttribute("aria-keyshortcuts") ?? "";
+    const parts = shortcut.split("+");
+    const key = parts[parts.length - 1];
+    const modifiers = new Set(parts.slice(0, -1));
+
+    expect(resolveNodeParentInsertionShortcut({
+      key,
+      altKey: modifiers.has("Alt"),
+      ctrlKey: modifiers.has("Control"),
+      metaKey: modifiers.has("Meta"),
+      shiftKey: modifiers.has("Shift"),
+      isComposing: false,
+      keyCode: 13,
+      defaultPrevented: false,
+      target: getButton(),
+      isEditing: false,
+      selectedNodeId: 1,
+      hasActiveGesture: false,
+      repeat: false,
+    })).toBe("insert");
   });
 });
