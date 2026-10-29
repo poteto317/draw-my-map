@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef } from "react";
+import { classifyNodeRequest } from "@/components/map/nodeRequestProcessing";
 import type { Node } from "@/types/node";
 import type { NodeLabelEditRequest } from "@/types/nodeLabelEditRequest";
 
@@ -30,20 +31,24 @@ export function useNodeLabelEditRequest({
 
   // 画面に出る前に入力欄を描き、autoFocus でフォーカスを移すため useLayoutEffect で処理する。
   useLayoutEffect(() => {
-    if (request === null) return;
-    if (processedSequenceRef.current === request.sequence) return;
-    if (request.documentRevision !== documentRevision) {
-      processedSequenceRef.current = request.sequence;
-      return;
+    const processing = classifyNodeRequest(request, processedSequenceRef.current, documentRevision, nodes);
+    switch (processing.kind) {
+      case "skip":
+        return;
+      case "discard":
+        processedSequenceRef.current = processing.sequence;
+        return;
+      case "ready": {
+        processedSequenceRef.current = processing.sequence;
+        const callbacks = latestCallbacksRef.current;
+        if (callbacks.hasActiveGesture()) callbacks.cancelActiveGesture();
+        callbacks.startEditing(processing.node.id, "");
+        return;
+      }
+      default: {
+        const unreachable: never = processing;
+        return unreachable;
+      }
     }
-    if (!nodes.some((node) => node.id === request.nodeId)) {
-      processedSequenceRef.current = request.sequence;
-      return;
-    }
-
-    processedSequenceRef.current = request.sequence;
-    const callbacks = latestCallbacksRef.current;
-    if (callbacks.hasActiveGesture()) callbacks.cancelActiveGesture();
-    callbacks.startEditing(request.nodeId, "");
   }, [request, documentRevision, nodes]);
 }

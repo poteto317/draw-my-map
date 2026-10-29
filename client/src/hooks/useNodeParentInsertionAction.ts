@@ -1,6 +1,7 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { canInsertParentNode, type InsertParentNodeResult } from "@/domain/nodes/nodeParentInsertion";
 import { formatNodeParentInsertionFailureNotice } from "@/domain/nodes/nodeParentInsertionMessages";
+import { useRevisionScopedNodeRequest } from "@/hooks/useRevisionScopedNodeRequest";
 import type { Node } from "@/types/node";
 import type { NodeLabelEditRequest } from "@/types/nodeLabelEditRequest";
 import type { OperationNotice } from "@/types/operationNotice";
@@ -36,32 +37,25 @@ export function useNodeParentInsertionAction({
     () => canInsertParentNode(nodes, selectedNodeId, visibleNodeIds),
     [nodes, selectedNodeId, visibleNodeIds],
   );
-  const [storedRequest, setStoredRequest] = useState<NodeLabelEditRequest | null>(null);
+  const { request: labelEditRequest, issueRequest: requestLabelEdit } = useRevisionScopedNodeRequest(documentRevision);
 
   const insert = useCallback(
     (nodeId: number) => {
       const result = insertParentNode(nodeId, visibleNodeIds);
       if (result.ok) {
         clearNotice();
-        setStoredRequest((previous) => ({
-          nodeId: result.insertedId,
-          sequence: (previous?.sequence ?? 0) + 1,
-          documentRevision,
-        }));
+        requestLabelEdit(result.insertedId);
         return;
       }
       publishNotice(formatNodeParentInsertionFailureNotice(result.reason));
     },
-    [insertParentNode, visibleNodeIds, documentRevision, publishNotice, clearNotice],
+    [insertParentNode, visibleNodeIds, requestLabelEdit, publishNotice, clearNotice],
   );
 
   const insertSelected = useCallback(() => {
     if (selectedNodeId === null) return;
     insert(selectedNodeId);
   }, [selectedNodeId, insert]);
-
-  const labelEditRequest =
-    storedRequest !== null && storedRequest.documentRevision === documentRevision ? storedRequest : null;
 
   return { canInsert, insertSelected, insert, labelEditRequest };
 }

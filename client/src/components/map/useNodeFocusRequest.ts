@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef } from "react";
 import type { ScreenSize } from "@/components/map/mapViewport";
+import { classifyNodeRequest } from "@/components/map/nodeRequestProcessing";
 import type { Node } from "@/types/node";
 import type { NodeFocusRequest } from "@/types/nodeFocusRequest";
 
@@ -42,23 +43,30 @@ export function useNodeFocusRequest({
   }, [nodes, hasActiveGesture, cancelActiveGesture, onFocusNode]);
 
   useEffect(() => {
-    if (request === null) return;
-    if (request.documentRevision !== documentRevision) {
-      processedSequenceRef.current = request.sequence;
-      return;
-    }
-    if (processedSequenceRef.current === request.sequence) return;
-
     const latestOptions = latestOptionsRef.current;
-    const node = latestOptions.nodes.find((candidate) => candidate.id === request.nodeId);
-    if (node === undefined) {
-      processedSequenceRef.current = request.sequence;
-      return;
+    const processing = classifyNodeRequest(
+      request,
+      processedSequenceRef.current,
+      documentRevision,
+      latestOptions.nodes,
+    );
+    switch (processing.kind) {
+      case "skip":
+        return;
+      case "discard":
+        processedSequenceRef.current = processing.sequence;
+        return;
+      case "ready":
+        // 画面の大きさが分かるまで処理済みにせず待つ
+        if (screen === null) return;
+        processedSequenceRef.current = processing.sequence;
+        if (latestOptions.hasActiveGesture()) latestOptions.cancelActiveGesture();
+        latestOptions.onFocusNode(processing.node, screen);
+        return;
+      default: {
+        const unreachable: never = processing;
+        return unreachable;
+      }
     }
-    if (screen === null) return;
-
-    processedSequenceRef.current = request.sequence;
-    if (latestOptions.hasActiveGesture()) latestOptions.cancelActiveGesture();
-    latestOptions.onFocusNode(node, screen);
   }, [request, screen, nodes, documentRevision]);
 }

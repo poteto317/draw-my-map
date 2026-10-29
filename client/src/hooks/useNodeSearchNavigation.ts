@@ -1,10 +1,10 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { RESOLUTION_LEVEL_LABELS } from "@/config/resolutionLevelLabels";
 import type { NodeCollapseIndex } from "@/domain/nodes/nodeCollapse";
 import { resolveNodeSearchReveal } from "@/domain/search/nodeSearchReveal";
+import { useRevisionScopedNodeRequest } from "@/hooks/useRevisionScopedNodeRequest";
 import { useRevisionScopedNotice } from "@/hooks/useRevisionScopedNotice";
 import type { Node } from "@/types/node";
-import type { NodeFocusRequest } from "@/types/nodeFocusRequest";
 import type { OperationNotice } from "@/types/operationNotice";
 import type { ResolutionFilterMode } from "@/types/nodeResolution";
 
@@ -36,7 +36,7 @@ export function useNodeSearchNavigation({
   setResolutionMode,
   selectNode,
 }: UseNodeSearchNavigationOptions) {
-  const [storedFocusRequest, setStoredFocusRequest] = useState<NodeFocusRequest | null>(null);
+  const { request: focusRequest, issueRequest: issueFocusRequest } = useRevisionScopedNodeRequest(documentRevision);
   const { notice, publishNotice } = useRevisionScopedNotice(documentRevision);
 
   const navigateToNode = useCallback((nodeId: number): NodeSearchNavigationResult => {
@@ -69,27 +69,19 @@ export function useNodeSearchNavigation({
     }
 
     selectNode(nodeId);
-    setStoredFocusRequest((current) => ({
-      nodeId,
-      sequence: (current?.sequence ?? 0) + 1,
-      documentRevision,
-    }));
+    issueFocusRequest(nodeId);
     return messages.length > 0 ? "revealed" : "navigated";
   }, [
     collapseIndex,
     collapsedNodeIds,
     expandNodes,
-    documentRevision,
+    issueFocusRequest,
     nodes,
     publishNotice,
     selectNode,
     setResolutionMode,
     resolutionVisibleNodeIds,
   ]);
-
-  const focusRequest = storedFocusRequest?.documentRevision === documentRevision
-    ? storedFocusRequest
-    : null;
 
   return { navigateToNode, focusRequest, notice };
 }
