@@ -1,5 +1,14 @@
 import type { Node } from "@/types/node";
 
+// ID ごとに、配列で最初に出会ったノードを引けるようにする
+export function indexFirstNodes(nodes: readonly Node[]): Map<number, Node> {
+  const nodesById = new Map<number, Node>();
+  for (const node of nodes) {
+    if (!nodesById.has(node.id)) nodesById.set(node.id, node);
+  }
+  return nodesById;
+}
+
 // 根は配列に無くても含める。親子関係が循環した不正な配列でも各ノードを一度だけ訪れて停止する
 export function collectSubtreeIds(nodes: readonly Node[], rootId: number): Set<number> {
   const childIdsByParentId = new Map<number, number[]>();

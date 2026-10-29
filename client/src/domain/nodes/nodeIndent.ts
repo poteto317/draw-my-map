@@ -1,11 +1,10 @@
 import {
+  applyBranchPlacement,
   calculateIndentTranslation,
   calculateOutdentTranslation,
-  translateBranch,
-  type BranchTranslation,
 } from "@/domain/nodes/nodeIndentPlacement";
 import { scanSiblingNeighbors } from "@/domain/nodes/nodeSiblingNeighbors";
-import { canConnectNodes } from "@/domain/nodes/nodeTree";
+import { canConnectNodes, indexFirstNodes } from "@/domain/nodes/nodeTree";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 
@@ -65,15 +64,6 @@ export function getNodeIndentAvailability(
   }
 }
 
-// ID ごとに、配列で最初に出会ったノードを引けるようにする
-function indexFirstNodes(nodes: readonly Node[]): Map<number, Node> {
-  const nodesById = new Map<number, Node>();
-  for (const node of nodes) {
-    if (!nodesById.has(node.id)) nodesById.set(node.id, node);
-  }
-  return nodesById;
-}
-
 // T から parentId を辿った祖先の数 + 1。循環や、配列に無い祖先があれば null
 function measureDepth(nodes: readonly Node[], nodeId: number): number | null {
   const nodesById = indexFirstNodes(nodes);
@@ -88,27 +78,6 @@ function measureDepth(nodes: readonly Node[], nodeId: number): number | null {
     current = nodesById.get(current.parentId);
   }
   return null;
-}
-
-// 自動配置では座標を変えない（applyTreeChange の layoutNodeForest が決める）
-function applyPlacement(
-  nodes: Node[],
-  nodeId: number,
-  mode: NodeLayoutMode,
-  calculate: () => BranchTranslation | null,
-): Node[] | null {
-  switch (mode) {
-    case "auto":
-      return nodes;
-    case "manual": {
-      const translation = calculate();
-      return translation === null ? null : translateBranch(nodes, nodeId, translation);
-    }
-    default: {
-      const unreachable: never = mode;
-      return unreachable;
-    }
-  }
 }
 
 // P の子のうち配列で最後のもの
@@ -170,7 +139,7 @@ function indentNode(
     return { ok: false, reason: "invalid-structure" };
   }
 
-  const placed = applyPlacement(
+  const placed = applyBranchPlacement(
     buildIndentedNodes(nodes, target, parent),
     target.id,
     mode,
@@ -221,7 +190,7 @@ function outdentNode(
     newParentLabel = grandparent.label;
   }
 
-  const placed = applyPlacement(
+  const placed = applyBranchPlacement(
     buildOutdentedNodes(nodes, target, parent),
     target.id,
     mode,

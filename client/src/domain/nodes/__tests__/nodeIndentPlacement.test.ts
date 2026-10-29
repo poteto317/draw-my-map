@@ -1,4 +1,5 @@
 import {
+  applyBranchPlacement,
   calculateIndentTranslation,
   calculateOutdentTranslation,
   translateBranch,
@@ -488,6 +489,35 @@ describe("translateBranch", () => {
   it("根が無ければ null", () => {
     expect(
       translateBranch(createM2(), 99, { rootX: 0, rootY: 0, dx: 0, dy: 0 }),
+    ).toBeNull();
+  });
+});
+
+describe("applyBranchPlacement", () => {
+  it("自動配置では計算を呼ばず、受け取った配列をそのまま返す", () => {
+    const nodes = createM2();
+    const calculate = jest.fn(() => ({ rootX: 1, rootY: 1, dx: 1, dy: 1 }));
+
+    expect(applyBranchPlacement(nodes, 4, "auto", calculate)).toBe(nodes);
+    expect(calculate).not.toHaveBeenCalled();
+  });
+
+  it("手動配置では計算した平行移動で枝を動かす", () => {
+    const nodes = createM2();
+    const translation = { rootX: 500, rootY: 600, dx: 10, dy: 20 };
+
+    expect(applyBranchPlacement(nodes, 4, "manual", () => translation)).toEqual(
+      translateBranch(nodes, 4, translation),
+    );
+  });
+
+  it("手動配置で平行移動を求められなければ null を返す", () => {
+    expect(applyBranchPlacement(createM2(), 4, "manual", () => null)).toBeNull();
+  });
+
+  it("手動配置で根が配列に無ければ null を返す", () => {
+    expect(
+      applyBranchPlacement(createM2(), 99, "manual", () => ({ rootX: 0, rootY: 0, dx: 0, dy: 0 })),
     ).toBeNull();
   });
 });

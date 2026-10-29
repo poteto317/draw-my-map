@@ -2,6 +2,7 @@ import {
   canConnectNodes,
   collectSubtreeIds,
   connectNodeTree,
+  indexFirstNodes,
   moveNodeSubtree,
 } from "@/domain/nodes/nodeTree";
 import type { Node } from "@/types/node";
@@ -293,5 +294,28 @@ describe("moveNodeSubtree", () => {
 
     expect(moveNodeSubtree(observed, 1, 20, 20)).not.toBeNull();
     expect(reads).toBeLessThanOrEqual(count * 3);
+  });
+});
+
+describe("indexFirstNodes", () => {
+  it("IDごとにノードを引ける", () => {
+    const nodes = [node(1, null), node(2, 1), node(3, 1)];
+
+    const index = indexFirstNodes(nodes);
+
+    expect(index.size).toBe(3);
+    expect(index.get(2)).toBe(nodes[1]);
+    expect(index.get(99)).toBeUndefined();
+  });
+
+  it("同じIDが重なっていると、配列で最初に出会ったノードを引く", () => {
+    const first = node(1, null, 0, 0);
+    const second = node(1, null, 50, 50);
+
+    expect(indexFirstNodes([first, second]).get(1)).toBe(first);
+  });
+
+  it("空の配列では空のMapを返す", () => {
+    expect(indexFirstNodes([]).size).toBe(0);
   });
 });

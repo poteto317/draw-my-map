@@ -7,6 +7,7 @@ import {
 } from "@/domain/nodes/nodeLayoutArithmetic";
 import { collectSubtreeIds } from "@/domain/nodes/nodeTree";
 import type { Node } from "@/types/node";
+import type { NodeLayoutMode } from "@/types/nodeLayout";
 
 // 根 T を (rootX, rootY) へ、子孫を (dx, dy) だけ動かす
 export type BranchTranslation = { rootX: number; rootY: number; dx: number; dy: number };
@@ -194,4 +195,26 @@ export function translateBranch(
     result.push({ ...node, x, y });
   }
   return result;
+}
+
+// 手動配置では calculate で求めた平行移動で枝を動かし、求められなければ null を返す。
+// 自動配置では座標を変えない（applyTreeChange の layoutNodeForest が決める）
+export function applyBranchPlacement(
+  nodes: Node[],
+  nodeId: number,
+  mode: NodeLayoutMode,
+  calculate: () => BranchTranslation | null,
+): Node[] | null {
+  switch (mode) {
+    case "auto":
+      return nodes;
+    case "manual": {
+      const translation = calculate();
+      return translation === null ? null : translateBranch(nodes, nodeId, translation);
+    }
+    default: {
+      const unreachable: never = mode;
+      return unreachable;
+    }
+  }
 }

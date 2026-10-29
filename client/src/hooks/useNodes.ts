@@ -40,6 +40,7 @@ import {
   type ChangeNodeIndentResult,
   type NodeIndentDirection,
 } from "@/domain/nodes/nodeIndent";
+import { settleTreeChangeOutcome } from "@/hooks/treeChangeOutcome";
 import { insertParentNode as computeParentInsertion, type InsertParentNodeResult } from "@/domain/nodes/nodeParentInsertion";
 import { replaceNodeImportance } from "@/domain/nodes/nodeImportanceUpdate";
 import { clearNodeIllustration, replaceNodeIllustration } from "@/domain/nodes/nodeIllustrationUpdate";
@@ -89,7 +90,7 @@ type UseNodesReturn = {
     direction: NodeIndentDirection,
     visibleNodeIds: ReadonlySet<number>,
   ) => ChangeNodeIndentResult;
-  // 選択中のノードと親の間に新しいノードを入れる。applyTreeChange を1回だけ呼び、成功時は新しいノードを選択する。
+  // nodeId のノードと親の間に新しいノードを入れる。applyTreeChange を1回だけ呼び、成功時は新しいノードを選択する。
   // documentRevision は変えない。失敗時は何も変えない
   insertParentNode: (
     nodeId: number,
@@ -317,11 +318,7 @@ export function useNodes(): UseNodesReturn {
       outcome = position;
       return reorderedNodes;
     });
-    // 候補を作れた後に失敗するのは、全体の自動配置だけ
-    const settled = outcome as ReorderSiblingResult | null;
-    if (applied && settled?.ok) return settled;
-    if (settled === null || settled.ok) return { ok: false, reason: "placement-failed" };
-    return settled;
+    return settleTreeChangeOutcome(applied, outcome as ReorderSiblingResult | null);
   }, [applyTreeChange]);
 
   // 新しい親は描画時の配列ではなく、確定時点の最新の配列から解決する。
@@ -342,11 +339,7 @@ export function useNodes(): UseNodesReturn {
       outcome = summary;
       return changedNodes;
     });
-    // 候補を作れた後に失敗するのは、全体の自動配置だけ
-    const settled = outcome as ChangeNodeIndentResult | null;
-    if (applied && settled?.ok) return settled;
-    if (settled === null || settled.ok) return { ok: false, reason: "placement-failed" };
-    return settled;
+    return settleTreeChangeOutcome(applied, outcome as ChangeNodeIndentResult | null);
   }, [applyTreeChange]);
 
   // 新しい ID は確定時点の最新の配列から採番する。確定しなかった ID は欠番のままにする。
@@ -366,13 +359,8 @@ export function useNodes(): UseNodesReturn {
       outcome = { ok: true, insertedId: inserted.insertedId };
       return inserted.nodes;
     });
-    // 候補を作れた後に失敗するのは、全体の自動配置だけ
-    const settled = outcome as InsertParentNodeResult | null;
-    if (applied && settled?.ok) {
-      setSelectedNodeId(settled.insertedId);
-      return settled;
-    }
-    if (settled === null || settled.ok) return { ok: false, reason: "placement-failed" };
+    const settled = settleTreeChangeOutcome(applied, outcome as InsertParentNodeResult | null);
+    if (settled.ok) setSelectedNodeId(settled.insertedId);
     return settled;
   }, [applyTreeChange]);
 
