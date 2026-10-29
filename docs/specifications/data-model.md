@@ -95,7 +95,7 @@ Root Node B (id: 5, parentId: null)
 
 ## 2. TypeScript 型定義リファレンス
 
-システムの中核を構成する共有型定義は `client/src/types/` 配下の全 14 ファイルに集約されています。
+システムの中核を構成する共有型定義は `client/src/types/` 配下の全 15 ファイルに集約されています。
 
 | ファイルパス | エクスポートされる型名 | 役割・用途 |
 | :--- | :--- | :--- |
@@ -111,6 +111,7 @@ Root Node B (id: 5, parentId: null)
 | `client/src/types/nodeSearch.ts` | `NodeSearchListItem` | ノード検索の候補（一致結果 `NodeSearchMatch` に、現在の表示で隠れているかの `hidden` を加えたもの） |
 | `client/src/types/nodeFocusRequest.ts` | `NodeFocusRequest` | 検索からの中央移動要求（`nodeId`, `sequence`, `documentRevision`） |
 | `client/src/types/nodeLabelEditRequest.ts` | `NodeLabelEditRequest` | 親の挿入の後のラベルの編集の開始要求（`nodeId`, `sequence`, `documentRevision`。2.9 節） |
+| `client/src/types/revisionScopedNodeRequest.ts` | `RevisionScopedNodeRequest` | ノードへの要求（中央移動・ラベルの編集）の共通の形（`nodeId`, `sequence`, `documentRevision`）。発行側の `useRevisionScopedNodeRequest` と振り分け側の `classifyNodeRequest` が共有する |
 | `client/src/types/mapStorageSession.ts` | `MapStorageSession`, `MapBodyWriteResult`, `MapFlushResult` | 開いているマップの本体の読み書きと flush の登録（5.5 節） |
 | `client/src/types/mapLibraryDialog.ts` | `MapLibraryDialogScreen`, `OpenMapLibraryDialogScreen`, `MapLibraryRowAction`, `MapLibraryDialogFocusTarget`, `MapLibraryDialogNotices` | マップのダイアログの画面、行の操作、フォーカス先、ダイアログ内の通知 |
 

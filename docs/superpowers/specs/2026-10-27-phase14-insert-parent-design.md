@@ -40,7 +40,7 @@
 - **拒否する条件**: 未選択（ボタンは無効、ショートカットは何もしない）、T が無い（`node-missing`）、T が見えていない（`node-hidden`。表示集合 V にない）、不正な構造（`invalid-structure`。T の親が配列に無い、T が自分自身を親にしている）、新しい ID が既存のノードと重なる（`id-conflict`）、配置できない（`placement-failed`。手動配置の座標が有限でない・桁落ちする・間隔が取れない、自動配置の失敗）。端（`at-edge`）は無い（見えているノードなら、ルートを含めて必ず親を入れられる）。
 - **ID が採れない場合**: ID は既存の `nodeIdAllocator.nextAvailableId` で `applyTreeChange` の中の最新の配列から採る。この関数は既存の ID と重ならない値を必ず返す（失敗しない）ので、「ID が採れない」理由は作らない。純関数は ID を引数で受け取るので、渡された ID が既存のノードと重なったときだけ `id-conflict` で拒否する（呼び出し元の誤りを黙って通さない。L-002）。
 - **通知の枠**: 失敗の通知は、並べ替え・上げ下げと共有する8系統目の枠（「枝の構造の変更の通知」）に出す。系統の数は8のまま。名前を「枝の構造の変更の通知（兄弟の順序変更・階層の上げ下げ・親の挿入）」に直す。
-- **成功の通知を出さない**: `Tab`・`Enter` と同じく、成功したら通知を出さず、ラベルの編集に入る。理由: (1) 入力欄へフォーカスが移ること自体が、支援技術にも見た目にも結果を伝える。(2) 成功の文言に変わる値を入れないと、続けて挿入したときに同じ文言になって読み上げられない（L-166）。(3) 入力欄へのフォーカスの移動の読み上げと、ライブリージョンの読み上げが重なる。
+- **成功の通知を出さない**: `Tab`・`Enter` と同じく、成功したら通知を出さず、ラベルの編集に入る。理由: (1) 入力欄へフォーカスが移ることが、見た目で結果を伝える（入力欄は「ノードのラベル」と読まれる（features.md の 3.4 節）。名前は開いた操作によらず同じなので、親が入ったことそのものは読み上げからは分からない。`Tab`・`Enter` の追加と同じ）。(2) 成功の文言に変わる値を入れないと、続けて挿入したときに同じ文言になって読み上げられない（L-166）。(3) 入力欄へのフォーカスの移動の読み上げと、ライブリージョンの読み上げが重なる。
 - **成功したら枠を空にする**: 成功したときは、8系統目の枠の通知を消す（`useRevisionScopedNotice` に `clearNotice` を足す）。理由: 前の失敗の通知「親ノードを挿入できませんでした。」や、前の上げ下げの通知（「…第3階層」など、挿入で深さが変わって正しくなくなる）が、成功した挿入の後に残ると誤解を招くため（L-166 の「古いまま残る」）。ほかの7系統は消さない。
 - **失敗の文言**: 理由によらず1つ。`親ノードを挿入できませんでした。`（`kind: "error"`）。ボタンは T が見えていないと無効で、ショートカットは選択が隠れると選択が外れるので、利用者が実際に見るのは、ほぼ座標の失敗と不正なデータだけである。理由ごとに文言を分けても、利用者が取れる手当て（元に戻す・座標を直す）は変わらない。
 - **折りたたみ**: T が閉じていれば閉じたまま（折りたたみの集合は ID で持ち、T の ID は変わらない）。N は開いた状態（新しい ID は集合に無い）。T の親が閉じていると T は見えないので拒否する（`node-hidden`。ボタンは無効）。展開の操作は行わない（N の親は T の元の親で、T が見えている以上は閉じていない）。
@@ -87,6 +87,7 @@ MapEditor
 │   └─ insertParentNode(nodeId, visibleNodeIds)          … applyTreeChange を1回呼ぶ。成功時は N を選択。documentRevision は変えない
 ├─ useRevisionScopedNotice（枝の構造の変更の通知。8系統目。clearNotice を足す）
 ├─ useNodeParentInsertionAction                          … ボタンの有効・無効、選択中のノードへの挿入、MapStage からの要求、通知、ラベルの編集の要求
+│   ├─ useRevisionScopedNodeRequest                      … ラベルの編集の要求の採番と revision での絞り込み（検索の中央移動と共有）
 │   ├─ canInsertParentNode                               … domain/nodes/nodeParentInsertion.ts
 │   └─ formatNodeParentInsertionFailureNotice            … domain/nodes/nodeParentInsertionMessages.ts
 ├─ AppHeader の operationControls
@@ -96,7 +97,7 @@ MapEditor
 └─ MapStage（onInsertParentNode と labelEditRequest を新しく受け取る）
     ├─ useNodeKeyboardShortcuts（Alt を含む Enter では兄弟を足さない）
     ├─ useNodeParentInsertionShortcut                    … Alt+Enter。判定は resolveNodeParentInsertionShortcut
-    ├─ useNodeLabelEditRequest                           … 要求を受けて startEditing(nodeId, "")
+    ├─ useNodeLabelEditRequest                           … 要求を受けて startEditing(nodeId, "")。振り分けは classifyNodeRequest（useNodeFocusRequest と共有）
     └─ NodeLabelEditor（リピートの Enter では確定しない）
 ```
 
@@ -105,15 +106,19 @@ MapEditor
 | 層 | ファイル | 役割 |
 | :--- | :--- | :--- |
 | types | `types/nodeLabelEditRequest.ts` | 型 `NodeLabelEditRequest`（`{ nodeId, sequence, documentRevision }`） |
+| types | `types/revisionScopedNodeRequest.ts` | ノードへの要求の共通の形 `RevisionScopedNodeRequest`（`{ nodeId, sequence, documentRevision }`）。検索の中央移動とラベルの編集の要求が共有する |
 | domain | `domain/nodes/nodeParentInsertion.ts` | 型（`useNodes` の戻り値の `InsertParentNodeResult` を含む全型）、ボタンの有効・無効 `canInsertParentNode`、挿入 `insertParentNode` |
 | domain | `domain/nodes/nodeParentInsertionMessages.ts` | 失敗の通知の文言 `formatNodeParentInsertionFailureNotice` |
 | hooks | `hooks/useNodeParentInsertionAction.ts` | ボタンの状態、挿入の要求、通知、ラベルの編集の要求 |
+| hooks | `hooks/useRevisionScopedNodeRequest.ts` | `useRevisionScopedNodeRequest(documentRevision)`。要求の採番（`issueRequest(nodeId)`）と、`documentRevision` が違う要求を隠す絞り込み |
+| hooks | `hooks/treeChangeOutcome.ts` | `settleTreeChangeOutcome`。`applyTreeChange` の後で、候補の計算の結果と確定できたかから、操作の結果（`placement-failed` を含む）を決める |
 | components | `components/layout/NodeParentInsertControl.tsx` | ヘッダーの「親を挿入」 |
 | components | `components/map/nodeParentInsertionShortcut.ts` | 入力の型 `NodeParentInsertionShortcutInput`、判定 `resolveNodeParentInsertionShortcut` |
 | components | `components/map/useNodeParentInsertionShortcut.ts` | `window` の `keydown` の登録 |
 | components | `components/map/useNodeLabelEditRequest.ts` | ラベルの編集の要求を受けて編集を始める |
+| components | `components/map/nodeRequestProcessing.ts` | `classifyNodeRequest`。ノードへの要求を `skip` / `discard` / `ready` に振り分ける純関数（`useNodeFocusRequest` と `useNodeLabelEditRequest` が共有） |
 
-変える既存のファイル: `domain/nodes/nodePlacement.ts`（`createParentNode` を足す）、`hooks/useNodes.ts`（`insertParentNode`）、`hooks/useRevisionScopedNotice.ts`（`clearNotice`）、`components/map/useNodeKeyboardShortcuts.ts`（`Alt` を含む `Enter`）、`components/map/NodeLabelEditor.tsx`（リピートの `Enter`）、`components/map/treeEditShortcutGuard.ts`（目印のコメントだけ）、`components/layout/LayoutModeOperationHint.tsx`、`components/map/MapEditor.tsx`、`components/map/MapStage.tsx`、および既存のテスト（`useNodeKeyboardShortcuts`・`NodeLabelEditor`・`useRevisionScopedNotice`・`LayoutModeOperationHint` のテストへの追加と、`MapStage` を直接描くテストへの新しい必須 props の追加）。
+変える既存のファイル: `domain/nodes/nodePlacement.ts`（`createParentNode` を足す）、`domain/nodes/nodeIndentPlacement.ts`（`applyBranchPlacement` を公開して挿入と共有する）、`domain/nodes/nodeIndent.ts`（共有した配置の関数を使う）、`domain/nodes/nodeTree.ts`（`indexFirstNodes`）、`hooks/useNodes.ts`（`insertParentNode`。確定後の結果は `settleTreeChangeOutcome` で決める）、`hooks/useNodeSearchNavigation.ts`・`components/map/useNodeFocusRequest.ts`（要求の採番・絞り込みと振り分けを共有の部品へ移す）、`hooks/useRevisionScopedNotice.ts`（`clearNotice`）、`components/map/useNodeKeyboardShortcuts.ts`（`Alt` を含む `Enter`）、`components/map/NodeLabelEditor.tsx`（リピートの `Enter`）、`components/map/treeEditShortcutGuard.ts`（目印のコメントだけ）、`components/layout/LayoutModeOperationHint.tsx`、`components/map/MapEditor.tsx`、`components/map/MapStage.tsx`、および既存のテスト（`useNodeKeyboardShortcuts`・`NodeLabelEditor`・`useRevisionScopedNotice`・`LayoutModeOperationHint`・`nodeTree`（`indexFirstNodes`）・`nodeIndentPlacement`（`applyBranchPlacement`）のテストへの追加と、`MapStage` を直接描くテストへの新しい必須 props の追加）。
 
 ## 用語
 
@@ -239,7 +244,7 @@ export function createParentNode(target: Node, id: number): Node;
 
 ```ts
 // hooks/useNodes.ts の UseNodesReturn
-// 選択中のノードと親の間に新しいノードを入れる。applyTreeChange を1回だけ呼び、成功時は新しいノードを選択する。
+// nodeId のノードと親の間に新しいノードを入れる。applyTreeChange を1回だけ呼び、成功時は新しいノードを選択する。
 // documentRevision は変えない。失敗時は何も変えない
 insertParentNode: (
   nodeId: number,
@@ -278,11 +283,12 @@ type UseNodeParentInsertionActionReturn = {
 ```
 
 - `canInsert` は `useMemo` で `nodes`・`selectedNodeId`・`visibleNodeIds` が変わったときだけ求める。3つの入力をすべて依存に入れる（L-612）。
+- 要求の採番と `documentRevision` による絞り込みは、自分では持たず `useRevisionScopedNodeRequest(documentRevision)` に任せる（`useNodeSearchNavigation` の中央移動の要求と同じ部品）。部品は `{ request, issueRequest }` を返す。
 - `insert(nodeId)`:
   1. `result = insertParentNode(nodeId, visibleNodeIds)`（受け取った `visibleNodeIds` をそのまま渡す）。
-  2. `result.ok` なら、`clearNotice()` を呼び、ラベルの編集の要求を `{ nodeId: result.insertedId, sequence: 前の sequence + 1, documentRevision }` に更新する。
+  2. `result.ok` なら、`clearNotice()` を呼び、`issueRequest(result.insertedId)` を呼ぶ（`{ nodeId: result.insertedId, sequence: 前の sequence + 1, documentRevision }` が控えられる）。
   3. 失敗なら `publishNotice(formatNodeParentInsertionFailureNotice(result.reason))` を1回呼ぶ。要求は変えない。
-- `labelEditRequest` は、控えた要求の `documentRevision` が今の `documentRevision` と等しいときだけ返し、違えば `null`（`useNodeSearchNavigation` の `focusRequest` と同じ）。
+- `labelEditRequest` は部品の `request` をそのまま返す。控えた要求の `documentRevision` が今の `documentRevision` と等しいときだけ返り、違えば `null`（`useNodeSearchNavigation` の `focusRequest` と同じ）。
 - `insertSelected()` は `insert(selectedNodeId)` と同じ。
 
 ## ラベルの編集の開始（`useNodeLabelEditRequest`）
@@ -300,10 +306,11 @@ type UseNodeLabelEditRequestOptions = {
 ```
 
 - `useLayoutEffect` で、`request` が変わったときに処理する。処理済みの `sequence` を ref に控え、同じ `sequence` は二度処理しない（StrictMode の二重実行でも1回）。
-  1. `request === null` → 何もしない。
-  2. `request.documentRevision !== documentRevision` → 処理済みにして何もしない。
-  3. `nodes` に `request.nodeId` が無い → 処理済みにして何もしない（後で現れても始めない）。
-  4. 処理済みにし、`hasActiveGesture()` なら `cancelActiveGesture()` を呼び、`startEditing(request.nodeId, "")` を呼ぶ。
+  振り分けは純関数 `classifyNodeRequest(request, processedSequence, documentRevision, nodes)`（`components/map/nodeRequestProcessing.ts`。`useNodeFocusRequest` と共有）で行い、結果の `kind` ごとに処理する。判定の順は次のとおり。
+  1. `request === null`、または `sequence` が処理済み → `skip`（何もしない）。
+  2. `request.documentRevision !== documentRevision` → `discard`（処理済みにして何もしない）。
+  3. `nodes` に `request.nodeId` が無い → `discard`（処理済みにして何もしない。後で現れても始めない）。
+  4. それ以外は `ready`。処理済みにし、`hasActiveGesture()` なら `cancelActiveGesture()` を呼び、`startEditing(request.nodeId, "")` を呼ぶ。
 - `useLayoutEffect` にする理由: 挿入の commit の描画の直後、画面に出る前に入力欄を描き、`autoFocus` でフォーカスを移すため（`useEffect` だと、N が選択されたが入力欄の無い状態が一瞬描かれる）。
 - 入力欄（`NodeLabelEditor`）は `autoFocus` を持つので、描かれた時点でフォーカスがボタンや `body` から入力欄へ移る。`Tab`・`Enter` の追加で使う部品・`startEditing` と同じなので、確定（`Enter`・`blur`）・取り消し（`Escape`）・空の確定（`label: ""` のまま、表示は「新しいノード」）の挙動も同じになる。
 - `MapStage` は `useHiddenNodeInteractionReset` の後で呼ぶ。N は見えているので、隠れたノードの編集の破棄とは競合しない。
@@ -522,6 +529,26 @@ type UseNodeParentInsertionShortcutOptions = {
 - `documentRevision` が変わると `labelEditRequest` が `null` になること。
 - `insertSelected` が `selectedNodeId` で `insertParentNode` を呼び、`visibleNodeIds` をそのまま（`toBe`）渡すこと。未選択では呼ばないこと。
 
+### 純関数: `nodeTree.test.ts`（追加）
+
+- `indexFirstNodes`: ID ごとにノードを引けること（件数、同一の参照、無い ID は `undefined`）。同じ ID が重なっていると配列で最初のノードを引くこと。空の配列で空の Map を返すこと。
+
+### 純関数: `nodeIndentPlacement.test.ts`（追加）
+
+- `applyBranchPlacement`: 自動配置では計算の関数を呼ばず、受け取った配列をそのまま（`toBe`）返すこと。手動配置では計算した平行移動で枝を動かすこと（`translateBranch` の結果と等しい）。手動配置で平行移動が `null`、または根が配列に無いと `null` を返すこと。
+
+### 純関数: `nodeRequestProcessing.test.ts`
+
+- `classifyNodeRequest` の `skip`（要求なし・処理済み）・`discard`（世代違い・ノード無し）・`ready`。判定の順（処理済みが世代違いより先、世代違いがノード無しより先）を、条件を重ねた入力で固定する。
+
+### 純関数: `treeChangeOutcome.test.ts`
+
+- `settleTreeChangeOutcome`: 確定できて成功ならその結果、結果が `null`（候補を作れなかった）なら `placement-failed`、確定できなかった成功も `placement-failed`、失敗の結果はそのまま。
+
+### フック: `useRevisionScopedNodeRequest.test.tsx`
+
+- `issueRequest` で `sequence` が 1 から 1 ずつ進み、同じノードへの要求でも進むこと。`documentRevision` が変わると `request` が `null` になり、その後の `issueRequest` が新しい `documentRevision` で `sequence` を続けること。`issueRequest` の依存に `documentRevision` が入っていること（古い値で発行しない）。
+
 ### フック: `useRevisionScopedNotice.test.tsx`（追加）
 
 - `clearNotice` で `notice` が `null` になり、その後の `publishNotice` で新しい通知が出ること。
@@ -587,7 +614,7 @@ type UseNodeParentInsertionShortcutOptions = {
   - 14.7・15.7 の目印の説明を5つのボタンに直す。14.8・15.8 の表に「親の挿入（16 章）」の行を足す。14.9・15.9 の対象外の「途中への親ノードの挿入」を消す。
 - `docs/specifications/data-model.md`: 1.2 の設計原則に「親の挿入（Phase 14）は、新しいノードを1つ足し、T の `parentId` を変える（手動配置では T の枝を平行移動する）だけで、保存形式・JSON・編集履歴の項目を足さない（2.9 節）」を足す。2.1 の `Node` の説明の `parentId` に親の挿入でも変わることを足す。新しい節「2.9 途中への親ノード挿入の型」に `NodeParentInsertionFailureReason`・`NodeParentInsertionResult`・`InsertParentNodeResult`（定義元は `client/src/domain/nodes/nodeParentInsertion.ts`）と `NodeLabelEditRequest`（定義元は `client/src/types/nodeLabelEditRequest.ts`）を足す。目次も直す。保存形式（3章）は変えないことを確かめる。
 - `docs/architecture/overview.md`: レイヤーの説明に新しいファイル（`nodeParentInsertion.ts`、`nodeParentInsertionMessages.ts`、`useNodeParentInsertionAction.ts`、`NodeParentInsertControl.tsx`、`nodeParentInsertionShortcut.ts`、`useNodeParentInsertionShortcut.ts`、`useNodeLabelEditRequest.ts`、`types/nodeLabelEditRequest.ts`）を足し、`nodePlacement.ts`・`useNodes.ts`・`useRevisionScopedNotice.ts`・`useNodeKeyboardShortcuts.ts`・`NodeLabelEditor.tsx` の説明を直し、各ディレクトリのファイル数を実数に合わせる（`ls` で数える）。「階層の上げ下げの流れ」の後に「親の挿入の流れ」（ボタン・ショートカット → `useNodeParentInsertionAction` → `useNodes.insertParentNode` の1回の commit と N の選択 → 成功で `clearNotice` とラベルの編集の要求 → `MapStage` の `useNodeLabelEditRequest` が `startEditing` → 入力欄の `autoFocus`。失敗で `publishNotice`）を足す。
-- `docs/testing/browser-test-cases.md`: 新しい節「Phase 14: 途中への親ノード挿入」（記号 `S`）を、R 節の後・「結果の集計」の前に足す（下の「手動テスト」）。「結果の集計」に S-01〜S-14 の未実施の行を足す。Q 節・R 節で「4つのボタン」や目印に触れている箇所があれば直す。
+- `docs/testing/browser-test-cases.md`: 新しい節「Phase 14: 途中への親ノード挿入」（記号 `S`）を、R 節の後・「結果の集計」の前に足す（下の「手動テスト」）。「結果の集計」に S-01〜S-15 の未実施の行を足す。Q 節・R 節で「4つのボタン」や目印に触れている箇所があれば直す。
 - `README.md`: 機能の一覧に「14. 途中への親ノード挿入（Phase 14 の3番目の項目）」を足し、編集履歴の対象の列挙に親の挿入を足す。
 - `client/README.md`: キーボードショートカットに `Alt`（`Option`）+ `Enter` を足し、機能の一覧に親の挿入を足す。`domain/nodes/` の説明に親の挿入を足す。
 - `docs/README.md`: 各文書の説明の「階層の上げ下げ」の列挙に「途中への親ノード挿入」を足す（流れ、Phase の範囲、型の節 2.9、手動テストの S 節）。
@@ -604,15 +631,16 @@ type UseNodeParentInsertionShortcutOptions = {
 | S-03 | 重なりを避けないこと。A に子 A1・A2 を足し（A1 は A の右、A2 は A1 の 40px 下）、B に親を入れると、B が A2 と同じ位置に重なること | 中 |
 | S-04 | ショートカット。`Alt` + `Enter`（macOS は `Option`）で S-01 と同じ結果になり、兄弟が増えないこと。`Enter`・`Shift` + `Enter` では今までどおり兄弟が増えること。`Ctrl` + `Alt` + `Enter`、`Alt` + `Shift` + `Enter` では何も起きないこと。`Alt` + `Enter` を約3秒押し続けても、挿入は1回だけで、入力欄が開いたままであること | 高 |
 | S-05 | `Enter` の押し続け。ノードを選択して `Enter` を約3秒押し続けると、兄弟は1つだけ増え、入力欄が開いたままであること（今までは手を離すまで増え続けた） | 高 |
-| S-06 | ルートと自動配置。手動配置でルート R に親を入れると、新しいノードが R の位置で新しいルートになり、R がその右に来ること。自動配置に切り替えたマップで先頭のルートに親を入れると、新しいノードが元の先頭のルートの位置に来て、木が並び直ること。先頭でないノードに入れても、先頭のルートの位置が変わらないこと | 高 |
+| S-06 | ルートと自動配置。手動配置でルート R に親を入れると、新しいノードが R の位置で新しいルートになり、R がその右に来ること。自動配置に切り替えたマップで先頭のルートに親を入れると、新しいノードが元の先頭のルートの位置に来て、木が並び直ること。先頭でないノードに入れても、先頭のルートの位置が変わらないこと（位置は localStorage の `x`・`y` で比べる。ダブルクリックで足した2本目のルートは先頭の木の下に置かれ選択もされないので、見えなければドラッグして画面に入れ、ラベルを付けてクリックで選択する） | 高 |
 | S-07 | 表示レベルと重要度。B の重要度を「高」にして B に親を入れると、新しいノードの重要度が「高」であること。表示を「高のみ」にして、重要度「低」で子孫に「高」が無いノードが隠れている状態で、見えているノードを選ぶとボタンが有効、選択を外すと無効であること | 中 |
 | S-08 | 元に戻す / やり直す。挿入してラベルを確定した後、1回目の「元に戻す」でラベルが空に戻り、2回目で挿入が戻って B が元の位置・元の親に戻ること。「やり直す」2回で同じ木と位置・ラベルに戻ること | 高 |
 | S-09 | 編集中に押す。A のラベルを編集中に「親を挿入」をマウスで押すと、A のラベルが確定してから A の上に親が入り、新しいノードの編集になること | 高 |
 | S-10 | ショートカットが止まる場面。ラベル編集中（`Alt` + `Enter` は確定になる）、検索入力欄、表示セレクター、箇条書きのダイアログ・マップのダイアログを開いている間、日本語 IME の変換中に `Alt` + `Enter` を押してもマップが変わらないこと。「上へ」「階層を下げる」にフォーカスがあるまま `Alt` + `Enter` で挿入されること | 高 |
-| S-11 | ボタンのキーボード操作と読み上げ。Tab で「親を挿入」へ移り、Enter・Space で挿入され、入力欄へフォーカスが移ること。「親を挿入」にフォーカスしたまま Enter を約3秒押し続けても、挿入は1回だけで入力欄が開いたままであること。ダブルクリックで2つの親が重なって入ること（「元に戻す」2回で戻る）。VoiceOver で「選択中のノードに親を挿入」と読まれ、押した後に入力欄が読まれること | 中 |
-| S-12 | 失敗の通知。座標が極端に大きい（`x` が `1e19`）ノードを含む手動配置の JSON を「JSON読み込み」で読み込み、そのノードに親を入れると、何も変わらず「親ノードを挿入できませんでした。」が出ること。続けてほかのノードに親を入れると、その通知が消えること | 中 |
+| S-11 | ボタンのキーボード操作と読み上げ。Tab で「親を挿入」へ移り、Enter・Space で挿入され、入力欄へフォーカスが移ること。「親を挿入」にフォーカスしたまま Enter を約3秒押し続けても、挿入は1回だけで入力欄が開いたままであること。ダブルクリックで2つの親が重なって入ること（「元に戻す」2回で戻る）。VoiceOver で「選択中のノードに親を挿入」と読まれ、押した後に入力欄が「ノードのラベル」と読まれること（features.md の 3.4 節）。選択を外して無効にしたときに「使用不可」などと読まれること | 中 |
+| S-12 | 失敗の通知。子孫の `x` が `1e19`（C の子 C1）の手動配置の JSON を「JSON読み込み」で読み込み、画面内の C に親を入れると、子孫を動かす計算が桁落ちして何も変わらず「親ノードを挿入できませんでした。」が出ること。続けてほかのノードに親を入れると、その通知が消えること | 中 |
 | S-13 | 保存と書き出し。挿入の後にリロードしても木が保たれること。JSON を書き出して別のマップへ読み込むと同じ木になること。PNG / SVG に挿入した後の配置が出ること | 中 |
-| S-14 | 幅 375px とダークモード。ヘッダーの5つのボタンが画面に収まり（折り返してよい）、押せること | 中 |
+| S-14 | 幅 375px とダークモード。ヘッダーの5つのボタンが画面に収まり（折り返してよい）、押せること（通常の幅で基本の木を作ってから幅を狭め、B は「ノードを検索」で選ぶ） | 中 |
+| S-15 | ドラッグ中にボタンから挿入する。キャンバスはフォーカスできず、ノードを押すとボタンのフォーカスは外れるので、コンソールの `setTimeout(() => document.querySelector('[aria-label="選択中のノードに親を挿入"]').click(), 3000)` で3秒後にボタンを押させ（タッチ端末では指でタップ）、その間に B をドラッグしてマウスのボタンを押したまま待つと、ドラッグが止まって新しいノードの入力欄が開くこと。マウスを離しても B は動かないこと。手動配置では「元に戻す」の1回目で挿入だけが戻り、2回目でドラッグ分が戻ること | 中 |
 
 ## 反映した知見
 
