@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   exportedMap,
@@ -14,7 +14,12 @@ import {
   type V3LayoutMode,
   type V3SeedNode,
 } from "@/app/testing/pageTestHelpers";
-import { resetMapStageTestRuntime } from "@/components/map/testing/mapStageTestRuntime";
+import {
+  mockNodePointerHandlers,
+  mockStageHandlers,
+  pointer,
+  resetMapStageTestRuntime,
+} from "@/components/map/testing/mapStageTestRuntime";
 import { seedMapLibrary } from "@/testing/mapLibraryTestStorage";
 
 // Pixi・イラスト生成・ダウンロード・画像化だけを差し替え、Home から MapEditor・ヘッダー・
@@ -309,6 +314,25 @@ describe("ページの親の挿入（ショートカット）", () => {
 });
 
 describe("ページの親の挿入（止まる場面。L-061）", () => {
+  it("ノードのドラッグ中の Alt+Enter では挿入しない", async () => {
+    storeBasicMap();
+    await renderPage();
+    selectBasicB();
+
+    // 手動配置で B をドラッグしている途中に押す
+    act(() => {
+      mockNodePointerHandlers.at(-1)?.pointerdown?.(pointer(270, 230));
+      mockStageHandlers.pointermove?.(pointer(270, 260));
+    });
+    pressAltEnter();
+    act(() => {
+      mockStageHandlers.pointerup?.(pointer(270, 260));
+    });
+
+    expect(exportedNodeCount()).toBe(5);
+    expect(screen.queryByTestId("node-label-input")).toBeNull();
+  });
+
   it("ラベル編集中の入力欄への Alt+Enter では挿入しない", async () => {
     storeBasicMap();
     await renderPage();
