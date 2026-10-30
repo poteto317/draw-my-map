@@ -232,6 +232,38 @@ describe("insertNodeForest: 失敗と採番", () => {
     expect(allocateIds).not.toHaveBeenCalled();
   });
 
+  it("root・manual で左端の x が大きく列の計算が桁落ちすれば placement-failed で、allocateIds を呼ばない", () => {
+    // y は普通の値なので、下端からの移動量の計算には進まず、仮の配置で失敗する
+    const current = [createTestNode({ id: 1, x: 2 ** 60, y: 0 })];
+    const allocateIds = idsFrom(10);
+    expect(insertNodeForest(
+      current, [item("A", null), item("A1", 0)], { kind: "root" }, "manual", allocateIds,
+    )).toEqual({ ok: false, reason: "placement-failed" });
+    expect(allocateIds).not.toHaveBeenCalled();
+  });
+
+  it("root・manual で移動量が小さく、下の木の y の加算が桁落ちすれば placement-failed で、allocateIds を呼ばない", () => {
+    // 移動量 2 ** -47 は、先頭の木の y（40）には足せるが、下の木の y（180）では丸めで失われる
+    const current = [createTestNode({ id: 1, y: 2 ** -47, height: 0 })];
+    const allocateIds = idsFrom(10);
+    expect(insertNodeForest(
+      current, [item("A", null), item("B", null)], { kind: "root" }, "manual", allocateIds,
+    )).toEqual({ ok: false, reason: "placement-failed" });
+    expect(allocateIds).not.toHaveBeenCalled();
+  });
+
+  it("child・manual で既存の子の下端が溢れて y の移動量が求められなければ placement-failed で、allocateIds を呼ばない", () => {
+    // 既存の子は仮の配置に含まれないので、仮の配置は成功し、移動量の計算で失敗する
+    const current = [
+      createTestNode({ id: 1 }),
+      createTestNode({ id: 2, parentId: 1, y: Number.MAX_VALUE, height: Number.MAX_VALUE }),
+    ];
+    const allocateIds = idsFrom(10);
+    expect(insertNodeForest(current, twoTrees, { kind: "child", parentId: 1 }, "manual", allocateIds))
+      .toEqual({ ok: false, reason: "placement-failed" });
+    expect(allocateIds).not.toHaveBeenCalled();
+  });
+
   it("同じ値を繰り返す生成器の allocator でも、既存の ID とも互いにも重ならない ID を割り当てる", () => {
     const allocator = createNodeIdAllocator(() => {
       const values = [1, 1, 2, 2, 3, 3, 4, 4, 5];

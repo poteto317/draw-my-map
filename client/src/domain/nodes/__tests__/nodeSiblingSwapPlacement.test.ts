@@ -250,6 +250,94 @@ describe("swapSiblingBranchPositions", () => {
     });
   });
 
+  it("根の指定が重複していても、重複の無い指定と同じ結果になる", () => {
+    const nodes = [
+      createTestNode({ id: 1, y: 0 }),
+      createTestNode({ id: 2, y: 100 }),
+      createTestNode({ id: 3, parentId: 2, y: 200 }),
+    ];
+
+    expect(ys(swapOk(nodes, [2, 2], [1]))).toEqual({ 1: 200, 2: 0, 3: 100 });
+  });
+
+  it("親子の循環があっても止まり、枝の各ノードを1回だけ動かす", () => {
+    const nodes = [
+      createTestNode({ id: 1, parentId: 2, y: 100 }),
+      createTestNode({ id: 2, parentId: 1, y: 160 }),
+      createTestNode({ id: 3, y: 0 }),
+    ];
+
+    expect(ys(swapOk(nodes, [1], [3]))).toEqual({ 1: 0, 2: 60, 3: 160 });
+  });
+
+  it("枝の途中のノードで下端が溢れたら、後ろのノードが正常でもplacement-failedにする", () => {
+    // y は普通の値なので、下端の失敗が消えると座標の移動は成功してしまう
+    const nodes = [
+      createTestNode({ id: 1, y: 100 }),
+      createTestNode({ id: 2, parentId: 1, y: 150, height: Infinity }),
+      createTestNode({ id: 3, parentId: 1, y: 200 }),
+      createTestNode({ id: 4, y: 0 }),
+    ];
+
+    expect(swapSiblingBranchPositions(nodes, [1], [4])).toEqual({
+      ok: false,
+      reason: "placement-failed",
+    });
+  });
+
+  // 2 ** 60 の前後の浮動小数点数の間隔は、下が 128、上が 256。2 ** 61 では下が 256、上が 512。
+  // どの入力も枝の外接範囲は求まるので、入れ替えの座標の計算まで届く
+  it.each<[string, Node[]]>([
+    [
+      "枝の間隔が桁落ちする",
+      [
+        createTestNode({ id: 1, y: 0, height: 1 }),
+        createTestNode({ id: 2, y: 2 ** 60, height: 256 }),
+      ],
+    ],
+    [
+      "上の位置に first の高さを足すと桁落ちする",
+      [
+        createTestNode({ id: 1, y: 0, height: 100 }),
+        createTestNode({ id: 2, y: -(2 ** 61), height: 256 }),
+      ],
+    ],
+    [
+      "first の下端に間隔を足すと桁落ちする",
+      [
+        createTestNode({ id: 1, y: -(2 ** 60), height: 1024 }),
+        createTestNode({ id: 2, y: -(2 ** 61), height: 2 ** 61 }),
+      ],
+    ],
+    [
+      "first の移動量が桁落ちする",
+      [
+        createTestNode({ id: 1, y: -100, height: 256 }),
+        createTestNode({ id: 2, y: -(2 ** 61), height: 256 }),
+      ],
+    ],
+    [
+      "second の移動量が桁落ちする",
+      [
+        createTestNode({ id: 1, y: 0, height: 2 ** 53 }),
+        createTestNode({ id: 2, y: 0.5, height: 1 }),
+      ],
+    ],
+    [
+      "枝の遠い子孫に移動量を足すと桁落ちする",
+      [
+        createTestNode({ id: 1, y: -10, height: 50 }),
+        createTestNode({ id: 2, y: 0 }),
+        createTestNode({ id: 3, parentId: 2, y: 2 ** 60, height: 256 }),
+      ],
+    ],
+  ])("%sときはplacement-failedにする", (_name, nodes) => {
+    expect(swapSiblingBranchPositions(nodes, [1], [2])).toEqual({
+      ok: false,
+      reason: "placement-failed",
+    });
+  });
+
   it("入力の配列とノードを変更しない", () => {
     const nodes = [
       createTestNode({ id: 1, y: 0 }),

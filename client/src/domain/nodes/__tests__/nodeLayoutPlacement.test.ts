@@ -1,11 +1,22 @@
 import { indexNodeForest, type IndexedNodeForest } from "@/domain/nodes/nodeLayoutForest";
-import type { NodeLayoutMetrics } from "@/domain/nodes/nodeLayoutMetrics";
+import {
+  calculateNodeLayoutMetrics,
+  type NodeLayoutMetrics,
+} from "@/domain/nodes/nodeLayoutMetrics";
 import { placeNodeForest } from "@/domain/nodes/nodeLayoutPlacement";
 import type { Node } from "@/types/node";
 import { createTestNode } from "@/testing/createTestNode";
 
 function node(id: number, parentId: number | null, y = 0, height = 60): Node {
   return createTestNode({ id, parentId, x: 80, y, height, label: String(id) });
+}
+
+// 実際の寸法計算の結果で配置する。寸法計算では止まらず、配置の計算まで届く入力だけを使う
+function placeWithCalculatedMetrics(nodes: readonly Node[]): ReturnType<typeof placeNodeForest> {
+  const forest = indexNodeForest(nodes)!;
+  const metrics = calculateNodeLayoutMetrics(forest);
+  expect(metrics).not.toBeNull();
+  return placeNodeForest(forest, metrics!);
 }
 
 describe("placeNodeForest", () => {
@@ -146,5 +157,50 @@ describe("placeNodeForest", () => {
     };
 
     expect(placeNodeForest(forest, metrics)).toBeNull();
+  });
+});
+
+// 2 ** 60 の前後の浮動小数点数の間隔は、下が 128、上が 256 なので、半分未満の加減算は失われる
+describe("placeNodeForest: 中央揃えと積み上げの桁落ち", () => {
+  it("ルートのspanから自身の高さを引けなければnull", () => {
+    // ルートは高さ60のまま、子の高さで span が 2 ** 60 になり、2 ** 60 - 60 が 2 ** 60 へ丸められる
+    const nodes = [node(1, null, 0, 60), node(2, 1, 0, 2 ** 60)];
+
+    expect(placeWithCalculatedMetrics(nodes)).toBeNull();
+  });
+
+  it("ルート以外のノードのspanから自身の高さを引けなければnull", () => {
+    // ルートの span は自身の高さと同じで余りが 0 になり、中間のノード 2 だけが丸めで失敗する
+    const nodes = [node(1, null, 0, 2 ** 60), node(2, 1, 0, 60), node(3, 2, 0, 2 ** 60)];
+
+    expect(placeWithCalculatedMetrics(nodes)).toBeNull();
+  });
+
+  it("spanから子グループの高さを引けなければnull", () => {
+    // 自身の高さが span と同じなので y は求まり、子グループの高さ60を引くところで丸められる
+    const nodes = [node(1, null, 0, 2 ** 60), node(2, 1, 0, 60)];
+
+    expect(placeWithCalculatedMetrics(nodes)).toBeNull();
+  });
+
+  it("子グループの先頭の位置が桁落ちすればnull", () => {
+    // 親の y は余り 0 で求まり、子グループを中央へ寄せる 100 の加算だけが失われる
+    const nodes = [node(1, null, 2 ** 60, 300), node(2, 1, 0, 100)];
+
+    expect(placeWithCalculatedMetrics(nodes)).toBeNull();
+  });
+
+  it("次の兄弟の位置を求めるとき、前の兄弟のspanの加算が桁落ちすればnull", () => {
+    // 親の高さは子グループの高さ（1 + 40 + 1）と同じで余りが 0 になり、高さ1の加算が失われる
+    const nodes = [node(1, null, 2 ** 60, 42), node(2, 1, 0, 1), node(3, 1, 0, 1)];
+
+    expect(placeWithCalculatedMetrics(nodes)).toBeNull();
+  });
+
+  it("次の兄弟の位置を求めるとき、兄弟の間隔の加算が桁落ちすればnull", () => {
+    // 高さ256の加算は保たれ、間隔40の加算だけが失われる
+    const nodes = [node(1, null, 2 ** 60, 552), node(2, 1, 0, 256), node(3, 1, 0, 256)];
+
+    expect(placeWithCalculatedMetrics(nodes)).toBeNull();
   });
 });

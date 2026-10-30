@@ -249,6 +249,27 @@ describe("calculateIndentTranslation", () => {
     expect(calculateIndentTranslation(nodes, 4, 2)).toBeNull();
   });
 
+  it("新しい親の既存の子の下端が溢れれば null", () => {
+    const nodes = [
+      node(2, null, 220, 0),
+      createTestNode({ id: 5, parentId: 2, y: Number.MAX_VALUE, height: Number.MAX_VALUE }),
+      node(4, null, 220, 100),
+    ];
+
+    expect(calculateIndentTranslation(nodes, 4, 2)).toBeNull();
+  });
+
+  it("新しい親の既存の子の下端に間隔 40 を足すと桁落ちすれば null", () => {
+    // 負の下端にすると、桁落ちの判定を外しても後段の間隔の判定（hasSufficientGap）では止まらない
+    const nodes = [
+      node(2, null, 220, 0),
+      createTestNode({ id: 5, parentId: 2, y: -(2 ** 61), height: 2 ** 60 }),
+      node(4, null, 220, 100),
+    ];
+
+    expect(calculateIndentTranslation(nodes, 4, 2)).toBeNull();
+  });
+
   it("新しい親や T が無ければ null", () => {
     expect(calculateIndentTranslation(createM2(), 4, 99)).toBeNull();
     expect(calculateIndentTranslation(createM2(), 99, 2)).toBeNull();
@@ -404,6 +425,57 @@ describe("calculateOutdentTranslation", () => {
 
   it("親の x が NaN なら null", () => {
     const nodes = replaceNode(createM4(), 2, { x: Number.NaN });
+
+    expect(calculateOutdentTranslation(nodes, 4, 2)).toBeNull();
+  });
+
+  it.each([Number.NaN, Infinity])("枝の子孫の y が %s なら null", (y) => {
+    // T が配列の先に来るので、枝の上端は T の y のままで、後段の差の計算では止まらない
+    const nodes = [node(2, null, 220, 0), node(4, 2, 440, 100), node(6, 4, 660, y)];
+
+    expect(calculateOutdentTranslation(nodes, 4, 2)).toBeNull();
+  });
+
+  it("親の枝のノードの下端が溢れれば null", () => {
+    const nodes = [
+      node(2, null, 220, 0),
+      node(4, 2, 440, 100),
+      createTestNode({ id: 5, parentId: 2, y: Number.MAX_VALUE, height: Number.MAX_VALUE }),
+    ];
+
+    expect(calculateOutdentTranslation(nodes, 4, 2)).toBeNull();
+  });
+
+  it("親の枝の下端に間隔 40 を足すと桁落ちすれば null", () => {
+    // 負の下端と、T より上にある子により、桁落ちの判定を外しても間隔の判定と根の y の判定で止まらない
+    const nodes = [
+      createTestNode({ id: 2, x: 220, y: -(2 ** 61), height: 2 ** 60 }),
+      node(4, 2, 440, 100),
+      node(6, 4, 660, 0),
+    ];
+
+    expect(calculateOutdentTranslation(nodes, 4, 2)).toBeNull();
+  });
+
+  it("T の x が NaN で dx が求められなければ null", () => {
+    const nodes = [node(2, null, 220, 0), node(4, 2, Number.NaN, 100)];
+
+    expect(calculateOutdentTranslation(nodes, 4, 2)).toBeNull();
+  });
+
+  it("枝の上端との差が桁落ちして dy が求められなければ null", () => {
+    // 目的の上端は 2 ** 53 + 40 で求まるが、枝の上端 0.5 を引くと丸めで失われる
+    const nodes = [
+      createTestNode({ id: 2, x: 220, y: 2 ** 52, height: 2 ** 52 }),
+      node(4, 2, 440, 0.5),
+    ];
+
+    expect(calculateOutdentTranslation(nodes, 4, 2)).toBeNull();
+  });
+
+  it("T が枝の上端でなく、根の y に dy を足すと桁落ちすれば null", () => {
+    // 枝の上端は子の 0 なので dy は 100 で求まり、T の y（2 ** 60）への加算だけが失われる
+    const nodes = [node(2, null, 220, 0), node(4, 2, 440, 2 ** 60), node(6, 4, 660, 0)];
 
     expect(calculateOutdentTranslation(nodes, 4, 2)).toBeNull();
   });
