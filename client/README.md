@@ -77,6 +77,7 @@ client/src/
 │   ├── nodes/            # ノードツリー操作、重なり判定、自動レイアウト、重要度判定、枝の折りたたみと表示用の配置、手動配置の共通規則、箇条書きの森の挿入、兄弟ノードの順序変更（並べ替え・手動配置の縦位置の入れ替え・通知の文言）、階層の上げ下げ（規則・手動配置の平行移動・通知の文言。兄弟の走査は並べ替えと共有）、途中への親ノード挿入（規則・失敗の通知の文言。手動配置の平行移動は上げ下げと共有）
 │   ├── outline/          # 箇条書きのテキストの解析（上限・行の分割・ラベル・階層）、プレビュー用の木、文言
 │   ├── search/           # ノードラベルの正規化・索引化・部分一致検索、検索結果の祖先展開の判定
+│   ├── shared/           # 外部入力（unknown）を as のキャストなしで読む型ガード（isRecord・readProperty）
 │   └── persistence/      # MapDocument スキーマ定義、エンコード/デコード、移行処理
 ├── hooks/                # React カスタムフック (状態管理、UIとドメインの仲介)
 ├── server/               # サーバーサイド処理 (Route Handler から呼び出されるサービス)
@@ -181,6 +182,7 @@ Draw My Map では、コードの信頼性と保守性を維持するため、�
   - `src/components/map/testing/mapStageTestRuntime.tsx` / `AutoLayoutMapStageHarness.tsx`: `MapStage` コンポーネント結合テスト用のランタイム注入・自動レイアウト検証ハーネス。
   - `src/components/map/testing/treeEditShortcutTargets.ts`: 兄弟の順序・階層のショートカットの共通ガードの target の条件を確かめるテストで共有する、キー入力の送り先の要素の補助（`insideOf`・`buttonInsideMarkedElement`）。
   - `src/app/testing/pageTestHelpers.tsx`: `Home` を本物の `MapEditor`・`MapStage` まで通すページの結合テストで共有する補助。描画してキャンバスの枠を固定する `renderPage`、`stageContainer`・`undoButton`・`redoButton`・`dialog`・`headerButton`、ノードを選択する `selectNode`、JSON 書き出しと保存の本体を読む `exportedMap`（`downloadMapJson` のモックを引数で受け取る）・`storedMap`、V3 の JSON を作る `v3Json`・`v3JsonFromLabels` と型 `ExportedNode`・`ExportedMap`。
+  - `src/app/__tests__/page*.test.tsx`: `Home` を本物の `useMapLibrary`・`MapEditor`・`MapStage`・`localStorage` まで通すページの結合テスト。保存と再読み込みの往復（自動保存した内容が戻ること、折りたたみ・表示の絞り込みを保存しないこと、削除・切り替えが再読み込み後も保たれること）は `pageSaveReload.test.tsx` にまとめる。
   - `src/app/testing/pageModuleMocks.ts`: ページの結合テストの `jest.mock` のファクトリから `jest.requireActual` で読むモックの中身（Pixi の標準形 `createPagePixiModuleMock`、文字幅の測定 `createMapTextMeasurementModuleMock`）。`jest.mock` は巻き上げられるため、ファクトリは `jest.requireActual` 経由でだけ外部の関数を使える。`@/app/page`・`pixi.js` を import しない。
 
 ### 3. 検証コマンドの一括実行 (`npm run verify`)
@@ -200,6 +202,7 @@ Draw My Map では、コードの信頼性と保守性を維持するため、�
 ## 関連ドキュメント
 
 - [リポジトリ ルート README](../README.md): プロジェクト全体のビジョン・全体クイックスタート
+- [開発者向けガイド](../docs/development/developer-guide.md): 新しく参加する開発者向けのセットアップ・主要な流れ・テストの書き方・よくある落とし穴
 - [ドキュメントポータル](../docs/README.md): ドキュメント全体の目次・ガイド
 - [システムアーキテクチャ概要](../docs/architecture/overview.md): Pixi.js と React の協調モデル、設計原則
 - [機能仕様・操作マニュアル](../docs/specifications/features.md): ショートカット、ノード操作、フィルタリング仕様

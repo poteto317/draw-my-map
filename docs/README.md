@@ -7,6 +7,14 @@ Draw My Map の設計・仕様・環境構築・テスト・開発運用に関�
 
 ## ドキュメント一覧
 
+### 0. はじめての方へ
+
+- **[開発者向けガイド](development/developer-guide.md)** (`docs/development/developer-guide.md`)
+  - 新しく参加する開発者向けの入口。セットアップ、よく使うコマンド、作業の進め方。
+  - 主要な流れ（レイヤーと依存の向き、`Home` と `MapEditor` の分担、`applyTreeChange` による1操作の編集、保存と読み込み、イラスト生成）。
+  - テストの書き方（置き場所と名前、レイヤーごとの書き方、共通の補助、失敗経路のテスト、特性テスト）。
+  - よくある落とし穴（外部入力を `as` で型付けしない、コールバック内の代入と型の絞り込み、Pixi.js と jsdom、`localStorage` の窓口、表示専用の状態、非同期の結果の照合、IME、React Compiler、`never` による網羅性）。
+
 ### 1. アーキテクチャ・設計
 
 - **[システムアーキテクチャ概要](architecture/overview.md)** (`docs/architecture/overview.md`)
@@ -70,7 +78,7 @@ Draw My Map の設計・仕様・環境構築・テスト・開発運用に関�
 ### 5. プロジェクト管理・開発履歴
 
 - **[開発ロードマップ](../ROADMAP.md)** (`ROADMAP.md`)
-  - プロジェクトのビジョン、差別化ポイント、各フェーズ（Phase 0〜39。Phase 0〜13 は完了、Phase 14 は進行中（兄弟ノードの順序変更と階層の上げ下げが完了）、Phase 15 以降は未着手）の実装完了状況。
+  - プロジェクトのビジョン、差別化ポイント、各フェーズ（Phase 0〜39。Phase 0〜13 は完了、Phase 14 は進行中（兄弟ノードの順序変更・階層の上げ下げ・途中への親ノード挿入が完了）、Phase 15 以降は未着手）の実装完了状況。
 - **[エージェント・開発ルール](../AGENTS.md)** (`AGENTS.md`)
   - サブエージェント駆動開発（Subagent-Driven Development）、二段階レビュー運用、PR運用ルール。
 - **[レビュー指摘の記録](review-findings/)** (`docs/review-findings/`)
@@ -87,6 +95,8 @@ Draw My Map の設計・仕様・環境構築・テスト・開発運用に関�
 ```text
 docs/
 ├── README.md                           # 本ドキュメントポータル
+├── development/                        # 開発者向け
+│   └── developer-guide.md              # 新しく参加する開発者向けガイド
 ├── architecture/                       # システムアーキテクチャ
 │   └── overview.md                     # アーキテクチャ概要・協調設計
 ├── specifications/                     # 機能・データ・API 仕様書

@@ -186,6 +186,7 @@ draw-my-map/
 
 プロジェクトの詳細な仕様・アーキテクチャについては、[ドキュメントポータル（docs/README.md）](docs/README.md) をご覧ください。
 
+- **[開発者向けガイド](docs/development/developer-guide.md)**: 新しく参加する開発者向けのセットアップ、主要な流れ、テストの書き方、よくある落とし穴
 - **[システムアーキテクチャ概要](docs/architecture/overview.md)**: Pixi.js と React 19 の協調モデル、レイヤード設計
 - **[機能仕様・操作マニュアル](docs/specifications/features.md)**: 全機能仕様、キーボードショートカット一覧
 - **[データモデル・永続化仕様](docs/specifications/data-model.md)**: `MapDocument` JSON スキーマ（V1/V2/V3）、マイグレーション、複数マップの `localStorage` 保存構造

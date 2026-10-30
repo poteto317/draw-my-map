@@ -272,6 +272,7 @@ sequenceDiagram
   - パラメータ: `{ text, source_lang: "japanese", target_lang: "english" }`
   - タイムアウト: 30 秒（`timeoutMs: 30_000`）
   - 翻訳に失敗した場合、日本語のまま画像生成へ進むことはせず、即座にエラー（429 または 502）を返します。
+  - 翻訳は NSFW の再試行より前に 1 回だけ行います。翻訳で `content-rejected` に分類されるエラーが起きても再試行はせず、一般の失敗と同じく `502`（`"upstream-error"`）を返します（再試行するのは画像生成の誤判定だけです）。
 
 #### ステップ 4: プロンプト構築 (`buildIllustrationPrompt`)
 - 概念長の上限クリップ: 長文翻訳結果によるプロンプト全体のトークンあふれ（Cloudflare 制限 2048 文字）を防ぐため、概念文字列は先頭 500 文字（`ILLUSTRATION_CONCEPT_MAX_LENGTH = 500`）にスライス。
@@ -297,6 +298,13 @@ sequenceDiagram
   - システムは `content-rejected` エラーを検知した場合、最大 3 回（初回 + 再試行 2 回）まで同一プロンプトで自動的にリトライします。
   - **シード制御の注意点**: Cloudflare Workers AI の FLUX API に明示的な `seed` パラメータを送ると `HTTP 400 (code: 5006)` エラーが発生するため、リクエストに `seed` は含めず、サーバー側のランダムシード生成に委ねることで再試行ごとの成功率を回復させます。
   - 3 回試行してもすべて拒否された場合のみ、`422 Unprocessable Entity`（`"content-rejected"`）を返します。
+
+#### エラー応答への変換（`handleIllustrationRequest.ts`）
+- 上流（翻訳・画像生成）の失敗は、`cloudflareRunModel.ts` が `ImageGenerationError`（`kind`: `quota-exceeded` / `content-rejected` / `upstream-error`）に分類し、`handleIllustrationRequest.ts` が HTTP 応答へ変換します。
+- 翻訳と画像生成で共通の変換は `upstreamFailureResponse` にまとめています。`quota-exceeded` だけを `429` にし、それ以外（`ImageGenerationError` でない想定外の例外を含む）は内部のメッセージを返さずに `502`（`"upstream-error"`）にします。
+- 画像生成だけは、その前に `content-rejected` を判定し、3 回目までは再試行、3 回目なら `422` にします。
+- `cloudflareRunModel.ts` は、例外のメッセージに API トークンが含まれ得るため、通信の失敗を固定の文言の `upstream-error` に置き換えます。時間切れのタイマーは、応答本文の読み込みが終わるまで解除しません。
+- 応答の本文は形が保証されないため、`unknown` のまま `domain/shared/unknownRecord.ts` の `readProperty` で読みます。分類に使うのは `errors` の先頭の項目だけで、`code` は数値の `8007` と一致するときだけ、`message` は文字列のときだけ使います。`success` が真偽値の `true` でなければ（文字列の `"true"` や本文が `null`・配列・文字列でも）`upstream-error` です。`result` は形を確かめずに返し、翻訳（`translated_text` が空でない文字列か）と画像生成（`image` が文字列か）の側で検証します。
 
 ---
 
@@ -439,12 +447,25 @@ Cloudflare ダッシュボードで API トークンを作成する際は、以�
 ```bash
 cd client
 
-# イラスト関連のすべてのテストを実行
+# イラスト関連のすべてのテストを実行（パスに illustration を含むもの。Route Handler の src/app/api/illustrations も含む）
 npm test -- illustration
 
-# サーバー側 Route Handler & アダプタテストのみ実行
+# Route Handler（環境変数と Cloudflare の実装への配線）のテストのみ実行
+npm test -- src/app/api/illustrations
+
+# サーバー側のオーケストレーションとアダプタのテストのみ実行
 npm test -- src/server/illustration
 
 # クライアント側サービステストのみ実行
 npm test -- src/services/illustration
 ```
+
+テストの役割分担は次のとおりです。
+
+| テストファイル | 確かめること |
+| :--- | :--- |
+| `app/api/illustrations/__tests__/route.test.ts` | `process.env` から設定を読む配線と、本物の `createCloudflareTranslator`・`createCloudflareImageGenerator` への配線。グローバルの `fetch` を `jest.spyOn` で差し替え、呼び出す URL（アカウント ID・モデル）・認証ヘッダー・送る本文・翻訳の有無・429 の変換を確かめる。 |
+| `server/illustration/__tests__/handleIllustrationRequest.test.ts` | 検証の順序、翻訳の有無、NSFW の再試行の回数、エラーコードと HTTP ステータスの対応。翻訳・生成は注入したモックで置き換える。 |
+| `server/illustration/__tests__/cloudflareImageGenerator.test.ts`・`cloudflareTranslator.test.ts` | 環境変数の検証、Workers AI の応答の分類（NSFW・無料枠・不正な応答）、時間切れ、トークンをエラーメッセージに含めないこと。`fetch` は引数で注入する。 |
+| `server/illustration/__tests__/cloudflareRunModel.test.ts` | 共通の呼び出しの単体。`result` をそのまま返すこと、`fetchImpl` を省いたときのグローバルの `fetch`、形の違う本文（`null`・配列・文字列、`success` が `true` 以外、`errors` が配列でない・先頭が `null`、`code` が文字列、`message` が文字列でない）をすべて `upstream-error` にすること。 |
+| `services/illustration/__tests__/*.test.ts` | クライアント側の API 呼び出しとエラーの分類、サムネイルの生成（注入した依存と、既定の `Image`・`canvas` 要素の両方）。 |

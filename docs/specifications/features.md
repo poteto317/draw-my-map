@@ -1266,7 +1266,7 @@ sequenceDiagram
 
 ## 14. 兄弟ノードの順序変更
 
-選択中のノードの枝（ノードと全子孫）を、同じ親を持つ兄弟（ルート同士を含む）の中で1つ上・1つ下へ移し、並びを変えます。自動配置では、ノードをドラッグして兄弟の間へ落としても並べ替えられます。並べ替えの規則は純関数（`client/src/domain/nodes/nodeSiblingOrder.ts` の `findSiblingReorderTarget`・`getSiblingReorderAvailability`・`reorderSiblingNodes`、手動配置の縦位置の入れ替えは `client/src/domain/nodes/nodeSiblingSwapPlacement.ts` の `swapSiblingBranchPositions`、通知の文言は `client/src/domain/nodes/nodeSiblingOrderMessages.ts` の `formatSiblingReorderNotice`）、1回の commit は `useNodes.reorderSibling`、ボタンの有効・無効と通知は `useSiblingReorderAction`（`client/src/hooks/useSiblingReorderAction.ts`）が受け持ちます。
+選択中のノードの枝（ノードと全子孫）を、同じ親を持つ兄弟（ルート同士を含む）の中で1つ上・1つ下へ移し、並びを変えます。自動配置では、ノードをドラッグして兄弟の間へ落としても並べ替えられます。並べ替えの規則は純関数（`client/src/domain/nodes/nodeSiblingOrder.ts` の `reorderSiblingNodes`・`reorderSiblingByRequest`、移動先の解決は `client/src/domain/nodes/nodeSiblingReorderTarget.ts` の `findSiblingReorderTarget`・`getSiblingReorderAvailability`（`nodeSiblingOrder.ts` からも再エクスポート）、配列の組み替えは `client/src/domain/nodes/nodeSiblingReorderSequence.ts` の `buildReorderedSiblings`、手動配置の縦位置の入れ替えは `client/src/domain/nodes/nodeSiblingSwapPlacement.ts` の `swapSiblingBranchPositions`、通知の文言は `client/src/domain/nodes/nodeSiblingOrderMessages.ts` の `formatSiblingReorderNotice`）、1回の commit は `useNodes.reorderSibling`、ボタンの有効・無効と通知は `useSiblingReorderAction`（`client/src/hooks/useSiblingReorderAction.ts`）が受け持ちます。
 
 兄弟とルートの順は `nodes` 配列の相対順で表します。並べ替えは、移動する枝の根ノード1つの配列内の位置だけを変え、子孫の配列位置は変えません。`Node` 型、保存形式（V3）、JSON、編集履歴の形式は変わりません。
 
