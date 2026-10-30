@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect } from "react";
 import type { ScreenSize } from "@/components/map/mapViewport";
 import {
   isViewportFocusShortcut,
   resolveViewportFocusRequest,
 } from "@/components/map/viewportFocusShortcut";
+import { useLatestRef } from "@/hooks/useLatestRef";
 import type { Node } from "@/types/node";
 
 type Options = {
@@ -27,7 +28,7 @@ export function useMapViewportShortcut({
   hasActiveGesture,
   onFocusNode,
 }: Options): void {
-  const latestOptionsRef = useRef({
+  const latestOptionsRef = useLatestRef({
     nodes,
     selectedNodeId,
     isEditing,
@@ -36,17 +37,6 @@ export function useMapViewportShortcut({
     hasActiveGesture,
     onFocusNode,
   });
-  useLayoutEffect(() => {
-    latestOptionsRef.current = {
-      nodes,
-      selectedNodeId,
-      isEditing,
-      enabled,
-      screen,
-      hasActiveGesture,
-      onFocusNode,
-    };
-  }, [nodes, selectedNodeId, isEditing, enabled, screen, hasActiveGesture, onFocusNode]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -71,5 +61,5 @@ export function useMapViewportShortcut({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [latestOptionsRef]);
 }

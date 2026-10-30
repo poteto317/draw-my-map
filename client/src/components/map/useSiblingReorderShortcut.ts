@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect } from "react";
 import { resolveSiblingReorderShortcut } from "@/components/map/siblingReorderShortcut";
 import { createTreeEditShortcutInput } from "@/components/map/treeEditShortcutGuard";
 import type { SiblingReorderRequest } from "@/domain/nodes/nodeSiblingOrder";
+import { useLatestRef } from "@/hooks/useLatestRef";
 
 export type UseSiblingReorderShortcutOptions = {
   selectedNodeId: number | null;
@@ -21,22 +22,13 @@ export function useSiblingReorderShortcut({
   onReorderSibling,
 }: UseSiblingReorderShortcutOptions): void {
   // window の登録をやり直さないよう、最新の options を ref から読む
-  const latestOptionsRef = useRef({
+  const latestOptionsRef = useLatestRef({
     selectedNodeId,
     isEditing,
     hasActiveGesture,
     enabled,
     onReorderSibling,
   });
-  useLayoutEffect(() => {
-    latestOptionsRef.current = {
-      selectedNodeId,
-      isEditing,
-      hasActiveGesture,
-      enabled,
-      onReorderSibling,
-    };
-  }, [selectedNodeId, isEditing, hasActiveGesture, enabled, onReorderSibling]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -56,5 +48,5 @@ export function useSiblingReorderShortcut({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [latestOptionsRef]);
 }

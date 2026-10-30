@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect } from "react";
+import { useLatestRef } from "@/hooks/useLatestRef";
 
 export type UseSiblingReorderDragEscapeOptions = {
   isSiblingReorderActive: () => boolean;
@@ -13,10 +14,7 @@ export function useSiblingReorderDragEscape({
   cancelActiveGesture,
 }: UseSiblingReorderDragEscapeOptions): void {
   // window の登録をやり直さないよう、最新の options を ref から読む
-  const latestOptionsRef = useRef({ isSiblingReorderActive, cancelActiveGesture });
-  useLayoutEffect(() => {
-    latestOptionsRef.current = { isSiblingReorderActive, cancelActiveGesture };
-  }, [isSiblingReorderActive, cancelActiveGesture]);
+  const latestOptionsRef = useLatestRef({ isSiblingReorderActive, cancelActiveGesture });
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -30,5 +28,5 @@ export function useSiblingReorderDragEscape({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [latestOptionsRef]);
 }

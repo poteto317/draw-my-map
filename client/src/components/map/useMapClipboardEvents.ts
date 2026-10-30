@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect } from "react";
 import { isEditableTarget } from "@/components/map/editableTarget";
 import {
   MAX_SUBTREE_CLIPBOARD_LENGTH,
@@ -9,6 +9,7 @@ import {
   type SubtreeClipboardData,
   type SubtreeClipboardResult,
 } from "@/domain/clipboard/subtreeClipboardCodec";
+import { useLatestRef } from "@/hooks/useLatestRef";
 import type { OperationNotice } from "@/types/operationNotice";
 
 type MapClipboardEventOptions = {
@@ -96,7 +97,7 @@ export function useMapClipboardEvents({
   publishNotice,
   enabled,
 }: MapClipboardEventOptions): void {
-  const latestOptionsRef = useRef<MapClipboardEventOptions>({
+  const latestOptionsRef = useLatestRef<MapClipboardEventOptions>({
     selectedNodeId,
     isEditing,
     hasActiveGesture,
@@ -105,17 +106,6 @@ export function useMapClipboardEvents({
     publishNotice,
     enabled,
   });
-  useLayoutEffect(() => {
-    latestOptionsRef.current = {
-      selectedNodeId,
-      isEditing,
-      hasActiveGesture,
-      copySubtree,
-      pasteSubtree,
-      publishNotice,
-      enabled,
-    };
-  }, [selectedNodeId, isEditing, hasActiveGesture, copySubtree, pasteSubtree, publishNotice, enabled]);
 
   useEffect(() => {
     const handleCopy = (event: ClipboardEvent) => {
@@ -138,5 +128,5 @@ export function useMapClipboardEvents({
       window.removeEventListener("copy", handleCopy);
       window.removeEventListener("paste", handlePaste);
     };
-  }, []);
+  }, [latestOptionsRef]);
 }

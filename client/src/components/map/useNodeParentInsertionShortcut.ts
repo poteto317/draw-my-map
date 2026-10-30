@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect } from "react";
 import { resolveNodeParentInsertionShortcut } from "@/components/map/nodeParentInsertionShortcut";
 import { createTreeEditShortcutInput } from "@/components/map/treeEditShortcutGuard";
+import { useLatestRef } from "@/hooks/useLatestRef";
 
 export type UseNodeParentInsertionShortcutOptions = {
   selectedNodeId: number | null;
@@ -20,22 +21,13 @@ export function useNodeParentInsertionShortcut({
   onInsertParentNode,
 }: UseNodeParentInsertionShortcutOptions): void {
   // window の登録をやり直さないよう、最新の options を ref から読む
-  const latestOptionsRef = useRef({
+  const latestOptionsRef = useLatestRef({
     selectedNodeId,
     isEditing,
     hasActiveGesture,
     enabled,
     onInsertParentNode,
   });
-  useLayoutEffect(() => {
-    latestOptionsRef.current = {
-      selectedNodeId,
-      isEditing,
-      hasActiveGesture,
-      enabled,
-      onInsertParentNode,
-    };
-  }, [selectedNodeId, isEditing, hasActiveGesture, enabled, onInsertParentNode]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -71,5 +63,5 @@ export function useNodeParentInsertionShortcut({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [latestOptionsRef]);
 }

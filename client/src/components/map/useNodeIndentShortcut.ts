@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect } from "react";
 import {
   resolveNodeIndentShortcut,
   shouldSuppressAltArrowNavigation,
 } from "@/components/map/nodeIndentShortcut";
 import { createTreeEditShortcutInput } from "@/components/map/treeEditShortcutGuard";
 import type { NodeIndentDirection } from "@/domain/nodes/nodeIndent";
+import { useLatestRef } from "@/hooks/useLatestRef";
 
 export type UseNodeIndentShortcutOptions = {
   selectedNodeId: number | null;
@@ -24,22 +25,13 @@ export function useNodeIndentShortcut({
   onChangeNodeIndent,
 }: UseNodeIndentShortcutOptions): void {
   // window の登録をやり直さないよう、最新の options を ref から読む
-  const latestOptionsRef = useRef({
+  const latestOptionsRef = useLatestRef({
     selectedNodeId,
     isEditing,
     hasActiveGesture,
     enabled,
     onChangeNodeIndent,
   });
-  useLayoutEffect(() => {
-    latestOptionsRef.current = {
-      selectedNodeId,
-      isEditing,
-      hasActiveGesture,
-      enabled,
-      onChangeNodeIndent,
-    };
-  }, [selectedNodeId, isEditing, hasActiveGesture, enabled, onChangeNodeIndent]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -63,5 +55,5 @@ export function useNodeIndentShortcut({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [latestOptionsRef]);
 }
