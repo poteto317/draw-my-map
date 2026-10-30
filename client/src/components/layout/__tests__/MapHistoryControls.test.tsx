@@ -169,6 +169,21 @@ describe("MapHistoryControls", () => {
       expect(input).toHaveFocus();
     });
 
+    it.each([
+      { name: "元に戻す", canUndo: false, canRedo: true },
+      { name: "やり直す", canUndo: true, canRedo: false },
+    ])("「$name」から外へ出て body に戻った後に無効になっても、フォーカスを移さない", ({ name, canUndo, canRedo }) => {
+      const { rerender } = renderControls(true, true);
+      const button = screen.getByRole("button", { name });
+      button.focus();
+      button.blur();
+      expect(document.body).toHaveFocus();
+
+      rerender(<MapHistoryControls canUndo={canUndo} canRedo={canRedo} onUndo={jest.fn()} onRedo={jest.fn()} />);
+
+      expect(document.body).toHaveFocus();
+    });
+
     it("ブラウザがフォーカスをbodyへ戻した後でも、もう一方のボタンへ移す", () => {
       const { rerender } = renderControls(true, false);
       const undoButton = screen.getByRole("button", { name: "元に戻す" });

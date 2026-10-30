@@ -143,6 +143,31 @@ describe("resolveSiblingReorderDrop", () => {
     });
   });
 
+  it("兄弟の x と幅が異なるとき、線は最も左の左端から最も右の右端まで引く", () => {
+    // 最も左の A と最も右の B が走査の途中にあり、後の C で範囲が狭まらないことも確かめる
+    const unevenNodes = nodes.map((node) => {
+      if (node.id === 2) return { ...node, x: 200 };
+      if (node.id === 4) return { ...node, x: 240, width: 160 };
+      return node;
+    });
+
+    expect(resolveSiblingReorderDrop(unevenNodes, visible, 3, 10)?.indicator).toEqual({
+      left: 192,
+      right: 408,
+      y: -20,
+    });
+  });
+
+  it("T が兄弟より左右に広いとき、線は T の左端から右端まで引く", () => {
+    const wideNodes = nodes.map((node) => (node.id === 3 ? { ...node, x: 100, width: 300 } : node));
+
+    expect(resolveSiblingReorderDrop(wideNodes, visible, 3, 10)?.indicator).toEqual({
+      left: 92,
+      right: 408,
+      y: -20,
+    });
+  });
+
   it("pointerY が有限でなければ null", () => {
     expect(resolveSiblingReorderDrop(nodes, visible, 3, Number.NaN)).toBeNull();
     expect(resolveSiblingReorderDrop(nodes, visible, 3, Number.POSITIVE_INFINITY)).toBeNull();

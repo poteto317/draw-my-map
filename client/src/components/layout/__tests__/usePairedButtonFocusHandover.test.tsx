@@ -88,6 +88,24 @@ describe("usePairedButtonFocusHandover", () => {
     expect(document.activeElement).toBe(outside);
   });
 
+  it("無効になったボタンの blur では記録を残し、その後の描画で二へ移す", () => {
+    const { rerender } = render(<Pair first second />);
+    const first = getFirst() as HTMLButtonElement;
+    first.focus();
+    // 無効化して blur が届くブラウザの順序を、本物の blur で作る。ハンドラーの focusout は blur の後に届くので、
+    // そこではもう無効で、フォーカスは body にある。コミット中の blur は React が流さないため rerender の前に起こす
+    first.addEventListener("blur", () => {
+      first.disabled = true;
+    }, { once: true });
+    first.blur();
+    expect(first).toBeDisabled();
+    expect(document.activeElement).toBe(document.body);
+
+    rerender(<Pair first={false} second />);
+
+    expect(document.activeElement).toBe(getSecond());
+  });
+
   it("外へ移してからフォーカスが body に戻っても、blur で記録が消えているので二へ移さない", () => {
     const { rerender } = render(<Pair first second />);
     getFirst().focus();

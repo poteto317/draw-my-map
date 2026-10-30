@@ -79,7 +79,7 @@ describe("buildReorderedSiblings", () => {
     expect(result.visibleIndex).toBe(2);
   });
 
-  it("見えない兄弟は visibleIndex・visibleCount に数えないが、組には入れる", () => {
+  it("T より前にある見えない兄弟は visibleIndex・visibleCount に数えない", () => {
     const nodes = family();
     const visible = new Set([R, 2, 4, 5]);
 
@@ -88,6 +88,18 @@ describe("buildReorderedSiblings", () => {
     expect(result.nodes.map((node) => node.id)).toEqual([R, 2, 3, 6, 5, 4]);
     expect(result.second).toEqual([4]);
     expect(result.visibleIndex).toBe(1);
+    expect(result.visibleCount).toBe(3);
+  });
+
+  it("移動範囲の中の見えない兄弟は、組に入れる（数には入れない）", () => {
+    const nodes = family();
+    const visible = new Set([R, 2, 4, 5]);
+
+    const result = buildReorderedSiblings(nodes, byId(nodes, 5), byId(nodes, 2), "before", visible);
+
+    expect(result.nodes.map((node) => node.id)).toEqual([R, 5, 2, 3, 6, 4]);
+    expect(result.second).toEqual([2, 3, 4]);
+    expect(result.visibleIndex).toBe(0);
     expect(result.visibleCount).toBe(3);
   });
 

@@ -28,10 +28,14 @@ function setup(options: {
   sessionNumber?: number;
   index?: MapIndexV1 | null;
   failSetItem?: (key: string) => boolean;
+  bodies?: Readonly<Record<string, string>>;
 } = {}) {
   const index = options.index === undefined ? indexOf("a", ["a", "b"]) : options.index;
   const { storage, entries } = createRecordingStorage({
-    initial: index === null ? {} : { [MAP_INDEX_STORAGE_KEY]: encodeMapIndex(index) },
+    initial: {
+      ...options.bodies,
+      ...(index === null ? {} : { [MAP_INDEX_STORAGE_KEY]: encodeMapIndex(index) }),
+    },
     failSetItem: options.failSetItem,
   });
   const state = {
@@ -57,10 +61,12 @@ function setup(options: {
 
 describe("createPersistentMapSession", () => {
   it("mapId と、作ったときのマップの本体を読む readBody を持つ", () => {
-    const { session } = setup();
+    const { session } = setup({
+      bodies: { [mapBodyKey("a")]: "json-a", [mapBodyKey("b")]: "json-b" },
+    });
 
     expect(session.mapId).toBe("a");
-    expect(session.readBody()).toEqual({ ok: true, value: null });
+    expect(session.readBody()).toEqual({ ok: true, value: "json-a" });
   });
 
   it("現在のセッションなら本体を書き、そのマップの更新日時だけを進めたインデックスを書いて反映する", () => {

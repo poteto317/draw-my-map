@@ -154,4 +154,37 @@ describe("calculatePinchViewport", () => {
       { x: 1.15e308, y: 0 },
     )).toBeNull();
   });
+
+  it("距離比がoverflowする場合は倍率の上限へ丸めずviewportを返さない", () => {
+    // 2点の距離と中点差はどれも有限なので、手前の判定では止まらない
+    expect(calculatePinchViewport(
+      INITIAL_VIEWPORT,
+      { x: 0, y: 0 },
+      { x: 1e-10, y: 0 },
+      { x: 0, y: 0 },
+      { x: 1e308, y: 0 },
+    )).toBeNull();
+  });
+
+  it("拡大後のoffsetがoverflowする場合はパンだけを適用せずviewportを返さない", () => {
+    // 中点のxが大きいと拡大のoffsetだけがoverflowする。中点差は有限で、パン自体はできる
+    expect(calculatePinchViewport(
+      INITIAL_VIEWPORT,
+      { x: 1.5e308, y: 0 },
+      { x: 1.5e308, y: 100 },
+      { x: 1.5e308, y: 0 },
+      { x: 1.5e308, y: 400 },
+    )).toBeNull();
+  });
+
+  it("パン後のoffsetがoverflowする場合はviewportを返さない", () => {
+    // 距離が変わらないので拡大はせず、中点差は有限のまま、開始時のoffsetとの加算だけがoverflowする
+    expect(calculatePinchViewport(
+      { offsetX: 1.5e308, offsetY: 0, scale: 1 },
+      { x: 0, y: 0 },
+      { x: 0, y: 100 },
+      { x: 1e308, y: 0 },
+      { x: 1e308, y: 100 },
+    )).toBeNull();
+  });
 });

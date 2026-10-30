@@ -287,6 +287,25 @@ describe("MapEditor", () => {
         .toHaveTextContent("枝を下へ移動しました（見えているルートの3件中2番目）。");
       expect(exportedMap().nodes.map((node) => node.id)).toEqual([2, 1, 3]);
     });
+
+    it("複数の系統の通知が同時に出ると、出した順ではなく系統の順に並べる", async () => {
+      await renderEditor({ storage: createTestStorageSession({ initialJson: threeRootsJson }) });
+      selectNode(0, 3);
+
+      // 表示の順の逆から出す
+      fireEvent.click(moveDownButton());
+      fireEvent.click(screen.getByRole("button", { name: "枝を複製" }));
+      fireEvent.click(screen.getByRole("button", { name: "SVG書き出し" }));
+      fireEvent.click(screen.getByRole("button", { name: "JSON書き出し" }));
+
+      const paragraphs = Array.from(screen.getByTestId("operation-notices").querySelectorAll("p"));
+      expect(paragraphs.map((paragraph) => paragraph.textContent)).toEqual([
+        "JSONファイルを書き出しました。",
+        "SVGファイルを書き出しました。",
+        "枝を複製しました。Fキーで選択ノードへ移動できます。",
+        "枝を下へ移動しました（見えているルートの3件中2番目）。",
+      ]);
+    });
   });
 
   describe("階層の上げ下げ", () => {

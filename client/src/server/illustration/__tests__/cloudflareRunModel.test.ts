@@ -74,7 +74,7 @@ describe("runCloudflareModel", () => {
 
     it("message が文字列でなければ、無料枠の超過のパターンを照合しない", async () => {
       await expect(
-        run(jsonResponse({ success: false, errors: [{ code: 4006, message: { text: "quota" } }] }, { status: 403 })),
+        run(jsonResponse({ success: false, errors: [{ code: 4006, message: ["quota"] }] }, { status: 403 })),
       ).rejects.toMatchObject({ kind: "upstream-error" });
     });
 
