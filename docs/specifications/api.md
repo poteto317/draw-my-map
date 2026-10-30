@@ -302,7 +302,7 @@ sequenceDiagram
 #### エラー応答への変換（`handleIllustrationRequest.ts`）
 - 上流（翻訳・画像生成）の失敗は、`cloudflareRunModel.ts` が `ImageGenerationError`（`kind`: `quota-exceeded` / `content-rejected` / `upstream-error`）に分類し、`handleIllustrationRequest.ts` が HTTP 応答へ変換します。
 - 翻訳と画像生成で共通の変換は `upstreamFailureResponse` にまとめています。`quota-exceeded` だけを `429` にし、それ以外（`ImageGenerationError` でない想定外の例外を含む）は内部のメッセージを返さずに `502`（`"upstream-error"`）にします。
-- 画像生成だけは、その前に `content-rejected` を判定し、3 回目までは再試行、3 回目なら `422` にします。
+- 画像生成だけは、その前に `content-rejected` を判定し、2 回目までは再試行し、3 回目も拒否されたら `422` にします。
 - `cloudflareRunModel.ts` は、例外のメッセージに API トークンが含まれ得るため、通信の失敗を固定の文言の `upstream-error` に置き換えます。時間切れのタイマーは、応答本文の読み込みが終わるまで解除しません。
 - 応答の本文は形が保証されないため、`unknown` のまま `domain/shared/unknownRecord.ts` の `readProperty` で読みます。分類に使うのは `errors` の先頭の項目だけで、`code` は数値の `8007` と一致するときだけ、`message` は文字列のときだけ使います。`success` が真偽値の `true` でなければ（文字列の `"true"` や本文が `null`・配列・文字列でも）`upstream-error` です。`result` は形を確かめずに返し、翻訳（`translated_text` が空でない文字列か）と画像生成（`image` が文字列か）の側で検証します。
 

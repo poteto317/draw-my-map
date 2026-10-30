@@ -45,7 +45,7 @@ cp -n .env.example .env.local
 | `npm run lint` | ESLint（Next.js と React Compiler 向けのルールを含む） |
 | `npm run verify` | Tailwind のスキャン → lint → 型チェック → テスト（`--runInBand`）→ 本番ビルド。変更を終えたら必ず実行する |
 
-`npm run verify` はテストだけで数分かかります。作業中は、変更したモジュールのテストと `npm run typecheck`・`npm run lint` を回し、最後に `verify` を流すのが効率的です。
+`npm run verify` はビルドまで含むので時間がかかります。作業中は、変更したモジュールのテストと `npm run typecheck`・`npm run lint` を回し、最後に `verify` を流すのが効率的です。
 
 ### 1.4 作業の進め方
 
@@ -95,7 +95,7 @@ config・types は全レイヤーから参照する
 
 1. 右パネルや右クリックメニューから、`useIllustrationGeneration` が `services/illustration/illustrationClient.ts` の `requestIllustration` を呼び、`POST /api/illustrations` を送ります。
 2. Route Handler（`app/api/illustrations/route.ts`）は、`server/illustration/handleIllustrationRequest.ts` に、環境変数と翻訳・画像生成の実装を渡すだけです。
-3. `handleIllustrationRequest` は、本文の検証 → ラベルの検証 → 設定の確認 → 日本語なら翻訳（1回）→ 画像生成（NSFW の誤判定は最大3回まで再試行）の順に処理し、失敗を HTTP ステータス（400・422・429・502・503）に変換します。
+3. `handleIllustrationRequest` は、本文の検証 → ラベルの検証 → 設定の確認 → 日本語なら翻訳（1回）→ 画像生成（NSFW の誤判定は最大3回まで試行）の順に処理し、失敗を HTTP ステータス（400・422・429・502・503）に変換します。
 4. Cloudflare への呼び出しは `cloudflareRunModel.ts` に集約されています。応答の形は保証されないため、`unknown` のまま読んで分類します。
 5. クライアントは受け取った画像を `illustrationThumbnail.ts` で 128px の JPEG に縮小してから、ノードに紐付けます。
 
@@ -134,12 +134,13 @@ config・types は全レイヤーから参照する
 
 ### 3.4 失敗経路のテスト
 
-正常系と同じだけ、失敗の経路もテストします。とくに次の4つは、このリポジトリで抜けやすい箇所です。
+正常系と同じだけ、失敗の経路もテストします。とくに次の5つは、このリポジトリで抜けやすい箇所です。
 
 1. **例外と拒否された Promise**: `mockRejectedValue`・`mockImplementation(() => { throw ... })` で失敗させ、利用者向けの通知・状態の後片付け（処理中の表示の解除、Object URL の解放、二重実行の防止の解除）まで確かめる。
 2. **形の違う外部入力**: JSON として正しくても形が違う値（`null`・配列・文字列・数値・項目の型違い）を入れる。例: `server/illustration/__tests__/cloudflareRunModel.test.ts`、`domain/mapLibrary/__tests__/mapIndex.test.ts`。
 3. **アンマウント・切り替えの後に届いた結果**: 遅れて解決した Promise が、ダウンロードや通知、別のマップへの書き込みをしないこと。
 4. **時間切れ**: `jest.useFakeTimers()` で進める。`afterEach` で `jest.useRealTimers()` に戻す。
+5. **数値の失敗経路**: `checkedAdd` などの `checked*` が `null` を返す経路は、`calculateOutdentTranslation` や `placeNodeForest` などの公開関数から確かめる。`Number.MAX_VALUE` で溢れさせる、`2 ** 60` のような大きな座標で小さな加算を丸めで失わせるなど、手前の別の判定で止まらない入力を選ぶ。どの経路も同じ `null` を返すので、対象の分岐を一時的に壊してテストが落ちることも確かめる。例: `domain/nodes/__tests__/nodeIndentPlacement.test.ts`。
 
 ### 3.5 リファクタリングの前に
 
@@ -164,7 +165,9 @@ if (typeof image !== "string") return INVALID;
 
 ### 4.2 コールバックの中で代入した変数は `null` に絞り込まれる
 
-`applyTreeChange` の更新関数の中で結果を代入しても、TypeScript は呼び出し後もその変数を初期値の `null` 型と見なします。`as` でキャストせず、受け取る関数の型引数で結果の型を明示します（`useNodes.ts` の `settleTreeChangeOutcome<ReorderSiblingResult>(applied, outcome)`）。
+`applyTreeChange` の更新関数の中で結果を代入しても、TypeScript は呼び出し後もその変数を初期値の `null` 型と見なします。結果付きの構造変更では、この代入を `hooks/treeChangeOutcome.ts` の `applyTreeChangeWithOutcome` に任せます。更新関数の代わりに、候補と結果の組 `{ nodes, outcome }` を返す `compute` を渡します（`nodes` が `null` なら確定しません）。呼び出しでは `applyTreeChangeWithOutcome<ReorderSiblingResult>(applyTreeChange, compute)` のように型引数を明示します。省くと成功と失敗で `R` の推論がずれ、TS2345 になります。
+
+それ以外でコールバックの中で代入するときも、`as` でキャストせず、受け取る関数の型引数で結果の型を明示します（`treeChangeOutcome.ts` の `settleTreeChangeOutcome<R>(applied, outcome)`）。
 
 ### 4.3 非 null アサーション（`!`）の代わりに
 
@@ -198,3 +201,7 @@ WebGL・Canvas が無いため、テストでは `pixi.js` を `jest.mock` で�
 ### 4.10 `switch` の網羅性
 
 結果の型（`ok: true | false` と `reason`）は `switch` で分け、`default` で `const unreachable: never = value;` を置いて、種類を足したときに型エラーで気付けるようにしています。この `default` はテストで到達できないため、カバレッジが 100% にならないのは想定どおりです。
+
+### 4.11 `window` のハンドラから最新の値を読む
+
+`window` にイベントを登録するフックは、登録をやり直さないよう、ハンドラから ref を通して最新の options を読みます。新しく書くときは `useLatestRef`（`hooks/useLatestRef.ts`）を使い、ハンドラが読む項目を落とさずに渡します（例: `components/map/useMapViewportShortcut.ts`）。`useLatestRef` の戻り値は `exhaustive-deps` が安定と判断しないので、effect の依存配列に ref を足してください。ref は常に同じオブジェクトなので、登録のやり直しは起きません。

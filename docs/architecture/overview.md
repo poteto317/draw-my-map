@@ -164,7 +164,7 @@ client/src/
 #### 3. Application State & Coordination Layer (Hooks) (`src/hooks/`, `src/components/map/use*.ts`)
 - **責務**: アプリケーション状態の保持（React State / Ref / Reducer）、ライフサイクル制御、および Domain / Services 層の呼び出し調停。
 - **構成モジュール**:
-  - **アプリケーション状態フック (`src/hooks/` 全 33 ファイル)**:
+  - **アプリケーション状態フック (`src/hooks/` 全 34 ファイル)**:
     - `useNodes.ts`, `useNodeLayoutState.ts`: ノードツリーの CRUD・選択・重要度・イラスト更新・枝の複製（`duplicateSubtree`）・枝のコピー（`copySubtree`）と貼り付け（`pasteSubtree`）・箇条書きの森の追加（`insertForest`）・兄弟の順序変更（`reorderSibling`。`applyTreeChange` を1回だけ呼ぶ）・階層の上げ下げ（`changeNodeIndent`。`applyTreeChange` を1回だけ呼び、結果 `ChangeNodeIndentResult` を返す）・親の挿入（`insertParentNode`。`applyTreeChange` を1回だけ呼び、その中の最新の配列で対象を解決して新しい ID を採番し、成功したときだけ新しいノードを選択する。結果 `InsertParentNodeResult` を返す）と、手動/自動レイアウトモードの状態管理（複製・貼り付け・森の追加の挿入処理は内部関数 `applySubtreeInsertion` を共有する）・ツリー変更時の `layoutNodeForest` 自動整列トリガー。
     - `useMapResolutionFilter.ts`, `mapResolutionFilterState.ts`: ズーム倍率・ヒステリシス・手動/自動モード遷移・マップ置換時の `pendingResetScale` 同期に基づく可視ノードフィルタリング状態管理。
     - `useMapLibrary.ts`: シェルの状態と操作。起動の判定を1回だけ確定させ（`startupRef`）、インデックス・現在のマップ・保護モード・起動時の通知を持つ。作成（`createMap`）・切り替え（`switchMap`）・名前変更（`renameMap`）・削除（`deleteMap`）を、`localStorage` を先に書いて成功したときだけ状態を更新する順で行い、結果を `MapLibraryOperationResult` で返す。現在のマップが変わるたびにセッション番号を進めて `MapStorageSession` を作り直し、`writeBody` と `registerFlush` をセッション番号で照合する。flush の登録先も持つ。セッション番号・状態・flush の登録先の ref を持ち、操作の順序を決めるのはこのフックで、照合の規則と表示用の値の導出は次の2つのモジュールに置く。公開する名前（`useMapLibrary`、型 `MapLibraryDeps`・`MapLibraryView`・`MapLibraryOperationResult`・`UseMapLibraryResult`）は変えず、`MapLibraryView`・`MapLibraryOperationResult` は `mapLibraryState.ts` から再エクスポートする。
@@ -179,7 +179,8 @@ client/src/
     - `useSiblingReorderAction.ts`: ヘッダーのボタンの有効・無効（`canMoveUp` / `canMoveDown`。`getSiblingReorderAvailability` を `useMemo` で1回）、選択中のノードの移動（`moveSelected`）、`MapStage` からの要求（`reorder`。ショートカットとドラッグ）を受け持つ。`useNodes.reorderSibling` の結果を `formatSiblingReorderNotice` で文言にし、必須の引数 `publishNotice`（`MapEditor` が持つ枝の構造の変更の通知の枠。操作通知バーの8系統目）へ必ず1回出す。通知の状態は持たない。
     - `useNodeIndentAction.ts`: ヘッダーのボタンの有効・無効（`canOutdent` / `canIndent`。`getNodeIndentAvailability` を `useMemo` で1回。`nodes`・選択・表示集合のすべてを依存にする）、選択中のノードの上げ下げ（`changeSelected`）、`MapStage` からの要求（`change`。ショートカット）を受け持つ。`useNodes.changeNodeIndent` の結果が成功した下げ（`direction: "indent"`）のときだけ `expandNodes([newParentId])` で新しい親を展開し、結果を `formatNodeIndentNotice` で文言にして、必須の引数 `publishNotice`（並べ替えと共有する8系統目の枠）へ必ず1回出す。
     - `useRevisionScopedNodeRequest.ts`: ノードへの要求（中央移動・ラベルの編集）を、発行した時点の `documentRevision` と組にして持つ。`issueRequest(nodeId)` のたびに `sequence` を1増やし、`documentRevision` が今の値と違う要求は `request` として返さない。`useNodeSearchNavigation.ts` と `useNodeParentInsertionAction.ts` が別々に呼ぶ。
-    - `treeChangeOutcome.ts`: `useNodes` の `applyTreeChange` を通す操作（兄弟の順序変更・階層の上げ下げ・親の挿入）の結果を決める純関数（`settleTreeChangeOutcome(applied, outcome)`）。確定でき候補が成功ならその結果、候補が失敗ならその理由、候補が無いか確定できなかったら `placement-failed`（候補を作れた後に失敗するのは全体の自動配置だけ）。
+    - `treeChangeOutcome.ts`: `useNodes` の `applyTreeChange` を通す操作（兄弟の順序変更・階層の上げ下げ・親の挿入）の結果を決める純関数（`settleTreeChangeOutcome(applied, outcome)`）。確定でき候補が成功ならその結果、候補が失敗ならその理由、候補が無いか確定できなかったら `placement-failed`（候補を作れた後に失敗するのは全体の自動配置だけ）。3つの操作は `applyTreeChangeWithOutcome(applyTreeChange, compute)` を通す。`applyTreeChange` のコールバックの中で確定時点の配列と `mode` から `compute` を実行し、`nodes`（`null` なら確定しない）を返して、`outcome` と確定の可否を `settleTreeChangeOutcome` に渡す。
+    - `useLatestRef.ts`: 描画のたびに最新の値を ref に写す（`useLatestRef(value)`。`useLayoutEffect` に依存配列を付けない）。ref は常に同じオブジェクトなので、登録をやり直さない `window` のハンドラや effect から最新の値を読める。
     - `useNodeParentInsertionAction.ts`: ヘッダーのボタンの有効・無効（`canInsert`。`canInsertParentNode` を `useMemo` で求め、`nodes`・選択・表示集合のすべてを依存にする）、選択中のノードへの挿入（`insertSelected`）、`MapStage` からのショートカットの要求（`insert`）、ラベルの編集の要求（`labelEditRequest`）を受け持つ。`useNodes.insertParentNode` の結果が成功のときだけ、必須の引数 `clearNotice` で枠を空にし（成功の通知は出さない）、`NodeLabelEditRequest`（`documentRevision` と組。`sequence` は呼ぶたびに増やす。要求の保持は `useRevisionScopedNodeRequest`）を出す。失敗のときだけ `formatNodeParentInsertionFailureNotice` で文言にして `publishNotice` へ1回出す。`documentRevision` が違う要求は `labelEditRequest` として返さない。
     - `useOutlineImport.ts`: 箇条書きからの追加のダイアログの状態（`closed | input | preview`、テキスト、入力のエラーと `sequence`、解析の結果、開いた時点の親の候補と `documentRevision`、追加する位置、ダイアログ内の通知、フォーカスの要求）と操作（`open`・`close`・`setText`・`requestPreview`・`back`・`setTarget`・`submit`・`consumeFocusRequest`）。解析（`parseOutlineText`）は「プレビュー」のイベントで1回だけ行い、入力中は文字数の上限だけを判定する。`submit` は子として追加する場合に開いた時点から `documentRevision` が変わっていれば `insertForest` を呼ばずに失敗にし、成功したときだけ（子として追加したなら）`expandNodes([parentId])` を呼び、成功の通知を `useRevisionScopedNotice` で出し、テキストを空にして閉じる。プレビューの木は解析の結果から `useMemo` で作る派生値で、状態には持たない（解析の結果と同時に作られ、同時に無くなる）。引数（`selectedNodeId`・`documentRevision`・`insertForest`・`expandNodes`）は必須で、`useLayoutEffect` で同期する ref から読み、操作の関数の参照を変えない。
     - `useNodeLabelSearch.ts`: `nodes` の参照が変わったときに検索索引を作り直し、入力ごとに同期検索して可視性を付加した候補を返す。
@@ -802,7 +803,7 @@ Draw My Map では、レイヤードアーキテクチャの利点を最大限�
 
 | レイヤー | テスト種別 | 主なツール | 検証内容・目標 |
 | :--- | :--- | :--- | :--- |
-| **Domain** | 単体テスト (Unit) | Jest | - 外部依存ゼロの純粋関数テスト。<br/>- ツリー探索、幾何計算、ベジェ曲線、境界矩形、JSON Codec、SVG 生成等を網羅的に検証（2026-10-30 時点の `src/domain` の文のカバレッジは約 96%。未到達の行の多くは、`switch` の網羅性を型で保証する `never` の分岐や、数値のオーバーフローに備えた防御的な分岐）。 |
+| **Domain** | 単体テスト (Unit) | Jest | - 外部依存ゼロの純粋関数テスト。<br/>- ツリー探索、幾何計算、ベジェ曲線、境界矩形、JSON Codec、SVG 生成等を網羅的に検証（2026-10-30 時点の `src/domain` の文のカバレッジは約 97%。未到達の行の多くは、`switch` の網羅性を型で保証する `never` の分岐や、数値のオーバーフローに備えた防御的な分岐）。 |
 | **Services** | 単体・モックテスト | Jest | - `localStorage` の書き込み失敗（容量超過）ハンドリング。<br/>- `File.text()`（`Blob.prototype.text()`）、Fetch API、オフスクリーン Canvas、`HTMLImageElement`、`URL.createObjectURL` / `revokeObjectURL` のモックを用いた境界値検証。 |
 | **Server** | 統合テスト (Integration) | Jest | - `handleIllustrationRequest` の入力検証、正常系、Cloudflare エラー（400, 422, 429, 502, 503）および NSFW 誤判定リトライ動作の検証。<br/>- Route Handler（`route.ts`）は、グローバルの `fetch` を `jest.spyOn` で差し替え、環境変数から本物の Cloudflare の実装までの配線（URL・認証ヘッダー・翻訳の有無）を外部通信なしで検証。 |
 | **Hooks** | フック単体・結合テスト | `@testing-library/react` | - `renderHook` を用いた状態遷移、デバウンス、自動レイアウト連動、リセット動作の検証。 |
@@ -856,5 +857,5 @@ cd client && npm run verify
 1. `npm run tailwind:scan`: Tailwind CSS v4 のクラススキャン検証。
 2. `npm run lint`: ESLint による静的構文解析とルールチェック。
 3. `npm run typecheck`: TypeScript コンパイラ（`tsc --noEmit`）による厳格な型整合性チェック。
-4. `npm test -- --runInBand`: Jest による全ユニット・統合テストの実行（2026-10-30 時点で 274 テストファイル、約 3,870 テストケース）。
+4. `npm test -- --runInBand`: Jest による全ユニット・統合テストの実行（2026-10-30 時点で 275 テストファイル、約 3,950 テストケース）。
 5. `npm run build`: Next.js 本番ビルドの成否確認（SSR・バンドル最適化エラーの早期検出）。
