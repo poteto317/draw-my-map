@@ -1,3 +1,4 @@
+import { readProperty } from "@/domain/shared/unknownRecord";
 import { ImageGenerationError, type CloudflareConfig } from "@/server/illustration/cloudflareErrors";
 import { runCloudflareModel } from "@/server/illustration/cloudflareRunModel";
 
@@ -18,7 +19,7 @@ export function createCloudflareTranslator(
       { text, source_lang: "japanese", target_lang: "english" },
       { fetchImpl, timeoutMs },
     );
-    const translated = (result as { translated_text?: unknown } | null)?.translated_text;
+    const translated = readProperty(result, "translated_text");
     if (typeof translated !== "string" || translated.trim() === "") {
       throw new ImageGenerationError("upstream-error", "翻訳の応答が不正です");
     }

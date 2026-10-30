@@ -1,3 +1,5 @@
+import { readProperty } from "@/domain/shared/unknownRecord";
+
 export type IllustrationErrorKind =
   | "invalid-label"
   | "not-configured"
@@ -70,7 +72,8 @@ export async function requestIllustration(
   if (!response.ok) throw new IllustrationRequestError(kindFromStatus(response.status));
 
   const body: unknown = await response.json().catch(() => null);
-  const { image, mimeType } = (body ?? {}) as { image?: unknown; mimeType?: unknown };
+  const image = readProperty(body, "image");
+  const mimeType = readProperty(body, "mimeType");
   if (typeof image !== "string" || typeof mimeType !== "string" || !ALLOWED_MIME_TYPE.test(mimeType)) {
     throw new IllustrationRequestError("upstream-error");
   }

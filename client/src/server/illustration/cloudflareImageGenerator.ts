@@ -1,3 +1,4 @@
+import { readProperty } from "@/domain/shared/unknownRecord";
 import {
   ImageGenerationError,
   type CloudflareConfig,
@@ -32,7 +33,7 @@ export function createCloudflareImageGenerator(
   return async (prompt) => {
     // 実際の API は seed を拒否する（HTTP 400, code 5006）ため、送らない
     const result = await runCloudflareModel(config, IMAGE_MODEL, { prompt, steps: 4 }, { fetchImpl, timeoutMs });
-    const image = (result as { image?: unknown } | null)?.image;
+    const image = readProperty(result, "image");
     if (typeof image !== "string") {
       throw new ImageGenerationError("upstream-error", "画像生成の応答が不正です");
     }

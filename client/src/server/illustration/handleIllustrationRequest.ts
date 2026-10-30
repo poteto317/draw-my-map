@@ -3,10 +3,12 @@ import {
   needsTranslation,
   validateIllustrationLabel,
 } from "@/domain/illustration/illustrationPrompt";
+import { isRecord } from "@/domain/shared/unknownRecord";
 import {
   ImageGenerationError,
   readCloudflareConfig,
   type CloudflareConfig,
+  type ImageGenerationErrorKind,
   type ImageGenerator,
 } from "@/server/illustration/cloudflareImageGenerator";
 import type { Translator } from "@/server/illustration/cloudflareTranslator";
@@ -24,10 +26,22 @@ function errorResponse(error: string, status: number): Response {
   return Response.json({ error }, { status });
 }
 
+function isImageGenerationError(error: unknown, kind: ImageGenerationErrorKind): boolean {
+  return error instanceof ImageGenerationError && error.kind === kind;
+}
+
+// 翻訳・生成の失敗の応答。無料枠の超過だけを 429 にし、それ以外（想定外の例外を含む）は内部の情報を返さずに 502 にする
+function upstreamFailureResponse(error: unknown): Response {
+  if (isImageGenerationError(error, "quota-exceeded")) {
+    return errorResponse("quota-exceeded", 429);
+  }
+  return errorResponse("upstream-error", 502);
+}
+
 async function readLabel(request: Request): Promise<string | null> {
   const body: unknown = await request.json().catch(() => null);
-  if (typeof body !== "object" || body === null || Array.isArray(body)) return null;
-  const label = (body as { label?: unknown }).label;
+  if (!isRecord(body)) return null;
+  const { label } = body;
   return typeof label === "string" ? label : null;
 }
 
@@ -50,10 +64,7 @@ export async function handleIllustrationRequest(
     try {
       concept = await createTranslator(config)(concept);
     } catch (error) {
-      if (error instanceof ImageGenerationError && error.kind === "quota-exceeded") {
-        return errorResponse("quota-exceeded", 429);
-      }
-      return errorResponse("upstream-error", 502);
+      return upstreamFailureResponse(error);
     }
   }
 
@@ -65,14 +76,11 @@ export async function handleIllustrationRequest(
       const image = await generate(prompt);
       return Response.json({ image: image.base64, mimeType: image.mimeType });
     } catch (error) {
-      if (error instanceof ImageGenerationError && error.kind === "content-rejected") {
+      if (isImageGenerationError(error, "content-rejected")) {
         if (attempt < MAX_GENERATION_ATTEMPTS) continue;
         return errorResponse("content-rejected", 422);
       }
-      if (error instanceof ImageGenerationError && error.kind === "quota-exceeded") {
-        return errorResponse("quota-exceeded", 429);
-      }
-      return errorResponse("upstream-error", 502);
+      return upstreamFailureResponse(error);
     }
   }
 }
