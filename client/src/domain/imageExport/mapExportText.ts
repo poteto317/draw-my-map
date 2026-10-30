@@ -85,6 +85,115 @@ function findWhitespaceRunEnd(codePoints: string[], start: number): number {
   return end;
 }
 
+function isBreakableWhitespace(
+  codePoints: string[],
+  index: number,
+  lastNonWhitespaceIndex: number,
+  consumedWhitespaceRunEnd: number,
+): boolean {
+  return (
+    /\s/u.test(codePoints[index]) &&
+    index < lastNonWhitespaceIndex &&
+    index >= consumedWhitespaceRunEnd
+  );
+}
+
+function findLastBreakableIndex(
+  codePoints: string[],
+  start: number,
+  fittingLength: number,
+  lastNonWhitespaceIndex: number,
+  consumedWhitespaceRunEnd: number,
+): number {
+  let breakAt = -1;
+  for (let index = start; index < start + fittingLength; index += 1) {
+    if (
+      isBreakableWhitespace(
+        codePoints,
+        index,
+        lastNonWhitespaceIndex,
+        consumedWhitespaceRunEnd,
+      )
+    ) {
+      breakAt = index;
+    }
+  }
+  return breakAt;
+}
+
+function wrapExplicitLine(
+  explicitLine: string,
+  maxWidth: number,
+  measureText: MeasureMapText,
+): string[] {
+  const codePoints = Array.from(explicitLine);
+
+  if (codePoints.length === 0) return [""];
+  if (maxWidth <= 0) return codePoints;
+
+  const lastNonWhitespaceIndex = findLastNonWhitespaceIndex(codePoints);
+  const wrappedLines: string[] = [];
+  let start = 0;
+  let consumedWhitespaceRunEnd = -1;
+
+  while (start < codePoints.length) {
+    const fittingLength = findFittingLength(
+      codePoints,
+      start,
+      maxWidth,
+      measureText,
+    );
+
+    if (fittingLength === 0) {
+      // A single code point wider than the limit still needs to make progress.
+      wrappedLines.push(codePoints[start]);
+      start += 1;
+      continue;
+    }
+
+    if (fittingLength === codePoints.length - start) {
+      wrappedLines.push(codePoints.slice(start).join(""));
+      break;
+    }
+
+    const breakAt = findLastBreakableIndex(
+      codePoints,
+      start,
+      fittingLength,
+      lastNonWhitespaceIndex,
+      consumedWhitespaceRunEnd,
+    );
+
+    if (breakAt >= 0 && (breakAt > start || start === 0)) {
+      const lineBeforeBreak = codePoints.slice(start, breakAt).join("");
+      if (lineBeforeBreak.length > 0) wrappedLines.push(lineBeforeBreak);
+      consumedWhitespaceRunEnd = findWhitespaceRunEnd(codePoints, breakAt);
+      start = breakAt + 1;
+    } else {
+      const fittedLine = codePoints
+        .slice(start, start + fittingLength)
+        .join("");
+      wrappedLines.push(fittedLine);
+      start += fittingLength;
+      if (
+        /\S/u.test(fittedLine) &&
+        start < codePoints.length &&
+        isBreakableWhitespace(
+          codePoints,
+          start,
+          lastNonWhitespaceIndex,
+          consumedWhitespaceRunEnd,
+        )
+      ) {
+        consumedWhitespaceRunEnd = findWhitespaceRunEnd(codePoints, start);
+        start += 1;
+      }
+    }
+  }
+
+  return wrappedLines;
+}
+
 export function getMapExportLabel(label: string): string {
   return normalizeMapXmlText(getNodeDisplayLabel(label));
 }
@@ -94,84 +203,14 @@ export function wrapMapExportText(
   maxWidth: number,
   measureText: MeasureMapText,
 ): string[] {
-  const explicitLines = normalizeMapXmlText(label)
+  return normalizeMapXmlText(label)
     .replace(/\r\n?/g, "\n")
-    .split("\n");
-  const wrappedLines: string[] = [];
-
-  for (const explicitLine of explicitLines) {
-    const codePoints = Array.from(explicitLine);
-    const lastNonWhitespaceIndex = findLastNonWhitespaceIndex(codePoints);
-
-    if (codePoints.length === 0) {
-      wrappedLines.push("");
-      continue;
-    }
-
-    if (maxWidth <= 0) {
-      for (const codePoint of codePoints) wrappedLines.push(codePoint);
-      continue;
-    }
-
-    let start = 0;
-    let consumedWhitespaceRunEnd = -1;
-    while (start < codePoints.length) {
-      const fittingLength = findFittingLength(
-        codePoints,
-        start,
-        maxWidth,
-        measureText,
-      );
-
-      if (fittingLength === 0) {
-        // A single code point wider than the limit still needs to make progress.
-        wrappedLines.push(codePoints[start]);
-        start += 1;
-        continue;
-      }
-
-      if (fittingLength === codePoints.length - start) {
-        wrappedLines.push(codePoints.slice(start).join(""));
-        break;
-      }
-
-      let breakAt = -1;
-      for (let index = start; index < start + fittingLength; index += 1) {
-        if (
-          /\s/u.test(codePoints[index]) &&
-          index < lastNonWhitespaceIndex &&
-          index >= consumedWhitespaceRunEnd
-        ) {
-          breakAt = index;
-        }
-      }
-
-      if (breakAt >= 0 && (breakAt > start || start === 0)) {
-        const lineBeforeBreak = codePoints.slice(start, breakAt).join("");
-        if (lineBeforeBreak.length > 0) wrappedLines.push(lineBeforeBreak);
-        consumedWhitespaceRunEnd = findWhitespaceRunEnd(codePoints, breakAt);
-        start = breakAt + 1;
-      } else {
-        const fittedLine = codePoints
-          .slice(start, start + fittingLength)
-          .join("");
-        wrappedLines.push(fittedLine);
-        start += fittingLength;
-        if (
-          /\S/u.test(fittedLine) &&
-          start < codePoints.length &&
-          /\s/u.test(codePoints[start]) &&
-          start < lastNonWhitespaceIndex &&
-          start >= consumedWhitespaceRunEnd
-        ) {
-          consumedWhitespaceRunEnd = findWhitespaceRunEnd(codePoints, start);
-          start += 1;
-        }
-      }
-    }
-  }
-
-  return wrappedLines;
+    .split("\n")
+    .flatMap((explicitLine) => wrapExplicitLine(
+      explicitLine,
+      maxWidth,
+      measureText,
+    ));
 }
 
 export function getMapExportTextLayout(

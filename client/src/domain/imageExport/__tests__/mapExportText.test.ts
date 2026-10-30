@@ -5,6 +5,18 @@ import {
 } from "../mapExportText";
 
 const measure = (text: string) => Array.from(text).length * 10;
+// W だけが広いと、上限より広い1文字を行の途中に置ける。
+const createMeasureWithWideW = () => {
+  let measurements = 0;
+  return (text: string) => {
+    // 行が前へ進まない退行でも、Jest を止めずに失敗させる。
+    if (++measurements > 100) throw new Error("Text wrapping did not terminate");
+    return Array.from(text).reduce(
+      (width, codePoint) => width + (codePoint === "W" ? 50 : 10),
+      0,
+    );
+  };
+};
 
 describe("wrapMapExportText", () => {
   it.each([-6, 0, 5])("finishes narrow text at width %s without adding empty lines", (maxWidth) => {
@@ -113,6 +125,83 @@ describe("wrapMapExportText", () => {
 
   it("normalizes CRLF and preserves explicit blank lines", () => {
     expect(wrapMapExportText("A\r\n\r\nB", 100, measure)).toEqual(["A", "", "B"]);
+  });
+
+  it.each([
+    ["", [""]],
+    ["A\rB", ["A", "B"]],
+    ["A\n\rB", ["A", "", "B"]],
+    ["\nA\n", ["", "A", ""]],
+  ] as const)("単独のCRと先頭・末尾の空行を明示的な改行として扱う: %j", (label, expected) => {
+    expect(wrapMapExportText(label, 100, measure)).toEqual(expected);
+  });
+
+  it.each([0, -1])("幅%sでは測定せずに空白も1コードポイントずつ行にする", (maxWidth) => {
+    // 幅0の文字として測れても、幅の判定へ進まないことを確かめる。
+    const zeroWidthMeasure = jest.fn(() => 0);
+
+    expect(wrapMapExportText("a b", maxWidth, zeroWidthMeasure))
+      .toEqual(["a", " ", "b"]);
+    expect(zeroWidthMeasure).not.toHaveBeenCalled();
+  });
+
+  it("上限より広い1文字は行の途中でも単独の行にして前へ進む", () => {
+    expect(wrapMapExportText("aWa", 30, createMeasureWithWideW())).toEqual(["a", "W", "a"]);
+  });
+
+  it("上限より広い文字の直後の空白はソフト改行に使わず次の行の先頭に残す", () => {
+    expect(wrapMapExportText("W B C", 20, createMeasureWithWideW()))
+      .toEqual(["W", " B", "C"]);
+  });
+
+  it("空白だけの行の直後の空白はソフト改行として除去しない", () => {
+    expect(wrapMapExportText("W    B", 10, createMeasureWithWideW()))
+      .toEqual(["W", " ", " ", " ", " ", "B"]);
+  });
+
+  it("幅に収まる範囲に空白が複数あれば最後の空白で折り返す", () => {
+    expect(wrapMapExportText("a b c d", 50, measure)).toEqual(["a b", "c d"]);
+  });
+
+  it("2行目以降でも幅に収まる範囲の空白で折り返す", () => {
+    expect(wrapMapExportText("aa bb cc", 40, measure)).toEqual(["aa", "bb", "cc"]);
+  });
+
+  it("語がちょうど収まった直後の空白1文字を除去する", () => {
+    expect(wrapMapExportText("ab cd", 20, measure)).toEqual(["ab", "cd"]);
+  });
+
+  it("語がちょうど収まった直後の連続空白は1文字だけ除去する", () => {
+    expect(wrapMapExportText("AB    C", 20, measure)).toEqual(["AB", "  ", " C"]);
+  });
+
+  it("語がちょうど収まった直後の末尾の空白を除去しない", () => {
+    expect(wrapMapExportText("AB  ", 20, measure)).toEqual(["AB", "  "]);
+  });
+
+  it("空白だけの行は除去せずに幅で分ける", () => {
+    expect(wrapMapExportText("   ", 20, measure)).toEqual(["  ", " "]);
+  });
+
+  it("連続空白の除去の状態を明示的な改行の次の行へ持ち越さない", () => {
+    expect(wrapMapExportText("A   B\nC   D", 20, measure))
+      .toEqual(["A", "  ", "B", "C", "  ", "D"]);
+  });
+
+  it("サロゲートペアを分割せずに幅で折り返す", () => {
+    const measuredTexts: string[] = [];
+    const recordingMeasure = (text: string) => {
+      measuredTexts.push(text);
+      return measure(text);
+    };
+
+    expect(wrapMapExportText("😀😀😀", 20, recordingMeasure))
+      .toEqual(["😀😀", "😀"]);
+    expect(measuredTexts).not.toContainEqual(expect.stringMatching(/\p{Cs}/u));
+  });
+
+  it("サロゲートペアの間の空白で折り返す", () => {
+    expect(wrapMapExportText("😀 😀😀", 30, measure)).toEqual(["😀", "😀😀"]);
   });
 });
 
