@@ -9,6 +9,12 @@ import {
 import type { Node } from "@/types/node";
 import type { ResolutionFilterMode } from "@/types/nodeResolution";
 
+// 表示のリセットで使う、最新の自動の表示レベルと、リセットを待つ間の倍率
+type ResolutionResetState = {
+  level: ReturnType<typeof resolveResolutionLevel>;
+  pendingScale: number | null;
+};
+
 type UseMapResolutionFilterOptions = {
   nodes: readonly Node[];
   scale: number;
@@ -34,7 +40,7 @@ export function useMapResolutionFilter({
   }, scale);
   const level = resolveResolutionLevel(mode, effectiveScale, previousAutoLevel);
   const resetAutoLevel = resolveResolutionLevel("auto", resetScale ?? scale, null);
-  const resetStateRef = useRef({ level: resetAutoLevel, pendingScale: null as number | null });
+  const resetStateRef = useRef<ResolutionResetState>({ level: resetAutoLevel, pendingScale: null });
   const visibleNodeIds = useMemo(
     () => collectVisibleNodeIds(nodes, level),
     [level, nodes],

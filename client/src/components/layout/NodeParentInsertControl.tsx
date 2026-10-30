@@ -1,5 +1,5 @@
-import type { KeyboardEvent } from "react";
 import { TREE_EDIT_SHORTCUT_BUTTON_ATTRIBUTE } from "@/components/map/treeEditShortcutGuard";
+import { preventRepeatedEnterClick } from "@/components/layout/repeatedEnterClick";
 
 export type NodeParentInsertControlProps = {
   canInsert: boolean;
@@ -9,12 +9,8 @@ export type NodeParentInsertControlProps = {
 const buttonClassName = "shrink-0 rounded-md bg-zinc-100 px-3 py-1 text-sm text-zinc-700 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-700 dark:text-zinc-200";
 
 export function NodeParentInsertControl({ canInsert, onInsert }: NodeParentInsertControlProps) {
-  function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
-    // Enterの押し続けで挿入が連続しないよう、リピートのclick合成を止める。
-    // 成功するとフォーカスは入力欄へ移るので、そこへ届くリピートは NodeLabelEditor が止める。2つの対策は組で働く
-    if (event.key === "Enter" && event.repeat) event.preventDefault();
-  }
-
+  // Enterの押し続けで挿入が連続しないよう、リピートのclick合成を止める（preventRepeatedEnterClick）。
+  // 成功するとフォーカスは入力欄へ移るので、そこへ届くリピートは NodeLabelEditor が止める。2つの対策は組で働く
   // 目印を付けたボタンでは、windowのAlt+Enterのショートカットが働く。ここでは処理しないので二重には動かない
   const shortcutTargetProps = { [TREE_EDIT_SHORTCUT_BUTTON_ATTRIBUTE]: "" };
 
@@ -28,7 +24,7 @@ export function NodeParentInsertControl({ canInsert, onInsert }: NodeParentInser
       aria-keyshortcuts="Alt+Enter"
       title="選択中のノードに親を挿入（Alt/Option+Enter）"
       onClick={onInsert}
-      onKeyDown={handleKeyDown}
+      onKeyDown={preventRepeatedEnterClick}
       {...shortcutTargetProps}
       disabled={!canInsert}
     >

@@ -21,20 +21,23 @@ export function useMapViewport() {
     setViewportState(next);
   }, []);
 
-  const panBy = useCallback((dx: number, dy: number) => {
-    const next = panViewport(viewportRef.current, dx, dy);
+  // 同期 Ref の最新の viewport から次の値を求め、計算関数が同じ参照を返した（変化なし）ときは設定しない
+  const updateViewport = useCallback((computeNext: (current: Viewport) => Viewport) => {
+    const next = computeNext(viewportRef.current);
     if (next !== viewportRef.current) setViewport(next);
   }, [setViewport]);
+
+  const panBy = useCallback((dx: number, dy: number) => {
+    updateViewport((current) => panViewport(current, dx, dy));
+  }, [updateViewport]);
 
   const zoomAt = useCallback((anchor: Point, requestedScale: number) => {
-    const next = zoomViewportAt(viewportRef.current, anchor, requestedScale);
-    if (next !== viewportRef.current) setViewport(next);
-  }, [setViewport]);
+    updateViewport((current) => zoomViewportAt(current, anchor, requestedScale));
+  }, [updateViewport]);
 
   const focusNode = useCallback((node: Node, screen: ScreenSize) => {
-    const next = focusViewportOnNode(viewportRef.current, node, screen);
-    if (next !== viewportRef.current) setViewport(next);
-  }, [setViewport]);
+    updateViewport((current) => focusViewportOnNode(current, node, screen));
+  }, [updateViewport]);
 
   return { viewport, viewportRef, setViewport, panBy, zoomAt, focusNode };
 }

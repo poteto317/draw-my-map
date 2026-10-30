@@ -14,7 +14,10 @@ import { NodeIndentControl } from "@/components/layout/NodeIndentControl";
 import { NodeParentInsertControl } from "@/components/layout/NodeParentInsertControl";
 import { NodeSiblingOrderControl } from "@/components/layout/NodeSiblingOrderControl";
 import { MapPersistenceControls } from "@/components/layout/MapPersistenceControls";
-import { MapOperationNotice } from "@/components/layout/MapOperationNotice";
+import {
+  hasOperationNotice,
+  MapOperationNoticeList,
+} from "@/components/layout/MapOperationNoticeList";
 import { OutlineImportControl } from "@/components/layout/OutlineImportControl";
 import { OutlineImportDialog } from "@/components/layout/OutlineImportDialog";
 import { resolveOutlineParentCandidate } from "@/components/layout/outlineParentCandidate";
@@ -39,8 +42,13 @@ import { useSiblingReorderAction } from "@/hooks/useSiblingReorderAction";
 import { useNodeIndentAction } from "@/hooks/useNodeIndentAction";
 import { useNodeParentInsertionAction } from "@/hooks/useNodeParentInsertionAction";
 import type { MapStorageSession } from "@/types/mapStorageSession";
+import type { OperationNotice } from "@/types/operationNotice";
 
 const CLIPBOARD_OPERATION_HINT = "枝をコピー: Ctrl/Cmd+C ／ 貼り付け: Ctrl/Cmd+V（新しいルートとして追加）";
+const LAYOUT_FAILED_NOTICE: OperationNotice = {
+  kind: "status",
+  message: "表示用の自動配置ができないため、元の位置で表示しています。",
+};
 
 type MapEditorProps = {
   mapId: string;
@@ -203,6 +211,17 @@ export function MapEditor({
   // 入口をすべて同じ値で止める（L-061）
   const editorShortcutsEnabled = shortcutsEnabled && outlineImport.screen === "closed";
   useMapHistoryShortcuts({ undo, redo, enabled: editorShortcutsEnabled });
+  // 操作通知バーの並び（上から表示する順）。位置ごとに系統が決まっている
+  const operationNotices = [
+    displayState.layoutFailed ? LAYOUT_FAILED_NOTICE : null,
+    persistence.notice,
+    imageExport.notice,
+    duplication.notice,
+    clipboardNotice,
+    nodeSearchNavigation.notice,
+    outlineImport.notice,
+    treeEditNotice,
+  ];
 
   // 閉じる描画で根の inert が外れた後に当てる（L-155）。"input"・"preview" はダイアログが当てる
   useLayoutEffect(() => {
@@ -298,46 +317,9 @@ export function MapEditor({
               />
             </>
           )}
-          operationNotices={persistence.notice === null
-            && imageExport.notice === null
-            && duplication.notice === null
-            && clipboardNotice === null
-            && nodeSearchNavigation.notice === null
-            && outlineImport.notice === null
-            && treeEditNotice === null
-            && !displayState.layoutFailed
-            ? null
-            : (
-              <>
-                {displayState.layoutFailed && (
-                  <MapOperationNotice notice={{
-                    kind: "status",
-                    message: "表示用の自動配置ができないため、元の位置で表示しています。",
-                  }} />
-                )}
-                {persistence.notice !== null && (
-                  <MapOperationNotice notice={persistence.notice} />
-                )}
-                {imageExport.notice !== null && (
-                  <MapOperationNotice notice={imageExport.notice} />
-                )}
-                {duplication.notice !== null && (
-                  <MapOperationNotice notice={duplication.notice} />
-                )}
-                {clipboardNotice !== null && (
-                  <MapOperationNotice notice={clipboardNotice} />
-                )}
-                {nodeSearchNavigation.notice !== null && (
-                  <MapOperationNotice notice={nodeSearchNavigation.notice} />
-                )}
-                {outlineImport.notice !== null && (
-                  <MapOperationNotice notice={outlineImport.notice} />
-                )}
-                {treeEditNotice !== null && (
-                  <MapOperationNotice notice={treeEditNotice} />
-                )}
-              </>
-            )}
+          operationNotices={hasOperationNotice(operationNotices)
+            ? <MapOperationNoticeList notices={operationNotices} />
+            : null}
         />
         <AppWorkspace
           canvas={(

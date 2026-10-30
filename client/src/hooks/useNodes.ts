@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import {
   createChildNode,
   createRootNode,
@@ -111,8 +111,8 @@ type UseNodesReturn = {
 export function useNodes(): UseNodesReturn {
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
   const [documentRevision, setDocumentRevision] = useState(0);
-  const nodeIdAllocatorRef = useRef<NodeIdAllocator | null>(null);
-  nodeIdAllocatorRef.current ??= createNodeIdAllocator();
+  // 採番器はマウントの間ずっと同じものを使う（Undo で消えたノードの ID も以後は再利用しないため）
+  const [nodeIdAllocator] = useState<NodeIdAllocator>(() => createNodeIdAllocator());
   const {
     nodes,
     layoutMode,
@@ -136,10 +136,10 @@ export function useNodes(): UseNodesReturn {
   }, []);
 
   const replaceMap = useCallback((state: NodeMapState) => {
-    nodeIdAllocatorRef.current!.reset();
+    nodeIdAllocator.reset();
     replaceLayoutState(state.nodes, state.layoutMode);
     markDocumentRestored();
-  }, [replaceLayoutState, markDocumentRestored]);
+  }, [nodeIdAllocator, replaceLayoutState, markDocumentRestored]);
 
   // ID allocatorはresetしない。Undoで消えたノードのIDも以後の追加で再利用しない
   const undo = useCallback(() => {
@@ -157,45 +157,41 @@ export function useNodes(): UseNodesReturn {
   const addNode = useCallback((x: number, y: number) => {
     let id!: number;
     applyTreeChange((currentNodes) => {
-      id = nodeIdAllocatorRef.current!.nextAvailableId(currentNodes);
+      id = nodeIdAllocator.nextAvailableId(currentNodes);
       return [...currentNodes, createRootNode(id, x, y)];
     });
     return id;
-  }, [applyTreeChange]);
+  }, [nodeIdAllocator, applyTreeChange]);
 
-  const addChildNode = useCallback((parentId: number) => {
+  // 基点のノード（子なら親、兄弟なら元のノード）から1つ作って追加し、作ったノードを選択してそのIDを返す。
+  // 基点が無い・作れないときは何も変えずに null を返す。ID は確定時点の最新の配列から採番する
+  const addNodeFromAnchor = useCallback((
+    anchorId: number,
+    createNode: (currentNodes: readonly Node[], anchorId: number, id: number) => Node | null,
+  ) => {
     let createdId: number | null = null;
     const applied = applyTreeChange((currentNodes) => {
-      if (!currentNodes.some((node) => node.id === parentId)) return null;
-      const id = nodeIdAllocatorRef.current!.nextAvailableId(currentNodes);
-      const child = createChildNode(currentNodes, parentId, id);
-      if (!child) return null;
+      if (!currentNodes.some((node) => node.id === anchorId)) return null;
+      const id = nodeIdAllocator.nextAvailableId(currentNodes);
+      const created = createNode(currentNodes, anchorId, id);
+      if (!created) return null;
 
       createdId = id;
-      return [...currentNodes, child];
+      return [...currentNodes, created];
     });
     if (!applied || createdId === null) return null;
 
     setSelectedNodeId(createdId);
     return createdId;
-  }, [applyTreeChange]);
+  }, [nodeIdAllocator, applyTreeChange]);
 
-  const addSiblingNode = useCallback((nodeId: number) => {
-    let createdId: number | null = null;
-    const applied = applyTreeChange((currentNodes) => {
-      if (!currentNodes.some((node) => node.id === nodeId)) return null;
-      const id = nodeIdAllocatorRef.current!.nextAvailableId(currentNodes);
-      const sibling = createSiblingNode(currentNodes, nodeId, id);
-      if (!sibling) return null;
+  const addChildNode = useCallback((parentId: number) => (
+    addNodeFromAnchor(parentId, createChildNode)
+  ), [addNodeFromAnchor]);
 
-      createdId = id;
-      return [...currentNodes, sibling];
-    });
-    if (!applied || createdId === null) return null;
-
-    setSelectedNodeId(createdId);
-    return createdId;
-  }, [applyTreeChange]);
+  const addSiblingNode = useCallback((nodeId: number) => (
+    addNodeFromAnchor(nodeId, createSiblingNode)
+  ), [addNodeFromAnchor]);
 
   const selectNode = useCallback((id: number | null) => {
     setSelectedNodeId(id);
@@ -253,7 +249,7 @@ export function useNodes(): UseNodesReturn {
       const inserted = insert(
         currentNodes,
         mode,
-        (occupied, count) => nodeIdAllocatorRef.current!.nextAvailableIds(occupied, count),
+        (occupied, count) => nodeIdAllocator.nextAvailableIds(occupied, count),
       );
       if (!inserted) return null;
 
@@ -264,7 +260,7 @@ export function useNodes(): UseNodesReturn {
 
     setSelectedNodeId(insertedRootId);
     return insertedRootId;
-  }, [applyTreeChange]);
+  }, [nodeIdAllocator, applyTreeChange]);
 
   const duplicateSubtree = useCallback((sourceId: number) => (
     applySubtreeInsertion((currentNodes, mode, allocateIds) => (
@@ -318,7 +314,8 @@ export function useNodes(): UseNodesReturn {
       outcome = position;
       return reorderedNodes;
     });
-    return settleTreeChangeOutcome(applied, outcome as ReorderSiblingResult | null);
+    // outcome はコールバックの中で代入するため、TypeScript は null に絞り込んでしまう。型引数で結果の型を明示する
+    return settleTreeChangeOutcome<ReorderSiblingResult>(applied, outcome);
   }, [applyTreeChange]);
 
   // 新しい親は描画時の配列ではなく、確定時点の最新の配列から解決する。
@@ -339,7 +336,7 @@ export function useNodes(): UseNodesReturn {
       outcome = summary;
       return changedNodes;
     });
-    return settleTreeChangeOutcome(applied, outcome as ChangeNodeIndentResult | null);
+    return settleTreeChangeOutcome<ChangeNodeIndentResult>(applied, outcome);
   }, [applyTreeChange]);
 
   // 新しい ID は確定時点の最新の配列から採番する。確定しなかった ID は欠番のままにする。
@@ -350,7 +347,7 @@ export function useNodes(): UseNodesReturn {
   ): InsertParentNodeResult => {
     let outcome: InsertParentNodeResult | null = null;
     const applied = applyTreeChange((currentNodes, mode) => {
-      const id = nodeIdAllocatorRef.current!.nextAvailableId(currentNodes);
+      const id = nodeIdAllocator.nextAvailableId(currentNodes);
       const inserted = computeParentInsertion(currentNodes, nodeId, id, visibleNodeIds, mode);
       if (!inserted.ok) {
         outcome = inserted;
@@ -359,10 +356,10 @@ export function useNodes(): UseNodesReturn {
       outcome = { ok: true, insertedId: inserted.insertedId };
       return inserted.nodes;
     });
-    const settled = settleTreeChangeOutcome(applied, outcome as InsertParentNodeResult | null);
+    const settled = settleTreeChangeOutcome<InsertParentNodeResult>(applied, outcome);
     if (settled.ok) setSelectedNodeId(settled.insertedId);
     return settled;
-  }, [applyTreeChange]);
+  }, [nodeIdAllocator, applyTreeChange]);
 
   const deleteNode = useCallback((id: number) => {
     let subtreeIds = new Set<number>();

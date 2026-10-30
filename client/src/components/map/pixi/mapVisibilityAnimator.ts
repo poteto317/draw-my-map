@@ -26,6 +26,11 @@ type VisibilityState = {
   tween: VisibilityTween | null;
 };
 
+type VisibilityEntry = {
+  target: MapVisibilityTarget;
+  state: VisibilityState;
+};
+
 const DEFAULT_DURATION_MS = 160;
 
 export function createMapVisibilityAnimator({
@@ -35,8 +40,8 @@ export function createMapVisibilityAnimator({
   reducedMotion,
   durationMs = DEFAULT_DURATION_MS,
 }: AnimatorDependencies) {
-  const states = new Map<string, VisibilityState>();
-  let targets = new Map<string, MapVisibilityTarget>();
+  // 対象と表示の状態を key ごとに組で持つ。対象を差し替えても、残った key の状態は引き継ぐ
+  let entries = new Map<string, VisibilityEntry>();
   let frameId: number | null = null;
   let disposed = false;
 
@@ -59,8 +64,7 @@ export function createMapVisibilityAnimator({
     frameId = null;
     const currentTime = now();
     let hasActiveTween = false;
-    for (const [key, target] of targets) {
-      const state = states.get(key)!;
+    for (const { target, state } of entries.values()) {
       sampleState(state, currentTime);
       target.setOpacity(state.opacity);
       target.setInteractive(state.visible);
@@ -76,7 +80,7 @@ export function createMapVisibilityAnimator({
   };
 
   const cancelFrameWhenIdle = () => {
-    const hasActiveTween = [...targets.keys()].some((key) => states.get(key)?.tween !== null);
+    const hasActiveTween = [...entries.values()].some(({ state }) => state.tween !== null);
     if (!hasActiveTween && frameId !== null) {
       cancelFrame(frameId);
       frameId = null;
@@ -86,8 +90,7 @@ export function createMapVisibilityAnimator({
   const setVisibleKeys = (visibleKeys: ReadonlySet<string>) => {
     if (disposed) return;
     const currentTime = now();
-    for (const [key, target] of targets) {
-      const state = states.get(key)!;
+    for (const [key, { target, state }] of entries) {
       const visible = visibleKeys.has(key);
       const wasTweening = state.tween !== null;
       sampleState(state, currentTime);
@@ -145,14 +148,14 @@ export function createMapVisibilityAnimator({
 
   const replaceTargets = (nextTargets: readonly MapVisibilityTarget[]) => {
     if (disposed) return;
-    targets = new Map(nextTargets.map((target) => [target.key, target]));
+    // 同じ key の対象が複数あれば、後のものを使う。無くなった key の状態は捨てる
+    const targetsByKey = new Map(nextTargets.map((target) => [target.key, target]));
+    const previousEntries = entries;
+    entries = new Map();
     const currentTime = now();
-    for (const key of states.keys()) {
-      if (!targets.has(key)) states.delete(key);
-    }
-    for (const [key, target] of targets) {
-      const state = states.get(key) ?? { opacity: 0, visible: false, tween: null };
-      states.set(key, state);
+    for (const [key, target] of targetsByKey) {
+      const state = previousEntries.get(key)?.state ?? { opacity: 0, visible: false, tween: null };
+      entries.set(key, { target, state });
       sampleState(state, currentTime);
       applyState(target, state);
     }
@@ -164,7 +167,7 @@ export function createMapVisibilityAnimator({
     disposed = true;
     if (frameId !== null) cancelFrame(frameId);
     frameId = null;
-    targets.clear();
+    entries.clear();
   };
 
   return { replaceTargets, setVisibleKeys, dispose };

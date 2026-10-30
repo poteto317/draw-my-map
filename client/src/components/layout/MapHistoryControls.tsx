@@ -1,4 +1,5 @@
-import { useLayoutEffect, useRef, type FocusEvent, type KeyboardEvent } from "react";
+import { preventRepeatedEnterClick } from "@/components/layout/repeatedEnterClick";
+import { usePairedButtonFocusHandover } from "@/components/layout/usePairedButtonFocusHandover";
 
 type MapHistoryControlsProps = {
   canUndo: boolean;
@@ -15,40 +16,15 @@ export function MapHistoryControls({
   onUndo,
   onRedo,
 }: MapHistoryControlsProps) {
-  const undoButtonRef = useRef<HTMLButtonElement>(null);
-  const redoButtonRef = useRef<HTMLButtonElement>(null);
-  // 直前にフォーカスしていたボタン。無効化でbodyへフォーカスが戻るブラウザでも、どちらを押していたか分かるよう残す
-  const focusedButtonRef = useRef<HTMLButtonElement | null>(null);
+  // 押したボタンが無効になってもキーボードのフォーカスを失わないよう、もう一方の有効なボタンへ移す
+  const {
+    firstRef: undoButtonRef,
+    secondRef: redoButtonRef,
+    handleFocus,
+    handleBlur,
+  } = usePairedButtonFocusHandover(canUndo, canRedo);
 
-  useLayoutEffect(() => {
-    const focusedButton = focusedButtonRef.current;
-    if (!focusedButton?.disabled) return;
-    const activeElement = document.activeElement;
-    if (activeElement !== focusedButton && activeElement !== document.body && activeElement !== null) return;
-    const otherButton = focusedButton === undoButtonRef.current ? redoButtonRef.current : undoButtonRef.current;
-    if (!otherButton || otherButton.disabled) {
-      // 移せる先が無いなら記録を捨てる。残すと、後で別の理由でボタンが有効になったときに誤ってフォーカスを奪う
-      focusedButtonRef.current = null;
-      return;
-    }
-    // 押したボタンが無効になってもキーボードのフォーカスを失わないよう、もう一方の有効なボタンへ移す
-    otherButton.focus();
-  }, [canUndo, canRedo]);
-
-  function handleFocus(event: FocusEvent<HTMLButtonElement>) {
-    focusedButtonRef.current = event.currentTarget;
-  }
-
-  function handleBlur(event: FocusEvent<HTMLButtonElement>) {
-    // 無効化によるblurでは記録を残し、ほかの要素へ移ったときだけ消す
-    if (!event.currentTarget.disabled) focusedButtonRef.current = null;
-  }
-
-  function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
-    // Enterの押し続けで履歴が連続して進み、フォーカス移動後にUndoとRedoが往復しないよう、リピートのclick合成を止める
-    if (event.key === "Enter" && event.repeat) event.preventDefault();
-  }
-
+  // Enterの押し続けで履歴が連続して進み、フォーカス移動後にUndoとRedoが往復しないよう、リピートのclick合成を止める（preventRepeatedEnterClick）
   // pointerdownの既定動作は止めない。編集中のラベル入力をblurで確定してから履歴を操作させるため
   return (
     <div className="flex shrink-0 gap-2">
@@ -59,7 +35,7 @@ export function MapHistoryControls({
         onClick={onUndo}
         onFocus={handleFocus}
         onBlur={handleBlur}
-        onKeyDown={handleKeyDown}
+        onKeyDown={preventRepeatedEnterClick}
         disabled={!canUndo}
       >
         元に戻す
@@ -71,7 +47,7 @@ export function MapHistoryControls({
         onClick={onRedo}
         onFocus={handleFocus}
         onBlur={handleBlur}
-        onKeyDown={handleKeyDown}
+        onKeyDown={preventRepeatedEnterClick}
         disabled={!canRedo}
       >
         やり直す

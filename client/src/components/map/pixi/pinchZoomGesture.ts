@@ -30,11 +30,10 @@ const isSameViewport = (first: Viewport, second: Viewport): boolean => (
 );
 
 export function createPinchZoomGesture(options: Options): PinchZoomGesture {
+  // 2本の指の pointerId は異なる（touchGestureCoordinator が2つの別の指を揃えてから作る）
   const ids = [options.first.pointerId, options.second.pointerId] as const;
-  const points = new Map<number, Point>([
-    [ids[0], { ...options.first.screen }],
-    [ids[1], { ...options.second.screen }],
-  ]);
+  let currentFirst: Point = { ...options.first.screen };
+  let currentSecond: Point = { ...options.second.screen };
   let startFirst = { ...options.first.screen };
   let startSecond = { ...options.second.screen };
   let waitingForBaseline = !hasFinitePositiveDistance(startFirst, startSecond);
@@ -46,9 +45,10 @@ export function createPinchZoomGesture(options: Options): PinchZoomGesture {
     owns,
     move(sample) {
       if (!active || !owns(sample.pointerId)) return;
-      points.set(sample.pointerId, { ...sample.screen });
-      const first = points.get(ids[0])!;
-      const second = points.get(ids[1])!;
+      if (sample.pointerId === ids[0]) currentFirst = { ...sample.screen };
+      if (sample.pointerId === ids[1]) currentSecond = { ...sample.screen };
+      const first = currentFirst;
+      const second = currentSecond;
       if (waitingForBaseline) {
         if (!hasFinitePositiveDistance(first, second)) return;
         startFirst = { ...first };

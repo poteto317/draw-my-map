@@ -1,6 +1,7 @@
 "use client";
 
-import { useId, type KeyboardEvent } from "react";
+import { useId } from "react";
+import { preventRepeatedEnterClick } from "@/components/layout/repeatedEnterClick";
 
 type NodeCollapseControlProps = {
   selectedNodeId: number | null;
@@ -31,11 +32,7 @@ export function NodeCollapseControl({
     onToggle(selectedNodeId);
   }
 
-  function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
-    // Enterの押し続けで折りたたみと展開が交互に起きないよう、リピートのclick合成を止める
-    if (event.key === "Enter" && event.repeat) event.preventDefault();
-  }
-
+  // Enterの押し続けで折りたたみと展開が交互に起きないよう、リピートのclick合成を止める（preventRepeatedEnterClick）
   return (
     <div className="flex flex-wrap items-center gap-2 text-sm text-zinc-600 dark:text-zinc-300">
       <button
@@ -45,7 +42,7 @@ export function NodeCollapseControl({
         aria-expanded={disabled ? undefined : !collapsed}
         aria-describedby={`${hiddenCountId} ${persistenceNoteId} ${layoutNoteId}`}
         onClick={handleToggle}
-        onKeyDown={handleKeyDown}
+        onKeyDown={preventRepeatedEnterClick}
       >
         {collapsed ? "枝を展開" : "枝を折りたたむ"}
       </button>

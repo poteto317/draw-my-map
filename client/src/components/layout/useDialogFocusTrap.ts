@@ -26,7 +26,8 @@ function keepOneRadioPerGroup(elements: HTMLElement[]): HTMLElement[] {
   }
   return elements.filter((element) => {
     if (!isGroupedRadio(element)) return true;
-    const group = groups.get(element.form)!.get(element.name)!;
+    // 上のループで全ラジオを登録済みのため、まとまりは必ず見つかる（見つからなければ自分だけのまとまりとして扱う）
+    const group = groups.get(element.form)?.get(element.name) ?? [element];
     const stop = group.find((radio) => radio.checked) ?? group[0];
     return element === stop;
   });

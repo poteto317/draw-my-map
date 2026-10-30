@@ -36,36 +36,31 @@ export function useMapJsonImport({
   return useCallback(async (file: File) => {
     const importRevision = latestImportRevisionRef.current + 1;
     latestImportRevisionRef.current = importRevision;
+    // アンマウントした後や、後から別のファイルを選んだ後の読み取り結果は捨てる
+    const isStale = () => !mountedRef.current || importRevision !== latestImportRevisionRef.current;
+    // 失敗では現在のマップを変えないので、そのことを理由に続けて伝える
+    const publishFailure = (reason: string) => {
+      publishNotice({ kind: "error", message: `${reason}${IMPORT_PRESERVED_MESSAGE}` });
+    };
+
     let read: MapDocumentResult<string>;
     try {
       read = await readFile(file);
     } catch {
-      if (!mountedRef.current) return;
-      if (importRevision !== latestImportRevisionRef.current) return;
-      publishNotice({
-        kind: "error",
-        message: `JSONファイルを読み取れませんでした。${IMPORT_PRESERVED_MESSAGE}`,
-      });
+      if (!isStale()) publishFailure("JSONファイルを読み取れませんでした。");
       return;
     }
 
-    if (!mountedRef.current) return;
-    if (importRevision !== latestImportRevisionRef.current) return;
+    if (isStale()) return;
 
     if (!read.ok) {
-      publishNotice({
-        kind: "error",
-        message: `${read.error}${IMPORT_PRESERVED_MESSAGE}`,
-      });
+      publishFailure(read.error);
       return;
     }
 
     const parsed = parseMapDocumentJson(read.value);
     if (!parsed.ok) {
-      publishNotice({
-        kind: "error",
-        message: `${parsed.error}${IMPORT_PRESERVED_MESSAGE}`,
-      });
+      publishFailure(parsed.error);
       return;
     }
 

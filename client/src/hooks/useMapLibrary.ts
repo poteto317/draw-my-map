@@ -28,13 +28,10 @@ import {
   addMapEntry,
   createMapIndexEntry,
   findMapEntry,
-  pickUnusedMapId,
   removeMapEntry,
   renameMapEntry,
   replaceLastMapEntry,
   setCurrentMap,
-  sortMapEntriesForDisplay,
-  touchMapEntry,
   type MapIndexEntry,
   type MapIndexV1,
 } from "@/domain/mapLibrary/mapIndex";
@@ -43,10 +40,23 @@ import {
   validateMapNameInput,
 } from "@/domain/mapLibrary/mapName";
 import {
-  hasMapBody,
-  readMapBody,
+  createPersistentMapSession,
+  flushRegisteredSession,
+  type FlushRegistration,
+} from "@/hooks/mapLibrarySession";
+import {
+  failedOperation,
+  pickNewMapId,
+  succeededOperation,
+  toMapLibraryView,
+  UNCHANGED_OPERATION_RESULT,
+  type LibraryState,
+  type MapLibraryOperationResult,
+  type MapLibraryView,
+  type PersistentLibraryState,
+} from "@/hooks/mapLibraryState";
+import {
   removeMapBody,
-  writeMapBody,
   writeMapIndex,
   type MapLibraryStorage,
 } from "@/services/persistence/mapLibraryStorage";
@@ -58,31 +68,14 @@ import { createProtectedStorageSession } from "@/services/persistence/protectedS
 import type { MapFlushResult, MapStorageSession } from "@/types/mapStorageSession";
 import type { OperationNotice } from "@/types/operationNotice";
 
+// 表示用の値と操作の結果の型は mapLibraryState が定義する。既存の import 先を保つため再エクスポートする
+export type { MapLibraryOperationResult, MapLibraryView } from "@/hooks/mapLibraryState";
+
 export type MapLibraryDeps = {
   getStorage: () => MapLibraryStorage | null;
   now: () => Date;
   generateId: () => string;
 };
-
-export type MapLibraryView =
-  | { status: "loading" }
-  | {
-      status: "ready";
-      storageMode: "persistent" | "protected";
-      maps: readonly MapIndexEntry[]; // 表示順
-      currentMap: MapIndexEntry;
-      storageSession: MapStorageSession;
-      startupNotice: OperationNotice | null;
-    };
-
-export type MapLibraryOperationResult =
-  | {
-      ok: true;
-      remounted: boolean;
-      notice: OperationNotice | null;
-      saveRetryNotice: OperationNotice | null;
-    }
-  | { ok: false; notice: OperationNotice };
 
 export type UseMapLibraryResult = {
   view: MapLibraryView;
@@ -91,57 +84,6 @@ export type UseMapLibraryResult = {
   renameMap: (id: string, nameInput: string) => MapLibraryOperationResult;
   deleteMap: (id: string) => MapLibraryOperationResult;
 };
-
-// 起動の結果から作る、シェルが持つ状態。セッションは (currentMapId, セッション番号) ごとに作り直す。
-// セッション番号は sessionNumberRef だけが持ち、session の writeBody・registerFlush が閉じ込める
-type LibraryState =
-  | {
-      mode: "persistent";
-      storage: MapLibraryStorage;
-      index: MapIndexV1;
-      session: MapStorageSession;
-      startupNotice: OperationNotice | null;
-    }
-  | {
-      mode: "protected";
-      entry: MapIndexEntry;
-      session: MapStorageSession;
-      startupNotice: OperationNotice;
-    };
-
-type PersistentLibraryState = Extract<LibraryState, { mode: "persistent" }>;
-
-type FlushRegistration = { session: number; flush: () => MapFlushResult };
-
-const UNCHANGED_RESULT: MapLibraryOperationResult = {
-  ok: true,
-  remounted: false,
-  notice: null,
-  saveRetryNotice: null,
-};
-
-function succeeded(
-  notice: OperationNotice,
-  remounted: boolean,
-): MapLibraryOperationResult {
-  return { ok: true, remounted, notice, saveRetryNotice: null };
-}
-
-function failed(notice: OperationNotice): MapLibraryOperationResult {
-  return { ok: false, notice };
-}
-
-// 新しいマップの id。インデックスの id と、本体が残っている id（孤立した本体）を使用済みとして避ける
-function pickNewMapId(
-  storage: MapLibraryStorage,
-  index: MapIndexV1,
-  generateId: () => string,
-): string | null {
-  return pickUnusedMapId(
-    generateId,
-    (candidate) => findMapEntry(index, candidate) !== null || hasMapBody(storage, candidate),
-  );
-}
 
 export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
   const [library, setLibrary] = useState<LibraryState | null>(null);
@@ -172,47 +114,23 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
     commitLibrary({ ...current, index });
   }, [commitLibrary]);
 
-  // writeBody は作られたときの mapId とセッション番号を閉じ込める
+  // writeBody・registerFlush は作られたときの mapId とセッション番号を閉じ込め、
+  // 呼ばれた時点の ref と照合する（照合の規則は mapLibrarySession）
   const createPersistentSession = useCallback(
-    (storage: MapLibraryStorage, mapId: string, session: number): MapStorageSession => ({
-      mapId,
-      readBody: () => readMapBody(storage, mapId),
-      writeBody: (json) => {
-        const current = libraryRef.current;
-        // セッション番号で照合する。マップ id だけでは A → B → A を区別できない（L-571、L-103）
-        if (
-          session !== sessionNumberRef.current
-          || current === null
-          || current.mode !== "persistent"
-          || findMapEntry(current.index, mapId) === null
-        ) {
-          return { status: "inactive" };
-        }
-        const written = writeMapBody(storage, mapId, json);
-        if (!written.ok) return { status: "failed", error: written.error };
-        // 更新日時の書き込みに失敗しても本体は保存済み。次の保存で書き直す
-        const touched = touchMapEntry(
-          current.index,
-          mapId,
-          depsRef.current.now().toISOString(),
-        );
-        if (touched !== null && writeMapIndex(storage, touched).ok) {
-          commitIndex(touched);
-        }
-        return { status: "saved" };
-      },
-      registerFlush: (flush) => {
-        // 古いセッションの登録で、現在のセッションの登録を上書きしない
-        if (session !== sessionNumberRef.current) {
-          return () => {};
-        }
-        const registration: FlushRegistration = { session, flush };
-        flushRef.current = registration;
-        return () => {
-          if (flushRef.current === registration) flushRef.current = null;
-        };
-      },
-    }),
+    (storage: MapLibraryStorage, mapId: string, session: number): MapStorageSession =>
+      createPersistentMapSession({
+        storage,
+        mapId,
+        sessionNumber: session,
+        getActiveSessionNumber: () => sessionNumberRef.current,
+        getActiveIndex: () => {
+          const current = libraryRef.current;
+          return current?.mode === "persistent" ? current.index : null;
+        },
+        now: () => depsRef.current.now(),
+        commitIndex,
+        flushSlot: flushRef,
+      }),
     [commitIndex],
   );
 
@@ -285,84 +203,56 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
   }, [commitLibrary, createPersistentSession]);
 
   // 現在のセッション番号で登録された flush だけを呼ぶ。登録が無ければ unchanged
-  const flushCurrentSession = useCallback((): MapFlushResult => {
-    const registration = flushRef.current;
-    if (registration === null || registration.session !== sessionNumberRef.current) {
-      return { status: "unchanged" };
-    }
-    return registration.flush();
-  }, []);
+  const flushCurrentSession = useCallback(
+    (): MapFlushResult => flushRegisteredSession(flushRef.current, sessionNumberRef.current),
+    [],
+  );
 
-  const view = useMemo((): MapLibraryView => {
-    if (library === null) return { status: "loading" };
-    if (library.mode === "protected") {
-      return {
-        status: "ready",
-        storageMode: "protected",
-        maps: [library.entry],
-        currentMap: library.entry,
-        storageSession: library.session,
-        startupNotice: library.startupNotice,
-      };
-    }
-    const currentMap = findMapEntry(library.index, library.index.currentMapId);
-    if (currentMap === null) {
-      // decodeMapIndex と更新関数が currentMapId を maps の id に保つ
-      throw new Error("現在のマップがインデックスにありません。");
-    }
-    return {
-      status: "ready",
-      storageMode: "persistent",
-      maps: sortMapEntriesForDisplay(library.index.maps),
-      currentMap,
-      storageSession: library.session,
-      startupNotice: library.startupNotice,
-    };
-  }, [library]);
+  const view = useMemo((): MapLibraryView => toMapLibraryView(library), [library]);
 
   const createMap = useCallback((nameInput: string): MapLibraryOperationResult => {
     if (libraryRef.current?.mode !== "persistent") {
-      return failed(indexWriteFailedNotice("マップを作成"));
+      return failedOperation(indexWriteFailedNotice("マップを作成"));
     }
     const validation = validateMapNameInput(nameInput);
     if (!validation.ok) {
-      return failed({ kind: "error", message: validation.message });
+      return failedOperation({ kind: "error", message: validation.message });
     }
     if (flushCurrentSession().status === "failed") {
-      return failed(createFlushFailedNotice());
+      return failedOperation(createFlushFailedNotice());
     }
     // flush で更新日時が変わるので、flush の後のインデックスを基準にする
     const current = libraryRef.current;
     if (current?.mode !== "persistent") {
-      return failed(indexWriteFailedNotice("マップを作成"));
+      return failedOperation(indexWriteFailedNotice("マップを作成"));
     }
     const { storage, index } = current;
     const { generateId, now } = depsRef.current;
     const id = pickNewMapId(storage, index, generateId);
     if (id === null) {
-      return failed(mapIdUnavailableNotice());
+      return failedOperation(mapIdUnavailableNotice());
     }
     const next = addMapEntry(
       index,
       createMapIndexEntry(id, validation.name, now().toISOString()),
     );
     if (!writeMapIndex(storage, next).ok) {
-      return failed(indexWriteFailedNotice("マップを作成"));
+      return failedOperation(indexWriteFailedNotice("マップを作成"));
     }
     commitNewSession(current, next);
-    return succeeded(mapCreatedNotice(validation.name), true);
+    return succeededOperation(mapCreatedNotice(validation.name), true);
   }, [commitNewSession, flushCurrentSession]);
 
   const switchMap = useCallback((id: string): MapLibraryOperationResult => {
     const before = libraryRef.current;
     if (before?.mode !== "persistent" || findMapEntry(before.index, id) === null) {
-      return failed(indexWriteFailedNotice("マップを切り替え"));
+      return failedOperation(indexWriteFailedNotice("マップを切り替え"));
     }
     if (before.index.currentMapId === id) {
-      return UNCHANGED_RESULT;
+      return UNCHANGED_OPERATION_RESULT;
     }
     if (flushCurrentSession().status === "failed") {
-      return failed(switchFlushFailedNotice());
+      return failedOperation(switchFlushFailedNotice());
     }
     // flush で更新日時が変わるので、flush の後のインデックスを基準にする
     const current = libraryRef.current;
@@ -374,35 +264,35 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
       || target === null
       || !writeMapIndex(current.storage, next).ok
     ) {
-      return failed(indexWriteFailedNotice("マップを切り替え"));
+      return failedOperation(indexWriteFailedNotice("マップを切り替え"));
     }
     commitNewSession(current, next);
-    return succeeded(mapSwitchedNotice(target.name), true);
+    return succeededOperation(mapSwitchedNotice(target.name), true);
   }, [commitNewSession, flushCurrentSession]);
 
   const renameMap = useCallback(
     (id: string, nameInput: string): MapLibraryOperationResult => {
       const current = libraryRef.current;
       if (current?.mode !== "persistent") {
-        return failed(indexWriteFailedNotice("名前を変更"));
+        return failedOperation(indexWriteFailedNotice("名前を変更"));
       }
       const validation = validateMapNameInput(nameInput);
       if (!validation.ok) {
-        return failed({ kind: "error", message: validation.message });
+        return failedOperation({ kind: "error", message: validation.message });
       }
       const target = findMapEntry(current.index, id);
       if (target === null) {
-        return failed(indexWriteFailedNotice("名前を変更"));
+        return failedOperation(indexWriteFailedNotice("名前を変更"));
       }
       if (target.name === validation.name) {
-        return UNCHANGED_RESULT;
+        return UNCHANGED_OPERATION_RESULT;
       }
       const next = renameMapEntry(current.index, id, validation.name);
       if (next === null || !writeMapIndex(current.storage, next).ok) {
-        return failed(indexWriteFailedNotice("名前を変更"));
+        return failedOperation(indexWriteFailedNotice("名前を変更"));
       }
       commitIndex(next);
-      return succeeded(mapRenamedNotice(validation.name), false);
+      return succeededOperation(mapRenamedNotice(validation.name), false);
     },
     [commitIndex],
   );
@@ -413,7 +303,7 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
     (current: PersistentLibraryState, target: MapIndexEntry): MapLibraryOperationResult => {
       const next = removeMapEntry(current.index, target.id);
       if (next === null || !writeMapIndex(current.storage, next).ok) {
-        return failed(indexWriteFailedNotice("マップを削除"));
+        return failedOperation(indexWriteFailedNotice("マップを削除"));
       }
       commitIndex(next);
       // インデックスを先に書き、本体を後に消す。消せなければ孤立した本体として残す
@@ -439,12 +329,12 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
       notices: { removed: OperationNotice; bodyRemains: OperationNotice },
     ): MapLibraryOperationResult => {
       if (!writeMapIndex(current.storage, next).ok) {
-        return failed(indexWriteFailedNotice("マップを削除"));
+        return failedOperation(indexWriteFailedNotice("マップを削除"));
       }
       const sessionNumber = advanceSessionNumber();
       const removed = removeMapBody(current.storage, target.id);
       commitSession(current, next, sessionNumber);
-      return succeeded(removed.ok ? notices.removed : notices.bodyRemains, true);
+      return succeededOperation(removed.ok ? notices.removed : notices.bodyRemains, true);
     },
     [advanceSessionNumber, commitSession],
   );
@@ -453,7 +343,7 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
     const current = libraryRef.current;
     const target = current?.mode === "persistent" ? findMapEntry(current.index, id) : null;
     if (current?.mode !== "persistent" || target === null) {
-      return failed(indexWriteFailedNotice("マップを削除"));
+      return failedOperation(indexWriteFailedNotice("マップを削除"));
     }
     const { storage, index } = current;
     if (index.currentMapId !== id) {
@@ -463,7 +353,7 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
       const next = removeMapEntry(index, id);
       const nextMap = next === null ? null : findMapEntry(next, next.currentMapId);
       if (next === null || nextMap === null) {
-        return failed(indexWriteFailedNotice("マップを削除"));
+        return failedOperation(indexWriteFailedNotice("マップを削除"));
       }
       return deleteOpenMap(current, target, next, {
         removed: currentMapDeletedNotice(target.name, nextMap.name),
@@ -474,7 +364,7 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
     const { generateId, now } = depsRef.current;
     const newId = pickNewMapId(storage, index, generateId);
     if (newId === null) {
-      return failed(mapIdUnavailableNotice());
+      return failedOperation(mapIdUnavailableNotice());
     }
     const next = replaceLastMapEntry(
       index,
@@ -482,7 +372,7 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
       createMapIndexEntry(newId, DEFAULT_MAP_NAME, now().toISOString()),
     );
     if (next === null) {
-      return failed(indexWriteFailedNotice("マップを削除"));
+      return failedOperation(indexWriteFailedNotice("マップを削除"));
     }
     return deleteOpenMap(current, target, next, {
       removed: lastMapDeletedNotice(target.name),

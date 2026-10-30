@@ -1,5 +1,5 @@
-import type { KeyboardEvent } from "react";
 import { TREE_EDIT_SHORTCUT_BUTTON_ATTRIBUTE } from "@/components/map/treeEditShortcutGuard";
+import { preventRepeatedEnterClick } from "@/components/layout/repeatedEnterClick";
 import { usePairedButtonFocusHandover } from "@/components/layout/usePairedButtonFocusHandover";
 
 export type NodeIndentControlProps = {
@@ -19,11 +19,7 @@ export function NodeIndentControl({
 }: NodeIndentControlProps) {
   const { firstRef, secondRef, handleFocus, handleBlur } = usePairedButtonFocusHandover(canOutdent, canIndent);
 
-  function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
-    // Enterの押し続けで操作が連続し、フォーカス移動後に逆の操作が起きないよう、リピートのclick合成を止める
-    if (event.key === "Enter" && event.repeat) event.preventDefault();
-  }
-
+  // Enterの押し続けで操作が連続し、フォーカス移動後に逆の操作が起きないよう、リピートのclick合成を止める（preventRepeatedEnterClick）
   // 目印を付けたボタンでは、windowのAlt+←/→のショートカットが働く。ここでは処理しないので二重には動かない
   const shortcutTargetProps = { [TREE_EDIT_SHORTCUT_BUTTON_ATTRIBUTE]: "" };
 
@@ -41,7 +37,7 @@ export function NodeIndentControl({
         onClick={onOutdent}
         onFocus={handleFocus}
         onBlur={handleBlur}
-        onKeyDown={handleKeyDown}
+        onKeyDown={preventRepeatedEnterClick}
         {...shortcutTargetProps}
         disabled={!canOutdent}
       >
@@ -57,7 +53,7 @@ export function NodeIndentControl({
         onClick={onIndent}
         onFocus={handleFocus}
         onBlur={handleBlur}
-        onKeyDown={handleKeyDown}
+        onKeyDown={preventRepeatedEnterClick}
         {...shortcutTargetProps}
         disabled={!canIndent}
       >
