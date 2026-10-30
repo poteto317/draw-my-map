@@ -2,7 +2,7 @@ import type { Viewport } from "@/components/map/mapViewport";
 import { createCanvasPanGesture } from "@/components/map/pixi/canvasPanGesture";
 import { createNodeConnectionGesture } from "@/components/map/pixi/nodeConnectionGesture";
 import { createNodeMoveGesture } from "@/components/map/pixi/nodeMoveGesture";
-import type { LatestValue, PointerGesture } from "@/components/map/pixi/pointerGesture";
+import type { LatestValue, PointerGesture, PointerSample } from "@/components/map/pixi/pointerGesture";
 import { createPointerGestureSession } from "@/components/map/pixi/pointerGestureSession";
 import {
   hasFinitePointerCoordinates,
@@ -90,6 +90,47 @@ export function createStageInteractions({
     return lease !== null && lease.gesture === siblingReorderGesture;
   };
 
+  const isNodeInteractive = (nodeId: number) =>
+    nodesRef.current.some((node) => node.id === nodeId)
+    && (visibleNodeIdsRef === undefined || visibleNodeIdsRef.current.has(nodeId));
+
+  const createNodeGesture = (
+    nodeId: number,
+    sample: PointerSample,
+    shiftKey: boolean,
+  ): PointerGesture | null => {
+    if (shiftKey) {
+      return createNodeConnectionGesture({
+        sourceNodeId: nodeId,
+        nodesRef,
+        visibleNodeIdsRef,
+        onConnectNodesRef,
+        onConnectionTargetChangeRef,
+      });
+    }
+    if (layoutModeRef.current === "auto") {
+      siblingReorderGesture = createSiblingReorderGesture({
+        nodeId,
+        startSample: sample,
+        nodesRef,
+        visibleNodeIdsRef: siblingReorderVisibleNodeIdsRef,
+        layoutModeRef,
+        onReorderSiblingRef,
+        onSiblingReorderPreviewChangeRef,
+        dragThreshold,
+      });
+      return siblingReorderGesture;
+    }
+    return createNodeMoveGesture({
+      nodeId,
+      startSample: sample,
+      nodesRef,
+      onMoveNodeRef,
+      onBeginNodeMoveRef,
+      dragThreshold,
+    });
+  };
+
   const handleNodePointerDown = (
     bindingAtEntry: StageBinding,
     nodeId: number,
@@ -105,54 +146,18 @@ export function createStageInteractions({
 
     const sample = toPointerSample(event, viewportRef.current);
     if (!hasFinitePointerCoordinates(sample)) return;
-    if (!nodesRef.current.some((node) => node.id === nodeId)
-      || visibleNodeIdsRef !== undefined && !visibleNodeIdsRef.current.has(nodeId)) {
+    if (!isNodeInteractive(nodeId)) {
       if (pointerGestures.owns(sample.pointerId)) pointerGestures.cancel();
       return;
     }
     if (touchGestures.pointerDown(sample)) return;
 
     pointerGestures.cancel();
-    if (
-      hasActiveGesture()
-      || activeBinding !== bindingAtEntry
-      || !nodesRef.current.some((node) => node.id === nodeId)
-      || visibleNodeIdsRef !== undefined && !visibleNodeIdsRef.current.has(nodeId)
-    ) {
+    if (hasActiveGesture() || activeBinding !== bindingAtEntry || !isNodeInteractive(nodeId)) {
       return;
     }
 
-    let gesture: PointerGesture | null;
-    if (event.shiftKey) {
-      gesture = createNodeConnectionGesture({
-        sourceNodeId: nodeId,
-        nodesRef,
-        visibleNodeIdsRef,
-        onConnectNodesRef,
-        onConnectionTargetChangeRef,
-      });
-    } else if (layoutModeRef.current === "auto") {
-      gesture = createSiblingReorderGesture({
-        nodeId,
-        startSample: sample,
-        nodesRef,
-        visibleNodeIdsRef: siblingReorderVisibleNodeIdsRef,
-        layoutModeRef,
-        onReorderSiblingRef,
-        onSiblingReorderPreviewChangeRef,
-        dragThreshold,
-      });
-      siblingReorderGesture = gesture;
-    } else {
-      gesture = createNodeMoveGesture({
-        nodeId,
-        startSample: sample,
-        nodesRef,
-        onMoveNodeRef,
-        onBeginNodeMoveRef,
-        dragThreshold,
-      });
-    }
+    const gesture = createNodeGesture(nodeId, sample, event.shiftKey);
     if (!gesture) return;
 
     const nextGesture = pointerGestures.start(sample.pointerId, gesture);

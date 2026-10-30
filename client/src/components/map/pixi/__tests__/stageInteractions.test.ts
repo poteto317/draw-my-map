@@ -496,6 +496,17 @@ describe("createStageInteractions", () => {
     expect(onConnectNodesRef.current).toHaveBeenCalledWith(1, 2);
   });
 
+  it("別pointerのpointercancelでは所有中のgestureを止めない", () => {
+    const { stage, handlers } = createStage();
+    const { controller } = createController();
+    controller.bind(stage as never);
+
+    nodePointerDown(controller, 1, pointer(100, 60, { pointerId: 1 }) as never);
+    handlers.pointercancel?.(pointer(100, 60, { pointerId: 2 }));
+
+    expect(controller.hasActiveGesture()).toBe(true);
+  });
+
   it("cancels the active gesture when its pointer starts again on the blank stage", () => {
     const { stage, handlers } = createStage();
     const {
@@ -619,6 +630,19 @@ describe("createStageInteractions", () => {
     handlers.pointermove?.(pointer(60, 60, { pointerId: 1 }));
 
     expect(onMoveNode).toHaveBeenCalledWith(1, 30, 50);
+  });
+
+  it("空白選択callbackでbindingが解放されたらパンを開始しない", () => {
+    const { stage, handlers } = createStage();
+    const { controller, onSelectNodeRef } = createController();
+    const cleanup = controller.bind(stage as never);
+    onSelectNodeRef.current = jest.fn(() => { cleanup(); });
+    const stagePointerDown = handlers.pointerdown;
+
+    stagePointerDown?.(pointer(0, 0, { target: stage }));
+
+    expect(onSelectNodeRef.current).toHaveBeenCalledWith(null);
+    expect(controller.hasActiveGesture()).toBe(false);
   });
 
   it("空白選択callbackから再入したpinchと並行してパンを開始しない", () => {
@@ -1583,6 +1607,186 @@ describe("createStageInteractions", () => {
       handlers.pointerup?.(pointer(50, 140));
 
       expect(onReorderSiblingRef.current).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("非有限の座標の入力", () => {
+    it("ノードのpointerdownでは接続を開始せず、選択もしない", () => {
+      // 接続の生成関数は座標を確かめないので、呼び出し側の判定だけが止める
+      const { stage } = createStage();
+      const { controller, onSelectNodeRef } = createController();
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 1, pointer(Number.NaN, 60, { shiftKey: true }) as never);
+
+      expect(onSelectNodeRef.current).not.toHaveBeenCalled();
+      expect(controller.hasActiveGesture()).toBe(false);
+    });
+
+    it("ノードのpointerdownでは所有中のgestureを止めない", () => {
+      const { stage, handlers } = createStage();
+      const { controller, onMoveNodeRef, onSelectNodeRef } = createController();
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 1, pointer(100, 60, { pointerId: 1 }) as never);
+      nodePointerDown(controller, 1, pointer(Number.NaN, 60, { pointerId: 2 }) as never);
+      handlers.pointermove?.(pointer(108, 66, { pointerId: 1 }));
+
+      expect((onSelectNodeRef.current as jest.Mock).mock.calls).toEqual([[1]]);
+      expect(onMoveNodeRef.current).toHaveBeenCalledWith(1, 28, 46);
+    });
+
+    it("空白のpointerdownでは選択を解除せず、パンも開始しない", () => {
+      const { stage, handlers } = createStage();
+      const { controller, onSelectNodeRef } = createController();
+      controller.bind(stage as never);
+
+      handlers.pointerdown?.(pointer(Number.NaN, 60, { target: stage }));
+
+      expect(onSelectNodeRef.current).not.toHaveBeenCalled();
+      expect(controller.hasActiveGesture()).toBe(false);
+    });
+
+    it("pointermoveでは接続先の候補を変えない", () => {
+      // 接続のmoveは座標を確かめず候補なしとして扱うので、呼び出し側の判定だけが候補を守る
+      const { stage, handlers } = createStage();
+      const { controller, onConnectionTargetChangeRef } = createController({
+        nodes: [node, targetNode],
+      });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 1, pointer(50, 50, { shiftKey: true }) as never);
+      handlers.pointermove?.(pointer(220, 60));
+      handlers.pointermove?.(pointer(Number.NaN, 60));
+
+      expect((onConnectionTargetChangeRef.current as jest.Mock).mock.calls).toEqual([[2]]);
+      expect(controller.activeNodeIds()).toEqual([1, 2]);
+    });
+  });
+
+  describe("解放したbindingのstageのイベント", () => {
+    // 解放の前にハンドラーを控え、新しいbindingで同じpointerのgestureを持たせる
+    function bindSecondStageWithGesture() {
+      const first = createStage();
+      const second = createStage();
+      const created = createController();
+      const cleanupFirst = created.controller.bind(first.stage as never);
+      const staleHandlers = { ...first.handlers };
+      cleanupFirst();
+      created.controller.bind(second.stage as never);
+      nodePointerDown(created.controller, 1, pointer(100, 60, { pointerId: 1 }) as never);
+
+      return { ...created, first, second, staleHandlers };
+    }
+
+    it.each(["pointerup", "pointerupoutside", "pointercancel"] as const)(
+      "%sでは新しいbindingのgestureを止めない",
+      (eventName) => {
+        const { controller, second, staleHandlers, onMoveNodeRef } = bindSecondStageWithGesture();
+
+        staleHandlers[eventName]?.(pointer(100, 60, { pointerId: 1 }));
+        second.handlers.pointermove?.(pointer(108, 66, { pointerId: 1 }));
+
+        expect(controller.hasActiveGesture()).toBe(true);
+        expect(onMoveNodeRef.current).toHaveBeenCalledWith(1, 28, 46);
+      },
+    );
+
+    it("pointermoveでは新しいbindingのgestureを動かさない", () => {
+      const { staleHandlers, onMoveNodeRef } = bindSecondStageWithGesture();
+
+      staleHandlers.pointermove?.(pointer(108, 66, { pointerId: 1 }));
+
+      expect(onMoveNodeRef.current).not.toHaveBeenCalled();
+    });
+
+    it("pointerdownでは選択を解除せず、新しいbindingのgestureを止めない", () => {
+      const { controller, first, staleHandlers, onSelectNodeRef } = bindSecondStageWithGesture();
+
+      staleHandlers.pointerdown?.(pointer(0, 0, { pointerId: 1, target: first.stage }));
+
+      expect((onSelectNodeRef.current as jest.Mock).mock.calls).toEqual([[1]]);
+      expect(controller.hasActiveGesture()).toBe(true);
+    });
+  });
+
+  describe("ノードが操作できるかのガード", () => {
+    it("別pointerで隠れたノードを押しても所有中のgestureを止めない", () => {
+      const { stage, handlers } = createStage();
+      const { controller, onMoveNodeRef, onSelectNodeRef } = createController({
+        nodes: [node, targetNode],
+        visibleNodeIds: new Set([1]),
+      });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 1, pointer(100, 60, { pointerId: 1 }) as never);
+      nodePointerDown(controller, 2, pointer(220, 60, { pointerId: 2 }) as never);
+      handlers.pointermove?.(pointer(108, 66, { pointerId: 1 }));
+
+      expect((onSelectNodeRef.current as jest.Mock).mock.calls).toEqual([[1]]);
+      expect(onMoveNodeRef.current).toHaveBeenCalledWith(1, 28, 46);
+    });
+
+    // 接続のcancelは候補をnullへ戻すcallbackを呼ぶ。ここで状況を変えて、新しいpointerdownの
+    // 1回目のガードの後、2回目のガードの前に変化が起きるようにする
+    function startConnectionThenPressTarget(
+      created: ReturnType<typeof createController>,
+      stage: FakeStage,
+      onCancel: () => void,
+    ) {
+      created.onConnectionTargetChangeRef.current = jest.fn((id: number | null) => {
+        if (id === null) onCancel();
+      });
+
+      nodePointerDown(created.controller, 1, pointer(50, 50, {
+        shiftKey: true,
+        pointerId: 1,
+        path: [stage],
+      }) as never);
+      nodePointerDown(created.controller, 2, pointer(220, 60, {
+        pointerId: 2,
+        path: [stage],
+      }) as never);
+    }
+
+    it("進行中のgestureのcancel中にノードが消えると、開始も選択もしない", () => {
+      const { stage } = createStage();
+      const created = createController({ nodes: [node, targetNode] });
+      created.controller.bind(stage as never);
+
+      startConnectionThenPressTarget(created, stage, () => {
+        created.nodesRef.current = [node];
+      });
+
+      expect((created.onSelectNodeRef.current as jest.Mock).mock.calls).toEqual([[1]]);
+      expect(created.controller.hasActiveGesture()).toBe(false);
+    });
+
+    it("進行中のgestureのcancel中にノードが隠れると、開始も選択もしない", () => {
+      const { stage } = createStage();
+      const created = createController({
+        nodes: [node, targetNode],
+        visibleNodeIds: new Set([1, 2]),
+      });
+      created.controller.bind(stage as never);
+
+      startConnectionThenPressTarget(created, stage, () => {
+        created.visibleNodeIdsRef!.current = new Set([1]);
+      });
+
+      expect((created.onSelectNodeRef.current as jest.Mock).mock.calls).toEqual([[1]]);
+      expect(created.controller.hasActiveGesture()).toBe(false);
+    });
+
+    it("進行中のgestureのcancel中にbindingが解放されると、開始も選択もしない", () => {
+      const { stage } = createStage();
+      const created = createController({ nodes: [node, targetNode] });
+      const cleanup = created.controller.bind(stage as never);
+
+      startConnectionThenPressTarget(created, stage, cleanup);
+
+      expect((created.onSelectNodeRef.current as jest.Mock).mock.calls).toEqual([[1]]);
+      expect(created.controller.hasActiveGesture()).toBe(false);
     });
   });
 });
