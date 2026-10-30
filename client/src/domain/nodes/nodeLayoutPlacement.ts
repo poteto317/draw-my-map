@@ -7,13 +7,39 @@ import {
 } from "@/domain/nodes/nodeLayoutArithmetic";
 import type { IndexedNodeForest } from "@/domain/nodes/nodeLayoutForest";
 import type { NodeLayoutMetrics } from "@/domain/nodes/nodeLayoutMetrics";
+import type { Node } from "@/types/node";
 
 export type LayoutPoint = { x: number; y: number };
+type ChildFrame = { node: Node; top: number };
 
 function calculateCenteringOffset(outerSpan: number, innerHeight: number): number | null {
   const extraSpan = checkedSubtract(outerSpan, innerHeight);
   if (extraSpan === null) return null;
   return checkedMultiply(extraSpan, 0.5);
+}
+
+function calculateChildFrames(
+  children: readonly Node[],
+  frameTop: number,
+  span: number,
+  childrenHeight: number,
+  spanById: ReadonlyMap<number, number>,
+): ChildFrame[] | null {
+  const childFrames: ChildFrame[] = [];
+  const childTopOffset = calculateCenteringOffset(span, childrenHeight);
+  if (childTopOffset === null) return null;
+  let childTop = checkedAdd(frameTop, childTopOffset);
+  if (childTop === null) return null;
+  for (const [childIndex, child] of children.entries()) {
+    childFrames.push({ node: child, top: childTop });
+    if (childIndex + 1 < children.length) {
+      const afterChild = checkedAdd(childTop, spanById.get(child.id)!);
+      if (afterChild === null) return null;
+      childTop = checkedAdd(afterChild, SIBLING_VERTICAL_GAP);
+      if (childTop === null) return null;
+    }
+  }
+  return childFrames;
 }
 
 export function placeNodeForest(
@@ -55,20 +81,14 @@ export function placeNodeForest(
 
       const children = forest.childrenByParent.get(frame.node.id) ?? [];
       if (children.length === 0) continue;
-      const childFrames: Array<{ node: (typeof children)[number]; top: number }> = [];
-      const childTopOffset = calculateCenteringOffset(span, childrenHeightById.get(frame.node.id)!);
-      if (childTopOffset === null) return null;
-      let childTop = checkedAdd(frame.top, childTopOffset);
-      if (childTop === null) return null;
-      for (const [childIndex, child] of children.entries()) {
-        childFrames.push({ node: child, top: childTop });
-        if (childIndex + 1 < children.length) {
-          const afterChild = checkedAdd(childTop, spanById.get(child.id)!);
-          if (afterChild === null) return null;
-          childTop = checkedAdd(afterChild, SIBLING_VERTICAL_GAP);
-          if (childTop === null) return null;
-        }
-      }
+      const childFrames = calculateChildFrames(
+        children,
+        frame.top,
+        span,
+        childrenHeightById.get(frame.node.id)!,
+        spanById,
+      );
+      if (childFrames === null) return null;
       for (let index = childFrames.length - 1; index >= 0; index -= 1) {
         stack.push(childFrames[index]);
       }
