@@ -110,6 +110,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  jest.useRealTimers();
   jest.restoreAllMocks();
 });
 
@@ -210,17 +211,20 @@ describe("保存と再読み込みの往復", () => {
   });
 
   it("切り替える直前の編集は元のマップに保存され、再読み込みして元のマップへ戻すと編集が残っている", async () => {
+    // 実時間では描画が遅いと自動保存が先に走り、切り替え前の flush を通らなくても通ってしまう
+    jest.useFakeTimers();
     seedMapLibrary(window.localStorage, [
       { id: "a", name: "A", json: v3JsonFromLabels(["A1"]), updatedAt: "2026-01-02T00:00:00.000Z" },
       { id: "b", name: "B", json: v3JsonFromLabels(["B1"]), updatedAt: "2026-01-01T00:00:00.000Z" },
     ], { currentMapId: "a" });
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     const { unmount } = await renderPage();
 
     // 自動保存の 300ms を待たずに切り替える。保存待ちは切り替え前の flush で元のマップへ書く
     selectNode(0, 1);
     await user.click(screen.getByRole("button", { name: "重要度 低" }));
     await user.click(headerButton("マップ一覧"));
+    expect(storedMap()?.nodes.map((node) => node.importance)).toEqual(["medium"]);
     await user.click(dialog().getByRole("button", { name: "B" }));
     expect(currentMapName()).toHaveTextContent("マップ: B");
 
