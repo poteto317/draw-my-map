@@ -40,7 +40,7 @@ import {
   type ChangeNodeIndentResult,
   type NodeIndentDirection,
 } from "@/domain/nodes/nodeIndent";
-import { settleTreeChangeOutcome } from "@/hooks/treeChangeOutcome";
+import { applyTreeChangeWithOutcome } from "@/hooks/treeChangeOutcome";
 import { insertParentNode as computeParentInsertion, type InsertParentNodeResult } from "@/domain/nodes/nodeParentInsertion";
 import { replaceNodeImportance } from "@/domain/nodes/nodeImportanceUpdate";
 import { clearNodeIllustration, replaceNodeIllustration } from "@/domain/nodes/nodeIllustrationUpdate";
@@ -302,21 +302,14 @@ export function useNodes(): UseNodesReturn {
     nodeId: number,
     request: SiblingReorderRequest,
     visibleNodeIds: ReadonlySet<number>,
-  ): ReorderSiblingResult => {
-    let outcome: ReorderSiblingResult | null = null;
-    const applied = applyTreeChange((currentNodes, mode) => {
+  ): ReorderSiblingResult => (
+    applyTreeChangeWithOutcome<ReorderSiblingResult>(applyTreeChange, (currentNodes, mode) => {
       const reordered = reorderSiblingByRequest(currentNodes, nodeId, request, visibleNodeIds, mode);
-      if (!reordered.ok) {
-        outcome = reordered;
-        return null;
-      }
-      const { nodes: reorderedNodes, ...position } = reordered;
-      outcome = position;
-      return reorderedNodes;
-    });
-    // outcome はコールバックの中で代入するため、TypeScript は null に絞り込んでしまう。型引数で結果の型を明示する
-    return settleTreeChangeOutcome<ReorderSiblingResult>(applied, outcome);
-  }, [applyTreeChange]);
+      if (!reordered.ok) return { nodes: null, outcome: reordered };
+      const { nodes, ...position } = reordered;
+      return { nodes, outcome: position };
+    })
+  ), [applyTreeChange]);
 
   // 新しい親は描画時の配列ではなく、確定時点の最新の配列から解決する。
   // 上げ下げは編集中の折りたたみや通知を保つため、documentRevision を上げない
@@ -324,20 +317,14 @@ export function useNodes(): UseNodesReturn {
     nodeId: number,
     direction: NodeIndentDirection,
     visibleNodeIds: ReadonlySet<number>,
-  ): ChangeNodeIndentResult => {
-    let outcome: ChangeNodeIndentResult | null = null;
-    const applied = applyTreeChange((currentNodes, mode) => {
+  ): ChangeNodeIndentResult => (
+    applyTreeChangeWithOutcome<ChangeNodeIndentResult>(applyTreeChange, (currentNodes, mode) => {
       const changed = computeNodeIndent(currentNodes, nodeId, direction, visibleNodeIds, mode);
-      if (!changed.ok) {
-        outcome = changed;
-        return null;
-      }
-      const { nodes: changedNodes, ...summary } = changed;
-      outcome = summary;
-      return changedNodes;
-    });
-    return settleTreeChangeOutcome<ChangeNodeIndentResult>(applied, outcome);
-  }, [applyTreeChange]);
+      if (!changed.ok) return { nodes: null, outcome: changed };
+      const { nodes, ...summary } = changed;
+      return { nodes, outcome: summary };
+    })
+  ), [applyTreeChange]);
 
   // 新しい ID は確定時点の最新の配列から採番する。確定しなかった ID は欠番のままにする。
   // 挿入は編集中の折りたたみや通知を保つため、documentRevision を上げない
@@ -345,18 +332,13 @@ export function useNodes(): UseNodesReturn {
     nodeId: number,
     visibleNodeIds: ReadonlySet<number>,
   ): InsertParentNodeResult => {
-    let outcome: InsertParentNodeResult | null = null;
-    const applied = applyTreeChange((currentNodes, mode) => {
+    const settled = applyTreeChangeWithOutcome<InsertParentNodeResult>(applyTreeChange, (currentNodes, mode) => {
       const id = nodeIdAllocator.nextAvailableId(currentNodes);
       const inserted = computeParentInsertion(currentNodes, nodeId, id, visibleNodeIds, mode);
-      if (!inserted.ok) {
-        outcome = inserted;
-        return null;
-      }
-      outcome = { ok: true, insertedId: inserted.insertedId };
-      return inserted.nodes;
+      if (!inserted.ok) return { nodes: null, outcome: inserted };
+      const { nodes, ...summary } = inserted;
+      return { nodes, outcome: summary };
     });
-    const settled = settleTreeChangeOutcome<InsertParentNodeResult>(applied, outcome);
     if (settled.ok) setSelectedNodeId(settled.insertedId);
     return settled;
   }, [nodeIdAllocator, applyTreeChange]);

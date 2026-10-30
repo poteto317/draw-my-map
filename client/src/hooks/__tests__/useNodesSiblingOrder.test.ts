@@ -193,6 +193,23 @@ describe("useNodes の兄弟の並べ替え", () => {
       expect(result.current.nodes).toBe(before.nodes);
     });
 
+    it("自動配置で、座標が配置の結果と一致していないマップでも、失敗の候補を確定しない", () => {
+      // 配置済みでないマップ（読み込んだ直後など）。候補を layoutNodeForest に通すと座標が動く
+      const { result } = renderNodes({
+        layoutMode: "auto",
+        nodes: [node(1, null, 0, 0), node(2, 1, 0, 0), node(3, 1, 0, 0)],
+      });
+      const before = observe(result.current);
+      expect(before.canUndo).toBe(false);
+
+      const outcome = reorder(result.current, 99, STEP_UP);
+
+      expect(outcome).toEqual({ ok: false, reason: "node-missing" });
+      expect(jest.mocked(layoutNodeForest)).not.toHaveBeenCalled();
+      expect(observe(result.current)).toEqual(before);
+      expect(result.current.nodes).toBe(before.nodes);
+    });
+
     it("自動配置の layoutNodeForest が失敗したら placement-failed を返す", () => {
       const { result } = renderNodes(autoMap());
       act(() => result.current.updateNodeLabel(1, "変更"));

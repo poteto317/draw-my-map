@@ -202,6 +202,24 @@ describe("useNodes の親ノードの挿入", () => {
       expect(result.current.canRedo).toBe(true);
       expect(result.current.documentRevision).toBe(before.documentRevision);
     });
+
+    it("自動配置で、座標が配置の結果と一致していないマップでも、失敗の候補を確定しない", () => {
+      // 配置済みでないマップ（読み込んだ直後など）。候補を layoutNodeForest に通すと座標が動く
+      const { result } = renderNodes({
+        layoutMode: "auto",
+        nodes: [node(1, null, 0, 0), node(2, 1, 0, 0), node(4, 1, 0, 0)],
+      });
+      const before = result.current;
+      expect(before.canUndo).toBe(false);
+
+      const outcome = insert(() => result.current, 99, new Set([1, 2, 4]));
+
+      expect(outcome).toEqual({ ok: false, reason: "node-missing" });
+      expect(jest.mocked(layoutNodeForest)).not.toHaveBeenCalled();
+      expect(result.current.nodes).toBe(before.nodes);
+      expect(result.current.canUndo).toBe(false);
+      expect(result.current.documentRevision).toBe(before.documentRevision);
+    });
   });
 
   it("同じ act で作ったノードにも、最新の配列で解決して挿入できる", () => {
