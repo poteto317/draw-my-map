@@ -1,27 +1,32 @@
-import { scanSiblingNeighbors, type SiblingNeighbors } from "@/domain/nodes/nodeSiblingNeighbors";
+import {
+  buildReorderedSiblings,
+  findReorderEndpoints,
+  type ReorderedSiblings,
+} from "@/domain/nodes/nodeSiblingReorderSequence";
+import {
+  findSiblingReorderTarget,
+  type SiblingReorderDirection,
+  type SiblingReorderTarget,
+} from "@/domain/nodes/nodeSiblingReorderTarget";
 import { swapSiblingBranchPositions } from "@/domain/nodes/nodeSiblingSwapPlacement";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 
-export type SiblingReorderDirection = "up" | "down";
-
-// anchorId は T と同じ親を持つ「見えている」兄弟。
-// "before": T を anchor の直前へ移す（anchor は T より前）。"after": T を anchor の直後へ移す（anchor は T より後ろ）
-export type SiblingReorderTarget = {
-  position: "before" | "after";
-  anchorId: number;
-};
+// 兄弟の順序変更の入口。移動先の解決は nodeSiblingReorderTarget、配列の組み替えは
+// nodeSiblingReorderSequence が担い、ここは検証と配置モードごとの座標の適用と結果の組み立てを行う。
+// 既存の import 先を保つため、移動先の解決の型と関数も再エクスポートする
+export {
+  findSiblingReorderTarget,
+  getSiblingReorderAvailability,
+  type SiblingReorderAvailability,
+  type SiblingReorderDirection,
+  type SiblingReorderTarget,
+  type SiblingReorderTargetResult,
+} from "@/domain/nodes/nodeSiblingReorderTarget";
 
 export type SiblingReorderRequest =
   | { kind: "step"; direction: SiblingReorderDirection }
   | { kind: "drop"; target: SiblingReorderTarget };
-
-export type SiblingReorderTargetResult =
-  | { ok: true; target: SiblingReorderTarget }
-  | { ok: false; reason: "node-missing" | "node-hidden" }
-  | { ok: false; reason: "at-edge"; hiddenBeyond: boolean; isRoot: boolean };
-
-export type SiblingReorderAvailability = { up: boolean; down: boolean };
 
 export type SiblingReorderFailureReason =
   | "node-missing"
@@ -62,178 +67,6 @@ export type ReorderSiblingResult =
 export type SiblingReorderRequestResult =
   | Extract<SiblingReorderResult, { ok: true }>
   | Exclude<ReorderSiblingResult, { ok: true }>;
-
-function toTargetResult(
-  neighbors: SiblingNeighbors,
-  direction: SiblingReorderDirection,
-): SiblingReorderTargetResult {
-  const isRoot = neighbors.node.parentId === null;
-  switch (direction) {
-    case "up":
-      return neighbors.previousVisibleId === null
-        ? { ok: false, reason: "at-edge", hiddenBeyond: neighbors.hiddenBefore, isRoot }
-        : {
-          ok: true,
-          target: { position: "before", anchorId: neighbors.previousVisibleId },
-        };
-    case "down":
-      return neighbors.nextVisibleId === null
-        ? { ok: false, reason: "at-edge", hiddenBeyond: neighbors.hiddenAfter, isRoot }
-        : {
-          ok: true,
-          target: { position: "after", anchorId: neighbors.nextVisibleId },
-        };
-    default: {
-      const unreachable: never = direction;
-      return unreachable;
-    }
-  }
-}
-
-export function findSiblingReorderTarget(
-  nodes: readonly Node[],
-  nodeId: number,
-  direction: SiblingReorderDirection,
-  visibleNodeIds: ReadonlySet<number>,
-): SiblingReorderTargetResult {
-  const scan = scanSiblingNeighbors(nodes, nodeId, visibleNodeIds);
-  switch (scan.kind) {
-    case "node-missing":
-    case "node-hidden":
-      return { ok: false, reason: scan.kind };
-    case "found":
-      return toTargetResult(scan.neighbors, direction);
-    default: {
-      const unreachable: never = scan;
-      return unreachable;
-    }
-  }
-}
-
-export function getSiblingReorderAvailability(
-  nodes: readonly Node[],
-  nodeId: number | null,
-  visibleNodeIds: ReadonlySet<number>,
-): SiblingReorderAvailability {
-  if (nodeId === null) return { up: false, down: false };
-  const scan = scanSiblingNeighbors(nodes, nodeId, visibleNodeIds);
-  switch (scan.kind) {
-    case "node-missing":
-    case "node-hidden":
-      return { up: false, down: false };
-    case "found":
-      return {
-        up: toTargetResult(scan.neighbors, "up").ok,
-        down: toTargetResult(scan.neighbors, "down").ok,
-      };
-    default: {
-      const unreachable: never = scan;
-      return unreachable;
-    }
-  }
-}
-
-type ReorderEndpoints = {
-  node: Node;
-  anchor: Node | null;
-  anchorFirst: boolean;
-  firstRoot: Node | null;
-};
-
-// T・anchor・最初のルートを1回の走査で求める。T と anchor は先に出会ったものを使う
-function findReorderEndpoints(
-  nodes: readonly Node[],
-  nodeId: number,
-  anchorId: number,
-): ReorderEndpoints | null {
-  let node: Node | null = null;
-  let anchor: Node | null = null;
-  let anchorFirst = false;
-  let firstRoot: Node | null = null;
-  for (const candidate of nodes) {
-    if (firstRoot === null && candidate.parentId === null) firstRoot = candidate;
-    if (node === null && candidate.id === nodeId) node = candidate;
-    else if (anchor === null && candidate.id === anchorId) {
-      anchor = candidate;
-      anchorFirst = node === null;
-    }
-  }
-  if (node === null) return null;
-  return { node, anchor, anchorFirst, firstRoot };
-}
-
-type ReorderedSiblings = {
-  nodes: Node[];
-  // 並べ替えた後の兄弟の列で上に来る組と下に来る組の、根ノードの ID
-  first: number[];
-  second: number[];
-  visibleIndex: number;
-  visibleCount: number;
-  firstRoot: Node | null;
-};
-
-// nodes を1回だけ走査して新しい配列を作る。T だけを anchor の前後へ移し、ほかは同じオブジェクトのまま積む
-function buildReorderedSiblings(
-  nodes: readonly Node[],
-  node: Node,
-  anchor: Node,
-  position: SiblingReorderTarget["position"],
-  visibleNodeIds: ReadonlySet<number>,
-): ReorderedSiblings {
-  const result: Node[] = [];
-  const skipped: number[] = [];
-  let collecting = false;
-  let visibleIndex = 0;
-  let visibleCount = 0;
-  let placed = false;
-  let firstRoot: Node | null = null;
-
-  const pushNode = (pushed: Node) => {
-    if (firstRoot === null && pushed.parentId === null) firstRoot = pushed;
-    if (pushed === node) placed = true;
-    if (pushed.parentId === node.parentId && visibleNodeIds.has(pushed.id)) {
-      if (!placed) visibleIndex += 1;
-      visibleCount += 1;
-    }
-    result.push(pushed);
-  };
-
-  for (const candidate of nodes) {
-    if (candidate === node) {
-      // "before" は anchor から T の直前まで、"after" は T の直後から anchor までを集める
-      collecting = position === "after";
-      continue;
-    }
-    if (candidate === anchor) {
-      if (position === "before") {
-        collecting = true;
-        skipped.push(candidate.id);
-        pushNode(node);
-        pushNode(candidate);
-      } else {
-        collecting = false;
-        skipped.push(candidate.id);
-        pushNode(candidate);
-        pushNode(node);
-      }
-      continue;
-    }
-    if (collecting && candidate.parentId === node.parentId) {
-      skipped.push(candidate.id);
-    }
-    pushNode(candidate);
-  }
-
-  const isBefore = position === "before";
-  return {
-    nodes: result,
-    first: isBefore ? [node.id] : skipped,
-    second: isBefore ? skipped : [node.id],
-    visibleIndex,
-    visibleCount,
-    firstRoot,
-  };
-}
 
 function applyManualPlacement(
   reordered: ReorderedSiblings,

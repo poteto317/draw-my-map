@@ -1,4 +1,4 @@
-import { getNodeDisplayLabel } from "@/domain/nodes/nodeDisplayLabel";
+import { getNodeDisplayLabel, truncateLabelByCodePoints } from "@/domain/nodes/nodeDisplayLabel";
 import type { ChangeNodeIndentResult } from "@/domain/nodes/nodeIndent";
 import type { OperationNotice } from "@/types/operationNotice";
 
@@ -9,14 +9,9 @@ const showAllHint = (siblings: string) =>
   `隠れている${siblings}の子にするには、表示を『すべて』に切り替えてください。`;
 
 // 21コードポイント以上なら先頭20コードポイント + 「…」、20コードポイント以下はそのまま
-function truncateLabel(label: string): string {
-  const codePoints = Array.from(label);
-  if (codePoints.length <= NODE_INDENT_NOTICE_LABEL_MAX_CODE_POINTS) return label;
-  return `${codePoints.slice(0, NODE_INDENT_NOTICE_LABEL_MAX_CODE_POINTS).join("")}…`;
-}
-
 function describeParent(label: string | null): string {
-  return `「${truncateLabel(getNodeDisplayLabel(label ?? ""))}」`;
+  const displayLabel = getNodeDisplayLabel(label ?? "");
+  return `「${truncateLabelByCodePoints(displayLabel, NODE_INDENT_NOTICE_LABEL_MAX_CODE_POINTS)}」`;
 }
 
 function formatIndentAtEdge(hiddenBeyond: boolean, isRoot: boolean): string {

@@ -1,6 +1,7 @@
 import { collectSubtreeIds } from "@/domain/nodes/nodeTree";
 import { validateMapDocumentGraph } from "@/domain/persistence/mapDocumentGraph";
 import { normalizeMapDocumentNode } from "@/domain/persistence/mapDocumentNode";
+import { isRecord } from "@/domain/shared/unknownRecord";
 import type { Node } from "@/types/node";
 
 // 正規化済みの単一の部分木。rootIdは唯一の根から求めた値で、クリップボードの形式には含めない
@@ -89,9 +90,9 @@ export function decodeSubtreeClipboard(
   } catch {
     return INVALID;
   }
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return INVALID;
+  if (!isRecord(value)) return INVALID;
 
-  const record = value as Record<string, unknown>;
+  const record = value;
   if (record.type !== SUBTREE_CLIPBOARD_TYPE) return INVALID;
   if (record.version !== SUBTREE_CLIPBOARD_VERSION) return INVALID;
   if (!Array.isArray(record.nodes)) return INVALID;

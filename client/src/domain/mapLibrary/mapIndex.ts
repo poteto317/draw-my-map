@@ -1,3 +1,4 @@
+import { isRecord } from "@/domain/shared/unknownRecord";
 import { normalizeStoredMapName } from "./mapName";
 import { normalizeMapTimestamp } from "./mapTimestamp";
 
@@ -31,10 +32,6 @@ export type MapRemovalPreview = {
   isLast: boolean;
   nextMap: MapIndexEntry | null;
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function toTime(iso: string): number {
   const time = Date.parse(iso);

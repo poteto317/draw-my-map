@@ -1,4 +1,5 @@
 // プレビュー用の木。先頭の一部の項目だけを木にし、表示用にラベルを短くする。
+import { truncateLabelByCodePoints } from "@/domain/nodes/nodeDisplayLabel";
 import type { ParsedOutline } from "./outlineParser";
 
 // プレビューに表示する項目数の上限。
@@ -21,11 +22,7 @@ export type OutlinePreview = {
 
 // 81コードポイント以上なら先頭80コードポイントに「…」を付ける。
 export function truncateOutlinePreviewLabel(label: string): string {
-  // コードポイント数は UTF-16 コード単位数以下なので、短ければ分割しない。
-  if (label.length <= OUTLINE_PREVIEW_LABEL_LENGTH) return label;
-  const codePoints = Array.from(label);
-  if (codePoints.length <= OUTLINE_PREVIEW_LABEL_LENGTH) return label;
-  return `${codePoints.slice(0, OUTLINE_PREVIEW_LABEL_LENGTH).join("")}…`;
+  return truncateLabelByCodePoints(label, OUTLINE_PREVIEW_LABEL_LENGTH);
 }
 
 // items の先頭 maxItems 件を1回の走査で木にする。親は常に自分より前にあるので再帰を使わない。

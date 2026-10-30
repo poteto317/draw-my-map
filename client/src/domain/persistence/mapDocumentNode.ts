@@ -4,8 +4,7 @@ import { getIllustratedNodeMinHeight } from "@/domain/nodes/nodeIllustration";
 import { normalizeMapDocumentNodeImportance } from "@/domain/persistence/mapDocumentNodeImportance";
 import { normalizeMapDocumentNodeIllustration } from "@/domain/persistence/mapDocumentNodeIllustration";
 import { projectMapDocumentNode } from "@/domain/persistence/mapDocumentNodeProjection";
-
-type NodeRecord = Record<string, unknown>;
+import { isRecord } from "@/domain/shared/unknownRecord";
 
 function failure(index: number, message: string): MapDocumentResult<Node> {
   return { ok: false, error: `node[${index}]${message}` };
@@ -24,11 +23,11 @@ export function normalizeMapDocumentNode(
   index: number,
   version: MapDocumentVersion,
 ): MapDocumentResult<Node> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return failure(index, "はオブジェクトである必要があります。");
   }
 
-  const node = value as NodeRecord;
+  const node = value;
   const { id, parentId, x, y, width, height, label } = node;
   if (!isSafeInteger(id) || id <= 0) {
     return failure(index, ".idは1以上の安全な整数である必要があります。");

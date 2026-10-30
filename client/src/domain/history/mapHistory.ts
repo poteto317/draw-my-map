@@ -24,8 +24,9 @@ export function createMapHistory(initial: NodeMapState): MapHistoryState {
 
 function areNodesEqual(a: Node, b: Node): boolean {
   if (a === b) return true;
-  const left = a as Record<string, unknown>;
-  const right = b as Record<string, unknown>;
+  // Node は型エイリアスのため、キャストなしで任意のキーを読める型へ代入できる（illustration の有無も比較する）
+  const left: Readonly<Record<string, unknown>> = a;
+  const right: Readonly<Record<string, unknown>> = b;
   const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
   for (const key of keys) {
     if (left[key] !== right[key]) return false;
