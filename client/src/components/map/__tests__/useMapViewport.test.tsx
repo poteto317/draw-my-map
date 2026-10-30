@@ -80,6 +80,34 @@ describe("useMapViewport", () => {
     expect(result.current.viewport).toEqual({ offsetX: 120, offsetY: 160, scale: 2 });
   });
 
+  // 観察できる結果（参照と描画回数）を確かめる。useMapViewport 内の「同じ参照なら設定しない」判定を外しても、
+  // React が同じ値の setState を描画せずに済ませるため、このテストは通る。判定そのものではなく、
+  // 各計算関数が不正な入力・変化なしで同じ参照を返すことと、その結果として再描画しないことを守る
+  it("パン・ズーム・中央移動の結果が変わらないときは、viewportを差し替えず再描画しない", () => {
+    let renderCount = 0;
+    const { result } = renderHook(() => {
+      renderCount += 1;
+      return useMapViewport();
+    });
+    const initialViewport = result.current.viewport;
+    const rendersBefore = renderCount;
+    // 画面 800x600 の中央にちょうど中心が来るノード（倍率1・オフセット0のまま）
+    const centeredNode = createTestNode({ x: 360, y: 280, width: 80, height: 40 });
+
+    act(() => {
+      result.current.panBy(Number.NaN, 10);
+      result.current.panBy(10, Number.POSITIVE_INFINITY);
+      result.current.zoomAt({ x: 100, y: 100 }, 1);
+      result.current.zoomAt({ x: 100, y: 100 }, -1);
+      result.current.focusNode(centeredNode, { width: 800, height: 600 });
+      result.current.focusNode(centeredNode, { width: Number.NaN, height: 600 });
+    });
+
+    expect(renderCount).toBe(rendersBefore);
+    expect(result.current.viewport).toBe(initialViewport);
+    expect(result.current.viewportRef.current).toBe(initialViewport);
+  });
+
   it("更新後もzoomAtとfocusNodeの参照を維持する", () => {
     const { result } = renderHook(() => useMapViewport());
     const zoomAt = result.current.zoomAt;

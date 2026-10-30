@@ -10,6 +10,15 @@ describe("mapImageFileName", () => {
       .toBe("旅行-20261021-090507.svg");
   });
 
+  it("日時を渡さないときは現在のローカル日時を使う", () => {
+    jest.useFakeTimers({ now: new Date(2026, 0, 2, 3, 4, 5) });
+    try {
+      expect(createMapImageFileName("png", "旅行")).toBe("旅行-20260102-030405.png");
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it("Windowsの予約名は先頭に_を付ける", () => {
     const now = new Date(2026, 9, 21, 9, 5, 7);
 

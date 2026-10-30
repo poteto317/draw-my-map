@@ -104,6 +104,36 @@ describe("useIllustrationTextures", () => {
     expect(result.current.size).toBe(0);
   });
 
+  it("読み込みに失敗した画像は、nodes が変わっても読み込み直さない", async () => {
+    const failure = Promise.reject(new Error("decode failed"));
+    mockedLoad.mockReturnValue(failure);
+    const { result, rerender } = renderHook(
+      ({ currentNodes }: { currentNodes: Node[] }) => useIllustrationTextures(runtime, currentNodes),
+      { initialProps: { currentNodes: [illustratedNode] } },
+    );
+    await act(async () => {
+      await failure.catch(() => undefined);
+    });
+
+    rerender({ currentNodes: [illustratedNode, createTestNode({ id: 2, illustration: IMAGE })] });
+
+    expect(mockedLoad).toHaveBeenCalledTimes(1);
+    expect(result.current.size).toBe(0);
+  });
+
+  it("1枚の読み込みに失敗しても、ほかの画像のテクスチャは返る", async () => {
+    const texture = createTexture();
+    mockedLoad.mockImplementation((_Texture, url) => (
+      url === IMAGE ? Promise.reject(new Error("decode failed")) : Promise.resolve(texture)
+    ));
+    const nodes = [illustratedNode, createTestNode({ id: 2, illustration: OTHER_IMAGE })];
+
+    const { result } = renderHook(() => useIllustrationTextures(runtime, nodes));
+
+    await waitFor(() => expect(result.current.get(OTHER_IMAGE)).toBe(texture));
+    expect(result.current.has(IMAGE)).toBe(false);
+  });
+
   it("runtime が null の間は、何も読み込まない", () => {
     const { result } = renderHook(() => useIllustrationTextures(null, [illustratedNode]));
 

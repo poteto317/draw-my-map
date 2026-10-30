@@ -80,6 +80,8 @@ describe("handleIllustrationRequest", () => {
 
   it.each([
     ["upstream-error", new ImageGenerationError("upstream-error", "u")],
+    // 再試行するのは画像生成の誤判定だけ。翻訳の content-rejected は一般の失敗として扱う
+    ["content-rejected", new ImageGenerationError("content-rejected", "c")],
     ["想定外の例外", new Error("secret internal detail")],
   ])("翻訳が失敗（%s）したら 502 で、生成せず、日本語のラベルに戻さない", async (_name, error) => {
     const { deps: d, generate } = deps(undefined, jest.fn().mockRejectedValue(error));
@@ -94,6 +96,9 @@ describe("handleIllustrationRequest", () => {
   it.each([
     ["JSONでない本文", "not json", true],
     ["配列の本文", [], false],
+    ["JSONのnull", null, false],
+    ["数値の本文", 1, false],
+    ["文字列の本文", "目標", false],
     ["labelが文字列でない", { label: 1 }, false],
     ["labelが無い", {}, false],
   ])("%s は 400 invalid-request で、生成しない", async (_name, body, raw) => {

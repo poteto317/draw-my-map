@@ -197,6 +197,24 @@ describe("useMapLibraryDialogState", () => {
       expect(result.current.notices).toEqual(EMPTY_NOTICES);
     });
 
+    it("閉じているときの back は何も変えず、ヘッダーへのフォーカスも求めない", () => {
+      const { result } = renderDialogState();
+      const before = {
+        screen: result.current.screen,
+        focusTarget: result.current.focusTarget,
+        headerFocusRequest: result.current.headerFocusRequest,
+        notices: result.current.notices,
+      };
+      expect(before.screen).toEqual({ kind: "closed" });
+
+      act(() => result.current.back());
+
+      expect(result.current.screen).toBe(before.screen);
+      expect(result.current.focusTarget).toBe(before.focusTarget);
+      expect(result.current.headerFocusRequest).toBeNull();
+      expect(result.current.notices).toBe(before.notices);
+    });
+
     it("一覧で戻ると、閉じてヘッダーの「マップ一覧」へ戻す", () => {
       const { result } = renderDialogState();
       act(() => result.current.openList());

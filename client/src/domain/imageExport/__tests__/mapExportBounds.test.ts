@@ -88,9 +88,12 @@ it("ノードの高さを超える複数行ラベルを出力範囲に含める"
 });
 
 it("有限座標間の差がオーバーフローする場合は失敗する", () => {
+  // 幅は座標に対して精度が飽和しない大きさにする。幅 1 だと、差の計算より前に
+  // ノード単体の右端の精度飽和の検査で失敗し、外接矩形の幅のオーバーフローを確かめられない
+  const coordinate = Number.MAX_VALUE / 1.5;
   const nodes = [
-    createTestNode({ id: 1, x: -Number.MAX_VALUE, width: 1, height: 18, label: "A" }),
-    createTestNode({ id: 2, x: Number.MAX_VALUE, width: 1, height: 18, label: "B" }),
+    createTestNode({ id: 1, x: -coordinate, width: 1e300, height: 18, label: "A" }),
+    createTestNode({ id: 2, x: coordinate, width: 1e300, height: 18, label: "B" }),
   ];
 
   expect(() => getMapExportBounds(nodes, measureText)).toThrow(

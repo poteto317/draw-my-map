@@ -414,6 +414,24 @@ describe("useMapLibrary", () => {
       expect(readyView(result.current.view).currentMap.id).toBe("new-2");
     });
 
+    it("使える id を作れなければ ok: false で何も書かない", () => {
+      const { result, operations } = setup({
+        initial: twoMapsInitial(),
+        ids: Array.from({ length: 10 }, () => "map-2"),
+      });
+      const viewBefore = result.current.view;
+      const before = operations.length;
+
+      let created: ReturnType<typeof result.current.createMap> | undefined;
+      act(() => {
+        created = result.current.createMap("新しい地図");
+      });
+
+      expect(created).toEqual({ ok: false, notice: mapIdUnavailableNotice() });
+      expect(operations.slice(before)).toEqual([]);
+      expect(result.current.view).toBe(viewBefore);
+    });
+
     it("名前が51文字なら ok: false で何も書かない", () => {
       const { result, operations } = setup({
         initial: twoMapsInitial(),
@@ -493,6 +511,51 @@ describe("useMapLibrary", () => {
         saveRetryNotice: null,
       });
       expect(operations.slice(before)).toEqual([]);
+    });
+
+    it("存在しない id なら ok: false で、flush もせず何も書かない", () => {
+      const { result, operations } = setup({ initial: twoMapsInitial() });
+      const flush = jest.fn(() => ({ status: "saved" as const }));
+      readyView(result.current.view).storageSession.registerFlush(flush);
+      const viewBefore = result.current.view;
+      const before = operations.length;
+
+      let switched: ReturnType<typeof result.current.switchMap> | undefined;
+      act(() => {
+        switched = result.current.switchMap("missing");
+      });
+
+      expect(switched).toEqual({
+        ok: false,
+        notice: indexWriteFailedNotice("マップを切り替え"),
+      });
+      expect(flush).not.toHaveBeenCalled();
+      expect(operations.slice(before)).toEqual([]);
+      expect(result.current.view).toBe(viewBefore);
+    });
+
+    it("インデックスの書き込みに失敗したら、切り替えずに元のセッションのまま", () => {
+      const { result, setFailIndexWrite } = setup({ initial: twoMapsInitial() });
+      const viewBefore = result.current.view;
+      setFailIndexWrite(true);
+
+      let switched: ReturnType<typeof result.current.switchMap> | undefined;
+      act(() => {
+        switched = result.current.switchMap("map-2");
+      });
+
+      expect(switched).toEqual({
+        ok: false,
+        notice: indexWriteFailedNotice("マップを切り替え"),
+      });
+      expect(result.current.view).toBe(viewBefore);
+      setFailIndexWrite(false);
+      let written: ReturnType<MapStorageSession["writeBody"]> | undefined;
+      act(() => {
+        written = readyView(result.current.view).storageSession.writeBody("edited-1");
+      });
+      expect(written).toEqual({ status: "saved" });
+      expect(readyView(result.current.view).currentMap.id).toBe("map-1");
     });
 
     it("A → B → A の後、最初の A のセッションの writeBody は inactive で何も書かない", () => {
@@ -598,6 +661,21 @@ describe("useMapLibrary", () => {
         result.current.switchMap("map-1");
       });
       expect(currentFlush).toHaveBeenCalledTimes(2);
+    });
+
+    it("現在の登録の解除関数を呼ぶと、次の切り替えでは flush を呼ばない", () => {
+      const { result } = setup({ initial: twoMapsInitial() });
+      const flush = jest.fn(() => ({ status: "failed" as const, error: "保存できない" }));
+      const unregister = readyView(result.current.view).storageSession.registerFlush(flush);
+
+      unregister();
+      let switched: ReturnType<typeof result.current.switchMap> | undefined;
+      act(() => {
+        switched = result.current.switchMap("map-2");
+      });
+
+      expect(flush).not.toHaveBeenCalled();
+      expect(switched).toMatchObject({ ok: true, remounted: true });
     });
   });
 
@@ -756,6 +834,24 @@ describe("useMapLibrary", () => {
         ok: false,
         notice: indexWriteFailedNotice("名前を変更"),
       });
+      expect(result.current.view).toBe(viewBefore);
+    });
+
+    it("存在しない id なら ok: false で何も書かない", () => {
+      const { result, operations } = setup({ initial: twoMapsInitial() });
+      const viewBefore = result.current.view;
+      const before = operations.length;
+
+      let renamed: ReturnType<typeof result.current.renameMap> | undefined;
+      act(() => {
+        renamed = result.current.renameMap("missing", "新しい名前");
+      });
+
+      expect(renamed).toEqual({
+        ok: false,
+        notice: indexWriteFailedNotice("名前を変更"),
+      });
+      expect(operations.slice(before)).toEqual([]);
       expect(result.current.view).toBe(viewBefore);
     });
   });

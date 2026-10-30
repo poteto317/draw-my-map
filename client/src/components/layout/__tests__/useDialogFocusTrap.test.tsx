@@ -224,6 +224,49 @@ describe("useDialogFocusTrap", () => {
     expect(onEscape).toHaveBeenCalledTimes(1);
   });
 
+  it("中にフォーカスが無いとき（body）は、Tab で最初へ、Shift+Tab で最後へ移す", () => {
+    renderTrap();
+    expect(document.body).toHaveFocus();
+
+    expect(fireEvent.keyDown(window, { key: "Tab" })).toBe(false);
+    expect(button("1つ目")).toHaveFocus();
+
+    (document.activeElement as HTMLElement).blur();
+    expect(document.body).toHaveFocus();
+    expect(fireEvent.keyDown(window, { key: "Tab", shiftKey: true })).toBe(false);
+    expect(button("4つ目")).toHaveFocus();
+  });
+
+  it.each(["altKey", "ctrlKey", "metaKey"] as const)(
+    "%s 付きの Tab は止めず、フォーカスも動かさない",
+    (modifier) => {
+      renderTrap();
+      button("3つ目").focus();
+
+      expect(fireEvent.keyDown(window, { key: "Tab", [modifier]: true })).toBe(true);
+      expect(button("3つ目")).toHaveFocus();
+    },
+  );
+
+  it("フォーカス可能な要素が中に無いときも、Tab の既定動作を止めて外へ出さない", () => {
+    function EmptyTrapHarness() {
+      const dialogRef = useRef<HTMLDivElement>(null);
+      const overlayRef = useRef<HTMLDivElement>(null);
+      useDialogFocusTrap({ dialogRef, overlayRef, onEscape: () => {} });
+      return (
+        <div ref={overlayRef}>
+          <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="空">
+            <p>本文だけ</p>
+          </div>
+        </div>
+      );
+    }
+    render(<EmptyTrapHarness />);
+
+    expect(fireEvent.keyDown(window, { key: "Tab" })).toBe(false);
+    expect(document.body).toHaveFocus();
+  });
+
   it("アンマウント後は、外へのフォーカスを戻さず Escape も受けない", () => {
     const onEscape = jest.fn();
     const { rerender } = render(

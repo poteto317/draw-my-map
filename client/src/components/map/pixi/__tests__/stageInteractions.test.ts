@@ -243,6 +243,37 @@ describe("createStageInteractions", () => {
     expect(latestOnSelectNode).toHaveBeenCalledWith(1);
   });
 
+  it("ノード選択のcallbackが例外を投げたら、開始したgestureを片付けて例外を伝える", () => {
+    const { stage, handlers } = createStage();
+    const { controller, onSelectNodeRef, onMoveNodeRef } = createController();
+    onSelectNodeRef.current = jest.fn(() => {
+      throw new Error("select failed");
+    });
+    controller.bind(stage as never);
+
+    expect(() => nodePointerDown(controller, 1, pointer(100, 60) as never)).toThrow("select failed");
+    expect(controller.hasActiveGesture()).toBe(false);
+    handlers.pointermove?.(pointer(140, 90));
+
+    expect(onMoveNodeRef.current).not.toHaveBeenCalled();
+  });
+
+  it("activeNodeIdsは操作中のgestureのノードだけを返し、ノードを持たないパンや待機中は空", () => {
+    const { stage, handlers } = createStage();
+    const { controller } = createController();
+    controller.bind(stage as never);
+
+    expect(controller.activeNodeIds()).toEqual([]);
+    nodePointerDown(controller, 1, pointer(100, 60) as never);
+    expect(controller.activeNodeIds()).toEqual([1]);
+    handlers.pointerup?.(pointer(100, 60));
+    expect(controller.activeNodeIds()).toEqual([]);
+
+    handlers.pointerdown?.(pointer(0, 0, { target: stage }));
+    expect(controller.hasActiveGesture()).toBe(true);
+    expect(controller.activeNodeIds()).toEqual([]);
+  });
+
   it("routes a non-Shift gesture to node movement", () => {
     const { stage, handlers } = createStage();
     const { controller, onMoveNodeRef, onConnectNodesRef } = createController();

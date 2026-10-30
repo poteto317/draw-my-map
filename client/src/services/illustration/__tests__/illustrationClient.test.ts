@@ -23,6 +23,18 @@ describe("requestIllustration", () => {
     expect(JSON.parse(init.body)).toEqual({ label: "目標" });
   });
 
+  it("fetchImplを渡さないときはグローバルのfetchを使う", async () => {
+    const originalFetch = globalThis.fetch;
+    const globalFetch = jest.fn().mockResolvedValue(response({ image: "G", mimeType: "image/png" }));
+    globalThis.fetch = globalFetch as unknown as typeof fetch;
+    try {
+      await expect(requestIllustration("目標")).resolves.toEqual({ dataUrl: "data:image/png;base64,G" });
+      expect(globalFetch).toHaveBeenCalledWith("/api/illustrations", expect.objectContaining({ method: "POST" }));
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("signalをfetchへ渡す", async () => {
     const fetchImpl = jest.fn().mockResolvedValue(response({ image: "A", mimeType: "image/jpeg" }));
     const controller = new AbortController();
@@ -72,6 +84,20 @@ describe("requestIllustration", () => {
 
   it("JSONでない成功応答は upstream-error", async () => {
     const fetchImpl = jest.fn().mockResolvedValue(new Response("oops", { status: 200 }));
+
+    await expect(requestIllustration("目標", { fetchImpl })).rejects.toMatchObject({
+      kind: "upstream-error",
+    });
+  });
+
+  it.each([
+    ["null", null],
+    ["配列", [{ image: "A", mimeType: "image/jpeg" }]],
+    ["数値", 5],
+    ["文字列", "A"],
+    ["mimeTypeが無いオブジェクト", { image: "A" }],
+  ])("成功応答の本文が%sなら upstream-error", async (_name, body) => {
+    const fetchImpl = jest.fn().mockResolvedValue(response(body));
 
     await expect(requestIllustration("目標", { fetchImpl })).rejects.toMatchObject({
       kind: "upstream-error",

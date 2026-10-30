@@ -288,6 +288,38 @@ describe("createMapVisibilityAnimator", () => {
     expect(replacement.target.setInteractive).toHaveBeenLastCalledWith(false);
   });
 
+  it("replaceTargetsで同じkeyのtargetが複数あれば後のtargetだけを操作する", () => {
+    const scheduler = createScheduler();
+    const first = createTarget("node:1");
+    const second = createTarget("node:1");
+    const animator = createAnimator(scheduler, [first.target, second.target]);
+
+    animator.setVisibleKeys(new Set(["node:1"]));
+    scheduler.setNow(160);
+    scheduler.runFrame(scheduler.frameId());
+
+    expect(first.calls).toEqual([]);
+    expect(second.target.setOpacity).toHaveBeenLastCalledWith(1);
+    expect(second.target.setInteractive).toHaveBeenLastCalledWith(true);
+  });
+
+  it("dispose後のreplaceTargets・setVisibleKeysはtargetを操作せずframeも要求しない", () => {
+    const scheduler = createScheduler();
+    const previous = createTarget("node:1");
+    const next = createTarget("node:2");
+    const animator = createAnimator(scheduler, [previous.target]);
+    const previousCallCount = previous.calls.length;
+
+    animator.dispose();
+    animator.replaceTargets([next.target]);
+    animator.setVisibleKeys(new Set(["node:1", "node:2"]));
+    animator.dispose();
+
+    expect(previous.calls).toHaveLength(previousCallCount);
+    expect(next.calls).toEqual([]);
+    expect(scheduler.requestFrame).not.toHaveBeenCalled();
+  });
+
   it("disposeは予約frameをcancelし、遅延callbackを無効化する", () => {
     const scheduler = createScheduler();
     const { target, calls } = createTarget("node:1");

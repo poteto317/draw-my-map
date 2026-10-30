@@ -49,6 +49,9 @@ describe("createCloudflareTranslator", () => {
     ["translated_text が無い", () => jsonResponse({ success: true, result: {} })],
     ["translated_text が空文字", () => ok("   ")],
     ["translated_text が文字列でない", () => ok(5)],
+    ["result が null", () => jsonResponse({ success: true, errors: [], result: null })],
+    ["result が文字列", () => jsonResponse({ success: true, errors: [], result: "hello" })],
+    ["result が配列", () => jsonResponse({ success: true, errors: [], result: [{ translated_text: "x" }] })],
   ])("%s は upstream-error", async (_name, makeResponse) => {
     const fetchImpl = jest.fn().mockResolvedValue(makeResponse());
 

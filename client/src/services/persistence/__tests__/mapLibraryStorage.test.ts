@@ -69,6 +69,19 @@ describe("mapLibraryStorage", () => {
       expect(readMapLibrarySnapshot(storage)).toEqual({ kind: "unavailable" });
     });
 
+    it("インデックスは読めても、旧キーの読み取りだけが例外なら unavailable", () => {
+      const { storage } = createRecordingStorage({
+        initial: { [MAP_INDEX_STORAGE_KEY]: "INDEX" },
+      });
+      const getItem = storage.getItem.bind(storage);
+      jest.spyOn(storage, "getItem").mockImplementation((key: string) => {
+        if (key === MAP_STORAGE_KEY) throw new DOMException("blocked", "SecurityError");
+        return getItem(key);
+      });
+
+      expect(readMapLibrarySnapshot(storage)).toEqual({ kind: "unavailable" });
+    });
+
     it("空の storage は何も無い available", () => {
       const { storage } = createRecordingStorage();
 

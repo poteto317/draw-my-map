@@ -115,6 +115,22 @@ describe("decodeMapIndex", () => {
     });
   });
 
+  it("配列・数値の項目も、オブジェクトでない項目として除外する", () => {
+    const result = decodeMapIndex(
+      raw({
+        version: 1,
+        currentMapId: "A",
+        maps: [[B.id, B.name], A, 1, true],
+        legacyCleanupPending: false,
+      }),
+    );
+    expect(result).toEqual({
+      kind: "ok",
+      index: indexOf([A], "A"),
+      repaired: true,
+    });
+  });
+
   it("空の name は既定の名前にする", () => {
     const result = decodeMapIndex(
       raw({ ...indexOf([{ ...A, name: "" }], "A") }),

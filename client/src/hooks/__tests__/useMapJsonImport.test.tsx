@@ -118,6 +118,92 @@ describe("useMapJsonImport", () => {
     });
   });
 
+  describe("読み込めないとき", () => {
+    function renderImport(readFile: (file: File) => Promise<MapDocumentResult<string>>) {
+      const requestSnapshotSave = jest.fn();
+      const replaceMap = jest.fn();
+      const publishNotice = jest.fn();
+      const { result } = renderHook(() => useMapJsonImport({
+        replaceMap,
+        requestSnapshotSave,
+        publishNotice,
+        readFile,
+      }));
+      return { result, requestSnapshotSave, replaceMap, publishNotice };
+    }
+
+    it("読み取りが例外なら、マップを変えずに読み取れなかった旨の error を出す", async () => {
+      const { result, requestSnapshotSave, replaceMap, publishNotice } = renderImport(
+        jest.fn().mockRejectedValue(new Error("read failed")),
+      );
+
+      await act(async () => result.current(new File([], "map.json")));
+
+      expect(publishNotice).toHaveBeenCalledWith({
+        kind: "error",
+        message: "JSONファイルを読み取れませんでした。現在のマップは変更されていません。",
+      });
+      expect(requestSnapshotSave).not.toHaveBeenCalled();
+      expect(replaceMap).not.toHaveBeenCalled();
+    });
+
+    it("読み取りの失敗は、その理由に変更していない旨を続けた error にする", async () => {
+      const { result, requestSnapshotSave, replaceMap, publishNotice } = renderImport(
+        jest.fn().mockResolvedValue({ ok: false, error: "ファイルが大きすぎます。" }),
+      );
+
+      await act(async () => result.current(new File([], "map.json")));
+
+      expect(publishNotice).toHaveBeenCalledWith({
+        kind: "error",
+        message: "ファイルが大きすぎます。現在のマップは変更されていません。",
+      });
+      expect(requestSnapshotSave).not.toHaveBeenCalled();
+      expect(replaceMap).not.toHaveBeenCalled();
+    });
+
+    it("マップの形式でないJSONは、保存も置き換えもせずに error を出す", async () => {
+      const { result, requestSnapshotSave, replaceMap, publishNotice } = renderImport(
+        jest.fn().mockResolvedValue({ ok: true, value: "{\"version\": 999}" }),
+      );
+
+      await act(async () => result.current(new File([], "map.json")));
+
+      expect(publishNotice).toHaveBeenCalledTimes(1);
+      expect(publishNotice).toHaveBeenCalledWith({
+        kind: "error",
+        message: expect.stringMatching(/現在のマップは変更されていません。$/),
+      });
+      expect(requestSnapshotSave).not.toHaveBeenCalled();
+      expect(replaceMap).not.toHaveBeenCalled();
+    });
+
+    it("後から選んだファイルがあると、前の読み取りの例外では通知しない", async () => {
+      const firstRead = deferredRead();
+      const readFile = jest.fn()
+        .mockReturnValueOnce(firstRead.promise)
+        .mockResolvedValueOnce({ ok: true, value: newerMapJson });
+      const { result, replaceMap, publishNotice } = renderImport(readFile);
+
+      let firstImport!: Promise<void>;
+      act(() => {
+        firstImport = result.current(new File([], "first.json"));
+      });
+      await act(async () => result.current(new File([], "second.json")));
+      await act(async () => {
+        firstRead.reject(new Error("read failed"));
+        await firstImport;
+      });
+
+      expect(replaceMap).toHaveBeenCalledTimes(1);
+      expect(publishNotice).toHaveBeenCalledTimes(1);
+      expect(publishNotice).toHaveBeenCalledWith({
+        kind: "status",
+        message: "マップを読み込みました。",
+      });
+    });
+  });
+
   describe("アンマウント後の読み取り結果", () => {
     const outcomes = [
       ["成功", (read: ReturnType<typeof deferredRead>) => read.resolve({ ok: true, value: importedMapJson })],

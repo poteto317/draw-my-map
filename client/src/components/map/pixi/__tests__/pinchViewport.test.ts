@@ -85,6 +85,40 @@ describe("calculatePinchViewport", () => {
     )).toBeNull();
   });
 
+  it.each([
+    [{ offsetX: 0, offsetY: 0, scale: 0 }],
+    [{ offsetX: 0, offsetY: 0, scale: Number.NaN }],
+    [{ offsetX: Number.POSITIVE_INFINITY, offsetY: 0, scale: 1 }],
+  ])("開始時のviewportが不正（%o）なら計算しない", (startViewport) => {
+    expect(calculatePinchViewport(
+      startViewport,
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 0, y: 0 },
+      { x: 200, y: 0 },
+    )).toBeNull();
+  });
+
+  it("現在の2点の距離がoverflowする場合はviewportを返さない", () => {
+    expect(calculatePinchViewport(
+      INITIAL_VIEWPORT,
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: -Number.MAX_VALUE, y: 0 },
+      { x: Number.MAX_VALUE, y: 0 },
+    )).toBeNull();
+  });
+
+  it("距離が変わらず中点だけが動いた場合は倍率を保ってパンする", () => {
+    expect(calculatePinchViewport(
+      INITIAL_VIEWPORT,
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 30, y: -20 },
+      { x: 130, y: -20 },
+    )).toEqual({ offsetX: 30, offsetY: -20, scale: 1 });
+  });
+
   it("有限な大座標でもpinch結果を更新する", () => {
     const result = calculatePinchViewport(
       INITIAL_VIEWPORT,

@@ -54,3 +54,63 @@ describe("createIllustrationThumbnail", () => {
     await expect(createIllustrationThumbnail("x", deps)).rejects.toBeInstanceOf(IllustrationThumbnailError);
   });
 });
+
+describe("createIllustrationThumbnail（既定の依存: Image と canvas 要素）", () => {
+  const imagePrototype = HTMLImageElement.prototype;
+  const canvasPrototype = HTMLCanvasElement.prototype;
+  const originalDescriptors = {
+    decode: Object.getOwnPropertyDescriptor(imagePrototype, "decode"),
+    naturalWidth: Object.getOwnPropertyDescriptor(imagePrototype, "naturalWidth"),
+    naturalHeight: Object.getOwnPropertyDescriptor(imagePrototype, "naturalHeight"),
+  };
+
+  function stubImage(decode: () => Promise<void>, width: number, height: number) {
+    const decodedSources: string[] = [];
+    Object.defineProperty(imagePrototype, "decode", {
+      configurable: true,
+      value(this: HTMLImageElement) {
+        decodedSources.push(this.src);
+        return decode();
+      },
+    });
+    Object.defineProperty(imagePrototype, "naturalWidth", { configurable: true, get: () => width });
+    Object.defineProperty(imagePrototype, "naturalHeight", { configurable: true, get: () => height });
+    return decodedSources;
+  }
+
+  afterEach(() => {
+    for (const [key, descriptor] of Object.entries(originalDescriptors)) {
+      if (descriptor) Object.defineProperty(imagePrototype, key, descriptor);
+      else delete (imagePrototype as unknown as Record<string, unknown>)[key];
+    }
+    jest.restoreAllMocks();
+  });
+
+  it("Image で data URL を読み込み、natural の大きさで切り出して canvas 要素へ描く", async () => {
+    const decodedSources = stubImage(() => Promise.resolve(), 100, 300);
+    const drawImage = jest.fn();
+    // getContext は引数ごとのオーバーロードがあり、spyOn の型は最後のもの（webgpu）になるため never で渡す
+    jest.spyOn(canvasPrototype, "getContext").mockReturnValue({ drawImage } as never);
+    jest.spyOn(canvasPrototype, "toDataURL").mockReturnValue("data:image/jpeg;base64,BBBB");
+
+    await expect(createIllustrationThumbnail("data:image/png;base64,SRC")).resolves.toBe("data:image/jpeg;base64,BBBB");
+    expect(decodedSources).toEqual(["data:image/png;base64,SRC"]);
+    expect(drawImage).toHaveBeenCalledWith(
+      expect.any(HTMLImageElement),
+      0,
+      100,
+      100,
+      100,
+      0,
+      0,
+      ILLUSTRATION_THUMBNAIL_SIZE,
+      ILLUSTRATION_THUMBNAIL_SIZE,
+    );
+  });
+
+  it("Image の decode が失敗したときは IllustrationThumbnailError", async () => {
+    stubImage(() => Promise.reject(new Error("decode failed")), 100, 100);
+
+    await expect(createIllustrationThumbnail("data:image/png;base64,SRC")).rejects.toBeInstanceOf(IllustrationThumbnailError);
+  });
+});

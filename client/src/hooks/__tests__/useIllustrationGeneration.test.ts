@@ -365,6 +365,34 @@ describe("useIllustrationGeneration", () => {
       expect(result.current.generation).toEqual({ status: "idle" });
     });
 
+    it("中断した古いリクエストが遅れて失敗（AbortError）しても、後から始めた生成中の状態を上書きしない", async () => {
+      const first = deferred<{ dataUrl: string }>();
+      const second = deferred<{ dataUrl: string }>();
+      mockRequest.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+      const { result, rerender } = renderWithRevision();
+      act(() => result.current.generateIllustration(1));
+      rerender({ revision: 1 });
+      act(() => result.current.generateIllustration(2));
+
+      await act(async () => first.reject(new DOMException("aborted", "AbortError")));
+
+      expect(result.current.generation).toEqual({ status: "generating", nodeId: 2, label: "予算" });
+    });
+
+    it("中断した古いリクエストが遅れて成功しても、後から始めた生成中の状態を上書きしない", async () => {
+      const first = deferred<{ dataUrl: string }>();
+      const second = deferred<{ dataUrl: string }>();
+      mockRequest.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+      const { result, rerender } = renderWithRevision();
+      act(() => result.current.generateIllustration(1));
+      rerender({ revision: 1 });
+      act(() => result.current.generateIllustration(2));
+
+      await act(async () => first.resolve({ dataUrl: "old" }));
+
+      expect(result.current.generation).toEqual({ status: "generating", nodeId: 2, label: "予算" });
+    });
+
     it("中断後は、すぐに新しい生成を受け付け、古いリクエストの完了で新しいロックを壊さない", async () => {
       const first = deferred<{ dataUrl: string }>();
       const second = deferred<{ dataUrl: string }>();
