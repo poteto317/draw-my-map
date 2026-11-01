@@ -1,3 +1,4 @@
+import { getNodeDisplayLabel } from "@/domain/nodes/nodeDisplayLabel";
 import type { Node } from "@/types/node";
 
 export type BranchMoveParentNode = Pick<Node, "id" | "parentId" | "label">;
@@ -11,11 +12,7 @@ function countValues(values: readonly string[]): Map<string, number> {
   return counts;
 }
 
-function displayName(node: BranchMoveParentNode): string {
-  return node.label || "（名前なし）";
-}
-
-// 同名のノードは親のラベルで見分ける。同じ親の下の同名は、候補の中の順番で見分ける
+// 空のラベルはキャンバスと同じ表示にする。同名のノードは親のラベルで見分ける。同じ親の下の同名は、候補の中の順番で見分ける
 export function listBranchMoveParentOptions(
   candidates: readonly BranchMoveParentNode[],
   nodes: readonly BranchMoveParentNode[],
@@ -23,14 +20,14 @@ export function listBranchMoveParentOptions(
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const noteOf = (node: BranchMoveParentNode) => {
     const parent = node.parentId === null ? undefined : nodeById.get(node.parentId);
-    return parent === undefined ? "ルート" : `親: ${displayName(parent)}`;
+    return parent === undefined ? "ルート" : `親: ${getNodeDisplayLabel(parent.label)}`;
   };
-  const notedText = (node: BranchMoveParentNode) => `${displayName(node)}（${noteOf(node)}`;
-  const nameCounts = countValues(candidates.map(displayName));
+  const notedText = (node: BranchMoveParentNode) => `${getNodeDisplayLabel(node.label)}（${noteOf(node)}`;
+  const nameCounts = countValues(candidates.map((node) => getNodeDisplayLabel(node.label)));
   const notedCounts = countValues(candidates.map(notedText));
   const positions = new Map<string, number>();
   return candidates.map((node) => {
-    const name = displayName(node);
+    const name = getNodeDisplayLabel(node.label);
     if (nameCounts.get(name) === 1) return { id: node.id, text: name };
     const noted = notedText(node);
     if (notedCounts.get(noted) === 1) return { id: node.id, text: `${noted}）` };

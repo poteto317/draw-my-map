@@ -10,11 +10,19 @@ it("同名が無ければラベルだけを返す", () => {
   ]);
 });
 
-it("名前なしのノードも同名として親を併記する", () => {
+it("空のラベルのノードもキャンバスと同じ表示で同名として親を併記する", () => {
   const nodes = [node(1, null, "A"), node(2, 1, ""), node(3, null, "")];
   expect(listBranchMoveParentOptions(nodes, nodes).slice(1)).toEqual([
-    { id: 2, text: "（名前なし）（親: A）" },
-    { id: 3, text: "（名前なし）（ルート）" },
+    { id: 2, text: "新しいノード（親: A）" },
+    { id: 3, text: "新しいノード（ルート）" },
+  ]);
+});
+
+it("ラベルが空の候補と、ラベルが「新しいノード」の候補を同名として見分ける", () => {
+  const nodes = [node(1, null, "A"), node(2, 1, ""), node(3, null, "新しいノード")];
+  expect(listBranchMoveParentOptions(nodes.slice(1), nodes)).toEqual([
+    { id: 2, text: "新しいノード（親: A）" },
+    { id: 3, text: "新しいノード（ルート）" },
   ]);
 });
 
