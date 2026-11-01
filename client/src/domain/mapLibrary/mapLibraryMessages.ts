@@ -73,6 +73,18 @@ export function createFlushFailedNotice(): OperationNotice {
   );
 }
 
+export function branchMoveFlushFailedNotice(): OperationNotice {
+  return error("編集中のマップを保存できないため、枝を移動できませんでした。");
+}
+
+export function branchMoveRejectedNotice(): OperationNotice {
+  return error("枝を移動できませんでした。移動元と移動先を確認してやり直してください。");
+}
+
+export function branchMovedToMapNotice(): OperationNotice {
+  return status("枝を移動し、移動先のマップを開きました。");
+}
+
 export function indexWriteFailedNotice(
   operation: MapLibraryOperationName,
 ): OperationNotice {

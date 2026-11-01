@@ -102,7 +102,7 @@ export function readMapLibrarySnapshot(
 
 // DOMException の name か code で容量不足を見分ける。code 22 は QuotaExceededError の旧来の値、
 // NS_ERROR_DOM_QUOTA_REACHED（code 1014）は古い Firefox の容量不足。
-function isQuotaExceededError(error: unknown): boolean {
+export function isQuotaExceededError(error: unknown): boolean {
   return (
     error instanceof DOMException &&
     (error.name === "QuotaExceededError" ||

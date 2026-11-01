@@ -17,6 +17,7 @@ import {
   lastWorldContainer,
   resetMapStageTestRuntime,
 } from "@/components/map/testing/mapStageTestRuntime";
+import { MENU_ACTIVATION_DOUBLE_CLICK_WINDOW_MS } from "@/components/map/menuActivationDoubleClick";
 import { seedMapLibrary } from "@/testing/mapLibraryTestStorage";
 
 // Pixi・イラスト生成・ダウンロード・画像化だけを差し替え、Home から MapEditor・ヘッダー・
@@ -111,6 +112,11 @@ function byLabel(nodes: readonly ExportedNode[], label: string): ExportedNode {
   const found = nodes.filter((node) => node.label === label);
   expect(found).toHaveLength(1);
   return found[0];
+}
+
+// ダイアログのマウスのクリックの直後のキャンバスの押下は無視されるので、時間窓を過ぎてからノードを押す
+function passDialogDoubleClickWindow() {
+  jest.spyOn(Date, "now").mockReturnValue(Date.now() + MENU_ACTIVATION_DOUBLE_CLICK_WINDOW_MS);
 }
 
 beforeEach(() => {
@@ -255,6 +261,7 @@ describe("ページの箇条書きから追加", () => {
       await user.click(dialog().getByRole("button", { name: "マップに追加" }));
       expect(byLabel(exportedMap(mockDownloadMapJson).nodes, "京都").parentId).toBe(1);
       // 追加の後は取り込んだ先頭のノードが選択されるので、旅行を選び直して確かめる
+      passDialogDoubleClickWindow();
       selectNode(0, 4);
 
       expect(screen.getByRole("button", { name: "枝を折りたたむ" })).toHaveAttribute("aria-expanded", "true");
@@ -331,6 +338,7 @@ describe("ページの箇条書きから追加", () => {
     const replaced = exportedMap(mockDownloadMapJson).nodes;
     expect(replaced.map((node) => node.label)).toEqual(["別1", "別2"]);
     // 置き換えで外れた選択を、置き換わったマップのノードで選び直しておく
+    passDialogDoubleClickWindow();
     selectNode(0, 2);
     expect(selectedLabel()).toBe("別1");
     const asMissing = dialog().getByRole("radio", { name: "選択していたノードの子として追加" });

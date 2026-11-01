@@ -19,6 +19,7 @@
    - 2.7 [兄弟ノードの順序変更の型](#27-兄弟ノードの順序変更の型)
    - 2.8 [階層の上げ下げの型](#28-階層の上げ下げの型)
    - 2.9 [途中への親ノード挿入の型](#29-途中への親ノード挿入の型)
+   - 2.10 [枝の移動の型](#210-枝の移動の型)
 3. [MapDocument JSON スキーマ仕様](#3-mapdocument-json-スキーマ仕様)
    - 3.1 [Version 1 スキーマ（Phase 5 初期）](#31-version-1-スキーマphase-5-初期)
    - 3.2 [Version 2 スキーマ（Phase 6）](#32-version-2-スキーマphase-6)
@@ -42,6 +43,7 @@
    - 5.8 [JSON ファイル エクスポート／インポート仕様](#58-json-ファイル-エクスポートインポート仕様)
    - 5.9 [マップの一覧の操作通知メッセージ (OperationNotice) 一覧](#59-マップの一覧の操作通知メッセージ-operationnotice-一覧)
    - 5.10 [枝のクリップボード形式](#510-枝のクリップボード形式)
+   - 5.11 [枝の移動のジャーナル](#511-枝の移動のジャーナル)
 
 ---
 
@@ -542,6 +544,59 @@ export type NodeLabelEditRequest = {
 - `useNodeParentInsertionAction` が、挿入が成功するたびに `sequence` を1増やして作ります。要求の `documentRevision` が今の値と等しいときだけ `labelEditRequest` として返し、違えば `null` を返します（成功した Undo / Redo・マップの置き換えの後に古い要求で編集を始めない）。
 - `MapStage` の `useNodeLabelEditRequest` が受け取り、まだ処理していない `sequence` で、`documentRevision` が一致し、ノードがあるときだけ `startEditing(nodeId, "")` を1回呼びます。保存・書き出しの対象ではありません。
 
+### 2.10 枝の移動の型
+
+枝の切り取り・移動（Phase 14。[features.md の 17 章](./features.md#17-枝の切り取り移動)）で受け渡す型です。保存形式（V3）と JSON は変えません。別マップへの移動の間だけ使うジャーナルは 5.11 節を参照してください。
+
+#### `BranchMoveFailureReason` / `BranchMoveResult` / `BranchTransferResult` (`client/src/domain/nodes/nodeBranchMove.ts`)
+`moveNodeBranch(nodes, rootId, parentId, mode): BranchMoveResult`（同一マップ）と `transferNodeBranch(source, target, rootId, allocateIds): BranchTransferResult`（別マップ）の結果の型です。
+
+```typescript
+export type BranchMoveFailureReason =
+  | "missing-node"
+  | "invalid-parent"
+  | "same-parent"
+  | "placement-failed";
+
+export type BranchMoveResult =
+  | { ok: true; nodes: Node[]; rootId: number }
+  | { ok: false; reason: BranchMoveFailureReason };
+
+export type BranchTransferResult =
+  | { ok: true; source: NodeMapState; target: NodeMapState; rootId: number }
+  | { ok: false; reason: BranchMoveFailureReason };
+```
+
+#### `MoveBranchResult` (`client/src/hooks/useNodes.ts`)
+`useNodes.moveBranch(rootId, parentId)` の戻り値です。
+
+```typescript
+export type MoveBranchResult =
+  | { ok: true; rootId: number }
+  | { ok: false; reason: BranchMoveFailureReason };
+```
+
+#### `BranchMoveMapTarget` (`client/src/hooks/branchMoveDialogState.ts`)
+ダイアログの移動先の選択肢です。`MapIndexEntry` はこの形を満たすので、`Home` は `view.maps` をそのまま渡します。`updatedAt` は同じ名前のマップを見分ける表示に使います。
+
+```typescript
+export type BranchMoveMapTarget = Pick<MapIndexEntry, "id" | "name" | "updatedAt">;
+```
+
+#### `MapLibraryOperationResult` の `enteredProtectedMode` (`client/src/hooks/mapLibraryState.ts`)
+操作の失敗で保護モードへ移ったことを示す値です。編集画面が作り直されてダイアログのエラー表示が消えるので、`useMapLibraryDialogState` はこの値を見てシェルの通知へ出し、フォーカスをヘッダーの「JSON書き出し」へ移します。
+
+```typescript
+export type MapLibraryOperationResult =
+  | {
+      ok: true;
+      remounted: boolean;
+      notice: OperationNotice | null;
+      saveRetryNotice: OperationNotice | null;
+    }
+  | { ok: false; notice: OperationNotice; enteredProtectedMode?: true };
+```
+
 ---
 
 ## 3. MapDocument JSON スキーマ仕様
@@ -880,9 +935,10 @@ Phase 12 から、名前を付けた複数のマップを保存します。マ�
 | マップ本体 | `draw-my-map.maps.v1.doc.<id>` | `mapBodyKey(id)`（接頭辞 `MAP_BODY_KEY_PREFIX`） | Version 3 の JSON（`serializeMapDocument` の出力） |
 | 壊れたインデックスの退避 | `draw-my-map.maps.v1.corrupt-backup` | `MAP_INDEX_BACKUP_STORAGE_KEY` | 壊れていたインデックスの生の文字列 |
 | 旧キー（移行元） | `draw-my-map.map.v1` | `MAP_STORAGE_KEY`（`mapStorage.ts`） | Phase 11 までの単一マップの JSON（Version 1〜3） |
+| 枝の移動のジャーナル | `draw-my-map.branch-move.v1` | `BRANCH_MOVE_JOURNAL_KEY`（`branchMoveJournal.ts`） | 別マップへの移動の間だけ置く原本の JSON（5.11 節） |
 
 - 本体のキーは `mapBodyKey(id)` の1か所だけで作ります。id は `MAP_ID_PATTERN`（`/^[A-Za-z0-9_-]{1,64}$/`）に合う文字列で、区切りの `.` を含みません。
-- 新しいキーはすべて `draw-my-map.maps.v1` で始まり、旧キー `draw-my-map.map.v1` とは前方一致で重なりません。本体を列挙するときは接頭辞 `draw-my-map.maps.v1.doc.` で探し、残りが id の形式に合うものだけを本体とみなすため、旧キーや退避キーを本体と取り違えません。
+- 一覧と本体のキーはすべて `draw-my-map.maps.v1` で始まり、旧キー `draw-my-map.map.v1` とは前方一致で重なりません。本体を列挙するときは接頭辞 `draw-my-map.maps.v1.doc.` で探し、残りが id の形式に合うものだけを本体とみなすため、旧キーや退避キーを本体と取り違えません。
 - インデックスに載っていない本体（孤立した本体）は、読み込み時に無視し、自動では消しません。インデックスにあって本体が無い項目は、空のマップ（まだ一度も保存していないマップ）として開きます。
 - **本体の保存データ形式**:
   インデント 2 スペースで整形され、末尾に改行コード（`\n`）が付与された Version 3 の JSON 文字列。マップ名は本体に含めず、インデックスにだけ持ちます。
@@ -1003,8 +1059,9 @@ export type MapIndexV1 = {
 #### 保護モード
 
 - `localStorage` へ書き込めないとき、または書き込むと保存済みのデータを壊すおそれがあるときのモードです。`useMapLibrary` の状態 `storageMode: "persistent" | "protected"` で表します。
-- 保護モードでは、`createProtectedStorageSession(mapId, initialJson)`（`services/persistence/protectedStorageSession.ts`）で作ったセッションをエディタへ渡します。`mapId` は `generateMapId()` で作ったメモリ上だけの id で、どこにも書きません。`readBody` は `{ ok: true, value: initialJson }`（移行に失敗した場合は旧キーの生の文字列、それ以外は `null`）を返し、`writeBody` は常に `{ status: "inactive" }` を返して何も書きません。`registerFlush` は何もしない解除関数を返します。
+- 保護モードでは、`createProtectedStorageSession(mapId, initialJson)`（`services/persistence/protectedStorageSession.ts`）で作ったセッションをエディタへ渡します。`mapId` は `generateMapId()` で作ったメモリ上だけの id で、どこにも書きません。ただし枝の移動から入る場合は、移動の実行中なら現在のマップの既存の id、起動時の復旧ならジャーナルの `sourceId`（ジャーナルが壊れているときは固定の `branch-move-recovery`）を使います。`readBody` は `{ ok: true, value: initialJson }`（移行に失敗した場合は旧キーの生の文字列、枝の移動の実行中は移動元の原本、起動時の復旧はジャーナルの `sourceBefore`、それ以外は `null`）を返し、`writeBody` は常に `{ status: "inactive" }` を返して何も書きません。`registerFlush` は何もしない解除関数を返します。
 - 自動保存と flush は何も書かず、通知も出しません。ヘッダーの「マップ一覧」「新しいマップ」は無効です。JSON の読み込み・書き出しと画像の書き出しは使えます。
+- 起動の分岐のほかに、枝の移動のジャーナルが壊れている・原本を復元できないときも保護モードになります（5.11 節）。
 
 ### 5.4 書き込み順序と途中失敗の扱い
 
@@ -1189,7 +1246,7 @@ sequenceDiagram
 マップの作成・切り替え・名前変更・削除の結果の文言は `client/src/domain/mapLibrary/mapLibraryMessages.ts`、名前の長さのエラーは `mapName.ts` の `validateMapNameInput`、起動時の通知は `mapLibraryStartup.ts` にあります（起動時の通知は 5.3 節の表）。通知を出す場所は次の2つに分かれます。
 
 - **ダイアログ内の通知**: ダイアログを開いたまま終わる操作の結果（名前変更の成功、開いていないマップの削除の結果、各操作の失敗、削除の後の保存の再試行の失敗）。ダイアログの中に常設した `role="status"` と `role="alert"` の領域に出し、ダイアログを閉じると消します。`status` 以外は `role="alert"` に出し、本体の削除の失敗と保存の再試行の失敗が重なったときは、半角空白でつないで1つにします。
-- **シェルの通知** (`MapLibraryNoticeRegion.tsx`): ダイアログを閉じて終わる操作の結果（作成・切り替え・開いているマップの削除）と、起動時の通知。エディタ（`MapEditor`）の外にあり、再マウントでは消えず、次のシェルの通知で置き換わります。
+- **シェルの通知** (`MapLibraryNoticeRegion.tsx`): ダイアログを閉じて終わる操作の結果（作成・切り替え・開いているマップの削除）、枝の別マップへの移動の成功と保護モードへの移行（文言は features.md の 17.3・17.4 節）、起動時の通知。エディタ（`MapEditor`）の外にあり、再マウントでは消えず、次のシェルの通知で置き換わります。
 
 | 場面 | 関数 | 種別 (`kind`) | 通知メッセージ (`message`) | 出す場所 |
 | :--- | :--- | :---: | :--- | :--- |
@@ -1247,3 +1304,52 @@ sequenceDiagram
 | **取得・配置の失敗** | `error` | `枝を貼り付けできませんでした。` | `clipboardData` の欠落、`getData` の例外、手動配置で座標を表現できない／自動配置で並べられない時 |
 
 入力欄・文字選択中・ラベル編集中・ジェスチャー中など、対象外のイベントでは通知を変更しません。
+
+### 5.11 枝の移動のジャーナル
+
+別マップへの枝の移動は、移動先の本体・移動元の本体・インデックスの3つのキーを書き換えます。`localStorage` は複数のキーを一度に書けないので、キー `draw-my-map.branch-move.v1` に原本を残してから書き、途中で失敗・中断しても原本へ戻せるようにします（`services/persistence/branchMoveJournal.ts`、`branchMoveTransaction.ts`）。
+
+```typescript
+// client/src/services/persistence/branchMoveJournal.ts
+export type BranchMoveJournal = {
+  version: 1;
+  sourceId: string;
+  targetId: string;
+  sourceBefore: string | null; // null はキーが無かったことを表す
+  targetBefore: string | null;
+  indexBefore: string;
+};
+```
+
+- ジャーナルは `JSON.stringify` した文字列で、書き込みの間だけ存在します。`decodeBranchMoveJournal` は項目がちょうど6個で、`version` が 1、`sourceId` と `targetId` が id の形式に合って異なり、`indexBefore` がインデックスとして読め、その `currentMapId` が `sourceId` で `maps` に `targetId` があるときだけ受け付けます。
+- `indexBefore` は保存済みの原文そのものです。起動は補正を書き戻さないので、補正待ちのインデックスも移動できます。`mapBranchTransfer.ts` は補正後の値で計算し、成功すると補正済みのインデックスを書きます。失敗・中断では原文（補正前の文字列）へ戻します。
+- 移動の間に要る空きは、ジャーナルの分と移す枝の分の合計です。ジャーナルは本体2つの全文を JSON の文字列として別のキーに持ち、再エスケープの分だけ増えるので、両方の本体の合計の約 1.2 倍になります（500 ノードの実測で 1.174 倍）。さらに、移動先の本体（枝の分だけ増える）を移動元の本体（枝の分だけ減る）より先に書くので、枝の大きさの分の空きも一時的に要ります。この順序は、元の枝を消す前に移動先を保存するという設計の決定で、必要な空きを減らすためには変えません。500 ノードの手動配置で実測した必要な空きは、両方の本体の合計に対して、移動先に既存の 500 ノードがあり葉を1つ移すときに 1.17 倍、移動先が未作成でルートごと移すときに 2.29 倍でした。このように幅があるので、通知には倍率を書きません。イラストの多いマップでは、切り替えは成功しても移動だけが容量不足で失敗することがあります。
+
+#### 書き込みの順序
+
+`writeBranchMove`（`mapBranchTransfer.ts` の `transferStoredBranch` から呼ぶ）は同期で次の順に行います。
+
+1. 既にジャーナルがあれば書かずに失敗します（`recoveryRequired: true`）。3つのキーの現在の値が読み込んだ原本と違えば、書かずに失敗します。原本は同じ同期処理の中で直前に読んだ値なので、これは処理の内部の防御で、別のタブの保存を検出するものではありません。ここでの読み取りが例外のときも、何も書いていないので復旧を求めずに失敗します（`recoveryRequired: false`）。
+2. ジャーナルを書きます。書けなければ本体を変えずに失敗します。容量不足（`isQuotaExceededError`）のときは、原因と、不要なマップやイラストを減らすことを案内する文言にします。
+3. 移動先の本体を書きます。
+4. 移動元の本体を書きます。
+5. インデックスを書きます（`currentMapId` を移動先へ、両方のマップの `updatedAt` を更新）。
+6. ジャーナルを消します。これが確定点で、成功の通知とセッションの切り替えはこの後です。
+
+3〜6 のどこかで失敗したら、書き終えたキーを原本へ戻してからジャーナルを消します。`sourceBefore` などが `null` のキーは `removeItem` で戻します。ひとつ戻せなくても残りのキーは戻します。戻せて、失敗の原因が容量不足なら、手順 2 と同じ文言で失敗します。
+
+#### 起動時の復旧
+
+`runMapLibraryStartup` は、通常の起動の判定の前に `recoverBranchMove` を呼びます。
+
+| 状態 | 結果 |
+| :--- | :--- |
+| ジャーナルが無い | 通常どおり起動する |
+| ジャーナルが読めて、原本へ戻せた | ジャーナルを消して通常どおり起動する。繰り返しても同じ結果になる |
+| ジャーナルが読めて、原本へ戻せない | ジャーナルを残して保護モード。`sourceBefore` を表示する |
+| ジャーナルが壊れている | 消さず、無視もせず保護モード（`mapId` は `branch-move-recovery`、`kind: "error"`）。空の内容で開き、ジャーナルが壊れていることとキー名を通知する |
+| ジャーナルの `getItem` が例外 | `recoverBranchMove` は `unavailable` を返し、`runMapLibraryStartup` は保存領域を使えない起動（`kind: "unavailable"` のスナップショット）として計画する。通知は `kind: "warning"`、`mapId` は `generateId` の値で、ほかのキーが読めても未復旧かもしれない本体は開かない |
+
+- 移動の実行中に原本へ戻せなかったときも、ジャーナルを残して保護モードへ移ります。`useMapLibrary` はセッション番号を進めて旧セッションを無効にするので、遅れて届いた自動保存が移動前の枝を書き戻すことはありません。結果の `enteredProtectedMode` は 2.10 節を参照してください。
+- 同期の `localStorage` の単一タブでの失敗と再読み込みを対象とします。複数のタブをまたぐ排他制御はしません。別のタブの保存は検出できません。
+- **既知の制限**: ジャーナルが壊れていると、保護モードが再読み込みの後も続き、解除の手段は画面にありません。ジャーナルからは原本を取り出せないので、自動では消さず、消すかどうかを利用者が判断する手順も用意していません。データは `draw-my-map.branch-move.v1` と各本体のキーに残っています。

@@ -11,6 +11,9 @@ import {
 import {
   autoSaveFailedNotice,
   bodyRemovalFailedNotice,
+  branchMovedToMapNotice,
+  branchMoveFlushFailedNotice,
+  branchMoveRejectedNotice,
   createFlushFailedNotice,
   currentBodyRemovalFailedNotice,
   currentMapDeletedNotice,
@@ -46,7 +49,9 @@ import {
 } from "@/hooks/mapLibrarySession";
 import {
   failedOperation,
+  isActiveBranchMoveSource,
   pickNewMapId,
+  protectedModeFailure,
   succeededOperation,
   toMapLibraryView,
   UNCHANGED_OPERATION_RESULT,
@@ -64,6 +69,7 @@ import {
   runMapLibraryStartup,
   type MapLibraryStartupResult,
 } from "@/services/persistence/mapLibraryStartupRunner";
+import { readBranchMoveIndex, transferStoredBranch } from "@/services/persistence/mapBranchTransfer";
 import { createProtectedStorageSession } from "@/services/persistence/protectedStorageSession";
 import type { MapFlushResult, MapStorageSession } from "@/types/mapStorageSession";
 import type { OperationNotice } from "@/types/operationNotice";
@@ -83,6 +89,7 @@ export type UseMapLibraryResult = {
   switchMap: (id: string) => MapLibraryOperationResult;
   renameMap: (id: string, nameInput: string) => MapLibraryOperationResult;
   deleteMap: (id: string) => MapLibraryOperationResult;
+  moveBranchToMap: (sourceSession: MapStorageSession, targetId: string, rootId: number) => MapLibraryOperationResult;
 };
 
 export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
@@ -380,5 +387,51 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
     });
   }, [deleteOpenMap, deleteOtherMap]);
 
-  return { view, createMap, switchMap, renameMap, deleteMap };
+  const protectAfterBranchMove = useCallback((
+    current: PersistentLibraryState,
+    sourceJson: string | null,
+    notice: OperationNotice,
+  ) => {
+    const entry = findMapEntry(current.index, current.index.currentMapId)!;
+    advanceSessionNumber();
+    commitLibrary({
+      mode: "protected",
+      entry,
+      session: createProtectedStorageSession(entry.id, sourceJson),
+      startupNotice: notice,
+    });
+  }, [advanceSessionNumber, commitLibrary]);
+
+  const moveBranchToMap = useCallback((
+    sourceSession: MapStorageSession,
+    targetId: string,
+    rootId: number,
+  ): MapLibraryOperationResult => {
+    const before = libraryRef.current;
+    if (!isActiveBranchMoveSource(before, sourceSession)
+      || before.index.currentMapId === targetId || findMapEntry(before.index, targetId) === null) {
+      return failedOperation(branchMoveRejectedNotice());
+    }
+    if (flushCurrentSession().status === "failed") {
+      return failedOperation(branchMoveFlushFailedNotice());
+    }
+    // flush による更新・再入を反映し、保存領域の最新インデックスも読み直す。
+    const current = libraryRef.current;
+    if (!isActiveBranchMoveSource(current, sourceSession)) return failedOperation(branchMoveRejectedNotice());
+    const stored = readBranchMoveIndex(current.storage);
+    if (stored === null || stored.index.currentMapId !== sourceSession.mapId) {
+      return failedOperation(branchMoveRejectedNotice());
+    }
+    const moved = transferStoredBranch(current.storage, stored.index, sourceSession.mapId, targetId, rootId, depsRef.current.now());
+    if (!moved.ok) {
+      const notice: OperationNotice = { kind: "error", message: moved.error };
+      if (!moved.recoveryRequired) return failedOperation(notice);
+      protectAfterBranchMove(current, moved.sourceJson, notice);
+      return protectedModeFailure(notice);
+    }
+    commitNewSession(current, moved.index);
+    return succeededOperation(branchMovedToMapNotice(), true);
+  }, [commitNewSession, flushCurrentSession, protectAfterBranchMove]);
+
+  return { view, createMap, switchMap, renameMap, deleteMap, moveBranchToMap };
 }

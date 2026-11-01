@@ -260,6 +260,22 @@ export function touchMapEntry(
   return updateMapEntry(index, id, (map) => ({ ...map, updatedAt }));
 }
 
+// 枝を別のマップへ移した後のインデックス。移動先を開き、両方のマップの更新日時を進める
+export function openMapAfterBranchTransfer(
+  index: MapIndexV1,
+  sourceId: string,
+  targetId: string,
+  updatedAt: string,
+): MapIndexV1 {
+  return {
+    ...index,
+    currentMapId: targetId,
+    maps: index.maps.map((map) => (
+      map.id === sourceId || map.id === targetId ? { ...map, updatedAt } : map
+    )),
+  };
+}
+
 export function removeMapEntry(
   index: MapIndexV1,
   removedId: string,

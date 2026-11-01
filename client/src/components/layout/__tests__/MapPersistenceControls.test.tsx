@@ -15,6 +15,23 @@ describe("MapPersistenceControls", () => {
     expect(onExport).toHaveBeenCalledTimes(1);
   });
 
+  it("JSON書き出しで押し続けたEnterとSpaceのkeydownはpreventDefaultする", () => {
+    render(<MapPersistenceControls onExport={jest.fn()} onImport={jest.fn()} />);
+    const button = screen.getByRole("button", { name: "JSON書き出し" });
+
+    expect(fireEvent.keyDown(button, { key: "Enter", repeat: true })).toBe(false);
+    expect(fireEvent.keyDown(button, { key: " ", repeat: true })).toBe(false);
+  });
+
+  it("JSON書き出しでrepeatでないEnterとSpace、repeatの他のキーはpreventDefaultしない", () => {
+    render(<MapPersistenceControls onExport={jest.fn()} onImport={jest.fn()} />);
+    const button = screen.getByRole("button", { name: "JSON書き出し" });
+
+    expect(fireEvent.keyDown(button, { key: "Enter", repeat: false })).toBe(true);
+    expect(fireEvent.keyDown(button, { key: " ", repeat: false })).toBe(true);
+    expect(fireEvent.keyDown(button, { key: "a", repeat: true })).toBe(true);
+  });
+
   it("JSON読み込みボタンから非表示ファイル入力を開く", async () => {
     const user = userEvent.setup();
     const { container } = render(

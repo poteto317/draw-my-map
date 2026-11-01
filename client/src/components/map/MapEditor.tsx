@@ -1,6 +1,11 @@
 "use client";
 
 import { useCallback, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { BranchMoveControl } from "@/components/layout/BranchMoveControl";
+import { BranchMoveDialog } from "@/components/layout/BranchMoveDialog";
+import type { BranchMoveMapTarget } from "@/hooks/branchMoveDialogState";
+import { useBranchMoveDialog } from "@/hooks/useBranchMoveDialog";
+import type { MapLibraryOperationResult } from "@/hooks/useMapLibrary";
 import { useNodes } from "@/hooks/useNodes";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { AppWorkspace } from "@/components/layout/AppWorkspace";
@@ -55,8 +60,13 @@ type MapEditorProps = {
   mapName: string;
   storageSession: MapStorageSession;
   mapControls: ReactNode;
+  // シェルが保護モードへ移ったときのフォーカスの戻し先。ボタンはこの編集画面が描画する
+  exportButtonRef: RefObject<HTMLButtonElement | null>;
+  mapMoveTargets: readonly BranchMoveMapTarget[];
+  onMoveBranchToMap: (rootId: number, targetMapId: string) => MapLibraryOperationResult;
   shortcutsEnabled: boolean;
-  // シェルのダイアログで最後にマウスでクリックした時刻。MapStage がその直後の dblclick を無視する
+  // 画面の外のダイアログで最後にマウスでクリックした時刻。ダイアログが1回目のクリックで閉じると、
+  // ダブルクリックの2回目と dblclick が MapStage のキャンバスへ届くので、メニューの項目と同じ時間窓で無視する
   dialogMouseClickedAtRef: RefObject<number | null>;
 };
 
@@ -68,6 +78,9 @@ export function MapEditor({
   mapName,
   storageSession,
   mapControls,
+  exportButtonRef,
+  mapMoveTargets,
+  onMoveBranchToMap,
   shortcutsEnabled,
   dialogMouseClickedAtRef,
 }: MapEditorProps) {
@@ -90,6 +103,7 @@ export function MapEditor({
     reorderSibling,
     changeNodeIndent,
     insertParentNode,
+    moveBranch,
     deleteNode,
     setLayoutMode,
     replaceMap,
@@ -199,6 +213,28 @@ export function MapEditor({
     publishNotice: publishTreeEditNotice,
     clearNotice: clearTreeEditNotice,
   });
+  const branchMove = useBranchMoveDialog({
+    mapId,
+    mapMoveTargets,
+    nodes,
+    selectedNodeId,
+    documentRevision,
+    moveBranch,
+    onMoveBranchToMap,
+    expandNodes: branchCollapse.expandNodes,
+    resolutionVisibleNodeIds: resolutionFilter.visibleNodeIds,
+    setResolutionMode: resolutionFilter.setMode,
+    publishNotice: publishTreeEditNotice,
+  });
+  const branchMoveButtonRef = useRef<HTMLButtonElement>(null);
+  const { focusRequest: branchMoveFocusRequest, consumeFocusRequest: consumeBranchMoveFocusRequest } = branchMove;
+  useLayoutEffect(() => {
+    if (branchMoveFocusRequest !== "header") return;
+    // 開いている間の置換で選択が外れるとボタンは無効になるので、常に押せる「JSON書き出し」へ送る
+    const button = branchMoveButtonRef.current;
+    (button?.disabled ? exportButtonRef.current : button)?.focus();
+    consumeBranchMoveFocusRequest();
+  }, [branchMoveFocusRequest, consumeBranchMoveFocusRequest, exportButtonRef]);
   const { moveSelected: moveSelectedSibling } = siblingReorder;
   const moveSelectedSiblingUp = useCallback(() => moveSelectedSibling("up"), [moveSelectedSibling]);
   const moveSelectedSiblingDown = useCallback(() => moveSelectedSibling("down"), [moveSelectedSibling]);
@@ -209,7 +245,9 @@ export function MapEditor({
   const { focusRequest: outlineFocusRequest, consumeFocusRequest: consumeOutlineFocusRequest } = outlineImport;
   const outlineImportButtonRef = useRef<HTMLButtonElement>(null);
   // 入口をすべて同じ値で止める（L-061）
-  const editorShortcutsEnabled = shortcutsEnabled && outlineImport.screen === "closed";
+  const editorShortcutsEnabled = shortcutsEnabled
+    && outlineImport.screen === "closed"
+    && branchMove.screen === "closed";
   useMapHistoryShortcuts({ undo, redo, enabled: editorShortcutsEnabled });
   // 操作通知バーの並び（上から表示する順）。位置ごとに系統が決まっている
   const operationNotices = [
@@ -282,6 +320,12 @@ export function MapEditor({
                 disabled={selectedNode === null}
                 onDuplicate={duplication.duplicateSelected}
               />
+              <BranchMoveControl
+                expanded={branchMove.screen !== "closed"}
+                disabled={selectedNode === null}
+                onOpen={branchMove.open}
+                buttonRef={branchMoveButtonRef}
+              />
               <NodeSiblingOrderControl
                 canMoveUp={siblingReorder.canMoveUp}
                 canMoveDown={siblingReorder.canMoveDown}
@@ -309,6 +353,7 @@ export function MapEditor({
               <MapPersistenceControls
                 onExport={persistence.exportJson}
                 onImport={persistence.importJsonFile}
+                exportButtonRef={exportButtonRef}
               />
               <MapImageExportControls
                 onExportPng={imageExport.exportPng}
@@ -366,6 +411,29 @@ export function MapEditor({
           )}
         />
       </div>
+      {branchMove.screen === "open" && (
+        <BranchMoveDialog
+          mapMoveTargets={mapMoveTargets}
+          targetMapId={branchMove.targetMapId}
+          currentMapId={mapId}
+          sameMap={branchMove.sameMap}
+          parentCandidates={branchMove.parentCandidates}
+          nodes={nodes}
+          allowRoot={branchMove.allowRoot}
+          parentTarget={branchMove.parentTarget}
+          canSubmit={branchMove.canSubmit}
+          error={branchMove.error}
+          focusRequest={branchMove.focusRequest}
+          onFocusRequestApplied={branchMove.consumeFocusRequest}
+          onTargetMapChange={branchMove.setTargetMapId}
+          onParentTargetChange={branchMove.setParentTarget}
+          onCancel={branchMove.close}
+          onSubmit={branchMove.submit}
+          onMouseClick={() => {
+            dialogMouseClickedAtRef.current = Date.now();
+          }}
+        />
+      )}
       {/* data-map-id を付けず、根の inert の外に置く */}
       {outlineImport.screen !== "closed" && (
         <OutlineImportDialog

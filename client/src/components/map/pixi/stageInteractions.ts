@@ -32,6 +32,7 @@ type StageInteractionOptions = {
   layoutModeRef: LatestValue<NodeLayoutMode>;
   onReorderSiblingRef: LatestValue<(nodeId: number, request: SiblingReorderRequest) => void>;
   onSiblingReorderPreviewChangeRef: LatestValue<(preview: SiblingReorderPreview | null) => void>;
+  shouldIgnorePointerDownRef?: LatestValue<() => boolean>;
   dragThreshold?: number;
 };
 
@@ -54,6 +55,7 @@ export function createStageInteractions({
   layoutModeRef,
   onReorderSiblingRef,
   onSiblingReorderPreviewChangeRef,
+  shouldIgnorePointerDownRef,
   dragThreshold = 4,
 }: StageInteractionOptions) {
   let activeBinding: StageBinding | null = null;
@@ -136,7 +138,7 @@ export function createStageInteractions({
     nodeId: number,
     event: FederatedPointerEvent,
   ) => {
-    if (event.button !== 0) return;
+    if (event.button !== 0 || shouldIgnorePointerDownRef?.current()) return;
     if (
       activeBinding !== bindingAtEntry
       || !event.composedPath().some((target: unknown) => target === bindingAtEntry.stage)
@@ -195,6 +197,7 @@ export function createStageInteractions({
 
     const handleStagePointerDown = (event: FederatedPointerEvent) => {
       if (activeBinding !== binding || event.target !== stage || event.button !== 0) return;
+      if (shouldIgnorePointerDownRef?.current()) return;
 
       const sample = toPointerSample(event, viewportRef.current);
       if (!hasFinitePointerCoordinates(sample)) return;

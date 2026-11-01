@@ -32,6 +32,18 @@ export function collectSubtreeIds(nodes: readonly Node[], rootId: number): Set<n
   return ids;
 }
 
+// nodeId から親をたどり、自分を含めて近い順に返す。循環した不正な配列でも停止する
+export function collectSelfAndAncestorIds(nodes: readonly Node[], nodeId: number | null): number[] {
+  const ids: number[] = [];
+  const nodesById = new Map(nodes.map((node) => [node.id, node]));
+  let currentId = nodeId;
+  while (currentId !== null && !ids.includes(currentId)) {
+    ids.push(currentId);
+    currentId = nodesById.get(currentId)?.parentId ?? null;
+  }
+  return ids;
+}
+
 function hasAncestorOrCycle(
   nodesById: ReadonlyMap<number, Node>,
   nodeId: number,

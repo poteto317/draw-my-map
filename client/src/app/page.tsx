@@ -32,6 +32,7 @@ export default function Home() {
   });
   const listButtonRef = useRef<HTMLButtonElement>(null);
   const createButtonRef = useRef<HTMLButtonElement>(null);
+  const exportButtonRef = useRef<HTMLButtonElement>(null);
   // ダイアログの中で最後にマウスでクリックした時刻。1回目のクリックで閉じたダイアログのダブルクリックの
   // 2回目がキャンバスへ届いたときに、MapStage が dblclick を無視する（L-150）。再マウントをまたぐのでシェルで持つ
   const dialogMouseClickedAtRef = useRef<number | null>(null);
@@ -41,10 +42,8 @@ export default function Home() {
   // 再マウントで新しいヘッダーの ref がつながった後に、ダイアログの戻し先へフォーカスする
   useLayoutEffect(() => {
     if (headerFocusRequest === null) return;
-    const button = headerFocusRequest === "list"
-      ? listButtonRef.current
-      : createButtonRef.current;
-    button?.focus();
+    const buttonRefs = { list: listButtonRef, create: createButtonRef, export: exportButtonRef };
+    buttonRefs[headerFocusRequest].current?.focus();
     consumeHeaderFocusRequest();
   }, [headerFocusRequest, currentMapId, consumeHeaderFocusRequest]);
 
@@ -56,12 +55,15 @@ export default function Home() {
       ) : (
         <>
           <MapEditor
-            key={view.currentMap.id}
+            key={`${view.currentMap.id}:${view.storageMode}`}
             mapId={view.currentMap.id}
+            mapMoveTargets={view.maps}
+            onMoveBranchToMap={(rootId, targetMapId) => dialog.moveBranchToMap(view.storageSession, targetMapId, rootId)}
             mapName={view.currentMap.name}
             storageSession={view.storageSession}
             shortcutsEnabled={dialog.screen.kind === "closed"}
             dialogMouseClickedAtRef={dialogMouseClickedAtRef}
+            exportButtonRef={exportButtonRef}
             mapControls={(
               <MapLibraryControls
                 mapName={view.currentMap.name}

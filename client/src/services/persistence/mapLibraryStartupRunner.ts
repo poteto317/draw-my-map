@@ -1,7 +1,9 @@
+import { recoverBranchMove, type BlockedBranchMoveRecovery } from "./branchMoveTransaction";
 import type { MapIndexV1 } from "@/domain/mapLibrary/mapIndex";
 import {
   planMapLibraryStartup,
   type MapLibraryStartupDeps,
+  type MapLibraryStartupSnapshot,
   type ProtectedStartup,
 } from "@/domain/mapLibrary/mapLibraryStartup";
 import { DEFAULT_MAP_NAME } from "@/domain/mapLibrary/mapName";
@@ -42,13 +44,30 @@ function toProtected(protectedStartup: ProtectedStartup): MapLibraryStartupResul
   };
 }
 
+function toBlockedByBranchMove(recovery: BlockedBranchMoveRecovery): MapLibraryStartupResult {
+  return {
+    mode: "protected",
+    mapId: recovery.mapId,
+    mapName: recovery.mapName,
+    initialJson: recovery.initialJson,
+    notice: { kind: "error", message: recovery.error },
+  };
+}
+
 // 分岐の判定は planMapLibraryStartup に任せ、ここでは計画どおりに書き、
 // 各書き込みが成功したときだけ次へ進む。storage が null なら書き込みは失敗として扱う。
 export function runMapLibraryStartup(
   storage: MapLibraryStorage | null,
   deps: MapLibraryStartupDeps,
 ): MapLibraryStartupResult {
-  const plan = planMapLibraryStartup(readMapLibrarySnapshot(storage), deps);
+  // 中断した枝の移動を通常の起動より先に原本へ戻す。ジャーナルを読めないときは未復旧かもしれない本体を
+  // 開かないように、ほかのキーが読めても保存領域を使えない起動として扱う
+  const recovery = storage === null ? null : recoverBranchMove(storage);
+  if (recovery?.kind === "blocked") return toBlockedByBranchMove(recovery);
+  const snapshot: MapLibraryStartupSnapshot = recovery?.kind === "unavailable"
+    ? { kind: "unavailable" }
+    : readMapLibrarySnapshot(storage);
+  const plan = planMapLibraryStartup(snapshot, deps);
   switch (plan.kind) {
     case "protected":
       return toProtected(plan.protectedStartup);

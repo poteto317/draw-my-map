@@ -1,5 +1,6 @@
 import {
   canConnectNodes,
+  collectSelfAndAncestorIds,
   collectSubtreeIds,
   connectNodeTree,
   indexFirstNodes,
@@ -11,6 +12,20 @@ import { createTestNode } from "@/testing/createTestNode";
 function node(id: number, parentId: number | null, x = 0, y = 0): Node {
   return createTestNode({ id, parentId, x, y, width: 1, height: 1 });
 }
+
+describe("collectSelfAndAncestorIds", () => {
+  it("returns the node and its ancestors, nearest first", () => {
+    expect(collectSelfAndAncestorIds([node(1, null), node(2, 1), node(3, 2)], 3)).toEqual([3, 2, 1]);
+  });
+
+  it("returns nothing for null", () => {
+    expect(collectSelfAndAncestorIds([node(1, null)], null)).toEqual([]);
+  });
+
+  it("stops on a parent cycle", () => {
+    expect(collectSelfAndAncestorIds([node(1, 2), node(2, 1)], 1)).toEqual([1, 2]);
+  });
+});
 
 describe("collectSubtreeIds", () => {
   it("includes a requested root even when it is absent", () => {

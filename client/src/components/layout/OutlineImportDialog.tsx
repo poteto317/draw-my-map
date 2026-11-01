@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useLayoutEffect, useRef } from "react";
+import { handleDialogClickCapture } from "@/components/layout/dialogClickCapture";
 import { OutlineImportInputScreen } from "@/components/layout/OutlineImportInputScreen";
 import {
   OutlineImportPreviewScreen,
@@ -157,18 +158,7 @@ export function OutlineImportDialog({
   return (
     <div
       ref={overlayRef}
-      onClickCapture={(event) => {
-        // キーボード・支援技術のクリックは detail が 0 で、ダブルクリックの続きが無いので数えない。
-        // ダブルクリックの続き（detail > 1）も、閉じた後のキャンバスの dblclick を無視するために数える
-        if (event.detail > 0) onMouseClick();
-        // ダブルクリックの続きの click は、1回目で画面が変わった後の同じ位置の要素（追加先のラベル・「キャンセル」など）に
-        // 届くので、ダイアログの中ではどの要素にも届けない。preventDefault でラベルによるラジオの選択も止める（L-408）。
-        // キーボードのクリック（detail 0）とマウスの1回目（detail 1）は通す
-        if (event.detail > 1) {
-          event.preventDefault();
-          event.stopPropagation();
-        }
-      }}
+      onClickCapture={(event) => handleDialogClickCapture(event, onMouseClick)}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
     >
       <div

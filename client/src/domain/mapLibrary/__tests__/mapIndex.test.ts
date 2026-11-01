@@ -8,6 +8,7 @@ import {
   encodeMapIndex,
   findMapEntry,
   isValidMapId,
+  openMapAfterBranchTransfer,
   pickUnusedMapId,
   removeMapEntry,
   renameMapEntry,
@@ -473,6 +474,25 @@ describe("更新の関数", () => {
       touchMapEntry(index, "B", A.updatedAt);
       withLegacyCleanupPending(index, true);
     }).not.toThrow();
+  });
+});
+
+describe("openMapAfterBranchTransfer", () => {
+  it("移動先を開き、移動元と移動先の更新日時だけを進める", () => {
+    const time = "2026-01-01T00:00:00.000Z";
+    const later = "2026-02-01T00:00:00.000Z";
+    const index = {
+      version: 1 as const,
+      currentMapId: "a",
+      maps: ["a", "b", "c"].map((id) => createMapIndexEntry(id, id, time)),
+      legacyCleanupPending: false,
+    };
+
+    const next = openMapAfterBranchTransfer(index, "a", "b", later);
+
+    expect(next.currentMapId).toBe("b");
+    expect(next.maps.map((map) => map.updatedAt)).toEqual([later, later, time]);
+    expect(index.currentMapId).toBe("a");
   });
 });
 

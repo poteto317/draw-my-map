@@ -5,3 +5,10 @@ export function preventRepeatedEnterClick(
 ): void {
   if (event.key === "Enter" && event.repeat) event.preventDefault();
 }
+
+// フォーカスが移ってきたボタンやダイアログを開くボタンでは、Space のリピートの click 合成も止める
+export function preventRepeatedActivationClick(
+  event: Pick<KeyboardEvent, "key" | "repeat" | "preventDefault">,
+): void {
+  if ((event.key === "Enter" || event.key === " ") && event.repeat) event.preventDefault();
+}

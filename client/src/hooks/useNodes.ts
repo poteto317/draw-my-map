@@ -44,6 +44,10 @@ import { applyTreeChangeWithOutcome } from "@/hooks/treeChangeOutcome";
 import { insertParentNode as computeParentInsertion, type InsertParentNodeResult } from "@/domain/nodes/nodeParentInsertion";
 import { replaceNodeImportance } from "@/domain/nodes/nodeImportanceUpdate";
 import { clearNodeIllustration, replaceNodeIllustration } from "@/domain/nodes/nodeIllustrationUpdate";
+import {
+  moveNodeBranch,
+  type BranchMoveFailureReason,
+} from "@/domain/nodes/nodeBranchMove";
 import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
 import { useNodeLayoutState } from "@/hooks/useNodeLayoutState";
 import type { Node } from "@/types/node";
@@ -54,6 +58,10 @@ import type { NodeMapState } from "@/types/nodeMapState";
 export type InsertForestResult =
   | { ok: true; rootId: number; count: number }
   | { ok: false; reason: ForestInsertionFailureReason };
+
+export type MoveBranchResult =
+  | { ok: true; rootId: number }
+  | { ok: false; reason: BranchMoveFailureReason };
 
 type UseNodesReturn = {
   nodes: Node[];
@@ -96,6 +104,7 @@ type UseNodesReturn = {
     nodeId: number,
     visibleNodeIds: ReadonlySet<number>,
   ) => InsertParentNodeResult;
+  moveBranch: (rootId: number, parentId: number | null) => MoveBranchResult;
   deleteNode: (id: number) => void;
   setLayoutMode: (mode: NodeLayoutMode) => void;
   replaceMap: (state: NodeMapState) => void;
@@ -343,6 +352,16 @@ export function useNodes(): UseNodesReturn {
     return settled;
   }, [nodeIdAllocator, applyTreeChange]);
 
+  const moveBranch = useCallback((rootId: number, parentId: number | null): MoveBranchResult => {
+    const settled = applyTreeChangeWithOutcome<MoveBranchResult>(applyTreeChange, (currentNodes, mode) => {
+      const moved = moveNodeBranch(currentNodes, rootId, parentId, mode);
+      if (!moved.ok) return { nodes: null, outcome: moved };
+      return { nodes: moved.nodes, outcome: { ok: true, rootId: moved.rootId } };
+    });
+    if (settled.ok) setSelectedNodeId(settled.rootId);
+    return settled;
+  }, [applyTreeChange]);
+
   const deleteNode = useCallback((id: number) => {
     let subtreeIds = new Set<number>();
     const applied = applyTreeChange((currentNodes) => {
@@ -378,6 +397,7 @@ export function useNodes(): UseNodesReturn {
     reorderSibling,
     changeNodeIndent,
     insertParentNode,
+    moveBranch,
     deleteNode,
     setLayoutMode,
     replaceMap,

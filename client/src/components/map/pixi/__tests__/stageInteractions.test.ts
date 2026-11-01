@@ -112,6 +112,7 @@ function createController(overrides: Partial<{
   layoutMode: NodeLayoutMode;
   onReorderSibling: (nodeId: number, request: SiblingReorderRequest) => void;
   onSiblingReorderPreviewChange: (preview: SiblingReorderPreview | null) => void;
+  shouldIgnorePointerDown: () => boolean;
 }> = {}) {
   const nodesRef = { current: overrides.nodes ?? [node] };
   const viewportRef = {
@@ -153,6 +154,9 @@ function createController(overrides: Partial<{
     layoutModeRef,
     onReorderSiblingRef,
     onSiblingReorderPreviewChangeRef,
+    shouldIgnorePointerDownRef: overrides.shouldIgnorePointerDown === undefined
+      ? undefined
+      : { current: overrides.shouldIgnorePointerDown },
     dragThreshold: overrides.dragThreshold,
   });
 
@@ -229,6 +233,51 @@ describe("createStageInteractions", () => {
 
     expect(onSelectNodeRef.current).not.toHaveBeenCalled();
     expect(onMoveNodeRef.current).not.toHaveBeenCalled();
+  });
+
+  it("閉じたオーバーレイの続きの押下は、空白の選択解除もパンも始めない", () => {
+    const { stage, handlers } = createStage();
+    const { controller, onSelectNodeRef, onViewportChangeRef } = createController({
+      shouldIgnorePointerDown: () => true,
+    });
+    controller.bind(stage as never);
+
+    handlers.pointerdown?.(pointer(0, 0, { target: stage }));
+    handlers.pointermove?.(pointer(20, 20));
+
+    expect(onSelectNodeRef.current).not.toHaveBeenCalled();
+    expect(onViewportChangeRef.current).not.toHaveBeenCalled();
+    expect(controller.hasActiveGesture()).toBe(false);
+  });
+
+  it("閉じたオーバーレイの続きの押下は、ノードの選択も移動も始めない", () => {
+    const { stage, handlers } = createStage();
+    const { controller, onSelectNodeRef, onMoveNodeRef } = createController({
+      shouldIgnorePointerDown: () => true,
+    });
+    controller.bind(stage as never);
+
+    nodePointerDown(controller, 1, pointer(50, 50) as never);
+    handlers.pointermove?.(pointer(70, 70));
+
+    expect(onSelectNodeRef.current).not.toHaveBeenCalled();
+    expect(onMoveNodeRef.current).not.toHaveBeenCalled();
+    expect(controller.hasActiveGesture()).toBe(false);
+  });
+
+  it("続きの押下でなければ、空白の選択解除とノードの選択を通常どおり行う", () => {
+    const { stage, handlers } = createStage();
+    const { controller, onSelectNodeRef } = createController({
+      shouldIgnorePointerDown: () => false,
+    });
+    controller.bind(stage as never);
+
+    handlers.pointerdown?.(pointer(0, 0, { target: stage }));
+    handlers.pointerup?.(pointer(0, 0));
+    nodePointerDown(controller, 1, pointer(50, 50) as never);
+
+    expect(onSelectNodeRef.current).toHaveBeenNthCalledWith(1, null);
+    expect(onSelectNodeRef.current).toHaveBeenNthCalledWith(2, 1);
   });
 
   it("selects a node using the latest selection callback", () => {

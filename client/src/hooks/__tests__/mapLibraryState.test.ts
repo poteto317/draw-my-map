@@ -1,6 +1,7 @@
 import type { MapIndexEntry, MapIndexV1 } from "@/domain/mapLibrary/mapIndex";
 import {
   failedOperation,
+  isActiveBranchMoveSource,
   pickNewMapId,
   succeededOperation,
   toMapLibraryView,
@@ -20,6 +21,28 @@ const NEWER = entry("newer", "2026-02-01T00:00:00.000Z");
 function indexOf(currentMapId: string, maps: MapIndexEntry[]): MapIndexV1 {
   return { version: 1, currentMapId, maps, legacyCleanupPending: false };
 }
+
+describe("isActiveBranchMoveSource", () => {
+  const { storage } = createRecordingStorage();
+  const session = createTestStorageSession().session;
+  const persistent = {
+    mode: "persistent" as const,
+    storage,
+    index: indexOf("older", [OLDER]),
+    session,
+    startupNotice: null,
+  };
+
+  it("開いているセッションなら true", () => {
+    expect(isActiveBranchMoveSource(persistent, session)).toBe(true);
+  });
+
+  it("別のセッション・起動前・保護モードは false", () => {
+    expect(isActiveBranchMoveSource(persistent, createTestStorageSession().session)).toBe(false);
+    expect(isActiveBranchMoveSource(null, session)).toBe(false);
+    expect(isActiveBranchMoveSource({ mode: "protected", entry: OLDER, session, startupNotice: { kind: "error", message: "保護" } }, session)).toBe(false);
+  });
+});
 
 describe("toMapLibraryView", () => {
   it("起動前（null）は loading を返す", () => {

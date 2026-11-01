@@ -1,4 +1,7 @@
 import {
+  branchMovedToMapNotice,
+  branchMoveFlushFailedNotice,
+  branchMoveRejectedNotice,
   AUTO_SAVE_FAILURE_MESSAGE,
   autoSaveFailedNotice,
   bodyRemovalFailedNotice,
@@ -105,6 +108,21 @@ describe("mapLibraryMessages", () => {
       kind: "warning",
       message:
         "マップ「地図 A」を一覧から削除し、新しい「無題のマップ」を作成しましたが、保存データの一部を消せませんでした。",
+    });
+  });
+
+  it("枝の移動の通知", () => {
+    expect(branchMoveFlushFailedNotice()).toEqual({
+      kind: "error",
+      message: "編集中のマップを保存できないため、枝を移動できませんでした。",
+    });
+    expect(branchMoveRejectedNotice()).toEqual({
+      kind: "error",
+      message: "枝を移動できませんでした。移動元と移動先を確認してやり直してください。",
+    });
+    expect(branchMovedToMapNotice()).toEqual({
+      kind: "status",
+      message: "枝を移動し、移動先のマップを開きました。",
     });
   });
 

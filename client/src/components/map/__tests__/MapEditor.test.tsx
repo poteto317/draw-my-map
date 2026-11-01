@@ -75,6 +75,9 @@ async function renderEditor({
   const rendered = await renderReady(
     <MapEditor
       mapId={storage.session.mapId}
+      exportButtonRef={{ current: null }}
+      mapMoveTargets={[{ id: storage.session.mapId, name: mapName, updatedAt: "2026-10-31T00:00:00.000Z" }]}
+      onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "移動先がありません。" } })}
       mapName={mapName}
       storageSession={storage.session}
       mapControls={mapControls}

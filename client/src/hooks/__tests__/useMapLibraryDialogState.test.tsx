@@ -27,11 +27,13 @@ import {
   selectFocusAfterRemoval,
   useMapLibraryDialogState,
 } from "@/hooks/useMapLibraryDialogState";
+import { createProtectedStorageSession } from "@/services/persistence/protectedStorageSession";
+import type { MapStorageSession } from "@/types/mapStorageSession";
 import type { OperationNotice } from "@/types/operationNotice";
 
 type FakeLibrary = Pick<
   UseMapLibraryResult,
-  "createMap" | "switchMap" | "renameMap" | "deleteMap"
+  "createMap" | "switchMap" | "renameMap" | "deleteMap" | "moveBranchToMap"
 >;
 
 function entry(id: string, name: string): MapIndexEntry {
@@ -75,6 +77,7 @@ function createFakeLibrary(): jest.Mocked<FakeLibrary> {
     switchMap: jest.fn<MapLibraryOperationResult, [string]>(() => UNCHANGED),
     renameMap: jest.fn<MapLibraryOperationResult, [string, string]>(() => UNCHANGED),
     deleteMap: jest.fn<MapLibraryOperationResult, [string]>(() => UNCHANGED),
+    moveBranchToMap: jest.fn<MapLibraryOperationResult, [MapStorageSession, string, number]>(() => UNCHANGED),
   };
 }
 
@@ -99,6 +102,69 @@ function renderDialogState(overrides: Partial<HookProps> = {}) {
 }
 
 const EMPTY_NOTICES = { status: "", alert: "", sequence: expect.any(Number) };
+
+describe("useMapLibraryDialogState の枝の別マップへの移動", () => {
+  const session = createProtectedStorageSession("a", null);
+  const moveFailure: OperationNotice = { kind: "error", message: "枝を移動できませんでした。" };
+
+  it("移動先を開いた成功はシェルの通知に出し、ヘッダーの「マップ一覧」へ戻す", () => {
+    const library = createFakeLibrary();
+    const notice: OperationNotice = { kind: "status", message: "枝を移動しました。" };
+    const success = remountedResult(notice);
+    library.moveBranchToMap.mockReturnValue(success);
+    const { result } = renderDialogState({ library });
+    let returned: MapLibraryOperationResult | undefined;
+
+    act(() => {
+      returned = result.current.moveBranchToMap(session, "b", 2);
+    });
+
+    expect(library.moveBranchToMap).toHaveBeenCalledWith(session, "b", 2);
+    expect(returned).toBe(success);
+    expect(result.current.shellNotice).toEqual({ sequence: 1, notice });
+    expect(result.current.headerFocusRequest).toBe("list");
+  });
+
+  it("保護モードへ移った失敗はシェルの通知に出し、ヘッダーの「JSON書き出し」へ移す", () => {
+    const library = createFakeLibrary();
+    library.moveBranchToMap.mockReturnValue({ ok: false, notice: moveFailure, enteredProtectedMode: true });
+    const { result } = renderDialogState({ library });
+
+    act(() => {
+      result.current.moveBranchToMap(session, "b", 2);
+    });
+
+    expect(result.current.shellNotice).toEqual({ sequence: 1, notice: moveFailure });
+    expect(result.current.headerFocusRequest).toBe("export");
+  });
+
+  it("保護モードへ移らない失敗はシェルの状態を変えず、枝の移動のダイアログへ任せる", () => {
+    const library = createFakeLibrary();
+    library.moveBranchToMap.mockReturnValue(failedResult(moveFailure));
+    const { result } = renderDialogState({ library });
+
+    act(() => {
+      result.current.moveBranchToMap(session, "b", 2);
+    });
+
+    expect(result.current.shellNotice).toBeNull();
+    expect(result.current.headerFocusRequest).toBeNull();
+  });
+
+  it("起動の通知を出した後でも、保護モードへ移った失敗をシェルの通知に出す", () => {
+    const library = createFakeLibrary();
+    library.moveBranchToMap.mockReturnValue({ ok: false, notice: moveFailure, enteredProtectedMode: true });
+    const startupNotice: OperationNotice = { kind: "warning", message: "一覧を作り直しました。" };
+    const { result } = renderDialogState({ library, startupNotice });
+    expect(result.current.shellNotice).toEqual({ sequence: 1, notice: startupNotice });
+
+    act(() => {
+      result.current.moveBranchToMap(session, "b", 2);
+    });
+
+    expect(result.current.shellNotice).toEqual({ sequence: 2, notice: moveFailure });
+  });
+});
 
 describe("useMapLibraryDialogState", () => {
   it("最初は閉じていて、通知もフォーカスの要求も無い", () => {

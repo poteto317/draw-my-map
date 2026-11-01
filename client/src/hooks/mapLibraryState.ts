@@ -32,7 +32,8 @@ export type MapLibraryOperationResult =
       notice: OperationNotice | null;
       saveRetryNotice: OperationNotice | null;
     }
-  | { ok: false; notice: OperationNotice };
+  // enteredProtectedMode: 操作の失敗で保護モードへ移った（編集画面は作り直される）
+  | { ok: false; notice: OperationNotice; enteredProtectedMode?: true };
 
 // 起動の結果から作る、シェルが持つ状態。セッションは (currentMapId, セッション番号) ごとに作り直す。
 // セッション番号は useMapLibrary の ref だけが持ち、session の writeBody・registerFlush が閉じ込める
@@ -69,6 +70,18 @@ export function succeededOperation(
 
 export function failedOperation(notice: OperationNotice): MapLibraryOperationResult {
   return { ok: false, notice };
+}
+
+// 枝の移動を始めたセッションが今も開いているか。flush の再入や切り替えの後は移動しない
+export function isActiveBranchMoveSource(
+  library: LibraryState | null,
+  session: MapStorageSession,
+): library is PersistentLibraryState {
+  return library?.mode === "persistent" && library.session === session;
+}
+
+export function protectedModeFailure(notice: OperationNotice): MapLibraryOperationResult {
+  return { ok: false, notice, enteredProtectedMode: true };
 }
 
 export function toMapLibraryView(library: LibraryState | null): MapLibraryView {

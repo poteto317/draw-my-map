@@ -13,6 +13,10 @@ import {
 import { createTestNode } from "@/testing/createTestNode";
 import { createRecordingStorage } from "@/testing/mapLibraryTestStorage";
 import {
+  BRANCH_MOVE_JOURNAL_KEY,
+  encodeBranchMoveJournal,
+} from "../branchMoveJournal";
+import {
   MAP_INDEX_BACKUP_STORAGE_KEY,
   MAP_INDEX_STORAGE_KEY,
   mapBodyKey,
@@ -620,6 +624,128 @@ describe("runMapLibraryStartup", () => {
         [mapBodyKey("map-x")]: bodyJson,
         [MAP_INDEX_BACKUP_STORAGE_KEY]: corruptRaw,
       });
+    });
+  });
+
+  describe("中断した枝の移動の復旧", () => {
+    const SOURCE_KEY = mapBodyKey("source");
+    const index: MapIndexV1 = {
+      version: 1,
+      currentMapId: "source",
+      maps: [
+        createMapIndexEntry("source", "移動元", NOW),
+        createMapIndexEntry("target", "移動先", NOW),
+      ],
+      legacyCleanupPending: false,
+    };
+    const originals = {
+      [SOURCE_KEY]: "source original",
+      [MAP_INDEX_STORAGE_KEY]: encodeMapIndex(index),
+    };
+    const journal = encodeBranchMoveJournal({
+      version: 1,
+      sourceId: "source",
+      targetId: "target",
+      sourceBefore: originals[SOURCE_KEY],
+      targetBefore: null,
+      indexBefore: originals[MAP_INDEX_STORAGE_KEY],
+    });
+
+    it("復旧した原本のインデックスから通常モードで開く", () => {
+      const { storage, entries } = createRecordingStorage({
+        initial: {
+          ...originals,
+          [BRANCH_MOVE_JOURNAL_KEY]: journal,
+          [MAP_INDEX_STORAGE_KEY]: encodeMapIndex({ ...index, currentMapId: "target" }),
+          [SOURCE_KEY]: "source after",
+        },
+      });
+
+      expect(runMapLibraryStartup(storage, createDeps())).toMatchObject({
+        mode: "persistent",
+        index,
+      });
+      expect(entries()).toEqual(originals);
+    });
+
+    it("原本へ戻せなければ、移動元のマップの原本を保護モードで開く", () => {
+      const { storage, entries } = createRecordingStorage({
+        initial: { ...originals, [BRANCH_MOVE_JOURNAL_KEY]: journal },
+        failRemoveItem: (key) => key === BRANCH_MOVE_JOURNAL_KEY,
+      });
+
+      const result = runMapLibraryStartup(storage, createDeps());
+
+      expect(result).toMatchObject({
+        mode: "protected",
+        initialJson: originals[SOURCE_KEY],
+        mapId: "source",
+        mapName: "移動元",
+        notice: { kind: "error" },
+      });
+      expect(result.notice?.message).toContain("JSON");
+      expect(entries()[BRANCH_MOVE_JOURNAL_KEY]).toBe(journal);
+    });
+
+    it("壊れたジャーナルでは通常の初期化をせず、error の通知で固定の id の保護モードにする", () => {
+      const { storage, operations } = createRecordingStorage({
+        initial: { [BRANCH_MOVE_JOURNAL_KEY]: "{" },
+      });
+
+      const result = runMapLibraryStartup(storage, createDeps());
+
+      expect(result).toMatchObject({
+        mode: "protected",
+        mapId: "branch-move-recovery",
+        initialJson: null,
+        notice: { kind: "error" },
+      });
+      expect(result.notice?.message).toContain(BRANCH_MOVE_JOURNAL_KEY);
+      expect(result.notice?.message).not.toContain("書き出");
+      expect(operations).toEqual([]);
+    });
+
+    it("保存領域を読めないときは、通常の起動と同じ warning の通知と生成した id の保護モードにする", () => {
+      const { storage, operations } = createRecordingStorage({
+        initial: { [BRANCH_MOVE_JOURNAL_KEY]: "{" },
+        failGetItem: true,
+      });
+
+      expect(runMapLibraryStartup(storage, createDeps())).toEqual({
+        mode: "protected",
+        mapId: "map-a",
+        mapName: "無題のマップ",
+        initialJson: null,
+        notice: { kind: "warning", message: UNAVAILABLE_WARNING },
+      });
+      expect(operations).toEqual([]);
+    });
+
+    it("ジャーナルのキーだけ読めなくても、原本へ戻す前の本体を通常どおりには開かない", () => {
+      const { storage: base, operations } = createRecordingStorage({
+        initial: { ...originals, [BRANCH_MOVE_JOURNAL_KEY]: journal, [SOURCE_KEY]: "source after" },
+      });
+      const storage: Storage = {
+        ...base,
+        getItem: (key) => {
+          if (key === BRANCH_MOVE_JOURNAL_KEY) throw new DOMException("blocked", "SecurityError");
+          return base.getItem(key);
+        },
+      };
+
+      expect(runMapLibraryStartup(storage, createDeps())).toMatchObject({
+        mode: "protected",
+        initialJson: null,
+        notice: { kind: "warning", message: UNAVAILABLE_WARNING },
+      });
+      expect(operations).toEqual([]);
+    });
+
+    it("storage が null なら復旧を試みず、通常の起動の判定に任せる", () => {
+      const result = runMapLibraryStartup(null, createDeps());
+
+      expect(result.mode).toBe("protected");
+      expect(result.notice?.message).toBe(UNAVAILABLE_WARNING);
     });
   });
 });

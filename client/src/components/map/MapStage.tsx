@@ -126,6 +126,15 @@ export function MapStage({
   const containerRef = useRef<HTMLDivElement>(null);
   const menuActivatedAtRef = useRef<number | null>(null);
   const runtime = usePixiApplication(containerRef);
+  // The 2nd press of a double-click on a menu item or a dialog button lands on the canvas after
+  // the overlay closed. Date.now() is read only after such an activation so normal clicks stay clock-neutral.
+  const isOverlayFollowUpClick = () => {
+    const activatedAt = menuActivatedAtRef.current;
+    if (activatedAt !== null && isDoubleClickFromOverlayActivation(activatedAt, Date.now())) return true;
+    // Dialog case: the 1st click closed the dialog (switch, create, delete, close).
+    const dialogClickedAt = dialogMouseClickedAtRef.current ?? null;
+    return dialogClickedAt !== null && isDoubleClickFromOverlayActivation(dialogClickedAt, Date.now());
+  };
   const illustrationTextures = useIllustrationTextures(runtime, nodes);
   const editing = useNodeEditing(nodes, onUpdateLabel);
   const cancelEditing = editing.cancelEditing;
@@ -162,6 +171,7 @@ export function MapStage({
     onConnectNodes,
     layoutMode,
     onReorderSibling,
+    shouldIgnorePointerDown: isOverlayFollowUpClick,
   });
 
   const scene = useRenderedMapScene({
@@ -304,13 +314,7 @@ export function MapStage({
   });
 
   const handleDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
-    // The 2nd click of a double-click on a menu item or a dialog button lands on the canvas after
-    // the overlay closed. Date.now() is read only after such an activation so normal double-clicks stay clock-neutral.
-    const activatedAt = menuActivatedAtRef.current;
-    if (activatedAt !== null && isDoubleClickFromOverlayActivation(activatedAt, Date.now())) return;
-    // Dialog case: the 1st click closed the dialog (switch, create, delete, close).
-    const dialogClickedAt = dialogMouseClickedAtRef.current ?? null;
-    if (dialogClickedAt !== null && isDoubleClickFromOverlayActivation(dialogClickedAt, Date.now())) return;
+    if (isOverlayFollowUpClick()) return;
     const container = containerRef.current;
     if (!container) return;
 
@@ -324,6 +328,11 @@ export function MapStage({
 
     if (action.type === "edit") editing.startEditing(action.nodeId);
     else onDoubleClick(action.point.x, action.point.y);
+  };
+
+  // The press would move focus off the control that the closed dialog just returned it to.
+  const handleMouseDown = (event: MouseEvent<HTMLDivElement>) => {
+    if (isOverlayFollowUpClick()) event.preventDefault();
   };
 
   const handleContextMenu = (event: MouseEvent<HTMLDivElement>) => {
@@ -362,6 +371,7 @@ export function MapStage({
     <div
       ref={containerRef}
       className="relative h-full w-full cursor-crosshair"
+      onMouseDown={handleMouseDown}
       onDoubleClick={handleDoubleClick}
       onContextMenu={handleContextMenu}
     >

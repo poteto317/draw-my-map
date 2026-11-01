@@ -13,9 +13,11 @@ import type {
   MapLibraryDialogScreen,
   OpenMapLibraryDialogScreen,
 } from "@/types/mapLibraryDialog";
+import type { MapStorageSession } from "@/types/mapStorageSession";
 import type { OperationNotice } from "@/types/operationNotice";
 
-export type HeaderFocusRequest = "list" | "create";
+// "export" は保護モードの戻し先。「マップ一覧」「新しいマップ」が無効になり、案内する書き出しの入口へ移す
+export type HeaderFocusRequest = "list" | "create" | "export";
 
 export type UseMapLibraryDialogStateResult = {
   screen: MapLibraryDialogScreen;
@@ -34,13 +36,14 @@ export type UseMapLibraryDialogStateResult = {
   switchTo: (mapId: string) => void;
   submitRename: (mapId: string, nameInput: string) => void;
   confirmDelete: (mapId: string) => void;
+  moveBranchToMap: UseMapLibraryResult["moveBranchToMap"];
   consumeFocusTarget: () => void;
   consumeHeaderFocusRequest: () => void;
 };
 
 type MapLibraryOperations = Pick<
   UseMapLibraryResult,
-  "createMap" | "switchMap" | "renameMap" | "deleteMap"
+  "createMap" | "switchMap" | "renameMap" | "deleteMap" | "moveBranchToMap"
 >;
 
 type DialogState = {
@@ -125,6 +128,11 @@ function closeAfterSuccess(
   const closed = closeDialog(state, "list");
   if (!result.remounted || result.notice === null) return closed;
   return { ...closed, shellNotice: nextShellNotice(state, result.notice) };
+}
+
+// 再マウントを伴う失敗（保護モードへの移行）も、シェルの通知だけが利用者に届く
+function closeAfterEnteringProtectedMode(state: DialogState, notice: OperationNotice): DialogState {
+  return { ...closeDialog(state, "export"), shellNotice: nextShellNotice(state, notice) };
 }
 
 // 一覧に戻る成功。status 以外の通知と保存の再試行の失敗は alert に出す
@@ -263,6 +271,20 @@ export function useMapLibraryDialogState(options: {
     });
   }, []);
 
+  // ダイアログは MapEditor が持つ。再マウントしない失敗は結果を返すだけで、そちらのエラー表示に任せる
+  const moveBranchToMap = useCallback((
+    sourceSession: MapStorageSession,
+    targetId: string,
+    rootId: number,
+  ): MapLibraryOperationResult => {
+    const result = libraryRef.current.moveBranchToMap(sourceSession, targetId, rootId);
+    setState((prev) => {
+      if (result.ok) return closeAfterSuccess(prev, result);
+      return result.enteredProtectedMode ? closeAfterEnteringProtectedMode(prev, result.notice) : prev;
+    });
+    return result;
+  }, []);
+
   const consumeFocusTarget = useCallback(() => {
     setState((prev) => (prev.focusTarget === null ? prev : { ...prev, focusTarget: null }));
   }, []);
@@ -290,6 +312,7 @@ export function useMapLibraryDialogState(options: {
     switchTo,
     submitRename,
     confirmDelete,
+    moveBranchToMap,
     consumeFocusTarget,
     consumeHeaderFocusRequest,
   };

@@ -4,6 +4,7 @@ import { createStageInteractions } from "@/components/map/pixi/stageInteractions
 import type { LatestValue } from "@/components/map/pixi/pointerGesture";
 import type { PixiRuntime } from "@/components/map/pixi/pixiTypes";
 import type { SiblingReorderPreview } from "@/components/map/siblingReorderDropSlot";
+import { useLatestRef } from "@/hooks/useLatestRef";
 import { useStageInteractionValues } from "@/components/map/useStageInteractionValues";
 import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
 import type { SiblingReorderRequest } from "@/domain/nodes/nodeSiblingOrder";
@@ -22,6 +23,7 @@ type UseMapStageInteractionsOptions = {
   onConnectNodes: (parentId: number, childId: number) => void;
   layoutMode: NodeLayoutMode;
   onReorderSibling: (nodeId: number, request: SiblingReorderRequest) => void;
+  shouldIgnorePointerDown?: () => boolean;
 };
 
 export function useMapStageInteractions({
@@ -36,7 +38,9 @@ export function useMapStageInteractions({
   onConnectNodes,
   layoutMode,
   onReorderSibling,
+  shouldIgnorePointerDown = () => false,
 }: UseMapStageInteractionsOptions) {
+  const shouldIgnorePointerDownRef = useLatestRef(shouldIgnorePointerDown);
   const [connectionTargetNodeId, setConnectionTargetNodeId] = useState<number | null>(null);
   const onConnectionTargetChangeRef = useRef(setConnectionTargetNodeId);
   const [siblingReorderPreview, setSiblingReorderPreview] = useState<SiblingReorderPreview | null>(null);
@@ -77,6 +81,7 @@ export function useMapStageInteractions({
     layoutModeRef,
     onReorderSiblingRef,
     onSiblingReorderPreviewChangeRef,
+    shouldIgnorePointerDownRef,
   });
   const interactions = interactionsRef.current;
 

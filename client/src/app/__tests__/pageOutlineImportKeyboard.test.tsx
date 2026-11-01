@@ -10,6 +10,9 @@ import {
 } from "@/app/testing/pageTestHelpers";
 import {
   lastWorldContainer,
+  mockStage,
+  mockStageHandlers,
+  pointer,
   resetMapStageTestRuntime,
 } from "@/components/map/testing/mapStageTestRuntime";
 import { readActiveMapJson, seedMapLibrary } from "@/testing/mapLibraryTestStorage";
@@ -409,6 +412,29 @@ describe("箇条書きから追加のダイアログのキーボード操作", (
       fireEvent.doubleClick(stageContainer(), { detail: 2, clientX: 600, clientY: 450 });
       expect(exportedLabels()).toEqual(["A", ""]);
     });
+  });
+
+  it("「キャンセル」の1回目のクリックで閉じた後、キャンバスへ届いた500ms以内の押下では選択を解除しない", async () => {
+    seedParentAndChild();
+    const user = userEvent.setup();
+    const now = jest.spyOn(Date, "now").mockReturnValue(10_000);
+    await renderPage();
+    selectNode(0, 2);
+    await user.click(outlineButton());
+    const pressBlankCanvas = () => act(() => {
+      mockStageHandlers.pointerdown?.(pointer(0, 0, { target: mockStage }));
+      mockStageHandlers.pointerup?.(pointer(0, 0));
+    });
+
+    now.mockReturnValue(10_200);
+    fireEvent.click(dialog().getByRole("button", { name: "キャンセル" }), { detail: 1 });
+    now.mockReturnValue(10_699);
+    pressBlankCanvas();
+    expect(selectedLabel()).toBe("親");
+
+    now.mockReturnValue(10_700);
+    pressBlankCanvas();
+    expect(selectedLabel()).toBeNull();
   });
 
   it("ノードのラベルの編集中に「箇条書きから追加」を押すと、入力中のラベルを確定してから開く（L-473）", async () => {
