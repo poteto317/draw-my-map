@@ -446,3 +446,52 @@ describe("MapStage context menu double-click activation", () => {
     nowSpy.mockRestore();
   });
 });
+
+describe("MapStage context menu follow-up press", () => {
+  async function activateMenuAt(base: number, onSelectNode: jest.Mock) {
+    const nowSpy = jest.spyOn(Date, "now").mockReturnValue(base);
+    const rendered = await renderReady(
+      <MapStage
+        {...defaultProps}
+        nodes={sampleNodes}
+        onSelectNode={onSelectNode}
+        onGenerateIllustration={jest.fn()}
+      />,
+    );
+    const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+    mockStageBounds(container);
+    fireEvent.contextMenu(container, { clientX: 100, clientY: 60 });
+    fireEvent.click(rendered.getByRole("menuitem", { name: "イラストを生成" }));
+    onSelectNode.mockClear();
+    return { container, nowSpy };
+  }
+  const pressCanvas = () => act(() => {
+    mockStageHandlers.pointerdown?.(pointer(700, 500, { target: mockStage }));
+  });
+
+  it("メニュー項目の直後（500ms以内）のキャンバス押下は選択解除せず、mousedownの既定動作も抑止する", async () => {
+    const base = 1_000_000;
+    const onSelectNode = jest.fn();
+    const { container, nowSpy } = await activateMenuAt(base, onSelectNode);
+
+    nowSpy.mockReturnValue(base + 499);
+    pressCanvas();
+    const notPrevented = fireEvent.mouseDown(container, { clientX: 700, clientY: 500 });
+
+    expect(onSelectNode).not.toHaveBeenCalled();
+    expect(notPrevented).toBe(false);
+  });
+
+  it("メニュー項目から500msを過ぎたキャンバス押下は選択解除し、mousedownの既定動作も抑止しない", async () => {
+    const base = 1_000_000;
+    const onSelectNode = jest.fn();
+    const { container, nowSpy } = await activateMenuAt(base, onSelectNode);
+
+    nowSpy.mockReturnValue(base + 500);
+    pressCanvas();
+    const notPrevented = fireEvent.mouseDown(container, { clientX: 700, clientY: 500 });
+
+    expect(onSelectNode).toHaveBeenCalledWith(null);
+    expect(notPrevented).toBe(true);
+  });
+});

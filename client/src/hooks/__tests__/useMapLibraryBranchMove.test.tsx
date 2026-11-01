@@ -71,6 +71,30 @@ describe("useMapLibrary.moveBranchToMap", () => {
     expect(operations).toEqual([]);
   });
 
+  it("flush中にA→B→Aと切り替わった場合は移動を拒否し、本体を変えない", () => {
+    const { result, entries, operations } = setup();
+    const old = ready(result.current.view).storageSession;
+    let switched = false;
+    old.registerFlush(() => {
+      if (!switched) {
+        switched = true;
+        act(() => { result.current.switchMap("b"); result.current.switchMap("a"); });
+      }
+      return { status: "unchanged" };
+    });
+    const before = entries();
+    operations.length = 0;
+
+    act(() => { expect(result.current.moveBranchToMap(old, "b", 1).ok).toBe(false); });
+
+    expect(switched).toBe(true);
+    expect(ready(result.current.view).currentMap.id).toBe("a");
+    expect(ready(result.current.view).storageSession).not.toBe(old);
+    expect(entries()[mapBodyKey("a")]).toBe(before[mapBodyKey("a")]);
+    expect(entries()[mapBodyKey("b")]).toBe(before[mapBodyKey("b")]);
+    expect(entries()[BRANCH_MOVE_JOURNAL_KEY]).toBeUndefined();
+  });
+
   it("flush中に削除された移動先を最新indexで検出する", () => {
     const { result, storage, entries } = setup();
     const old = ready(result.current.view).storageSession;
