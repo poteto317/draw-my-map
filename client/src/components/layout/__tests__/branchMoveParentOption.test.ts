@@ -42,3 +42,11 @@ it("親のラベルでも見分けられない同名は、候補の順番を併�
     { id: 4, text: "同名（ルート）" },
   ]);
 });
+
+it("親のラベルが空のときは、注記の親もキャンバスと同じ表示にする", () => {
+  const nodes = [node(1, null, ""), node(2, 1, "X"), node(3, null, "X")];
+  expect(listBranchMoveParentOptions(nodes.slice(1), nodes)).toEqual([
+    { id: 2, text: "X（親: 新しいノード）" },
+    { id: 3, text: "X（ルート）" },
+  ]);
+});
