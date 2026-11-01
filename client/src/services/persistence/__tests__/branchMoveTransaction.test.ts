@@ -17,9 +17,28 @@ it("journal→target→source→index→削除で確定する", () => {
   expect(operations.map(op => op.key)).toEqual([JOURNAL, TARGET, SOURCE, INDEX, JOURNAL]);
   expect(entries()).toEqual({ [SOURCE]: input.sourceAfter, [TARGET]: input.targetAfter, [INDEX]: input.indexAfter });
 });
-it.each([SOURCE, TARGET, INDEX, JOURNAL])("原本不一致・既存journal %s では書かない", key => {
+it.each([SOURCE, TARGET, INDEX])("原本不一致 %s では書かず、復旧は要らない失敗を返す", key => {
   const { storage, operations } = createRecordingStorage({ initial: { ...original, [key]: "changed" } });
-  expect(writeBranchMove(storage, input).ok).toBe(false);
+  expect(writeBranchMove(storage, input)).toEqual({
+    ok: false,
+    error: "枝を移動できませんでした。保存データを確認してやり直してください。",
+    recoveryRequired: false,
+  });
+  expect(operations).toEqual([]);
+});
+it("既存journalがあるときは書かず、復旧が要る失敗を返す", () => {
+  const { storage, operations } = createRecordingStorage({ initial: { ...original, [JOURNAL]: "changed" } });
+  expect(writeBranchMove(storage, input)).toEqual({ ok: false, error: RECOVERY_ERROR, recoveryRequired: true });
+  expect(operations).toEqual([]);
+});
+it("書く前のjournalの自己検査に通らないときは、原本が一致していても何も書かず、やり直せる失敗を返す", () => {
+  const broken = "{broken";
+  const { storage, operations } = createRecordingStorage({ initial: { [SOURCE]: input.sourceBefore!, [INDEX]: broken } });
+  expect(writeBranchMove(storage, { ...input, indexBefore: broken })).toEqual({
+    ok: false,
+    error: "枝を移動できませんでした。保存データを確認してやり直してください。",
+    recoveryRequired: false,
+  });
   expect(operations).toEqual([]);
 });
 it("書き込み前の読み取りの例外は何も書かず、やり直せる失敗として返す", () => {

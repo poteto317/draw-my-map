@@ -64,6 +64,7 @@ describe("transferStoredBranch", () => {
     expect(target.ok && target.value.nodes[1]).toMatchObject({ importance: "high", illustration: createJpegDataUrl(128, 128), width: 100, height: 116 });
     expect(target.ok && target.value.nodes[1].parentId).toBe(target.ok && target.value.nodes[0].id);
     expect(Object.keys(result)).toEqual(["ok", "index"]);
+    expect(target.ok && target.value.layoutMode).toBe("manual");
   });
 
   it("既存の移動先ノードとlayoutを保ち、衝突IDを再採番する", () => {

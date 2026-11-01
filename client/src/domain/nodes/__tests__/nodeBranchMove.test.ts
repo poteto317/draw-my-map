@@ -51,6 +51,9 @@ describe("moveNodeBranch", () => {
     const movedChild = result.nodes.find(({ id }) => id === 3)!;
     expect(movedChild.x - movedRoot.x).toBe(300);
     expect(movedChild.y - movedRoot.y).toBe(60);
+    // 親(4)の右 0+100+120=220、既存の子(5)の下 300+60+40=400 へ根を置き、子は同じ差(-80, +380)だけ動く
+    expect([movedRoot.x, movedRoot.y]).toEqual([220, 400]);
+    expect([movedChild.x, movedChild.y]).toEqual([520, 460]);
   });
 
   it("ルートへ移す枝を残ったノードの下へ平行移動し、最後のルートにする", () => {
@@ -61,6 +64,7 @@ describe("moveNodeBranch", () => {
     const root = result.nodes.find(({ id }) => id === 2)!;
     const child = result.nodes.find(({ id }) => id === 3)!;
     expect(root.parentId).toBeNull();
+    expect(root.x).toBe(300);
     expect(root.y).toBeGreaterThan(360);
     expect(child.y - root.y).toBe(60);
   });
