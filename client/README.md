@@ -30,7 +30,7 @@ Draw My Map のフロントエンドおよびエッジバックエンドの主�
    - ノードだけ削除（Phase 14）。「親を挿入」の直後の「ノードだけ削除」で選択1個を削除し、隠れた子孫も残します。純粋候補は `domain/nodes/nodeOnlyDeletion.ts`、1回の構造確定・履歴・選択は `useNodes.deleteNodeOnly`、有効状態と既存8系統目への通知は `useNodeOnlyDeletionAction`、表示と連続起動の抑止は `NodeOnlyDeleteControl` が担当します。手動配置では座標維持、自動配置では再配置し、保存形式はV3のままです。`Delete` / `Backspace` の枝削除は従来どおりです（[機能18章](../docs/specifications/features.md#18-ノードだけ削除)、[API9章](../docs/specifications/api.md#9-ノードだけ削除のクライアントapi)）。実ブラウザは [U節](../docs/testing/browser-test-cases.md#phase-14-ノードだけ削除) の中間・葉・根、隠れた子、保存再読み込み、キー操作・フォーカス・従来削除の手順で確認します（未実施）。
    - 枝の切り取り・移動（Phase 14）。ヘッダーの「枝を移動」のダイアログで、選択ノードと全子孫を同じマップの別の親・新しいルート、または別のマップの新しいルートへ移す。同一マップは 1 回で Undo / Redo でき、別のマップはジャーナルで保護して書き、成功の後に移動先を開く。
 3. **データ永続化とエクスポート (Domain & Services)**:
-   - `localStorage` へのマップごとのリアルタイム自動保存と復元。マップの一覧（インデックス）を `draw-my-map.maps.v1`、各マップの本体（Version 3 の JSON）を `draw-my-map.maps.v1.doc.<id>` に保存し、`localStorage` を直接読み書きするのは `services/persistence/mapLibraryStorage.ts` だけです。Phase 11 までの単一のキー `draw-my-map.map.v1` は、起動時に1件のマップとして移行し、次の起動で消します。保存はセッション番号で照合し、切り替えの後に前のマップの保存待ちが届いても書き込みません。
+   - `localStorage` へのマップごとのリアルタイム自動保存と復元。マップの一覧（インデックス）を `draw-my-map.maps.v1`、各マップの本体（Version 3 の JSON）を `draw-my-map.maps.v1.doc.<id>` に保存し、`localStorage` を直接読み書きするのは `services/persistence/mapLibraryStorage.ts` だけです（枝の移動のジャーナルの書き込みと復旧の `branchMoveTransaction.ts` と、移動の前のインデックスの読み取り `mapBranchTransfer.ts` の `readBranchMoveIndex` は、注入された storage を直接呼びます）。Phase 11 までの単一のキー `draw-my-map.map.v1` は、起動時に1件のマップとして移行し、次の起動で消します。保存はセッション番号で照合し、切り替えの後に前のマップの保存待ちが届いても書き込みません。
    - `MapDocument` JSON 形式でのインポート / エクスポート（旧バージョン互換性・自動マイグレーション対応）。
    - 高解像度 PNG および ベクター SVG 形式での画像エクスポート。
    - 自動配置の折りたたみ中は表示用投影座標を使用し、正本の全ノードと保存座標は維持します。JSON、`localStorage`、PNG / SVG は正本の全件を扱い、手動配置へ戻すと保存座標を表示します。
@@ -87,7 +87,7 @@ client/src/
 ├── services/             # 外部環境との入出力・副作用アダプター (ブラウザ / Web API)
 │   ├── illustration/     # Route Handler クライアント、サムネイル縮小処理
 │   ├── imageExport/      # DOM Canvas / SVG のラスタライズとファイルダウンロード
-│   └── persistence/      # localStorage 読み書き（mapLibraryStorage.ts だけ）、起動の実行、マップ id の生成、JSON ファイルリーダー/ダウンローダー
+│   └── persistence/      # localStorage 読み書き（mapLibraryStorage.ts が中心。枝の移動のジャーナルの `branchMoveTransaction.ts` と `readBranchMoveIndex` は注入された storage を直接呼ぶ）、枝の移動、起動の実行、マップ id の生成、JSON ファイルリーダー/ダウンローダー
 ├── testing/              # テスト用ヘルパー、モック、フィクスチャ (createTestNode, jpegFixture, createTestStorageSession, mapLibraryTestStorage)。ページの結合テスト専用のものは app/testing/
 └── types/                # アプリケーション共通の TypeScript 型定義
 ```

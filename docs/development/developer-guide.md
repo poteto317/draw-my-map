@@ -87,7 +87,7 @@ config・types は全レイヤーから参照する
 
 ### 2.4 保存と読み込みの流れ
 
-- ノードの配列は `MapDocument`（V3 の JSON）にして、`useMapStorageAutoSave` が自動保存します。`localStorage` を直接読み書きするのは `services/persistence/mapLibraryStorage.ts` だけです。
+- ノードの配列は `MapDocument`（V3 の JSON）にして、`useMapStorageAutoSave` が自動保存します。`localStorage` を直接読み書きするのは `services/persistence/mapLibraryStorage.ts` だけです（例外は 4.5 節）。
 - 読み込みは、`domain/persistence/mapDocumentDecoder.ts` の `parseMapDocumentJson` が `unknown` から検証して `Node[]` を作ります（V1・V2 は V3 へ移行）。インデックスは `domain/mapLibrary/mapIndex.ts` の `decodeMapIndex`、クリップボードは `domain/clipboard/subtreeClipboardCodec.ts` の `decodeSubtreeClipboard` が検証します。
 - 保存は、マップの切り替えに使うセッション番号で照合します。切り替えの後に前のマップの保存待ちが届いても書き込みません。
 
@@ -180,7 +180,7 @@ WebGL・Canvas が無いため、テストでは `pixi.js` を `jest.mock` で�
 
 ### 4.5 `localStorage` は1か所からだけ触る
 
-`window.localStorage` を直接読み書きするのは `services/persistence/mapLibraryStorage.ts` だけです。読み書きは例外（容量超過・プライベートモードの `SecurityError`）を投げ得るため、このモジュールは例外を外へ出さず、結果型で返します。新しい保存先が必要なときも、このモジュールに関数を足してください。
+`window.localStorage` を直接読み書きするのは `services/persistence/mapLibraryStorage.ts` だけです。読み書きは例外（容量超過・プライベートモードの `SecurityError`）を投げ得るため、このモジュールは例外を外へ出さず、結果型で返します。新しい保存先が必要なときも、このモジュールに関数を足してください。ただし枝の移動のジャーナルの書き込みと復旧は、途中で継続する手順があるので `services/persistence/branchMoveTransaction.ts` も、移動の前の補正待ちのインデックスの読み取りは `services/persistence/mapBranchTransfer.ts` の `readBranchMoveIndex` も、注入された storage を直接呼びます。この2か所は呼び出し元が注入する storage を使うので、ブラウザの `localStorage` を直接参照しません。
 
 ### 4.6 表示だけの状態を保存形式に入れない
 
