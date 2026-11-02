@@ -16,6 +16,7 @@ import { MapHistoryControls } from "@/components/layout/MapHistoryControls";
 import { NodeCollapseControl } from "@/components/layout/NodeCollapseControl";
 import { NodeDuplicateControl } from "@/components/layout/NodeDuplicateControl";
 import { NodeIndentControl } from "@/components/layout/NodeIndentControl";
+import { NodeOnlyDeleteControl } from "@/components/layout/NodeOnlyDeleteControl";
 import { NodeParentInsertControl } from "@/components/layout/NodeParentInsertControl";
 import { NodeSiblingOrderControl } from "@/components/layout/NodeSiblingOrderControl";
 import { MapPersistenceControls } from "@/components/layout/MapPersistenceControls";
@@ -45,6 +46,7 @@ import { useNodeSearchNavigation } from "@/hooks/useNodeSearchNavigation";
 import { useOutlineImport } from "@/hooks/useOutlineImport";
 import { useSiblingReorderAction } from "@/hooks/useSiblingReorderAction";
 import { useNodeIndentAction } from "@/hooks/useNodeIndentAction";
+import { useNodeOnlyDeletionAction } from "@/hooks/useNodeOnlyDeletionAction";
 import { useNodeParentInsertionAction } from "@/hooks/useNodeParentInsertionAction";
 import type { MapStorageSession } from "@/types/mapStorageSession";
 import type { OperationNotice } from "@/types/operationNotice";
@@ -105,6 +107,7 @@ export function MapEditor({
     insertParentNode,
     moveBranch,
     deleteNode,
+    deleteNodeOnly,
     setLayoutMode,
     replaceMap,
     attachIllustration,
@@ -177,7 +180,7 @@ export function MapEditor({
     notice: clipboardNotice,
     publishNotice: publishClipboardNotice,
   } = useRevisionScopedNotice(documentRevision);
-  // 枝の構造の変更の通知（兄弟の順序変更・階層の上げ下げ・親の挿入）。8系統目
+  // 枝の構造の変更の通知（兄弟の順序変更・階層の上げ下げ・親の挿入・ノードだけ削除）。8系統目
   const {
     notice: treeEditNotice,
     publishNotice: publishTreeEditNotice,
@@ -212,6 +215,13 @@ export function MapEditor({
     insertParentNode,
     publishNotice: publishTreeEditNotice,
     clearNotice: clearTreeEditNotice,
+  });
+  const nodeOnlyDeletion = useNodeOnlyDeletionAction({
+    selectedNodeId,
+    nodes,
+    visibleNodeIds: displayState.visibleNodeIds,
+    deleteNodeOnly,
+    publishNotice: publishTreeEditNotice,
   });
   const branchMove = useBranchMoveDialog({
     mapId,
@@ -341,6 +351,10 @@ export function MapEditor({
               <NodeParentInsertControl
                 canInsert={nodeParentInsertion.canInsert}
                 onInsert={nodeParentInsertion.insertSelected}
+              />
+              <NodeOnlyDeleteControl
+                canDelete={nodeOnlyDeletion.canDelete}
+                onDelete={nodeOnlyDeletion.deleteSelected}
               />
               <span className="text-sm text-zinc-600 dark:text-zinc-400">
                 {CLIPBOARD_OPERATION_HINT}

@@ -1,6 +1,6 @@
-# Draw My Map イラスト生成 API 仕様書
+# Draw My Map API 仕様書
 
-本書は、**Draw My Map** におけるノードアイコン・イラスト生成エンドポイント（`POST /api/illustrations`）の詳細な API 仕様、内部アーキテクチャ、処理パイプライン、クライアント側画像処理、および本番公開に向けた運用・セキュリティ考慮事項をまとめた技術仕様書です。
+本書は、**Draw My Map** におけるノードアイコン・イラスト生成エンドポイント（`POST /api/illustrations`）の詳細な API 仕様、内部アーキテクチャ、処理パイプライン、クライアント側画像処理、および本番公開に向けた運用・セキュリティ考慮事項をまとめた技術仕様書です。9章ではノードだけ削除のクライアントAPIを扱います。
 
 ---
 
@@ -14,6 +14,7 @@
 6. [エラーハンドリングと UI 表現](#6-エラーハンドリングと-ui-表現)
 7. [本番公開に向けたセキュリティ・運用の考慮事項](#7-本番公開に向けたセキュリティ運用の考慮事項)
 8. [開発・テスト・環境設定](#8-開発テスト環境設定)
+9. [ノードだけ削除のクライアントAPI](#9-ノードだけ削除のクライアントapi)
 
 ---
 
@@ -469,3 +470,75 @@ npm test -- src/services/illustration
 | `server/illustration/__tests__/cloudflareImageGenerator.test.ts`・`cloudflareTranslator.test.ts` | 環境変数の検証、Workers AI の応答の分類（NSFW・無料枠・不正な応答）、時間切れ、トークンをエラーメッセージに含めないこと。`fetch` は引数で注入する。 |
 | `server/illustration/__tests__/cloudflareRunModel.test.ts` | 共通の呼び出しの単体。`result` をそのまま返すこと、`fetchImpl` を省いたときのグローバルの `fetch`、形の違う本文（`null`・配列・文字列、`success` が `true` 以外、`errors` が配列でない・先頭が `null`、`code` が文字列、`message` が文字列でない）をすべて `upstream-error` にすること。 |
 | `services/illustration/__tests__/*.test.ts` | クライアント側の API 呼び出しとエラーの分類、サムネイルの生成（注入した依存と、既定の `Image`・`canvas` 要素の両方）。 |
+
+
+## 9. ノードだけ削除のクライアントAPI
+
+### 9.1 純粋な候補生成（`domain/nodes/nodeOnlyDeletion.ts`）
+
+HTTP通信は行いません。`Node` は `types/node.ts`、`NodeLayoutMode` は `types/nodeLayout.ts` の既存型です。
+
+```typescript
+export type NodeOnlyDeletionFailureReason =
+  | "node-missing" | "node-hidden" | "invalid-structure" | "placement-failed";
+export type DeleteNodeOnlyResult =
+  | { ok: true; deletedId: number }
+  | { ok: false; reason: NodeOnlyDeletionFailureReason };
+export type NodeOnlyDeletionResult =
+  | { ok: true; nodes: Node[]; deletedId: number }
+  | { ok: false; reason: NodeOnlyDeletionFailureReason };
+
+export function canDeleteNodeOnly(
+  nodes: readonly Node[], nodeId: number | null,
+  visibleNodeIds: ReadonlySet<number>,
+): boolean;
+export function deleteNodeOnly(
+  nodes: readonly Node[], nodeId: number,
+  visibleNodeIds: ReadonlySet<number>, mode: NodeLayoutMode,
+): NodeOnlyDeletionResult;
+```
+
+`canDeleteNodeOnly` は選択・実在・可視だけを調べ、森や配置の成功は保証しません。変換は対象実在、可視、全件のgeometry、`indexNodeForest` の順で検証し、入力を変更せず候補を返します。全配列の相対順で直下の子を対象位置へ昇格し、他の親子関係・属性を保持します。manualは座標維持、autoは先頭ルート変更時だけ旧先頭の基準座標を渡します。ここでは最終レイアウトを実行しません。
+
+### 9.2 `useNodes` の構造確定
+
+```typescript
+// UseNodesReturn のメソッド
+ deleteNodeOnly: (
+   nodeId: number, visibleNodeIds: ReadonlySet<number>,
+ ) => DeleteNodeOnlyResult;
+```
+
+安定したcallbackで、`applyTreeChangeWithOutcome` 内の最新全ノード・modeから候補を作り、`applyTreeChange` へ1回渡します。最終 `layoutNodeForest` が失敗した場合も `placement-failed` となり、ノード・選択・履歴・保存対象は不変です。成功後だけ削除対象の選択を解除し、他の選択を維持します。1回のUndo / Redoに対応し、通常成功でID採番・版更新をせず、返却結果に `nodes` は含めません。既存 `deleteNode(id)` の枝削除は別APIです。
+
+### 9.3 action・通知・Control
+
+```typescript
+// hooks/useNodeOnlyDeletionAction.ts
+export type UseNodeOnlyDeletionActionOptions = {
+  selectedNodeId: number | null;
+  nodes: readonly Node[];
+  visibleNodeIds: ReadonlySet<number>;
+  deleteNodeOnly: (nodeId: number, visibleNodeIds: ReadonlySet<number>) => DeleteNodeOnlyResult;
+  publishNotice: (notice: OperationNotice) => void;
+};
+export type UseNodeOnlyDeletionActionReturn = {
+  canDelete: boolean; deleteSelected: () => void;
+};
+export function useNodeOnlyDeletionAction(
+  options: UseNodeOnlyDeletionActionOptions,
+): UseNodeOnlyDeletionActionReturn;
+
+// domain/nodes/nodeOnlyDeletionMessages.ts
+export function formatNodeOnlyDeletionFailureNotice(
+  reason: NodeOnlyDeletionFailureReason,
+): OperationNotice;
+
+// components/layout/NodeOnlyDeleteControl.tsx
+export type NodeOnlyDeleteControlProps = {
+  canDelete: boolean; onDelete: () => void;
+};
+export function NodeOnlyDeleteControl(props: NodeOnlyDeleteControlProps): React.JSX.Element;
+```
+
+全propsは必須です。actionは未選択なら実行せず、それ以外はIDと可視集合をAPIへ渡して成功/失敗を既存通知枠へ1回発行します。成功は `status`、4種類の失敗は `error` で、正確な文言は [features.md 18.3節](./features.md#183-通知と失敗) を参照してください。Controlは `disabled={!canDelete}`、`detail > 1` 抑止、Enter / Spaceのrepeat抑止だけを持ち、pointerdownやフォーカス移動は扱いません。`MapEditor` が全ノード・最終可視集合・構造通知枠と配線し、MapStageのprops/ショートカットは増やしません。V3保存codecは変更ありません。

@@ -40,6 +40,7 @@ import {
   type ChangeNodeIndentResult,
   type NodeIndentDirection,
 } from "@/domain/nodes/nodeIndent";
+import { deleteNodeOnly as computeNodeOnlyDeletion, type DeleteNodeOnlyResult } from "@/domain/nodes/nodeOnlyDeletion";
 import { applyTreeChangeWithOutcome } from "@/hooks/treeChangeOutcome";
 import { insertParentNode as computeParentInsertion, type InsertParentNodeResult } from "@/domain/nodes/nodeParentInsertion";
 import { replaceNodeImportance } from "@/domain/nodes/nodeImportanceUpdate";
@@ -106,6 +107,7 @@ type UseNodesReturn = {
   ) => InsertParentNodeResult;
   moveBranch: (rootId: number, parentId: number | null) => MoveBranchResult;
   deleteNode: (id: number) => void;
+  deleteNodeOnly: (nodeId: number, visibleNodeIds: ReadonlySet<number>) => DeleteNodeOnlyResult;
   setLayoutMode: (mode: NodeLayoutMode) => void;
   replaceMap: (state: NodeMapState) => void;
   // 成功したUndo／RedoとreplaceMapで増える。編集・ジェスチャー・生成結果の失効に使う
@@ -362,6 +364,20 @@ export function useNodes(): UseNodesReturn {
     return settled;
   }, [applyTreeChange]);
 
+  // 最新の全ノードから候補を一度だけ確定し、成功した削除対象だけ選択解除する。
+  const deleteNodeOnly = useCallback((
+    nodeId: number,
+    visibleNodeIds: ReadonlySet<number>,
+  ): DeleteNodeOnlyResult => {
+    const settled = applyTreeChangeWithOutcome<DeleteNodeOnlyResult>(applyTreeChange, (currentNodes, mode) => {
+      const deleted = computeNodeOnlyDeletion(currentNodes, nodeId, visibleNodeIds, mode);
+      if (!deleted.ok) return { nodes: null, outcome: deleted };
+      return { nodes: deleted.nodes, outcome: { ok: true, deletedId: deleted.deletedId } };
+    });
+    if (settled.ok) setSelectedNodeId((prev) => prev === settled.deletedId ? null : prev);
+    return settled;
+  }, [applyTreeChange]);
+
   const deleteNode = useCallback((id: number) => {
     let subtreeIds = new Set<number>();
     const applied = applyTreeChange((currentNodes) => {
@@ -399,6 +415,7 @@ export function useNodes(): UseNodesReturn {
     insertParentNode,
     moveBranch,
     deleteNode,
+    deleteNodeOnly,
     setLayoutMode,
     replaceMap,
     documentRevision,
