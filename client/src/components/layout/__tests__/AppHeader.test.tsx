@@ -5,6 +5,8 @@ describe("AppHeader", () => {
   it("タイトル『Draw My Map』が表示される", () => {
     render(
       <AppHeader
+        viewControls={null}
+        showCanvasHints={true}
         layoutMode="manual"
         onLayoutModeChange={jest.fn()}
         searchControls={null}
@@ -18,6 +20,8 @@ describe("AppHeader", () => {
   it("狭い画面で内容を複数行に折り返せる", () => {
     render(
       <AppHeader
+        viewControls={null}
+        showCanvasHints={true}
         layoutMode="manual"
         onLayoutModeChange={jest.fn()}
         searchControls={null}
@@ -32,6 +36,8 @@ describe("AppHeader", () => {
     const onLayoutModeChange = jest.fn();
     render(
       <AppHeader
+        viewControls={null}
+        showCanvasHints={true}
         layoutMode="manual"
         onLayoutModeChange={onLayoutModeChange}
         searchControls={null}
@@ -51,6 +57,8 @@ describe("AppHeader", () => {
   ] as const)("%sモードの操作案内を組み込む", (layoutMode, expectedHint) => {
     render(
       <AppHeader
+        viewControls={null}
+        showCanvasHints={true}
         layoutMode={layoutMode}
         onLayoutModeChange={jest.fn()}
         searchControls={null}
@@ -65,6 +73,8 @@ describe("AppHeader", () => {
   it("操作コントロールと通知をヘッダー内へ配置する", () => {
     render(
       <AppHeader
+        viewControls={null}
+        showCanvasHints={true}
         layoutMode="manual"
         onLayoutModeChange={jest.fn()}
         searchControls={null}
@@ -83,6 +93,8 @@ describe("AppHeader", () => {
   it("重要度・表示スロットを操作案内の後、操作コントロールの前へDOM順で配置する", () => {
     render(
       <AppHeader
+        viewControls={null}
+        showCanvasHints={true}
         layoutMode="manual"
         onLayoutModeChange={jest.fn()}
         searchControls={<div data-testid="search-controls">検索</div>}
@@ -115,6 +127,8 @@ describe("AppHeader", () => {
   it("マップ操作をh1の直後に描画する", () => {
     render(
       <AppHeader
+        viewControls={null}
+        showCanvasHints={true}
         layoutMode="manual"
         onLayoutModeChange={jest.fn()}
         searchControls={<div data-testid="search-controls">検索</div>}
@@ -125,4 +139,11 @@ describe("AppHeader", () => {
     const title = screen.getByRole("heading", { name: "Draw My Map" });
     expect(title.nextElementSibling).toBe(screen.getByTestId("map-controls"));
   });
+});
+
+it("outlineのview controlsを表示しcanvasヒントを隠す", () => {
+  render(<AppHeader layoutMode="manual" onLayoutModeChange={jest.fn()} mapControls={null} searchControls={null}
+    viewControls={<button>アウトライン表示</button>} showCanvasHints={false} />);
+  expect(screen.getByRole("button", { name: "アウトライン表示" })).toBeInTheDocument();
+  expect(screen.queryByText(/空白ダブルクリックで追加/)).not.toBeInTheDocument();
 });

@@ -542,3 +542,54 @@ export function NodeOnlyDeleteControl(props: NodeOnlyDeleteControlProps): React.
 ```
 
 全propsは必須です。actionは未選択なら実行せず、それ以外はIDと可視集合をAPIへ渡して成功/失敗を既存通知枠へ1回発行します。成功は `status`、4種類の失敗は `error` で、正確な文言は [features.md 18.3節](./features.md#183-通知と失敗) を参照してください。Controlは `disabled={!canDelete}`、`detail > 1` 抑止、Enter / Spaceのrepeat抑止だけを持ち、pointerdownやフォーカス移動は扱いません。`MapEditor` が全ノード・最終可視集合・構造通知枠と配線し、MapStageのprops/ショートカットは増やしません。V3保存codecは変更ありません。
+
+## 10. アウトライン編集と共有フォーカスのクライアントAPI
+
+新しいHTTP API・保存形式は追加しません。正本APIは既存`useNodes`で、操作型もその戻り値から取得します。
+
+### 10.1 表示モデル
+
+`buildOutlineRows(nodes: readonly Node[]): OutlineRows`（`domain/outline/outlineRows.ts`）は次を返します。
+
+```ts
+type OutlineRow = { nodeId: number; depth: number };
+type OutlineRows = {
+  rows: readonly OutlineRow[];
+  nodesById: ReadonlyMap<number, Node>;
+  allNodeIds: ReadonlySet<number>;
+  invalidStructure: boolean;
+  duplicateIds: boolean;
+};
+```
+
+根/兄弟の正本配列順を保つ先行順・明示スタック・O(n)時間/領域で全件を導出します。正本変更・再帰・表示件数制限はありません。到達不能行は末尾深さ1、構造異常はフラグで通知し、重複IDへの誤編集を禁止します。
+
+### 10.2 draftとactions
+
+`useOutlineLabelDraft(options)`の必須引数は`nodes, documentRevision, enabled, duplicateIds, updateNodeLabel, publishNotice`。draftは`{ nodeId, documentRevision, originalLabel, text } | null`で、返却は`draft, begin(nodeId, initialLabel?), setText(text), commit(): number | null, cancel(): number | null, invalidate()`です。確定時にrevision・存在・元ラベル・enabledを再確認し、同期refガードで一重確定します。変更なしでは更新せず、無効draftを通知して破棄します。
+
+`useOutlineEditorActions(options)`の必須引数は`nodes, selectedNodeId, documentRevision, enabled, model, api, expandNodes, publishNotice`。`api`は`useNodes`の`selectNode/updateNodeLabel/insertForest/addChildNode/addSiblingNode/reorderSibling/changeNodeIndent/deleteNodeOnly`のPickです。戻り値`OutlineEditorActions`は`draft, focusRequest`、可否`canAddRoot/canAddRelated/canEdit/canMoveUp/canMoveDown/canIndent/canOutdent/canDelete`、操作`select/beginEdit/setDraftText/finishEdit(restoreFocus)/cancelEdit/invalidateDraft/addRoot/addChild/addSibling/move/changeIndent/deleteSelected`を持ちます。
+
+構造APIの可視集合には必ず`model.allNodeIds`を渡します。mapの呼出し元は従来の`displayState.visibleNodeIds`です。ルート追加は`insertForest([{ label: "", parentIndex: null }], { kind: "root" })`、関連追加は既存の末尾追加、削除は`deleteNodeOnly`を1回だけ実行し、戻り値を確認して成功時だけ編集/focusへ進みます。通知は既存formatterと構造通知枠です。
+
+`OutlineFocusRequest`は`{ target: { kind: "row"; nodeId: number } | { kind: "root-add" }, documentRevision: number, sequence: number }`です。`OutlineEditor`の必須propsは`nodes, model, selectedNodeId, documentRevision, enabled, actions`。ローカルキー・textarea・roving tabIndex・一覧内scroll/focusを担い、windowキー・保存・Pixiに依存しません。
+
+### 10.3 canvas復帰と検索の共通issuer
+
+`useOutlineCanvasReturn(options)`の必須引数は`nodes, selectedNodeId, documentRevision, collapseIndex, collapsedNodeIds, resolutionMode, expandNodes, setResolutionMode, publishNotice, issueFocusRequest`、戻り値は`{ returnToCanvas }`です。有効な選択の祖先を展開し、`INITIAL_VIEWPORT.scale`基準の解像度でrevealして日本語通知を出し、共有issuerへ要求します。
+
+`useRevisionScopedNodeRequest(documentRevision)`は`{ request, issueRequest(nodeId), clearRequest() }`を返します。要求は`{ nodeId, sequence, documentRevision }`、発行毎にsequenceを増やし、revisionが異なる要求は隠します。`clearRequest`は要求だけを消して採番は維持します。
+
+変更後の`useNodeSearchNavigation(options)`は次の全引数が必須です。
+
+```ts
+{
+  nodes, resolutionVisibleNodeIds, collapseIndex, collapsedNodeIds,
+  expandNodes, documentRevision, setResolutionMode, selectNode,
+  issueFocusRequest: (nodeId: number) => void
+}
+// 戻り値: { navigateToNode, notice }
+// navigateToNode(nodeId): "navigated" | "revealed" | "missing"
+```
+
+検索hookは独自のfocus要求を保持しません。`MapEditor`の単一`canvasFocus = useRevisionScopedNodeRequest(documentRevision)`を検索とoutline復帰の両方へ渡し、MapStageにも同じrequestを渡します。mode変更前に`clearRequest`して過去検索の再生を防ぎ、両方向の連続操作でもsequenceが衝突しません。

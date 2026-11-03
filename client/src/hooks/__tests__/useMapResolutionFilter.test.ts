@@ -212,3 +212,14 @@ describe("useMapResolutionFilter", () => {
     expect([...result.current.visibleNodeIds]).toEqual([1, 2, 3]);
   });
 });
+
+it.each(["auto", "high"] as const)("viewport復帰は%sモードを保持して初期倍率へauto履歴を戻す", mode => {
+  const { result, rerender } = renderHook(({ scale }) => useMapResolutionFilter({ nodes, scale, resetRevision: 0 }), { initialProps: { scale: 0.5 } });
+  act(() => result.current.setMode(mode));
+  expect(result.current.level).toBe("high");
+  act(() => result.current.resetViewportScale(1));
+  expect(result.current).toMatchObject({ mode, level: mode === "auto" ? "all" : "high" });
+  rerender({ scale: 1 });
+  rerender({ scale: 0.97 });
+  expect(result.current).toMatchObject({ mode, level: mode === "auto" ? "all" : "high" });
+});

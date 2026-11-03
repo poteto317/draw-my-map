@@ -191,7 +191,7 @@ client/src/
     - `useBranchMoveDialog.ts`: 枝の移動のダイアログの状態（開閉、開いた時点の移動元と `documentRevision`、選択、親の候補、確定の可否、エラーと `sequence`、フォーカスの要求）と確定。同一マップの成功では移動先の祖先の展開と通知、移動元が隠れているときの全表示を行う。
     - `branchMoveDialogState.ts`: `useBranchMoveDialog` の状態の型、遷移、確定の可否の判定、親の選択値の解釈を行う純粋関数。React に依存しない。
     - `useNodeLabelSearch.ts`: `nodes` の参照が変わったときに検索索引を作り直し、入力ごとに同期検索して可視性を付加した候補を返す。
-    - `useNodeSearchNavigation.ts`: 選択時にノードIDの実在を再確認し、隠れている場合は閉じた祖先の展開（`expandNodes`）と必要な解像度表示への切り替えを行って通知し（両方のときは通知文を半角空白で連結）、選択と中央移動要求を発行する（要求の保持は `useRevisionScopedNodeRequest`）。検索操作では `documentRevision` を増やさない。
+    - `useNodeSearchNavigation.ts`: 選択時にノードIDの実在を再確認し、隠れている場合は閉じた祖先の展開（`expandNodes`）と必要な解像度表示への切り替えを行って通知し（両方のときは通知文を半角空白で連結）、選択と中央移動要求を発行する（要求はMapEditorの共通issuerへ委譲し、保持は `useRevisionScopedNodeRequest`）。検索操作では `documentRevision` を増やさない。
     - `useBranchCollapse.ts`: `documentRevision` とノードIDで表示専用の折りたたみ集合を管理する。文書世代が変わると全展開へ戻し、削除や葉化で無効になった指定は `normalizeCollapsedNodeIds` で描画時点から除外する。ヘッダーのボタンの可否は `canToggle`（`canCollapse` による子の有無の判定）で返し、`toggle` と検索用の `expandNodes` で集合を更新する。
     - `useMapDisplayState.ts`: 折りたたみ可視集合と解像度可視集合を統合し、自動配置時の表示用投影座標を返す。正本 `nodes` は変更しない。
     - `useMapHistory.ts`: 編集履歴（Undo / Redo）の ref 管理と React state への反映。`useNodeLayoutState` から呼ばれる。
@@ -889,3 +889,19 @@ cd client && npm run verify
 3. `npm run typecheck`: TypeScript コンパイラ（`tsc --noEmit`）による厳格な型整合性チェック。
 4. `npm test -- --runInBand`: Jest による全ユニット・統合テストの実行（2026-10-30 時点で 275 テストファイル、約 3,950 テストケース）。
 5. `npm run build`: Next.js 本番ビルドの成否確認（SSR・バンドル最適化エラーの早期検出）。
+
+## アウトライン編集（Phase 15・候補004）
+
+`MapEditor`がUI状態`map | outline`（初期map）を持ち、中央の`MapStage`と`OutlineEditor`を排他的にマウントします。outline中はcanvasのwindowショートカット/clipboard/ジェスチャーとhidden選択解除処理が残りません。右の`IllustrationPanel`、選択ID、共通ヘッダーと既存通知は共用します。outlineヘッダーではcanvas用検索・解像度・構造操作を隠します。
+
+単一の`useNodes`がnodes/layoutMode・履歴・選択・revisionを所有し、`useMapPersistence`も同じ1つをモードに関係なく常時保持します。保存/JSON/画像には全正本を渡し続けます。モード・draft・focusは保存と履歴に含めません。全置換はrevisionでdraftを失効、別マップと保護モードは既存editor寿命で終了、dialogは既存inert/editorShortcutsEnabledへ委譲します。保存失敗の編集保持・既存通知・JSON救出・flush・競合保護を迂回しません。
+
+- `domain/outline/outlineRows.ts`: 全正本の先行順・深さ・ID索引・全ID集合と構造異常をO(n)の明示スタックで導出。表示のフィルターを入力にせず、正本を書き換えません。
+- `useOutlineLabelDraft`: revision/ID/元ラベルとenabledの検証、入力と一重確定の同期ガード、失効を所有します。
+- `useOutlineEditorActions`: 既存useNodes APIを1操作1回で呼び、戻り値を見て追加編集/削除後focusと通知へ進みます。構造操作へ全ID集合を渡し、canvasには従来の可視集合を維持します。
+- `OutlineEditor/OutlineToolbar`: 全行の平坦DOM、深さ12までの字下げと実深さ、textarea・局所キー・可否・roving Tab入口・一覧scroll/focusを担います。仮想化と新たな件数制限はありません。
+- `useOutlineCanvasReturn`: 既存resolveNodeSearchRevealで選択の祖先/解像度を調整し、初期viewport基準でcanvasへ戻します。以前のパン/ズーム位置は引き継ぎません。
+
+canvasフォーカスは`MapEditor`内の1つの`useRevisionScopedNodeRequest(documentRevision)`へ統一します。検索の`useNodeSearchNavigation`と`useOutlineCanvasReturn`は必須の`issueFocusRequest`を受け、MapStageは共通requestだけを消費します。mode変更前の`clearRequest`は過去の要求を消しつつsequenceを維持し、検索→復帰・復帰→初回検索の衝突と古い要求の再生を防ぎます。outline局所focusは別のrevision付き要求であり、canvas要求を上書きしません。
+
+1万行の森/鎖は導出自動テストの対象ですが、全DOM行の実操作感・狭幅・実IMEはブラウザ確認V節で未確認として区別しています。候補005の書き出しや新しい保存形式は追加していません。

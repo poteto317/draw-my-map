@@ -100,3 +100,8 @@ describe("mapResolutionFilterState", () => {
     expect(reduceResolutionFilterState(state, action)).toBe(state);
   });
 });
+
+it("resetViewportは手動modeを保持しauto履歴と保留倍率だけを戻す", () => {
+  expect(reduceResolutionFilterState({ mode: "high", previousAutoLevel: "high", pendingResetScale: null }, { type: "resetViewport", level: "all", pendingScale: 1 }))
+    .toEqual({ mode: "high", previousAutoLevel: "all", pendingResetScale: 1 });
+});

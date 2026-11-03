@@ -64,3 +64,19 @@ describe("useRevisionScopedNodeRequest", () => {
     expect(result.current.issueRequest).toBe(issueRequest);
   });
 });
+
+it("clearは要求だけ破棄し同一イベントとrevision変更後も単調な連番を保つ", () => {
+  const { result, rerender } = renderRequest(0);
+  act(() => result.current.issueRequest(1));
+  act(() => result.current.clearRequest());
+  expect(result.current.request).toBeNull();
+  act(() => result.current.clearRequest());
+  expect(result.current.request).toBeNull();
+  act(() => result.current.issueRequest(2));
+  expect(result.current.request?.sequence).toBe(2);
+  act(() => { result.current.clearRequest(); result.current.issueRequest(3); });
+  expect(result.current.request).toEqual({ nodeId: 3, sequence: 3, documentRevision: 0 });
+  rerender({ revision: 1 });
+  act(() => result.current.issueRequest(4));
+  expect(result.current.request).toEqual({ nodeId: 4, sequence: 4, documentRevision: 1 });
+});

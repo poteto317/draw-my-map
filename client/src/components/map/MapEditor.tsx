@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { EditorViewModeControl, type EditorViewMode } from "@/components/layout/EditorViewModeControl";
+import { OutlineEditor } from "@/components/outline/OutlineEditor";
+import { buildOutlineRows } from "@/domain/outline/outlineRows";
+import { useOutlineEditorActions } from "@/hooks/useOutlineEditorActions";
+import { useOutlineCanvasReturn } from "@/hooks/useOutlineCanvasReturn";
+import { useRevisionScopedNodeRequest } from "@/hooks/useRevisionScopedNodeRequest";
 import { BranchMoveControl } from "@/components/layout/BranchMoveControl";
 import { BranchMoveDialog } from "@/components/layout/BranchMoveDialog";
 import type { BranchMoveMapTarget } from "@/hooks/branchMoveDialogState";
@@ -119,6 +125,8 @@ export function MapEditor({
     undo,
     redo,
   } = useNodes();
+  const [viewMode, setViewMode] = useState<EditorViewMode>("map");
+  const canvasFocus = useRevisionScopedNodeRequest(documentRevision);
   const [viewportScale, setViewportScale] = useState(1);
   const { replaceMapAndReset, resetRevision } = useResettingMapReplacement(replaceMap);
   const resolutionFilter = useMapResolutionFilter({
@@ -150,6 +158,7 @@ export function MapEditor({
     visibleNodeIds: displayState.visibleNodeIds,
   });
   const nodeSearchNavigation = useNodeSearchNavigation({
+    issueFocusRequest: canvasFocus.issueRequest,
     nodes,
     resolutionVisibleNodeIds: resolutionFilter.visibleNodeIds,
     collapseIndex: branchCollapse.index,
@@ -259,6 +268,33 @@ export function MapEditor({
     && outlineImport.screen === "closed"
     && branchMove.screen === "closed";
   useMapHistoryShortcuts({ undo, redo, enabled: editorShortcutsEnabled });
+  const outlineModel = useMemo(() => buildOutlineRows(nodes), [nodes]);
+  const outlineActions = useOutlineEditorActions({
+    nodes, selectedNodeId, documentRevision,
+    enabled: editorShortcutsEnabled && viewMode === "outline",
+    model: outlineModel,
+    api: { selectNode, updateNodeLabel, insertForest, addChildNode, addSiblingNode, reorderSibling, changeNodeIndent, deleteNodeOnly },
+    expandNodes: branchCollapse.expandNodes,
+    publishNotice: publishTreeEditNotice,
+  });
+  const { returnToCanvas } = useOutlineCanvasReturn({
+    nodes, selectedNodeId, documentRevision,
+    collapseIndex: branchCollapse.index, collapsedNodeIds: branchCollapse.collapsedNodeIds,
+    resolutionMode: resolutionFilter.mode, expandNodes: branchCollapse.expandNodes,
+    setResolutionMode: resolutionFilter.setMode, publishNotice: publishTreeEditNotice,
+    issueFocusRequest: canvasFocus.issueRequest,
+  });
+  function changeViewMode(nextMode: EditorViewMode) {
+    if (!editorShortcutsEnabled || nextMode === viewMode) return;
+    canvasFocus.clearRequest();
+    if (nextMode === "map") {
+      setViewportScale(INITIAL_VIEWPORT.scale);
+      resolutionFilter.resetViewportScale(INITIAL_VIEWPORT.scale);
+      returnToCanvas();
+    }
+    setViewMode(nextMode);
+  }
+
   // 操作通知バーの並び（上から表示する順）。位置ごとに系統が決まっている
   const operationNotices = [
     displayState.layoutFailed ? LAYOUT_FAILED_NOTICE : null,
@@ -285,7 +321,9 @@ export function MapEditor({
           layoutMode={layoutMode}
           onLayoutModeChange={setLayoutMode}
           mapControls={mapControls}
-          searchControls={(
+          viewControls={<EditorViewModeControl mode={viewMode} onChange={changeViewMode} />}
+          showCanvasHints={viewMode === "map"}
+          searchControls={viewMode === "map" && (
             <NodeSearchBox
               query={nodeSearch.query}
               onQueryChange={nodeSearch.setQuery}
@@ -304,7 +342,7 @@ export function MapEditor({
               }}
             />
           )}
-          resolutionControls={(
+          resolutionControls={viewMode === "map" && (
             <ResolutionFilterSelector
               mode={resolutionFilter.mode}
               level={resolutionFilter.level}
@@ -319,46 +357,50 @@ export function MapEditor({
                 onUndo={undo}
                 onRedo={redo}
               />
-              <NodeCollapseControl
-                selectedNodeId={selectedNodeId}
-                canToggle={selectedNodeId !== null && branchCollapse.canToggle(selectedNodeId)}
-                collapsed={selectedNodeId !== null && branchCollapse.collapsedNodeIds.has(selectedNodeId)}
-                hiddenCount={selectedNodeId === null ? 0 : branchCollapse.hiddenCountById.get(selectedNodeId) ?? 0}
-                onToggle={branchCollapse.toggle}
-              />
-              <NodeDuplicateControl
-                disabled={selectedNode === null}
-                onDuplicate={duplication.duplicateSelected}
-              />
-              <BranchMoveControl
-                expanded={branchMove.screen !== "closed"}
-                disabled={selectedNode === null}
-                onOpen={branchMove.open}
-                buttonRef={branchMoveButtonRef}
-              />
-              <NodeSiblingOrderControl
-                canMoveUp={siblingReorder.canMoveUp}
-                canMoveDown={siblingReorder.canMoveDown}
-                onMoveUp={moveSelectedSiblingUp}
-                onMoveDown={moveSelectedSiblingDown}
-              />
-              <NodeIndentControl
-                canOutdent={nodeIndent.canOutdent}
-                canIndent={nodeIndent.canIndent}
-                onOutdent={outdentSelected}
-                onIndent={indentSelected}
-              />
-              <NodeParentInsertControl
-                canInsert={nodeParentInsertion.canInsert}
-                onInsert={nodeParentInsertion.insertSelected}
-              />
-              <NodeOnlyDeleteControl
-                canDelete={nodeOnlyDeletion.canDelete}
-                onDelete={nodeOnlyDeletion.deleteSelected}
-              />
-              <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                {CLIPBOARD_OPERATION_HINT}
-              </span>
+              {viewMode === "map" && (
+                <>
+                  <NodeCollapseControl
+                    selectedNodeId={selectedNodeId}
+                    canToggle={selectedNodeId !== null && branchCollapse.canToggle(selectedNodeId)}
+                    collapsed={selectedNodeId !== null && branchCollapse.collapsedNodeIds.has(selectedNodeId)}
+                    hiddenCount={selectedNodeId === null ? 0 : branchCollapse.hiddenCountById.get(selectedNodeId) ?? 0}
+                    onToggle={branchCollapse.toggle}
+                  />
+                  <NodeDuplicateControl
+                    disabled={selectedNode === null}
+                    onDuplicate={duplication.duplicateSelected}
+                  />
+                  <BranchMoveControl
+                    expanded={branchMove.screen !== "closed"}
+                    disabled={selectedNode === null}
+                    onOpen={branchMove.open}
+                    buttonRef={branchMoveButtonRef}
+                  />
+                  <NodeSiblingOrderControl
+                    canMoveUp={siblingReorder.canMoveUp}
+                    canMoveDown={siblingReorder.canMoveDown}
+                    onMoveUp={moveSelectedSiblingUp}
+                    onMoveDown={moveSelectedSiblingDown}
+                  />
+                  <NodeIndentControl
+                    canOutdent={nodeIndent.canOutdent}
+                    canIndent={nodeIndent.canIndent}
+                    onOutdent={outdentSelected}
+                    onIndent={indentSelected}
+                  />
+                  <NodeParentInsertControl
+                    canInsert={nodeParentInsertion.canInsert}
+                    onInsert={nodeParentInsertion.insertSelected}
+                  />
+                  <NodeOnlyDeleteControl
+                    canDelete={nodeOnlyDeletion.canDelete}
+                    onDelete={nodeOnlyDeletion.deleteSelected}
+                  />
+                  <span className="text-sm text-zinc-600 dark:text-zinc-400">
+                    {CLIPBOARD_OPERATION_HINT}
+                  </span>
+                </>
+              )}
               <OutlineImportControl
                 expanded={outlineImport.screen !== "closed"}
                 onOpen={outlineImport.open}
@@ -381,10 +423,13 @@ export function MapEditor({
             : null}
         />
         <AppWorkspace
-          canvas={(
+          canvas={viewMode === "outline" ? (
+            <OutlineEditor nodes={nodes} model={outlineModel} selectedNodeId={selectedNodeId}
+              documentRevision={documentRevision} enabled={editorShortcutsEnabled} actions={outlineActions} />
+          ) : (
             <MapStage
               nodes={displayState.displayNodes}
-              focusRequest={nodeSearchNavigation.focusRequest}
+              focusRequest={canvasFocus.request}
               visibleNodeIds={displayState.visibleNodeIds}
               onViewportScaleChange={setViewportScale}
               selectedNodeId={selectedNodeId}

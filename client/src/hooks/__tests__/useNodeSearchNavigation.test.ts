@@ -1,4 +1,5 @@
 import { createNodeCollapseIndex } from "@/domain/nodes/nodeCollapse";
+import { useRevisionScopedNodeRequest } from "@/hooks/useRevisionScopedNodeRequest";
 import { useBranchCollapse } from "@/hooks/useBranchCollapse";
 import { useState } from "react";
 import type { ResolutionFilterMode } from "@/types/nodeResolution";
@@ -20,8 +21,11 @@ function renderNavigation({
   const selectNode = jest.fn();
   const expandNodes = jest.fn();
   const hook = renderHook(
-    (props: { nodes: readonly Node[]; resolutionVisibleNodeIds: ReadonlySet<number>; documentRevision: number }) =>
-      useNodeSearchNavigation({ ...props, collapseIndex: createNodeCollapseIndex(props.nodes), collapsedNodeIds: new Set(), expandNodes, setResolutionMode, selectNode }),
+    (props: { nodes: readonly Node[]; resolutionVisibleNodeIds: ReadonlySet<number>; documentRevision: number }) => {
+      const issuer = useRevisionScopedNodeRequest(props.documentRevision);
+      const navigation = useNodeSearchNavigation({ ...props, issueFocusRequest: issuer.issueRequest, collapseIndex: createNodeCollapseIndex(props.nodes), collapsedNodeIds: new Set(), expandNodes, setResolutionMode, selectNode });
+      return { ...navigation, focusRequest: issuer.request };
+    },
     { initialProps: { nodes, resolutionVisibleNodeIds, documentRevision } },
   );
   return { ...hook, setResolutionMode, selectNode, expandNodes };
@@ -129,12 +133,14 @@ function useIntegratedNavigation(nodes: readonly Node[], inResolution: boolean) 
   const collapse = useBranchCollapse({ nodes, documentRevision: 1 });
   const [mode, setMode] = useState<ResolutionFilterMode>("auto");
   const [selected, selectNode] = useState<number | null>(null);
+  const issuer = useRevisionScopedNodeRequest(1);
   const navigation = useNodeSearchNavigation({
+    issueFocusRequest: issuer.issueRequest,
     nodes, resolutionVisibleNodeIds: new Set(inResolution ? [1, 2, 3, 4, 5, 6] : [1, 2, 5, 6]), documentRevision: 1,
     collapseIndex: collapse.index, collapsedNodeIds: collapse.collapsedNodeIds,
     expandNodes: collapse.expandNodes, setResolutionMode: setMode, selectNode,
   });
-  return { collapse, mode, selected, ...navigation };
+  return { collapse, mode, selected, ...navigation, focusRequest: issuer.request };
 }
 describe("祖先展開の検索連携", () => {
   it.each([true, false])("祖先だけ展開し、Rに対象を含む=%sに応じて段階と通知を変える", (inResolution) => {

@@ -72,5 +72,10 @@ export function useMapResolutionFilter({
     dispatch({ type: "setMode", mode: nextMode });
   }, []);
 
-  return { mode, level, visibleNodeIds, setMode };
+  const resetViewportScale = useCallback((nextScale: number) => {
+    dispatch({ type: "resetViewport", level: resolveResolutionLevel("auto", nextScale, null),
+      pendingScale: scale !== nextScale ? nextScale : null });
+  }, [scale]);
+
+  return { mode, level, visibleNodeIds, setMode, resetViewportScale };
 }

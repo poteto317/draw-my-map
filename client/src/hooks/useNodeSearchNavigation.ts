@@ -2,7 +2,6 @@ import { useCallback } from "react";
 import { RESOLUTION_LEVEL_LABELS } from "@/config/resolutionLevelLabels";
 import type { NodeCollapseIndex } from "@/domain/nodes/nodeCollapse";
 import { resolveNodeSearchReveal } from "@/domain/search/nodeSearchReveal";
-import { useRevisionScopedNodeRequest } from "@/hooks/useRevisionScopedNodeRequest";
 import { useRevisionScopedNotice } from "@/hooks/useRevisionScopedNotice";
 import type { Node } from "@/types/node";
 import type { OperationNotice } from "@/types/operationNotice";
@@ -19,6 +18,7 @@ type UseNodeSearchNavigationOptions = {
   documentRevision: number;
   setResolutionMode: (mode: ResolutionFilterMode) => void;
   selectNode: (id: number | null) => void;
+  issueFocusRequest: (nodeId: number) => void;
 };
 
 const MISSING_NODE_NOTICE: OperationNotice = {
@@ -35,8 +35,8 @@ export function useNodeSearchNavigation({
   documentRevision,
   setResolutionMode,
   selectNode,
+  issueFocusRequest,
 }: UseNodeSearchNavigationOptions) {
-  const { request: focusRequest, issueRequest: issueFocusRequest } = useRevisionScopedNodeRequest(documentRevision);
   const { notice, publishNotice } = useRevisionScopedNotice(documentRevision);
 
   const navigateToNode = useCallback((nodeId: number): NodeSearchNavigationResult => {
@@ -83,5 +83,5 @@ export function useNodeSearchNavigation({
     resolutionVisibleNodeIds,
   ]);
 
-  return { navigateToNode, focusRequest, notice };
+  return { navigateToNode, notice };
 }

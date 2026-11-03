@@ -7,6 +7,8 @@ type AppHeaderProps = {
   layoutMode: NodeLayoutMode;
   onLayoutModeChange: (mode: NodeLayoutMode) => void;
   mapControls: ReactNode;
+  viewControls: ReactNode;
+  showCanvasHints: boolean;
   searchControls: ReactNode;
   importanceControls?: ReactNode;
   resolutionControls?: ReactNode;
@@ -18,6 +20,8 @@ export function AppHeader({
   layoutMode,
   onLayoutModeChange,
   mapControls,
+  viewControls,
+  showCanvasHints,
   searchControls,
   importanceControls,
   resolutionControls,
@@ -30,12 +34,13 @@ export function AppHeader({
         Draw My Map
       </h1>
       {mapControls}
+      {viewControls}
       {searchControls}
       <LayoutModeSelector
         layoutMode={layoutMode}
         onLayoutModeChange={onLayoutModeChange}
       />
-      <LayoutModeOperationHint layoutMode={layoutMode} />
+      {showCanvasHints && <LayoutModeOperationHint layoutMode={layoutMode} />}
       {importanceControls}
       {resolutionControls}
       {operationControls}

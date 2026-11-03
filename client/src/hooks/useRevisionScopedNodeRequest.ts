@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { RevisionScopedNodeRequest } from "@/types/revisionScopedNodeRequest";
 
 // ノードへの要求（フォーカス・ラベルの編集など）を、発行した時点の documentRevision を添えて持つ。
@@ -6,15 +6,19 @@ import type { RevisionScopedNodeRequest } from "@/types/revisionScopedNodeReques
 export function useRevisionScopedNodeRequest(documentRevision: number) {
   const [stored, setStored] = useState<RevisionScopedNodeRequest | null>(null);
 
+  const sequence = useRef(0);
+  const clearRequest = useCallback(() => setStored(null), []);
+
   const issueRequest = useCallback((nodeId: number) => {
-    setStored((previous) => ({
+    sequence.current += 1;
+    setStored({
       nodeId,
-      sequence: (previous?.sequence ?? 0) + 1,
+      sequence: sequence.current,
       documentRevision,
-    }));
+    });
   }, [documentRevision]);
 
   const request = stored !== null && stored.documentRevision === documentRevision ? stored : null;
 
-  return { request, issueRequest };
+  return { request, issueRequest, clearRequest };
 }
