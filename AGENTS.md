@@ -71,7 +71,14 @@ PRのマージ後は次の順で後処理を行う。
   `feature` → `refactor-srp` → `review-loop` → `commit-ja` → `pr-ja` → `pr-review-loop` → `pr-merge` → `review-digest` → `lessons-push`
 - **マージと後処理**: `pr-merge`でPRをマージした後、`review-digest`へ進む前に「PRマージ後の後処理」（ROADMAPの照合、メインのチェックアウトでの検証、マージ済みworktreeとローカルブランチの整理）を行う。リモートのブランチは削除しない。
 - **依頼の言い換え**: 「次の機能を実装して」「ロードマップを進めて」「開発ループを回して」などの依頼は、`/feature` の起動として扱い、Skill ツールで `dev-flow-kit:feature` を起動する。途中のステップだけを頼まれた場合（例: 「SRP リファクタリングして」「レビューループを回して」「PR を作って」）は、該当するコマンド（`dev-flow-kit:refactor-srp` など）を起動する。その 1 ステップだけでよい場合は `--only` を付ける。
-- **再開**: 中断したフローは `/dev-flow --resume` で再開する。状態はこのリポジトリの `.claude/dev-flow/` に保存される（git 管理外）。
+- **再開**: 中断したフローは `/dev-flow --resume` で再開する。状態（`state.json`・`review-log.md`）は git 管理外の `.claude/dev-flow/` に置き、次の規則に従う。
+  - **正本は worktree 側**: フローを worktree で進めている間は、その worktree の `.claude/dev-flow/` だけを状態の正本にする。メインのチェックアウトの `.claude/dev-flow/state.json` は所在の案内だけにし、`feature`・`branch`・`worktree`・`agent`（`claude-code` か `codex`）の項目だけを書く。`completed`・`current`・`loop` は書かず、worktree の state.json を写さない。ほかのエージェントが書いた state.json は上書きしない。
+  - **再開先の決め方**: メインのチェックアウトで `/dev-flow --resume` を実行したときは、メインの state.json の進捗の項目（`completed`・`current`・`loop`）を使わない。`worktree` が指す worktree の state.json から再開し、作業もその worktree で行う。`worktree` が無いか存在しないときは `git worktree list` で該当するブランチの worktree を探し、見つからなければ再開せずに報告する。
+  - **別のエージェントとの競合の確認**: 再開と `/feature` の開始の前に、同じフローを別のエージェントが進めていないかを確かめる。次のどれかに当たれば、再開せずに `AskUserQuestion`（無い環境ではユーザーへの質問）で進め方を確認する。
+    - state.json の `agent` が自分と異なる。
+    - 対象の worktree の state.json、`review-log.md`、作業ツリーのファイルのどれかが、直近 30 分以内に自分以外によって更新されている（自分の更新か分からない場合も含む）。
+    - コミット・未コミットの変更が、自分の記録と合わない。
+  - **完了後の片付け**: フローが完了したら（`lessons-push` の後）、メインのチェックアウトの state.json を削除する。
 - **実装前の確認**: `$DEV_FLOW_KIT/lessons/review-lessons.md` の「優先度 A のチェックリスト」を確認し、今回の変更に関係する項目は本文も読む。
 - **プラグインが使えない環境**（Codex など）: `$DEV_FLOW_KIT/commands/` の各コマンドのファイルを上の順に読み、その手順に従う。
 - **優先順位**: このファイルのほかのルールと dev-flow-kit のコマンドの指示が食い違う場合は、このリポジトリのルールに従う。
