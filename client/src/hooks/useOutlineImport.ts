@@ -57,7 +57,7 @@ export type UseOutlineImportReturn = {
   target: OutlineImportTarget;
   dialogNotices: OutlineDialogNotices;
   focusRequest: OutlineImportFocusRequest | null;
-  notice: OperationNotice | null; // 操作通知バーの7系統目
+  notice: OperationNotice | null; // 操作通知バーの8系統目
   open: () => void;
   close: () => void;
   setText: (text: string) => void;

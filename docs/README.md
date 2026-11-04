@@ -23,6 +23,7 @@ Draw My Map の設計・仕様・環境構築・テスト・開発運用に関�
   - 単一責任原則（SRP）に基づくモジュール分割とデータフロー図（Mermaid）。
   - 複数マップのシェル（`Home`）と編集画面（`MapEditor`）の分担、`useMapLibrary`・`mapLibraryStorage`・`domain/mapLibrary/` の責務、セッション番号による保存先の照合。
   - 箇条書きからの追加の流れ（`domain/outline/` の解析、`nodeForestInsertion.ts`・`nodeManualPlacement.ts`、`useOutlineImport`、`useNodes.insertForest` の1回の commit）。
+  - アウトライン書き出しの流れ（正本から先行順モデル、長さ検査、Blob、URL 解放、専用通知）。
   - 兄弟の順序変更の流れ（`nodeSiblingOrder.ts`・`nodeSiblingSwapPlacement.ts`、`useSiblingReorderAction`、`useNodes.reorderSibling` の1回の commit、自動配置の並べ替えのジェスチャー）。
   - 階層の上げ下げの流れ（`nodeIndent.ts`・`nodeIndentPlacement.ts`・`nodeSiblingNeighbors.ts`、`useNodeIndentAction`、`useNodes.changeNodeIndent` の1回の commit、下げたときの新しい親の展開、並べ替えと共有する枝の構造の変更の通知）。
   - 親の挿入の流れ（`nodeParentInsertion.ts`・`nodeParentInsertionMessages.ts`・`nodePlacement.ts` の `createParentNode`、`useNodeParentInsertionAction`、`useNodes.insertParentNode` の1回の commit と新しいノードの選択、成功したときの `clearNotice` とラベルの編集の要求（`useNodeLabelEditRequest`）、失敗の通知、並べ替え・上げ下げと共有する枝の構造の変更の通知）。
@@ -31,7 +32,7 @@ Draw My Map の設計・仕様・環境構築・テスト・開発運用に関�
 ### 2. 仕様書・マニュアル
 
 - **[機能仕様・操作マニュアル](specifications/features.md)** (`docs/specifications/features.md`)
-  - Phase 0〜14とPhase 15候補004で実装された機能の詳細仕様。Phase 14 の構造編集は14〜18章（兄弟順序・階層・親挿入・枝移動・ノードだけ削除）。
+  - Phase 0〜15で実装された機能の詳細仕様。Phase 14 の構造編集は14〜18章（兄弟順序・階層・親挿入・枝移動・ノードだけ削除）。
   - キャンバス操作（パン、ズーム、フォーカス）、ノード操作（作成、編集、削除、子孫連動移動、ドラッグ接続）。
   - 自動レイアウトアルゴリズム、解像度フィルタリング（重要度とヒステリシス制御）。
   - AIイラスト生成（プロンプト生成、ノード紐付け、縮小、再生成、削除）。
@@ -40,7 +41,7 @@ Draw My Map の設計・仕様・環境構築・テスト・開発運用に関�
   - 枝のコピー＆ペースト（専用形式、Ctrl/Cmd+C・V、入力優先、上限、貼り付け後の配置と Undo / Redo）。
   - ノード検索（NFKC正規化、最大50件と総件数、キー操作、隠れたノードの表示切り替えと中央移動）。
   - 枝の折りたたみ（全子孫数、解像度フィルターとの統合、自動配置の表示用座標、検索による祖先展開、保存・復元・Undo / Redo・画像出力との境界、削除・ドラッグ・接続・複製・貼り付けなど既存の編集操作との関係）。
-  - アウトライン表示・編集（19章）。全件表示、末尾追加、ラベル・階層・兄弟順の編集、保存と履歴、マップ復帰。Markdown書き出し（候補005）は未実装。
+  - アウトライン表示・編集（19章）と Markdown・箇条書き書き出し（20章）。全件表示・編集、全正本から2形式のテキスト出力、再取込みの保証範囲。
   - キーボードショートカット・マウス操作一覧表。
   - 複数マップ（作成・一覧・切り替え・名前変更・削除の3通り、名前の規則、ダイアログのキーボード操作とフォーカス、保護モード、起動時の通知、他タブとの同時編集は対象外）。
   - 箇条書きからの追加（記法とインデントの数え方、階層の補正と警告、上限、プレビュー、追加する位置と配置、1操作での Undo / Redo、通知、キーボードとフォーカス）。
@@ -62,6 +63,7 @@ Draw My Map の設計・仕様・環境構築・テスト・開発運用に関�
   - 枝の折りたたみなど表示専用の状態を保存形式・編集履歴に含めない方針（1.2）。
 
 - **[API 仕様](specifications/api.md)** (`docs/specifications/api.md`)
+  - アウトライン書き出しのクライアントAPI（11章。整形、ダウンロード、通知の契約）。
   - ノードだけ削除のクライアントAPI（`api.md` 9章。純粋変換・hook・action・Controlの公開契約）。
   - Route Handler: `POST /api/illustrations` のリクエスト / レスポンス JSON スキーマ。
   - 処理パイプライン（入力検証 → 日本語自動翻訳 `@cf/meta/m2m100-1.2b` → 画像生成 `@cf/black-forest-labs/flux-1-schnell` → NSFW 誤判定リトライ機構）。
@@ -77,13 +79,13 @@ Draw My Map の設計・仕様・環境構築・テスト・開発運用に関�
 ### 4. テスト・品質保証
 
 - **[実ブラウザテストケース](testing/browser-test-cases.md)** (`docs/testing/browser-test-cases.md`)
-  - 自動テスト（Jest + jsdom）では検証が難しいキャンバス描画・インタラクション・実ブラウザ固有挙動の確認テスト項目（Phase 0〜15。Phase 14 は Q〜U 節、Phase 15 候補004は V 節）。
+  - 自動テスト（Jest + jsdom）では検証が難しいキャンバス描画・インタラクション・実ブラウザ固有挙動の確認テスト項目（Phase 0〜15。Phase 14 は Q〜U 節、Phase 15 候補004は V 節、候補005は W 節）。
   - 優先度別テストケース（起動、操作、フィルタリング、イラスト生成、エクスポート、編集履歴、枝の複製、枝のコピー＆ペースト、ノード検索、枝の折りたたみ、複数マップの保存・切り替え、箇条書きからの追加、兄弟ノードの順序変更、階層の上げ下げ、途中への親ノード挿入等）。
 
 ### 5. プロジェクト管理・開発履歴
 
 - **[開発ロードマップ](../ROADMAP.md)** (`ROADMAP.md`)
-  - プロジェクトのビジョン、差別化ポイント、各フェーズ（Phase 0〜39。Phase 0〜14 は完了、Phase 15 は進行中、Phase 16〜39 は未着手）の実装完了状況。
+  - プロジェクトのビジョン、差別化ポイント、各フェーズ（Phase 0〜39。Phase 0〜15 は完了、Phase 16〜39 は未着手）の実装完了状況。
 - **[エージェント・開発ルール](../AGENTS.md)** (`AGENTS.md`)
   - サブエージェント駆動開発（Subagent-Driven Development）、二段階レビュー運用、PR運用ルール。
 - **[レビュー指摘の記録](review-findings/)** (`docs/review-findings/`)

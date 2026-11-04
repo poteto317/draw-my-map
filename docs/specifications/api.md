@@ -1,6 +1,6 @@
 # Draw My Map API 仕様書
 
-本書は、**Draw My Map** におけるノードアイコン・イラスト生成エンドポイント（`POST /api/illustrations`）の詳細な API 仕様、内部アーキテクチャ、処理パイプライン、クライアント側画像処理、および本番公開に向けた運用・セキュリティ考慮事項をまとめた技術仕様書です。9章ではノードだけ削除のクライアントAPIを扱います。
+本書は、**Draw My Map** におけるノードアイコン・イラスト生成エンドポイント（`POST /api/illustrations`）の詳細な API 仕様、内部アーキテクチャ、処理パイプライン、クライアント側画像処理、および本番公開に向けた運用・セキュリティ考慮事項をまとめた技術仕様書です。9〜11章ではクライアントAPIを扱います。
 
 ---
 
@@ -15,6 +15,8 @@
 7. [本番公開に向けたセキュリティ・運用の考慮事項](#7-本番公開に向けたセキュリティ運用の考慮事項)
 8. [開発・テスト・環境設定](#8-開発テスト環境設定)
 9. [ノードだけ削除のクライアントAPI](#9-ノードだけ削除のクライアントapi)
+10. [アウトライン編集と共有フォーカスのクライアントAPI](#10-アウトライン編集と共有フォーカスのクライアントapi)
+11. [アウトライン書き出しのクライアントAPI](#11-アウトライン書き出しのクライアントapi)
 
 ---
 
@@ -593,3 +595,13 @@ type OutlineRows = {
 ```
 
 検索hookは独自のfocus要求を保持しません。`MapEditor`の単一`canvasFocus = useRevisionScopedNodeRequest(documentRevision)`を検索とoutline復帰の両方へ渡し、MapStageにも同じrequestを渡します。mode変更前に`clearRequest`して過去検索の再生を防ぎ、両方向の連続操作でもsequenceが衝突しません。
+
+## 11. アウトライン書き出しのクライアントAPI
+
+この機能はクライアント内で完結し、HTTP エンドポイントを追加しません。`MapEditor` は正本 `nodes` から既存の `buildOutlineRows` で作った `outlineModel` を、`mapName` とともに `useOutlineExport` へ渡します。表示用 `displayNodes` と `visibleNodeIds` は入力に使いません。
+
+`formatOutlineRows(model: OutlineRows, format: "md" | "txt"): OutlineExportResult` は純粋関数です。`invalidStructure` / `duplicateIds` または行の ID が見つからなければ `invalid-structure`、行がなければ `empty` を返します。各ラベルを正規化し、`2 * (row.depth - 1) + prefix.length + label.length + 1` で全行の UTF-16 長を安全整数と `MAX_OUTLINE_EXPORT_CODE_UNITS = 1_000_000` で検査します。超過または不正な深さは `too-large` です。検査がすべて通った後だけ `repeat` / `join` で文字列化し、`{ ok: true, text }` を返します。正本は変更しません。
+
+`downloadOutlineText(text, mapName, format, now?)` は `.md` を `text/markdown;charset=utf-8`、`.txt` を `text/plain;charset=utf-8` の Blob にし、既存 `createMapFileName` の無効文字・予約名・ローカル日時の規則で `<mapName>-YYYYMMDD-HHMMSS.md|txt` を作ります。`URL.createObjectURL` 後のアンカー `click()` と `finally` の `URL.revokeObjectURL` を担当し、失敗例外は呼出し元へ渡します。
+
+`useOutlineExport({ model, mapName, downloadText? })` は `{ exportMarkdown, exportPlainText, notice }` を返します。空と上限は警告、不正構造・生成・ダウンロード例外は形式別のエラーを専用通知枠へ出します。正常復帰時だけ形式別の成功通知を出します。成功はブラウザへのダウンロード開始を指し、ディスクへの保存完了を示しません。`OutlineExportControls` は共通ヘッダーの2ボタンだけを持ち、map / outline のどちらでも使え、ダイアログ中は editor 根の `inert` に従います。保存・JSON・画像の通知、履歴、選択、V3保存形式は変更しません。

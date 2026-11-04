@@ -23,6 +23,10 @@ jest.mock("@/services/illustration/illustrationGeneration", () => {
 });
 
 const mockDownloadMapJson = jest.fn();
+const mockDownloadOutlineText = jest.fn();
+jest.mock("@/services/outlineExport/outlineTextDownload", () => ({
+  downloadOutlineText: (text: string, mapName: string, format: string) => mockDownloadOutlineText(text, mapName, format),
+}));
 jest.mock("@/services/persistence/mapJsonDownload", () => {
   const actual = jest.requireActual("@/services/persistence/mapJsonDownload");
   return {
@@ -91,6 +95,7 @@ beforeEach(() => {
   resetMapStageTestRuntime();
   window.localStorage.clear();
   mockDownloadMapJson.mockReset();
+  mockDownloadOutlineText.mockReset();
   mockDownloadMapImage.mockReset();
 });
 
@@ -290,4 +295,60 @@ it("保存session失敗でもoutline編集を保持し、同じpersistenceから
   await user.click(screen.getByRole("button", { name: "マップ" }));
   expect(exportedMap().nodes[1].label).toBe("救出する編集");
   expect(storage.registeredFlushCount()).toBe(1);
+});
+
+it("exportsFullModelInBothModes: 非表示の子も正本順で出し、選択・履歴・JSONを保つ", async () => {
+  await renderOutlineEditor();
+  const before = exportedMap();
+  searchFor("親A");
+  await userEvent.click(screen.getByRole("button", { name: "枝を折りたたむ" }));
+  await userEvent.click(screen.getByRole("button", { name: "表示 高のみ" }));
+  await userEvent.click(screen.getByRole("button", { name: "Markdown書き出し" }));
+  expect(mockDownloadOutlineText).toHaveBeenLastCalledWith("- 親A\n  - 子B\n", "テストのマップ", "md");
+  expect(screen.getByText("Markdownファイルを書き出しました。", { selector: "p" })).toBeInTheDocument();
+  await switchTo("アウトライン");
+  await userEvent.click(screen.getByRole("button", { name: "階層2・子B" }));
+  await userEvent.click(screen.getByRole("button", { name: "箇条書き書き出し" }));
+  expect(mockDownloadOutlineText).toHaveBeenLastCalledWith("・親A\n  ・子B\n", "テストのマップ", "txt");
+  expect(exportedMap()).toEqual(before);
+  expect(screen.getByRole("button", { name: "階層2・子B" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "元に戻す" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "やり直す" })).toBeDisabled();
+});
+
+it("保存失敗中にも出力し、出力失敗は保存通知と独立して残す", async () => {
+  const storage = createTestStorageSession({ initialJson: outlineJson });
+  await renderEditor({ storage });
+  storage.setWriteOutcome("failed");
+  await switchTo("アウトライン");
+  await userEvent.dblClick(screen.getByRole("button", { name: "階層2・子B" }));
+  await userEvent.clear(screen.getByRole("textbox", { name: "ラベル編集" }));
+  await userEvent.type(screen.getByRole("textbox", { name: "ラベル編集" }), "救出{Enter}");
+  await waitFor(() => expect(within(screen.getByRole("banner")).getByRole("alert")).toHaveTextContent("ブラウザへ自動保存できませんでした。"));
+  mockDownloadOutlineText.mockImplementationOnce(() => { throw new Error("救出という秘密のラベル"); });
+  await userEvent.click(screen.getByRole("button", { name: "Markdown書き出し" }));
+  expect(within(screen.getByRole("banner")).getAllByRole("alert").map(node => node.textContent)).toEqual([
+    "ブラウザへ自動保存できませんでした。不要なマップを削除するか、JSONで書き出してください。", "Markdownファイルを書き出せませんでした。",
+  ]);
+  expect(screen.queryByText(/救出という秘密のラベル/)).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "箇条書き書き出し" }));
+  expect(mockDownloadOutlineText).toHaveBeenLastCalledWith("・親A\n  ・救出\n", "テストのマップ", "txt");
+  expect(within(screen.getByRole("banner")).getByRole("alert")).toHaveTextContent("ブラウザへ自動保存できませんでした。");
+  expect(screen.getByText("箇条書きファイルを書き出しました。", { selector: "p" })).toBeInTheDocument();
+});
+
+it("respectsEditorInert: 取込みと枝移動のダイアログ中は根が inert で閉じると戻る", async () => {
+  await renderOutlineEditor();
+  const root = document.querySelector("[data-map-id]");
+  const markdown = screen.getByRole("button", { name: "Markdown書き出し" });
+  expect(root).toContainElement(markdown);
+  await userEvent.click(screen.getByRole("button", { name: "箇条書きから追加" }));
+  expect(root).toHaveAttribute("inert");
+  await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "キャンセル" }));
+  expect(root).not.toHaveAttribute("inert");
+  searchFor("親A");
+  await userEvent.click(screen.getByRole("button", { name: "枝を移動" }));
+  expect(root).toHaveAttribute("inert");
+  await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "キャンセル" }));
+  expect(root).not.toHaveAttribute("inert");
 });

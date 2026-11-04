@@ -18,6 +18,7 @@ import { AppWorkspace } from "@/components/layout/AppWorkspace";
 import { NodeImportanceSelector } from "@/components/layout/NodeImportanceSelector";
 import { ResolutionFilterSelector } from "@/components/layout/ResolutionFilterSelector";
 import { MapImageExportControls } from "@/components/layout/MapImageExportControls";
+import { OutlineExportControls } from "@/components/layout/OutlineExportControls";
 import { MapHistoryControls } from "@/components/layout/MapHistoryControls";
 import { NodeCollapseControl } from "@/components/layout/NodeCollapseControl";
 import { NodeDuplicateControl } from "@/components/layout/NodeDuplicateControl";
@@ -40,6 +41,7 @@ import { INITIAL_VIEWPORT } from "@/components/map/mapViewport";
 import { useIllustrationGeneration } from "@/hooks/useIllustrationGeneration";
 import { useMapHistoryShortcuts } from "@/components/map/useMapHistoryShortcuts";
 import { useMapImageExport } from "@/hooks/useMapImageExport";
+import { useOutlineExport } from "@/hooks/useOutlineExport";
 import { useMapPersistence } from "@/hooks/useMapPersistence";
 import { useNodeDuplicationAction } from "@/hooks/useNodeDuplicationAction";
 import { useResettingMapReplacement } from "@/hooks/useResettingMapReplacement";
@@ -189,7 +191,7 @@ export function MapEditor({
     notice: clipboardNotice,
     publishNotice: publishClipboardNotice,
   } = useRevisionScopedNotice(documentRevision);
-  // 枝の構造の変更の通知（兄弟の順序変更・階層の上げ下げ・親の挿入・ノードだけ削除）。8系統目
+  // 枝の構造の変更の通知（兄弟の順序変更・階層の上げ下げ・親の挿入・ノードだけ削除）。9系統目
   const {
     notice: treeEditNotice,
     publishNotice: publishTreeEditNotice,
@@ -269,6 +271,7 @@ export function MapEditor({
     && branchMove.screen === "closed";
   useMapHistoryShortcuts({ undo, redo, enabled: editorShortcutsEnabled });
   const outlineModel = useMemo(() => buildOutlineRows(nodes), [nodes]);
+  const outlineExport = useOutlineExport({ model: outlineModel, mapName });
   const outlineActions = useOutlineEditorActions({
     nodes, selectedNodeId, documentRevision,
     enabled: editorShortcutsEnabled && viewMode === "outline",
@@ -300,6 +303,7 @@ export function MapEditor({
     displayState.layoutFailed ? LAYOUT_FAILED_NOTICE : null,
     persistence.notice,
     imageExport.notice,
+    outlineExport.notice,
     duplication.notice,
     clipboardNotice,
     nodeSearchNavigation.notice,
@@ -415,6 +419,10 @@ export function MapEditor({
                 onExportPng={imageExport.exportPng}
                 onExportSvg={imageExport.exportSvg}
                 isExportingPng={imageExport.isExportingPng}
+              />
+              <OutlineExportControls
+                onExportMarkdown={outlineExport.exportMarkdown}
+                onExportPlainText={outlineExport.exportPlainText}
               />
             </>
           )}

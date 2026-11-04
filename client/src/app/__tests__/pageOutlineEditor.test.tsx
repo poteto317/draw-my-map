@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { exportedMap, headerButton, renderPage, selectNode, stageContainer, storedMap, undoButton, v3Json } from "@/app/testing/pageTestHelpers";
 import { resetMapStageTestRuntime } from "@/components/map/testing/mapStageTestRuntime";
 import { seedMapLibrary } from "@/testing/mapLibraryTestStorage";
+import { MAP_STORAGE_KEY } from "@/services/persistence/mapStorage";
+import { mapBodyKey } from "@/services/persistence/mapLibraryStorage";
 
 jest.mock("pixi.js", () => (
   jest.requireActual<typeof import("@/app/testing/pageModuleMocks")>("@/app/testing/pageModuleMocks")
@@ -15,6 +17,10 @@ jest.mock("@/services/illustration/illustrationGeneration", () => {
 });
 
 const mockDownloadMapJson = jest.fn();
+const mockDownloadOutlineText = jest.fn();
+jest.mock("@/services/outlineExport/outlineTextDownload", () => ({
+  downloadOutlineText: (text: string, mapName: string, format: string) => mockDownloadOutlineText(text, mapName, format),
+}));
 jest.mock("@/services/persistence/mapJsonDownload", () => {
   const actual = jest.requireActual("@/services/persistence/mapJsonDownload");
   return {
@@ -41,7 +47,7 @@ function exported() { return exportedMap(mockDownloadMapJson); }
 function button(name: string) { return screen.getByRole("button", { name }); }
 function row(label: string, depth = 1) { return button(`階層${depth}・${label}`); }
 function textarea() { return screen.getByRole("textbox", { name: "ラベル編集" }); }
-beforeEach(() => { resetMapStageTestRuntime(); window.localStorage.clear(); mockDownloadMapJson.mockReset(); });
+beforeEach(() => { resetMapStageTestRuntime(); window.localStorage.clear(); mockDownloadMapJson.mockReset(); mockDownloadOutlineText.mockReset(); });
 afterEach(() => { jest.restoreAllMocks(); jest.useRealTimers(); });
 
 import { createJpegDataUrl } from "@/testing/jpegFixture";
@@ -130,4 +136,61 @@ it("配置失敗では正本・選択・履歴を増やさない", async () => {
   await user.click(button("階層を下げる"));
   expect(exported()).toEqual(before); expect(row("B", 2)).toHaveAttribute("aria-pressed", "true"); expect(undoButton()).toBeDisabled();
   expect(within(screen.getByRole("banner")).getByRole("alert")).not.toBeEmptyDOMElement();
+});
+
+it("Home の共通ヘッダーは両モードで全件テキストを出し、保存内容を変えない", async () => {
+  const source = v3Json([
+    { id: 1, label: "根", importance: "high" },
+    { id: 2, parentId: 1, label: "低い子", importance: "low" },
+  ]);
+  seedMapLibrary(window.localStorage, [{ json: source }]);
+  const user = userEvent.setup();
+  await renderPage();
+  const before = storedMap();
+  selectNode(0, 2);
+  await user.click(headerButton("枝を折りたたむ"));
+  await user.click(button("表示 高のみ"));
+  await user.click(headerButton("Markdown書き出し"));
+  expect(mockDownloadOutlineText).toHaveBeenLastCalledWith("- 根\n  - 低い子\n", "マップ 1", "md");
+  await user.click(button("アウトライン"));
+  await user.click(headerButton("箇条書き書き出し"));
+  expect(mockDownloadOutlineText).toHaveBeenLastCalledWith("・根\n  ・低い子\n", "マップ 1", "txt");
+  expect(storedMap()).toEqual(before);
+  expect(exported()).toEqual(before);
+  expect(undoButton()).toBeDisabled();
+});
+
+it("Home の外側ダイアログ中は書き出しボタンを含む editor 根が inert", async () => {
+  await renderPage();
+  const root = document.querySelector("[data-map-id]");
+  expect(root).toContainElement(headerButton("Markdown書き出し"));
+  await userEvent.click(headerButton("新しいマップ"));
+  expect(root).toHaveAttribute("inert");
+  await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "キャンセル" }));
+  expect(root).not.toHaveAttribute("inert");
+});
+
+it("保護モードの Home でも正本テキストを書き出せる", async () => {
+  const source = v3Json([{ id: 1, label: "救出" }]);
+  window.localStorage.setItem(MAP_STORAGE_KEY, source);
+  const originalSetItem = Storage.prototype.setItem;
+  jest.spyOn(Storage.prototype, "setItem").mockImplementation(function (this: Storage, key, value) {
+    if (key.startsWith(mapBodyKey(""))) throw new DOMException("blocked", "SecurityError");
+    originalSetItem.call(this, key, value);
+  });
+  await renderPage();
+  expect(headerButton("マップ一覧")).toBeDisabled();
+  await userEvent.click(headerButton("Markdown書き出し"));
+  expect(mockDownloadOutlineText).toHaveBeenLastCalledWith("- 救出\n", "無題のマップ", "md");
+  expect(screen.getByText("Markdownファイルを書き出しました。", { selector: "p" })).toBeInTheDocument();
+});
+
+it("Home で上限を越えた正本は書き出さず専用警告を出す", async () => {
+  seedMapLibrary(window.localStorage, [{ json: v3Json([{ id: 1, label: "長".repeat(999_999) }]) }]);
+  await renderPage();
+  await userEvent.click(headerButton("Markdown書き出し"));
+  expect(mockDownloadOutlineText).not.toHaveBeenCalled();
+  expect(within(screen.getByRole("banner")).getByRole("alert")).toHaveTextContent(
+    "書き出すテキストが大きすぎます。JSONで書き出してください。",
+  );
 });
