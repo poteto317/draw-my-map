@@ -60,7 +60,7 @@ PRのマージ後は次の順で後処理を行う。
 
 1. マージされた変更と`ROADMAP.md`を照合し、完了した項目、進行中のPhase、現在地、次の未完了項目に変更があれば`ROADMAP.md`を更新する。実装時に更新済みであれば、差分がないことの確認だけでよい。
 2. 更新が不要な場合も、ロードマップと実装が一致していることを確認する。
-3. ベースブランチの最新状態と検証結果を確認してから、マージ済みfeature worktreeとブランチを整理する。
+3. ベースブランチの最新状態と検証結果を確認してから、マージ済みfeature worktreeとブランチを整理する。worktreeを削除する前に、そのworktreeの`.claude/dev-flow/`の中身（開発フローの状態）をメインのチェックアウトの`.claude/dev-flow/`へ戻す（「開発フロー」の「再開」の項）。
 4. ベースブランチに未コミット変更がある場合は、上書きやリセットを行わず、最新のリモートブランチから作成した隔離worktreeで後処理を行う。
 
 ## 開発フロー（dev-flow-kit）
@@ -72,9 +72,11 @@ PRのマージ後は次の順で後処理を行う。
 - **マージと後処理**: `pr-merge`でPRをマージした後、`review-digest`へ進む前に「PRマージ後の後処理」（ROADMAPの照合、メインのチェックアウトでの検証、マージ済みworktreeとローカルブランチの整理）を行う。リモートのブランチは削除しない。
 - **依頼の言い換え**: 「次の機能を実装して」「ロードマップを進めて」「開発ループを回して」などの依頼は、`/feature` の起動として扱い、Skill ツールで `dev-flow-kit:feature` を起動する。途中のステップだけを頼まれた場合（例: 「SRP リファクタリングして」「レビューループを回して」「PR を作って」）は、該当するコマンド（`dev-flow-kit:refactor-srp` など）を起動する。その 1 ステップだけでよい場合は `--only` を付ける。
 - **再開**: 中断したフローは `/dev-flow --resume` で再開する。状態（`state.json`・`review-log.md`・`script-candidates/`）は git 管理外の `.claude/dev-flow/` に置き、次の規則に従う。同時に進めるフローは 1 つだけにする。
-  - **記録する項目**: state.json を作るときと更新するたびに、dev-flow-kit の形式の項目に加えて `agent`（Claude Code は `claude-code`、Codex は `codex`）と `updatedAt`（`date '+%Y-%m-%dT%H:%M:%S%z'` の値）を書く。worktree を作った後は `branch` と `worktree`（絶対パス）も書く。dev-flow-kit のコマンドの手順で state.json を更新するときも、これらの項目は消さずに残す。
-  - **状態の置き場所**: `feature` の手順1の state.json はメインのチェックアウトに作る。実装用の worktree を作ったら、`.claude/dev-flow/` の中身をその worktree の `.claude/dev-flow/` へ移し、以降はそこを正本にする。メインの state.json は、`feature`・`branch`・`worktree`・`agent`・`updatedAt` だけを持つ案内に書き換え、進捗（`completed`・`current`・`loop`・`pr`）は書かない。「PRマージ後の後処理」で worktree を削除する前に、worktree の `.claude/dev-flow/` の中身をメインのチェックアウトの `.claude/dev-flow/` へ戻し（案内は上書きしてよい）、`review-digest` と `lessons-push` はメインのチェックアウトで進める。完了した state.json はそのまま残してよい（再開しても「すべて完了」で終わる）。
-  - **再開先の決め方**: `/dev-flow --resume` はメインのチェックアウトで実行する。メインの state.json に `worktree` があり、その worktree が存在すれば、その worktree の state.json から再開し、作業もその worktree で行う。`worktree` が無ければ、メインの state.json から再開する。`worktree` が指す worktree が存在せず、メインの state.json に進捗が無ければ、再開せずに報告する。
+  - **記録する項目**: state.json を作るとき、更新するとき、各手順を始めるとき、サブエージェントを起動するときと完了を受けたときに、dev-flow-kit の形式の項目に加えて `agent`（Claude Code は `claude-code`、Codex は `codex`）と `updatedAt`（`date '+%Y-%m-%dT%H:%M:%S%z'` の値）を書く。worktree を作った後は `branch` と `worktree`（絶対パス）も書く。「PRマージ後の後処理」を終えたら `postMerge: true` を書く。dev-flow-kit のコマンドの手順で state.json を更新するときも、これらの項目は消さずに残す。
+  - **前のフローの記録の退避**: `/feature` の手順1で state.json を作る前に、メインのチェックアウトの `.claude/dev-flow/` に完了したフロー（`completed` に `lessons-push` がある）の state.json・`review-log.md`・`script-candidates/` などがあれば、`.claude/dev-flow/archive-pr<PR番号>/`（PR が無ければ `archive-<日付>/`）へ移す。前のフローの周回や「対応不要」の判定を、次のフローへ持ち込まない。
+  - **状態の置き場所**: `feature` の手順1の state.json はメインのチェックアウトに作る。実装用の worktree を作ったら、`.claude/dev-flow/` の中身をその worktree の `.claude/dev-flow/` へ移し、以降はそこを正本にする。メインの state.json は、`feature`・`branch`・`worktree`・`agent`・`updatedAt` だけを持つ案内に書き換え、進捗（`completed`・`current`・`loop`・`pr`）は書かない。「PRマージ後の後処理」で worktree を削除する前に、worktree の `.claude/dev-flow/` の中身をメインのチェックアウトの `.claude/dev-flow/` へ戻し（案内は上書きしてよい）、`review-digest` と `lessons-push` はメインのチェックアウトで進める。完了した state.json は、次の `/feature` で退避するまで残してよい（再開しても「すべて完了」で終わる）。
+  - **作業する場所**: worktree で進めている間、dev-flow-kit の各コマンドの「プロジェクト直下」はその worktree と読み替える。`.claude/dev-flow/` の読み書き、git、検証のコマンドは、worktree の絶対パス（`git -C <worktree>`、`cd <worktree> && ...`）で実行する。シェルの作業ディレクトリが呼び出しのたびにメインへ戻る環境でも、メインの `.claude/dev-flow/` を使わない。
+  - **再開先の決め方**: `/dev-flow --resume` はメインのチェックアウトで実行する。メインの state.json に `worktree` があり、その worktree が存在すれば、その worktree の state.json から再開し、作業もその worktree で行う。`worktree` が無ければ、メインの state.json から再開する。`worktree` が指す worktree が存在せず、メインの state.json に進捗が無ければ、再開せずに報告する。`completed` に `pr-merge` があり `postMerge` が `true` でなければ、`review-digest` へ進む前に「PRマージ後の後処理」（状態のメインへの戻しを含む）から再開する。
   - **別のエージェントとの競合の確認**: 再開と `/feature` の開始の前に、メインの state.json と（あれば）worktree の state.json を読み、次のどれかに当たれば、作業も state.json の上書きもせずに `AskUserQuestion`（無い環境ではユーザーへの質問）で進め方を確認する。`/feature` の手順1の「既にあれば上書きする」よりこの確認を優先する。
     - `agent` が自分と異なり、フローが完了していない（`completed` に `lessons-push` が無い）。
     - `agent` が自分と同じでも、`updatedAt` が 30 分以内で、その更新をこのセッションで行った記録が無い（同じ種類のエージェントの別のセッションが進めている可能性がある）。
