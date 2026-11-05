@@ -69,6 +69,7 @@ type MapEditorProps = {
   mapId: string;
   mapName: string;
   storageSession: MapStorageSession;
+  storageMode: "persistent" | "protected";
   mapControls: ReactNode;
   // シェルが保護モードへ移ったときのフォーカスの戻し先。ボタンはこの編集画面が描画する
   exportButtonRef: RefObject<HTMLButtonElement | null>;
@@ -87,6 +88,7 @@ export function MapEditor({
   mapId,
   mapName,
   storageSession,
+  storageMode,
   mapControls,
   exportButtonRef,
   mapMoveTargets,
@@ -175,6 +177,7 @@ export function MapEditor({
     layoutMode,
     replaceMap: replaceMapAndReset,
     storageSession,
+    storageMode,
     mapName,
   });
   const imageExport = useMapImageExport({
@@ -325,6 +328,7 @@ export function MapEditor({
           layoutMode={layoutMode}
           onLayoutModeChange={setLayoutMode}
           mapControls={mapControls}
+          saveStatus={persistence.saveStatus}
           viewControls={<EditorViewModeControl mode={viewMode} onChange={changeViewMode} />}
           showCanvasHints={viewMode === "map"}
           searchControls={viewMode === "map" && (

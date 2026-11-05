@@ -2,11 +2,14 @@ import type { ReactNode } from "react";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 import { LayoutModeOperationHint } from "@/components/layout/LayoutModeOperationHint";
 import { LayoutModeSelector } from "@/components/layout/LayoutModeSelector";
+import { MapSaveStatus as MapSaveStatusDisplay } from "@/components/layout/MapSaveStatus";
+import type { MapSaveStatus } from "@/domain/persistence/mapSaveStatus";
 
 type AppHeaderProps = {
   layoutMode: NodeLayoutMode;
   onLayoutModeChange: (mode: NodeLayoutMode) => void;
   mapControls: ReactNode;
+  saveStatus: MapSaveStatus;
   viewControls: ReactNode;
   showCanvasHints: boolean;
   searchControls: ReactNode;
@@ -20,6 +23,7 @@ export function AppHeader({
   layoutMode,
   onLayoutModeChange,
   mapControls,
+  saveStatus,
   viewControls,
   showCanvasHints,
   searchControls,
@@ -34,6 +38,7 @@ export function AppHeader({
         Draw My Map
       </h1>
       {mapControls}
+      <MapSaveStatusDisplay status={saveStatus} />
       {viewControls}
       {searchControls}
       <LayoutModeSelector

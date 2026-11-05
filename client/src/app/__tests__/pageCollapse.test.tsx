@@ -290,7 +290,7 @@ it("閉親Tabがauto配置不能で失敗した場合は展開せず履歴も作
   const impossible = tree.map((node) => node.id === 1
     ? { ...node, x: Number.MAX_VALUE, width: Number.MAX_VALUE } : node);
   await start("auto", impossible); select(1); toggle();
-  expect(within(screen.getByRole("banner")).getByRole("status")).toHaveTextContent("表示用の自動配置ができないため、元の位置で表示しています。");
+  expect(within(screen.getByRole("banner")).getByText("表示用の自動配置ができないため、元の位置で表示しています。")).toHaveAttribute("role", "status");
   const before = exported();
   fireEvent.keyDown(window, { key: "Tab" });
   expect(exported()).toBe(before);

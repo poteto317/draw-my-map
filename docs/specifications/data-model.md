@@ -1152,6 +1152,16 @@ sequenceDiagram
 4. **失敗時**: `AUTO_SAVE_FAILURE_MESSAGE`（`domain/mapLibrary/mapLibraryMessages.ts`）の「ブラウザへ自動保存できませんでした。不要なマップを削除するか、JSONで書き出してください。」を通知し、次の変更で再試行します。
 5. **アンマウント**: 保存待ちのタイマーを破棄するだけで、書き込みません。再マウントを伴う操作（切り替え・新規作成）は、シェルが事前に flush します。
 
+#### 保存状態の導出（Phase 16・候補006）
+
+`MapSaveStatus` は `checking | saved | beforeSave | restoreFailed | pending | failed | protected` の7状態です。表示文言は順に「保存状態を確認中」「保存済み」「保存前」「復元できませんでした」「保存待ち」「保存失敗」「ブラウザへ保存できません」です。`MapStorageSession` や V3 JSON に保存するフィールドではなく、現在のエディタのメモリ上で導出します。
+
+`useMapStorageRestoration` は本体の初回読込結果を `restored`（有効な本体）、`empty`（本体なし）、`failed`（読み取り・解析失敗）で伝えます。`serializeMapDocument(createMapDocument(...))` の現在の snapshot 文字列を完全一致で比較し、V2/V3 の復元では正規化した文字列を確認済み基準にします。V1 は旧文字列を初期比較基準として V3 への書き戻しを待ちます。本体なしと復元失敗の仮の初期基準を、書き込み成功の証拠にはしません。
+
+`storageMode="protected"` を最優先し、復元前は `checking`、明示的な強制保存要求がない確認済み基準への一致は `saved` と判定します。その後、直近の書き込み失敗を `failed` として優先し、仮の初期基準と同じなら `beforeSave` / `restoreFailed`、差分や強制要求があれば `pending` です。同じ snapshot を要求しても `saved` が返るまで `pending` です。書き込み失敗後は新しい編集や仮の基準への復帰では `failed` を維持し、確認済み基準への復帰または次の `saved` で解除します。確認済み基準へ内容変更で戻った際、別 snapshot 向けの古い強制要求は失効させます。仮の基準では失効させず、現在 snapshot 自体への強制要求は実際の `saved` まで維持します。古い強制要求は後続の成功でも消しますが、書き込み中に届いた新しい要求は残します。
+
+`writeBody` の `saved` だけが確認済み基準を進めます。これはマップ本体の成功であり、一覧インデックスの更新が失敗しても成立します。通常タイマーと同期 flush の成功は同じ結果処理を通り、保存失敗通知だけを消します。`failed` は基準を進めず、失敗だけを理由にタイマーを張り直しません。`inactive` と flush の `unchanged` は成功の証拠ではありません。`inactive` は旧セッションと保護モードの双方で起こり得るため、表示上の保護モードはシェルの `storageMode` から判定します。A→B→A の再マウントでも旧エディタの結果を引き継ぎません。
+
 #### flush（`flushPendingSave(): MapFlushResult`）
 
 - 復元が終わる前は `unchanged` を返し、何も書きません（空のマップの内容で、まだ読み込んでいない本体を上書きしないため）。

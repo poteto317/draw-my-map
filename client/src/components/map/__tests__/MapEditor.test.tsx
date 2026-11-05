@@ -56,6 +56,11 @@ const savedJson = `${JSON.stringify({
     { id: 1, parentId: null, label: "保存済みのノード", importance: "medium", x: 250, y: 170, width: 100, height: 60 },
   ],
 })}\n`;
+const legacyJson = `${JSON.stringify({
+  version: 1,
+  layoutMode: "auto",
+  nodes: [{ id: 10, parentId: null, label: "旧データ", x: 20, y: 30, width: 160, height: 64 }],
+})}\n`;
 
 type RenderEditorOptions = {
   mapName?: string;
@@ -79,7 +84,7 @@ async function renderEditor({
       mapMoveTargets={[{ id: storage.session.mapId, name: mapName, updatedAt: "2026-10-31T00:00:00.000Z" }]}
       onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "移動先がありません。" } })}
       mapName={mapName}
-      storageSession={storage.session}
+      storageSession={storage.session} storageMode="persistent"
       mapControls={mapControls}
       shortcutsEnabled={shortcutsEnabled}
       dialogMouseClickedAtRef={dialogMouseClickedAtRef}
@@ -141,6 +146,21 @@ afterEach(() => {
 });
 
 describe("MapEditor", () => {
+  it("V1 本体の復元直後は新形式への保存待ちを表示する", async () => {
+    await renderEditor({ storage: createTestStorageSession({ initialJson: legacyJson }) });
+
+    expect(screen.getByRole("status", { name: "保存状態: 保存待ち" })).toBeInTheDocument();
+    expect(exportedMap().nodes.map((node) => node.label)).toEqual(["旧データ"]);
+  });
+
+  it("本体を読み取れないときは警告と復元失敗状態を出し、空マップを保存済みにしない", async () => {
+    await renderEditor({ storage: createTestStorageSession({ readError: "読み取り失敗" }) });
+
+    expect(screen.getByRole("status", { name: "保存状態: 復元できませんでした" })).toBeInTheDocument();
+    expect(screen.getByText("保存データを復元できませんでした。空のマップで開始します。")).toBeInTheDocument();
+    expect(exportedMap().nodes).toEqual([]);
+  });
+
   it("mapControls に渡した要素をヘッダーの見出しの直後に出す", async () => {
     await renderEditor({ mapControls: <button type="button">マップの一覧</button> });
 
@@ -199,6 +219,7 @@ describe("MapEditor", () => {
     const storage = createTestStorageSession({ initialJson: savedJson });
     const user = userEvent.setup();
     await renderEditor({ storage });
+    expect(screen.getByRole("status", { name: "保存状態: 保存済み" })).toBeInTheDocument();
 
     await user.type(screen.getByRole("combobox", { name: "ノードを検索" }), "保存済み");
     expect(screen.getByRole("option", { name: /保存済みのノード/ })).toBeInTheDocument();
@@ -208,6 +229,7 @@ describe("MapEditor", () => {
     try {
       const writesBefore = storage.writes.length;
       addNodeAt(600, 450);
+      expect(screen.getByRole("status", { name: "保存状態: 保存待ち" })).toBeInTheDocument();
       act(() => {
         jest.advanceTimersByTime(299);
       });
@@ -216,6 +238,7 @@ describe("MapEditor", () => {
         jest.advanceTimersByTime(1);
       });
       expect(storage.writes).toHaveLength(writesBefore + 1);
+      expect(screen.getByRole("status", { name: "保存状態: 保存済み" })).toBeInTheDocument();
       const written = JSON.parse(storage.writes.at(-1)!) as ExportedMap;
       expect(written.nodes).toHaveLength(2);
       expect(written.nodes[0].label).toBe("保存済みのノード");

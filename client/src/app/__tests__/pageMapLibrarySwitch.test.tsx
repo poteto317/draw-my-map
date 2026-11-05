@@ -409,14 +409,21 @@ describe("マップの切り替えと混在の防止", () => {
     const setItem = jest.spyOn(Storage.prototype, "setItem");
     const user = setupUser();
     await renderPage();
+    expect(banner().getByRole("status", { name: "保存状態: 保存済み" })).toBeInTheDocument();
     addNodeAt(500, 400);
+    expect(banner().getByRole("status", { name: "保存状態: 保存待ち" })).toBeInTheDocument();
     advance(100);
 
     await switchTo(user, "B");
+    expect(currentMapName()).toHaveTextContent("マップ: B");
+    expect(banner().getByRole("status", { name: "保存状態: 保存済み" })).toBeInTheDocument();
     await switchTo(user, "A");
+    expect(currentMapName()).toHaveTextContent("マップ: A");
+    expect(banner().getByRole("status", { name: "保存状態: 保存済み" })).toBeInTheDocument();
     expect(exportedLabels()).toHaveLength(2);
     addNodeAt(300, 400);
     advance(300);
+    expect(banner().getByRole("status", { name: "保存状態: 保存済み" })).toBeInTheDocument();
 
     expect(bodyWriteNodeCounts(setItem, "a")).toEqual([2, 3]);
     expect(bodyLabels("a")).toHaveLength(3);
@@ -437,6 +444,7 @@ describe("マップの切り替えと混在の防止", () => {
     addNodeAt(500, 400);
     advance(300);
     expect(banner().getByText(AUTO_SAVE_FAILURE_MESSAGE)).toBeInTheDocument();
+    expect(banner().getByRole("status", { name: "保存状態: 保存失敗" })).toBeInTheDocument();
 
     const list = await openList(user);
     await user.click(list.getByRole("button", { name: "B" }));
@@ -474,6 +482,7 @@ describe("マップの切り替えと混在の防止", () => {
     expect(bodyLabels("a")).toHaveLength(2);
     expect(dialog().getByRole("alert")).toHaveTextContent("");
     expect(banner().queryByText(AUTO_SAVE_FAILURE_MESSAGE)).not.toBeInTheDocument();
+    expect(banner().getByRole("status", { name: "保存状態: 保存済み" })).toBeInTheDocument();
     expect(currentMapName()).toHaveTextContent("マップ: A");
   });
 
@@ -497,6 +506,7 @@ describe("マップの切り替えと混在の防止", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(currentMapName()).toHaveTextContent("マップ: A");
     expect(banner().getByText(AUTO_SAVE_FAILURE_MESSAGE)).toBeInTheDocument();
+    expect(banner().getByRole("status", { name: "保存状態: 保存失敗" })).toBeInTheDocument();
   });
 
   it("切り替える前に始めた PNG 書き出しは、切り替えた後に終わってもダウンロードも通知もしない", async () => {
@@ -701,6 +711,7 @@ describe("移行と保護モード", () => {
 
       expect(exportedLabels()).toHaveLength(1);
       expect(screen.queryByText(AUTO_SAVE_FAILURE_MESSAGE)).not.toBeInTheDocument();
+      expect(banner().getByRole("status", { name: "保存状態: ブラウザへ保存できません" })).toBeInTheDocument();
     } finally {
       if (descriptor) Object.defineProperty(window, "localStorage", descriptor);
     }

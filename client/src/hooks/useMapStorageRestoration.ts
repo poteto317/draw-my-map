@@ -5,6 +5,7 @@ import {
   parseMapDocumentJsonWithVersion,
   serializeMapDocument,
 } from "@/domain/persistence/mapDocumentCodec";
+import type { MapRestoreOrigin } from "@/domain/persistence/mapSaveStatus";
 import type { MapDocumentResult } from "@/types/mapDocument";
 import type { NodeMapState } from "@/types/nodeMapState";
 import type { OperationNotice } from "@/types/operationNotice";
@@ -19,6 +20,7 @@ type UseMapStorageRestorationOptions = {
 type MapStorageRestoration = {
   hydrated: boolean;
   initialPersistedSnapshot: string | null;
+  restoreOrigin: MapRestoreOrigin | null;
 };
 
 const RESTORE_WARNING = "保存データを復元できませんでした。空のマップで開始します。";
@@ -32,6 +34,7 @@ export function useMapStorageRestoration({
   const [restoration, setRestoration] = useState<MapStorageRestoration>({
     hydrated: false,
     initialPersistedSnapshot: null,
+    restoreOrigin: null,
   });
   const restoredRef = useRef(false);
 
@@ -50,6 +53,7 @@ export function useMapStorageRestoration({
       setRestoration({
         hydrated: true,
         initialPersistedSnapshot: currentSnapshot,
+        restoreOrigin: stored.ok ? "empty" : "failed",
       });
       return;
     }
@@ -60,6 +64,7 @@ export function useMapStorageRestoration({
       setRestoration({
         hydrated: true,
         initialPersistedSnapshot: currentSnapshot,
+        restoreOrigin: "failed",
       });
       return;
     }
@@ -74,6 +79,7 @@ export function useMapStorageRestoration({
       initialPersistedSnapshot: sourceVersion === 1
         ? stored.value
         : serializeMapDocument(document),
+      restoreOrigin: "restored",
     });
   }, [currentSnapshot, publishNotice, readBody, replaceMap]);
   /* eslint-enable react-hooks/set-state-in-effect */

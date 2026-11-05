@@ -103,12 +103,26 @@ describe("useMapPersistence", () => {
         layoutMode: "manual",
         replaceMap,
         storageSession: storage.session,
+        storageMode: "persistent",
         mapName: "旅行",
       }));
       act(() => jest.advanceTimersByTime(300));
 
       expect(replaceMap).not.toHaveBeenCalled();
       expect(storage.writes).toEqual([]);
+    });
+
+    it("本体なしのsaveStatusを返す", () => {
+      const storage = createTestStorageSession({ initialJson: null });
+      const { result } = renderHook(() => useMapPersistence({
+        nodes: [],
+        layoutMode: "manual",
+        replaceMap: jest.fn(),
+        storageSession: storage.session,
+        storageMode: "persistent",
+        mapName: "旅行",
+      }));
+      expect(result.current.saveStatus).toBe("beforeSave");
     });
 
     it("検証済みの保存値を一度だけ復元する", () => {
@@ -123,6 +137,7 @@ describe("useMapPersistence", () => {
         layoutMode: "manual",
         replaceMap,
         storageSession: storage.session,
+        storageMode: "persistent",
         mapName: "旅行",
       }), { wrapper });
 
@@ -149,6 +164,7 @@ describe("useMapPersistence", () => {
         layoutMode: "manual",
         replaceMap: jest.fn(),
         storageSession: storage.session,
+        storageMode: "persistent",
         mapName: "旅行",
       }));
       act(() => jest.advanceTimersByTime(300));
@@ -170,6 +186,7 @@ describe("useMapPersistence", () => {
         layoutMode: "manual",
         replaceMap,
         storageSession: storage.session,
+        storageMode: "persistent",
         mapName: "旅行",
       }));
 
@@ -187,6 +204,7 @@ describe("useMapPersistence", () => {
         layoutMode: "manual",
         replaceMap,
         storageSession: storage.session,
+        storageMode: "persistent",
         mapName: "旅行",
       }));
 
@@ -206,6 +224,7 @@ describe("useMapPersistence", () => {
           layoutMode: nodes.length === 0 ? "manual" : "auto",
           replaceMap: jest.fn(),
           storageSession: storage.session,
+        storageMode: "persistent",
           mapName: "旅行",
         }),
         { initialProps: { nodes: [] as Node[] } },
@@ -250,6 +269,7 @@ describe("useMapPersistence", () => {
           layoutMode: "manual",
           replaceMap: jest.fn(),
           storageSession: storage.session,
+        storageMode: "persistent",
           mapName: "旅行",
         }),
         { initialProps: { label: "A" } },
@@ -273,6 +293,7 @@ describe("useMapPersistence", () => {
           layoutMode: "manual",
           replaceMap: jest.fn(),
           storageSession: storage.session,
+        storageMode: "persistent",
           mapName: "旅行",
         }),
         { initialProps: { label: "A" } },
@@ -293,6 +314,7 @@ describe("useMapPersistence", () => {
           layoutMode: "manual",
           replaceMap: jest.fn(),
           storageSession: storage.session,
+        storageMode: "persistent",
           mapName: "旅行",
         }),
         { initialProps: { label: "A" } },
@@ -315,6 +337,7 @@ describe("useMapPersistence", () => {
           layoutMode: "manual",
           replaceMap: jest.fn(),
           storageSession: storage.session,
+        storageMode: "persistent",
           mapName: "旅行",
         }),
         { initialProps: { label: "A" } },
@@ -347,6 +370,7 @@ describe("useMapPersistence", () => {
           layoutMode: "manual",
           replaceMap: jest.fn(),
           storageSession: storage.session,
+        storageMode: "persistent",
           mapName: "旅行",
         }),
         { initialProps: { label: "A" } },
@@ -381,6 +405,7 @@ describe("useMapPersistence", () => {
         layoutMode: "manual",
         replaceMap: jest.fn(),
         storageSession: storage.session,
+        storageMode: "persistent",
         mapName: "旅行",
         readFile,
       }));
@@ -413,6 +438,7 @@ describe("useMapPersistence", () => {
         layoutMode: "manual",
         replaceMap: jest.fn(),
         storageSession: createTestStorageSession().session,
+        storageMode: "persistent",
         mapName: "旅行",
         downloadJson,
       }));
@@ -435,6 +461,7 @@ describe("useMapPersistence", () => {
         layoutMode: "manual",
         replaceMap: jest.fn(),
         storageSession: createTestStorageSession().session,
+        storageMode: "persistent",
         mapName: "旅行",
         downloadJson,
       }));
@@ -459,6 +486,7 @@ describe("useMapPersistence", () => {
         layoutMode: "manual",
         replaceMap,
         storageSession: createTestStorageSession().session,
+        storageMode: "persistent",
         mapName: "旅行",
         readFile,
       }));
@@ -496,6 +524,7 @@ describe("useMapPersistence", () => {
         layoutMode: "manual",
         replaceMap: jest.fn(),
         storageSession: storage.session,
+        storageMode: "persistent",
         mapName: "旅行",
         readFile,
       }));
@@ -517,6 +546,7 @@ describe("useMapPersistence", () => {
         layoutMode: "manual",
         replaceMap,
         storageSession: createTestStorageSession().session,
+        storageMode: "persistent",
         mapName: "旅行",
         readFile,
       }));
@@ -538,6 +568,7 @@ describe("useMapPersistence", () => {
         layoutMode: "manual",
         replaceMap,
         storageSession: createTestStorageSession().session,
+        storageMode: "persistent",
         mapName: "旅行",
         readFile,
       }));
@@ -562,6 +593,7 @@ describe("useMapPersistence", () => {
         layoutMode: "manual",
         replaceMap,
         storageSession: createTestStorageSession().session,
+        storageMode: "persistent",
         mapName: "旅行",
         readFile,
       }));

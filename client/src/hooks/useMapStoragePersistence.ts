@@ -12,6 +12,7 @@ type UseMapStoragePersistenceOptions = {
   replaceMap: (state: NodeMapState) => void;
   publishNotice: (notice: OperationNotice) => void;
   storageSession: MapStorageSession;
+  storageMode: "persistent" | "protected";
   clearSaveFailureNotice: () => void;
 };
 
@@ -20,6 +21,7 @@ export function useMapStoragePersistence({
   replaceMap,
   publishNotice,
   storageSession,
+  storageMode,
   clearSaveFailureNotice,
 }: UseMapStoragePersistenceOptions) {
   const restoration = useMapStorageRestoration({
@@ -33,6 +35,8 @@ export function useMapStoragePersistence({
     currentSnapshot,
     hydrated: restoration.hydrated,
     initialPersistedSnapshot: restoration.initialPersistedSnapshot,
+    restoreOrigin: restoration.restoreOrigin,
+    storageMode,
     publishNotice,
     writeBody: storageSession.writeBody,
     clearSaveFailureNotice,

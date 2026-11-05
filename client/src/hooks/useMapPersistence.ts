@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { isAutoSaveFailedNotice } from "@/domain/mapLibrary/mapLibraryMessages";
 import { createMapDocument, serializeMapDocument } from "@/domain/persistence/mapDocumentCodec";
+import type { MapSaveStatus } from "@/domain/persistence/mapSaveStatus";
 import { useMapFilePersistence } from "@/hooks/useMapFilePersistence";
 import { useMapStoragePersistence } from "@/hooks/useMapStoragePersistence";
 import type { MapDocumentResult } from "@/types/mapDocument";
@@ -17,6 +18,7 @@ type UseMapPersistenceOptions = {
   layoutMode: NodeLayoutMode;
   replaceMap: (state: NodeMapState) => void;
   storageSession: MapStorageSession;
+  storageMode: "persistent" | "protected";
   mapName: string;
   downloadJson?: (json: string, mapName: string) => void;
   readFile?: (file: File) => Promise<MapDocumentResult<string>>;
@@ -26,6 +28,7 @@ type UseMapPersistenceResult = {
   exportJson: () => void;
   importJsonFile: (file: File) => Promise<void>;
   notice: OperationNotice | null;
+  saveStatus: MapSaveStatus;
 };
 
 export function useMapPersistence({
@@ -33,6 +36,7 @@ export function useMapPersistence({
   layoutMode,
   replaceMap,
   storageSession,
+  storageMode,
   mapName,
   downloadJson,
   readFile,
@@ -46,11 +50,12 @@ export function useMapPersistence({
   const clearSaveFailureNotice = useCallback(() => {
     setNotice((current) => (isAutoSaveFailedNotice(current) ? null : current));
   }, []);
-  const { requestSnapshotSave } = useMapStoragePersistence({
+  const { requestSnapshotSave, saveStatus } = useMapStoragePersistence({
     currentSnapshot,
     replaceMap,
     publishNotice: setNotice,
     storageSession,
+    storageMode,
     clearSaveFailureNotice,
   });
   const { exportJson, importJsonFile } = useMapFilePersistence({
@@ -63,5 +68,5 @@ export function useMapPersistence({
     readFile,
   });
 
-  return { exportJson, importJsonFile, notice };
+  return { exportJson, importJsonFile, notice, saveStatus };
 }

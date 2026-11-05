@@ -61,6 +61,7 @@ export default function Home() {
             onMoveBranchToMap={(rootId, targetMapId) => dialog.moveBranchToMap(view.storageSession, targetMapId, rootId)}
             mapName={view.currentMap.name}
             storageSession={view.storageSession}
+            storageMode={view.storageMode}
             shortcutsEnabled={dialog.screen.kind === "closed"}
             dialogMouseClickedAtRef={dialogMouseClickedAtRef}
             exportButtonRef={exportButtonRef}

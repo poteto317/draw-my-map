@@ -130,6 +130,7 @@ describe("Home とマップの一覧の結合", () => {
 
   it("空の localStorage で起動すると「無題のマップ」を開き、インデックスを作る", async () => {
     await renderPage();
+    expect(within(screen.getByRole("banner")).getByRole("status", { name: "保存状態: 保存前" })).toBeInTheDocument();
 
     expect(currentMapName()).toHaveTextContent("マップ: 無題のマップ");
     const index = readIndex();
@@ -150,6 +151,7 @@ describe("Home とマップの一覧の結合", () => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       expect(currentMapName()).toHaveTextContent("マップ: 旅行");
       expect(exportedLabels()).toEqual([]);
+      expect(within(screen.getByRole("banner")).getByRole("status", { name: "保存状態: 保存前" })).toBeInTheDocument();
       await waitFor(() => expect(shellNotices().getByRole("status"))
         .toHaveTextContent("マップ「旅行」を作成しました。"));
       await waitFor(() => expect(headerButton("マップ一覧")).toHaveFocus());
@@ -206,6 +208,7 @@ describe("Home とマップの一覧の結合", () => {
 
     expect(currentMapName()).toHaveTextContent("マップ: B");
     expect(exportedLabels()).toEqual(["B1"]);
+    expect(within(screen.getByRole("banner")).getByRole("status", { name: "保存状態: 保存済み" })).toBeInTheDocument();
     expect(readIndex().currentMapId).toBe("b");
     expect(readActiveMapJson(window.localStorage)).toBe(v3JsonFromLabels(["B1"]));
   });
@@ -388,6 +391,7 @@ describe("Home とマップの一覧の結合", () => {
     await renderPage();
 
     await waitFor(() => expect(shellNotices().getByRole("alert")).toHaveTextContent(UNAVAILABLE_WARNING));
+    expect(within(screen.getByRole("banner")).getByRole("status", { name: "保存状態: ブラウザへ保存できません" })).toBeInTheDocument();
     expect(headerButton("マップ一覧")).toBeDisabled();
     expect(headerButton("新しいマップ")).toBeDisabled();
     expect(screen.getByText("保存できないため、マップの切り替えは使えません。")).toBeInTheDocument();
@@ -406,6 +410,7 @@ describe("Home とマップの一覧の結合", () => {
       await renderPage();
 
       await waitFor(() => expect(shellNotices().getByRole("alert")).toHaveTextContent(UNAVAILABLE_WARNING));
+      expect(within(screen.getByRole("banner")).getByRole("status", { name: "保存状態: ブラウザへ保存できません" })).toBeInTheDocument();
       expect(currentMapName()).toHaveTextContent("マップ: 無題のマップ");
       expect(headerButton("マップ一覧")).toBeDisabled();
     } finally {

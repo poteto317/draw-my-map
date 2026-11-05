@@ -1,6 +1,6 @@
 # Draw My Map API 仕様書
 
-本書は、**Draw My Map** におけるノードアイコン・イラスト生成エンドポイント（`POST /api/illustrations`）の詳細な API 仕様、内部アーキテクチャ、処理パイプライン、クライアント側画像処理、および本番公開に向けた運用・セキュリティ考慮事項をまとめた技術仕様書です。9〜11章ではクライアントAPIを扱います。
+本書は、**Draw My Map** におけるノードアイコン・イラスト生成エンドポイント（`POST /api/illustrations`）の詳細な API 仕様、内部アーキテクチャ、処理パイプライン、クライアント側画像処理、および本番公開に向けた運用・セキュリティ考慮事項をまとめた技術仕様書です。9〜12章ではクライアントAPIを扱います。
 
 ---
 
@@ -17,6 +17,7 @@
 9. [ノードだけ削除のクライアントAPI](#9-ノードだけ削除のクライアントapi)
 10. [アウトライン編集と共有フォーカスのクライアントAPI](#10-アウトライン編集と共有フォーカスのクライアントapi)
 11. [アウトライン書き出しのクライアントAPI](#11-アウトライン書き出しのクライアントapi)
+12. [保存状態表示のクライアントAPI](#12-保存状態表示のクライアントapi)
 
 ---
 
@@ -605,3 +606,9 @@ type OutlineRows = {
 `downloadOutlineText(text, mapName, format, now?)` は `.md` を `text/markdown;charset=utf-8`、`.txt` を `text/plain;charset=utf-8` の Blob にし、既存 `createMapFileName` の無効文字・予約名・ローカル日時の規則で `<mapName>-YYYYMMDD-HHMMSS.md|txt` を作ります。`URL.createObjectURL` 後のアンカー `click()` と `finally` の `URL.revokeObjectURL` を担当し、失敗例外は呼出し元へ渡します。
 
 `useOutlineExport({ model, mapName, downloadText? })` は `{ exportMarkdown, exportPlainText, notice }` を返します。空と上限は警告、不正構造・生成・ダウンロード例外は形式別のエラーを専用通知枠へ出します。正常復帰時だけ形式別の成功通知を出します。成功はブラウザへのダウンロード開始を指し、ディスクへの保存完了を示しません。`OutlineExportControls` は共通ヘッダーの2ボタンだけを持ち、map / outline のどちらでも使え、ダイアログ中は editor 根の `inert` に従います。保存・JSON・画像の通知、履歴、選択、V3保存形式は変更しません。
+
+## 12. 保存状態表示のクライアントAPI
+
+HTTP エンドポイントと保存形式は追加しません。`MapRestoreOrigin = "restored" | "empty" | "failed"` は `useMapStorageRestoration` が本体の初回読込結果として返し、`MapSaveStatus = "checking" | "saved" | "beforeSave" | "restoreFailed" | "pending" | "failed" | "protected"` は `deriveMapSaveStatus` が現在のエディタの表示用に返します。入力は `hydrated`, `restoreOrigin`, `currentSnapshot`, `initialPersistedSnapshot`, `confirmedSnapshot`, `forcedSnapshot`, `hasSaveFailure`, `storageMode` です。仮の初期 snapshot と `inactive` / `unchanged` は保存成功の根拠にしません。
+
+`useMapStorageAutoSave` は既存の `requestSnapshotSave(snapshot)` と同期 `flushPendingSave()` を保ち、返り値に `saveStatus` を追加します。`useMapStoragePersistence`、`useMapPersistence`、`MapEditor` はシェルの必須 `storageMode: "persistent" | "protected"` を受け渡し、`MapEditor` が `AppHeader` の必須 `saveStatus` に結果を渡します。`MapSaveStatus` は単一の `role="status"` / `aria-live="polite"` と独立した `aria-label` を持ちます。失敗の `role="alert"` と JSON 救出案内は既存通知のままです。詳細な遷移は [data-model.md の 5.5 節](./data-model.md#55-自動保存ライフサイクルusemapstorageautosaveと-flush) を参照してください。

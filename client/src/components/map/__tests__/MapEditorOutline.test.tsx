@@ -72,7 +72,7 @@ async function renderEditor({
       mapMoveTargets={[{ id: storage.session.mapId, name: mapName, updatedAt: "2026-10-31T00:00:00.000Z" }]}
       onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "移動先がありません。" } })}
       mapName={mapName}
-      storageSession={storage.session}
+      storageSession={storage.session} storageMode="persistent"
       mapControls={mapControls}
       shortcutsEnabled={shortcutsEnabled}
       dialogMouseClickedAtRef={dialogMouseClickedAtRef}
@@ -233,7 +233,7 @@ it("dialogとdisabledはoutline操作を止め、共通選択をイラストパ�
   expect(screen.getByRole("button", { name: "階層2・子B" })).toBeDisabled();
   await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "キャンセル" }));
   expect(screen.getByRole("button", { name: "階層2・子B" })).not.toBeDisabled();
-  rerender(<MapEditor mapId={storage.session.mapId} mapName="別" storageSession={storage.session}
+  rerender(<MapEditor mapId={storage.session.mapId} mapName="別" storageSession={storage.session} storageMode="persistent"
     mapControls={null} exportButtonRef={{ current: null }} mapMoveTargets={[]} onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "なし" } })}
     shortcutsEnabled={false} dialogMouseClickedAtRef={{ current: null }} />);
   expect(screen.getByRole("button", { name: "階層2・子B" })).toBeDisabled();
@@ -259,7 +259,7 @@ it("同じ表示ボタンは要求を再発行せず、map key変更では初期
   expect(mockFocusedNodes).toHaveBeenCalledTimes(1);
   expect(mockFocusRequests.mock.lastCall?.[0]?.sequence).toBe(1);
   await switchTo("アウトライン");
-  rerender(<MapEditor key="other-map" mapId="other-map" mapName="別" storageSession={storage.session}
+  rerender(<MapEditor key="other-map" mapId="other-map" mapName="別" storageSession={storage.session} storageMode="persistent"
     mapControls={null} exportButtonRef={{ current: null }} mapMoveTargets={[]} onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "なし" } })}
     shortcutsEnabled={true} dialogMouseClickedAtRef={{ current: null }} />);
   await waitFor(() => expect(document.querySelector("canvas")).toBeInTheDocument());
