@@ -21,6 +21,7 @@ type UseMapStorageAutoSaveResult = {
   requestSnapshotSave: (snapshot: string) => void;
   flushPendingSave: () => MapFlushResult;
   saveStatus: MapSaveStatus;
+  hasSavedBodyThisMount: () => boolean;
 };
 
 export function useMapStorageAutoSave({
@@ -44,6 +45,7 @@ export function useMapStorageAutoSave({
   const lastPersistedSnapshotRef = useRef<string | null>(null);
   const confirmedSnapshotRef = useRef<string | null>(null);
   const hasSaveFailureRef = useRef(false);
+  const hasSavedBodyThisMountRef = useRef(false);
   const forcedSnapshotRef = useRef<string | null>(null);
   const forceGenerationRef = useRef(0);
   const pendingTimerRef = useRef<number | null>(null);
@@ -91,6 +93,7 @@ export function useMapStorageAutoSave({
       if (written.status === "inactive") return { status: "unchanged" };
 
       lastPersistedSnapshotRef.current = snapshot;
+      hasSavedBodyThisMountRef.current = true;
       confirmedSnapshotRef.current = snapshot;
       // 成功した書込より後の明示要求だけを残す。古い要求は新しい編集の保存で置換される。
       if (forceGenerationRef.current === forceGeneration) forcedSnapshotRef.current = null;
@@ -180,5 +183,7 @@ export function useMapStorageAutoSave({
     return handleWriteResultRef.current(snapshot, written, forceGeneration);
   }, []);
 
-  return { requestSnapshotSave, flushPendingSave, saveStatus };
+  const hasSavedBodyThisMount = useCallback(() => hasSavedBodyThisMountRef.current, []);
+
+  return { requestSnapshotSave, flushPendingSave, saveStatus, hasSavedBodyThisMount };
 }

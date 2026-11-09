@@ -1,6 +1,16 @@
 import { createProtectedStorageSession } from "../protectedStorageSession";
 
 describe("createProtectedStorageSession", () => {
+  it("保護 session は editor snapshot を登録しても公開しない", () => {
+    const session = createProtectedStorageSession("map-1", "persisted");
+    const unregister = session.registerBackupSnapshot(() => ({
+      json: "editor", hydrated: true, restoreOrigin: "restored", hasSavedBodyThisMount: true,
+    }));
+    expect(session.readBackupSnapshot()).toBeNull();
+    unregister();
+    expect(session.readBackupSnapshot()).toBeNull();
+  });
+
   it("mapId と最初の値を返す", () => {
     const session = createProtectedStorageSession("map-1", '{"version":3}');
 

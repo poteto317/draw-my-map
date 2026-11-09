@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useState } from "react";
 import { isAutoSaveFailedNotice } from "@/domain/mapLibrary/mapLibraryMessages";
 import { createMapDocument, serializeMapDocument } from "@/domain/persistence/mapDocumentCodec";
 import type { MapSaveStatus } from "@/domain/persistence/mapSaveStatus";
@@ -50,7 +50,7 @@ export function useMapPersistence({
   const clearSaveFailureNotice = useCallback(() => {
     setNotice((current) => (isAutoSaveFailedNotice(current) ? null : current));
   }, []);
-  const { requestSnapshotSave, saveStatus } = useMapStoragePersistence({
+  const { requestSnapshotSave, saveStatus, hydrated, restoreOrigin, hasSavedBodyThisMount } = useMapStoragePersistence({
     currentSnapshot,
     replaceMap,
     publishNotice: setNotice,
@@ -58,6 +58,15 @@ export function useMapPersistence({
     storageMode,
     clearSaveFailureNotice,
   });
+  useLayoutEffect(
+    () => storageSession.registerBackupSnapshot(() => ({
+      json: currentSnapshot,
+      hydrated,
+      restoreOrigin,
+      hasSavedBodyThisMount: hasSavedBodyThisMount(),
+    })),
+    [currentSnapshot, hydrated, restoreOrigin, hasSavedBodyThisMount, storageSession],
+  );
   const { exportJson, importJsonFile } = useMapFilePersistence({
     currentSnapshot,
     mapName,

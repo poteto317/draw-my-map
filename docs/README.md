@@ -27,12 +27,13 @@ Draw My Map の設計・仕様・環境構築・テスト・開発運用に関�
   - 兄弟の順序変更の流れ（`nodeSiblingOrder.ts`・`nodeSiblingSwapPlacement.ts`、`useSiblingReorderAction`、`useNodes.reorderSibling` の1回の commit、自動配置の並べ替えのジェスチャー）。
   - 階層の上げ下げの流れ（`nodeIndent.ts`・`nodeIndentPlacement.ts`・`nodeSiblingNeighbors.ts`、`useNodeIndentAction`、`useNodes.changeNodeIndent` の1回の commit、下げたときの新しい親の展開、並べ替えと共有する枝の構造の変更の通知）。
   - 親の挿入の流れ（`nodeParentInsertion.ts`・`nodeParentInsertionMessages.ts`・`nodePlacement.ts` の `createParentNode`、`useNodeParentInsertionAction`、`useNodes.insertParentNode` の1回の commit と新しいノードの選択、成功したときの `clearNotice` とラベルの編集の要求（`useNodeLabelEditRequest`）、失敗の通知、並べ替え・上げ下げと共有する枝の構造の変更の通知）。
+  - 一括バックアップ・追加復元の流れ（ファイル形式、editor snapshot、専用ジャーナル、起動復旧と保護モード、ダイアログの画面遷移）。
   - 枝の移動の流れ（`nodeBranchMove.ts`、`useBranchMoveDialog`、`useNodes.moveBranch` の1回の commit、`useMapLibrary.moveBranchToMap` のセッションの調整、`branchMoveTransaction.ts` のジャーナル、再マウントの後の通知とフォーカス）。
 
 ### 2. 仕様書・マニュアル
 
 - **[機能仕様・操作マニュアル](specifications/features.md)** (`docs/specifications/features.md`)
-  - Phase 0〜15と Phase 16 候補006で実装された機能の詳細仕様。Phase 14 の構造編集は14〜18章（兄弟順序・階層・親挿入・枝移動・ノードだけ削除）。
+  - Phase 0〜15と Phase 16 候補006・007で実装された機能の詳細仕様。Phase 14 の構造編集は14〜18章（兄弟順序・階層・親挿入・枝移動・ノードだけ削除）。
   - キャンバス操作（パン、ズーム、フォーカス）、ノード操作（作成、編集、削除、子孫連動移動、ドラッグ接続）。
   - 自動レイアウトアルゴリズム、解像度フィルタリング（重要度とヒステリシス制御）。
   - AIイラスト生成（プロンプト生成、ノード紐付け、縮小、再生成、削除）。
@@ -45,6 +46,7 @@ Draw My Map の設計・仕様・環境構築・テスト・開発運用に関�
   - キーボードショートカット・マウス操作一覧表。
   - 複数マップ（作成・一覧・切り替え・名前変更・削除の3通り、名前の規則、ダイアログのキーボード操作とフォーカス、保護モード、起動時の通知、他タブとの同時編集は対象外）。
   - 現在のマップ本体の保存状態（7状態、300ms待機、復元失敗、保存失敗と JSON 救出、保護モード）。
+  - 全マップの一括バックアップ・追加復元（12.11節。確認、欠損、上限、復旧、フォーカス、対象外）。
   - 箇条書きからの追加（記法とインデントの数え方、階層の補正と警告、上限、プレビュー、追加する位置と配置、1操作での Undo / Redo、通知、キーボードとフォーカス）。
   - 兄弟ノードの順序変更（ボタン・ショートカット・自動配置のドラッグ、隠れた兄弟の扱い、手動配置の縦位置の入れ替え、先頭のルートの座標の引き継ぎ、1操作での Undo / Redo、通知、既存の操作との関係）。
   - 階層の上げ下げ（ボタン・ショートカット、上げ下げの規則と隠れた兄弟、手動配置の座標、自動配置と先頭のルート、折りたたみの展開、1操作での Undo / Redo、通知、キーボードとフォーカス、「戻る」「進む」の抑止、既存の操作との関係）。
@@ -61,10 +63,12 @@ Draw My Map の設計・仕様・環境構築・テスト・開発運用に関�
   - 階層の上げ下げの型（2.8。親子は `parentId`、兄弟の順は `nodes` 配列の相対順で表し、保存形式は変えない）。
   - 途中への親ノード挿入の型（2.9。`NodeParentInsertionResult`・`InsertParentNodeResult`・`NodeLabelEditRequest`。親子は `parentId` で表し、保存形式は変えない）。
   - 枝の移動の型（2.10）とジャーナル（5.11。キー `draw-my-map.branch-move.v1`）。
+  - 一括バックアップ形式と専用ジャーナル（5.12。キー `draw-my-map.library-restore.v1`）、保存成功証拠を持つ `MapStorageSession`（5.5）。
   - 枝の折りたたみなど表示専用の状態を保存形式・編集履歴に含めない方針（1.2）。
 
 - **[API 仕様](specifications/api.md)** (`docs/specifications/api.md`)
   - アウトライン書き出しのクライアントAPI（11章。整形、ダウンロード、通知の契約）。
+  - 一括バックアップ・追加復元のクライアントAPI（13章。snapshot 登録、4操作、結果と通知先）。
   - ノードだけ削除のクライアントAPI（`api.md` 9章。純粋変換・hook・action・Controlの公開契約）。
   - Route Handler: `POST /api/illustrations` のリクエスト / レスポンス JSON スキーマ。
   - 処理パイプライン（入力検証 → 日本語自動翻訳 `@cf/meta/m2m100-1.2b` → 画像生成 `@cf/black-forest-labs/flux-1-schnell` → NSFW 誤判定リトライ機構）。
@@ -80,7 +84,7 @@ Draw My Map の設計・仕様・環境構築・テスト・開発運用に関�
 ### 4. テスト・品質保証
 
 - **[実ブラウザテストケース](testing/browser-test-cases.md)** (`docs/testing/browser-test-cases.md`)
-  - 自動テスト（Jest + jsdom）では検証が難しいキャンバス描画・インタラクション・実ブラウザ固有挙動の確認テスト項目（Phase 0〜15と Phase 16 候補006。Phase 14 は Q〜U 節、Phase 15 候補004は V 節、候補005は W 節、保存状態は X 節）。
+  - 自動テスト（Jest + jsdom）では検証が難しいキャンバス描画・インタラクション・実ブラウザ固有挙動の確認テスト項目（Phase 0〜15と Phase 16 候補006・007。Phase 14 は Q〜U 節、Phase 15 候補004は V 節、候補005は W 節、保存状態は X 節、一括バックアップ・追加復元は Y 節）。
   - 優先度別テストケース（起動、操作、フィルタリング、イラスト生成、エクスポート、編集履歴、枝の複製、枝のコピー＆ペースト、ノード検索、枝の折りたたみ、複数マップの保存・切り替え、箇条書きからの追加、兄弟ノードの順序変更、階層の上げ下げ、途中への親ノード挿入等）。
 
 ### 5. プロジェクト管理・開発履歴

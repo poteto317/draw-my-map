@@ -114,7 +114,7 @@ Root Node B (id: 5, parentId: null)
 | `client/src/types/nodeFocusRequest.ts` | `NodeFocusRequest` | 検索からの中央移動要求（`nodeId`, `sequence`, `documentRevision`） |
 | `client/src/types/nodeLabelEditRequest.ts` | `NodeLabelEditRequest` | 親の挿入の後のラベルの編集の開始要求（`nodeId`, `sequence`, `documentRevision`。2.9 節） |
 | `client/src/types/revisionScopedNodeRequest.ts` | `RevisionScopedNodeRequest` | ノードへの要求（中央移動・ラベルの編集）の共通の形（`nodeId`, `sequence`, `documentRevision`）。発行側の `useRevisionScopedNodeRequest` と振り分け側の `classifyNodeRequest` が共有する |
-| `client/src/types/mapStorageSession.ts` | `MapStorageSession`, `MapBodyWriteResult`, `MapFlushResult` | 開いているマップの本体の読み書きと flush の登録（5.5 節） |
+| `client/src/types/mapStorageSession.ts` | `MapStorageSession`, `MapBackupSnapshot`, `MapBodyWriteResult`, `MapFlushResult` | 開いているマップの本体の読み書き、flush とバックアップ snapshot の登録（5.5 節） |
 | `client/src/types/mapLibraryDialog.ts` | `MapLibraryDialogScreen`, `OpenMapLibraryDialogScreen`, `MapLibraryRowAction`, `MapLibraryDialogFocusTarget`, `MapLibraryDialogNotices` | マップのダイアログの画面、行の操作、フォーカス先、ダイアログ内の通知 |
 
 ### 2.1 ノード・キャンバス状態型
@@ -258,7 +258,7 @@ export type MapDocumentResult<T> =
 #### `MapIndexEntry` / `MapIndexV1` (`client/src/domain/mapLibrary/mapIndex.ts`)
 複数マップの一覧（インデックス）の型です。`localStorage` のキー `draw-my-map.maps.v1` に JSON で保存します。型の定義と読み込み時の正規化は 5.2 節を参照してください。マップ本体（`MapDocument`）にはマップ名を含めず、名前・作成日時・更新日時はこの型だけが持ちます。
 
-#### `MapStorageSession` / `MapBodyWriteResult` / `MapFlushResult` (`client/src/types/mapStorageSession.ts`)
+#### `MapStorageSession` / `MapBackupSnapshot` / `MapBodyWriteResult` / `MapFlushResult` (`client/src/types/mapStorageSession.ts`)
 エディタが開いているマップの本体を読み書きするための、マップ id とセッション番号を閉じ込めた保存先の型です。定義と照合の規則は 5.5 節を参照してください。
 
 ### 2.4 AI イラスト生成・通知型
@@ -936,6 +936,7 @@ Phase 12 から、名前を付けた複数のマップを保存します。マ�
 | 壊れたインデックスの退避 | `draw-my-map.maps.v1.corrupt-backup` | `MAP_INDEX_BACKUP_STORAGE_KEY` | 壊れていたインデックスの生の文字列 |
 | 旧キー（移行元） | `draw-my-map.map.v1` | `MAP_STORAGE_KEY`（`mapStorage.ts`） | Phase 11 までの単一マップの JSON（Version 1〜3） |
 | 枝の移動のジャーナル | `draw-my-map.branch-move.v1` | `BRANCH_MOVE_JOURNAL_KEY`（`branchMoveJournal.ts`） | 別マップへの移動の間だけ置く原本の JSON（5.11 節） |
+| 一括追加復元のジャーナル | `draw-my-map.library-restore.v1` | `LIBRARY_RESTORE_JOURNAL_KEY`（`libraryRestoreJournal.ts`） | 追加復元の途中で一覧と新規本体を戻すための JSON（5.12 節） |
 
 - 本体のキーは `mapBodyKey(id)` の1か所だけで作ります。id は `MAP_ID_PATTERN`（`/^[A-Za-z0-9_-]{1,64}$/`）に合う文字列で、区切りの `.` を含みません。
 - 一覧と本体のキーはすべて `draw-my-map.maps.v1` で始まり、旧キー `draw-my-map.map.v1` とは前方一致で重なりません。本体を列挙するときは接頭辞 `draw-my-map.maps.v1.doc.` で探し、残りが id の形式に合うものだけを本体とみなすため、旧キーや退避キーを本体と取り違えません。
@@ -999,7 +1000,7 @@ export type MapIndexV1 = {
 
 ### 5.3 起動の分岐と移行
 
-起動の処理は、`localStorage` から読み取った値（`readMapLibrarySnapshot` が返す、インデックスの生の文字列・旧キーの生の文字列・本体の id の一覧）を入力に「書き込む内容・開く状態・通知」を決める純関数 `planMapLibraryStartup(snapshot, deps)`（`domain/mapLibrary/mapLibraryStartup.ts`）と、その計画を書き込みとともに実行する `runMapLibraryStartup(storage, deps)`（`services/persistence/mapLibraryStartupRunner.ts`）に分かれます。
+起動は通常の一覧修復より先に専用復元・枝移動の両ジャーナルを判定します（5.11・5.12 節）。その後の起動の処理は、`localStorage` から読み取った値（`readMapLibrarySnapshot` が返す、インデックスの生の文字列・旧キーの生の文字列・本体の id の一覧）を入力に「書き込む内容・開く状態・通知」を決める純関数 `planMapLibraryStartup(snapshot, deps)`（`domain/mapLibrary/mapLibraryStartup.ts`）と、その計画を書き込みとともに実行する `runMapLibraryStartup(storage, deps)`（`services/persistence/mapLibraryStartupRunner.ts`）に分かれます。
 
 - 起動の処理は書き込みを伴い、書き込んだ結果が次の判定の入力を変えるため、何度実行しても同じ結果にはなりません。`useMapLibrary` は `startupRef` に最初の結果を入れ、StrictMode の2回目の effect では `localStorage` を読み書きせず、ref の結果をそのまま state に設定します。この effect は購読やタイマーを持たないため cleanup がありません。状態がすでに確定している（`libraryRef` が null でない）ときの再実行（開発時の Fast Refresh）では、起動時の結果で設定し直すと起動後の操作が巻き戻るため、何もしません。StrictMode の擬似的な再マウントでは layout effect が `libraryRef` をレンダー時の null に戻してから2回目が実行されるため、2回目は従来どおり ref の結果を設定します。
 - 移行と旧キーの後始末は、同じ起動の計画に入りません。移行した起動では旧キーを残し、次の起動で消します。例外は、本体かインデックスの書き込みが容量不足で失敗したときのやり直し（「旧キーからの移行」の 4）で、このときだけ移行した起動のうちに旧キーを消します。
@@ -1059,9 +1060,9 @@ export type MapIndexV1 = {
 #### 保護モード
 
 - `localStorage` へ書き込めないとき、または書き込むと保存済みのデータを壊すおそれがあるときのモードです。`useMapLibrary` の状態 `storageMode: "persistent" | "protected"` で表します。
-- 保護モードでは、`createProtectedStorageSession(mapId, initialJson)`（`services/persistence/protectedStorageSession.ts`）で作ったセッションをエディタへ渡します。`mapId` は `generateMapId()` で作ったメモリ上だけの id で、どこにも書きません。ただし枝の移動から入る場合は、移動の実行中なら現在のマップの既存の id、起動時の復旧ならジャーナルの `sourceId`（ジャーナルが壊れているときは固定の `branch-move-recovery`）を使います。`readBody` は `{ ok: true, value: initialJson }`（移行に失敗した場合は旧キーの生の文字列、枝の移動の実行中は移動元の原本、起動時の復旧はジャーナルの `sourceBefore`、それ以外は `null`）を返し、`writeBody` は常に `{ status: "inactive" }` を返して何も書きません。`registerFlush` は何もしない解除関数を返します。
+- 保護モードでは、`createProtectedStorageSession(mapId, initialJson)`（`services/persistence/protectedStorageSession.ts`）で作ったセッションをエディタへ渡します。通常の保存領域利用不能時の `mapId` は `generateMapId()` によるメモリ上だけの id です。枝移動で保護へ移る場合は現在または移動元の id を使います。一括復元の実行中に復旧不能となった場合は現在の id と書込直前の有効な document JSON を使い、一括復元ジャーナルによる保護起動では、有効な保存中一覧（無ければ有効な一括復元ジャーナルの操作前一覧）の現在 id とその本体の有効な V1/V2/V3 原文を使います。選んだ本体が不正・欠損・読取不能なら `initialJson` は `null` とし、別マップでは代用しません。枝移動ジャーナル単独の保護起動では、読める記録の `sourceBefore` を使い、記録が壊れている場合は `initialJson: null` と固定 id `branch-move-recovery` を使います（5.11 節）。`readBody` は `{ ok: true, value: initialJson }`、`writeBody` は常に `{ status: "inactive" }` です。`registerFlush` と `registerBackupSnapshot` は何もしない解除関数を返し、`readBackupSnapshot` は `null` です。
 - 自動保存と flush は何も書かず、通知も出しません。ヘッダーの「マップ一覧」「新しいマップ」は無効です。JSON の読み込み・書き出しと画像の書き出しは使えます。
-- 起動の分岐のほかに、枝の移動のジャーナルが壊れている・原本を復元できないときも保護モードになります（5.11 節）。
+- 起動の分岐のほかに、枝の移動または一括追加復元のジャーナルが壊れている・原本を復元できないときも保護モードになります（5.11・5.12 節）。
 
 ### 5.4 書き込み順序と途中失敗の扱い
 
@@ -1101,16 +1102,26 @@ export type MapFlushResult =
   | { status: "unchanged" } // 保存待ちが無い、または復元前
   | { status: "failed"; error: string };
 
+export type MapBackupSnapshot = {
+  json: string; // 現在の editor の最新 V3 document JSON
+  hydrated: boolean;
+  restoreOrigin: MapRestoreOrigin | null;
+  hasSavedBodyThisMount: boolean; // 同じ mount で writeBody が saved を返した実績
+};
+
 export type MapStorageSession = {
   mapId: string;
   readBody: () => MapDocumentResult<string | null>; // 本体の読み込み（復元に使う）
   writeBody: (json: string) => MapBodyWriteResult;  // 本体の書き込み＋更新日時の更新
   registerFlush: (flush: () => MapFlushResult) => () => void;
+  registerBackupSnapshot: (snapshot: () => MapBackupSnapshot) => () => void;
+  readBackupSnapshot: () => MapBackupSnapshot | null;
 };
 ```
 
 - `useMapLibrary` は、現在のマップが変わるたびにセッション番号を進め、新しいセッションを作ります。`writeBody` は作られたときの `mapId` とセッション番号を閉じ込め、呼ばれたときに、セッション番号がシェルの現在の番号と一致し、`mapId` がインデックスにあるときだけ書きます。そうでなければ `{ status: "inactive" }` を返し、何も書かず、通知もしません。照合はマップ id ではなくセッション番号で行うため、A → B → A と切り替えたときに、最初の A のエディタの書き込みは `inactive` になります。
 - `registerFlush` も、古いセッションからの登録を受け付けません（現在の登録を上書きしない）。
+- `registerBackupSnapshot` と `readBackupSnapshot` は必須です。`useMapPersistence` は layout effect で最新 document と保存実績の getter を登録します。古いセッションと保護セッションの `readBackupSnapshot()` は `null` です。初回復元が `failed` の場合は、同じ mount の `writeBody: saved` 実績が出るまで一括操作を拒否します。`saveStatus`、`flush: unchanged`、仮の baseline は証拠にしません。実績があれば、保存待ち・保存失敗の状態でも最新 snapshot を使います。
 
 ```mermaid
 sequenceDiagram
@@ -1215,6 +1226,8 @@ sequenceDiagram
 
 ### 5.8 JSON ファイル エクスポート／インポート仕様
 
+この節はヘッダーから開いている**1マップ**を扱う JSON です。マップ一覧の一括バックアップ・追加復元は 5.12 節の別形式です。個別 JSON の読み込みは現在のマップを置換しますが、追加復元は置換しません。
+
 #### エクスポート（ダウンロード）仕様 (`mapJsonDownload.ts`, `useMapJsonExport.ts`)
 - **トリガー**: アプリケーションヘッダーの「**JSON書き出し**」ボタン。
 - **ファイル名命名規則**（`createMapJsonFileName(mapName, now)` → `createMapFileName`。`domain/mapLibrary/mapFileName.ts`）:
@@ -1317,6 +1330,8 @@ sequenceDiagram
 
 ### 5.11 枝の移動のジャーナル
 
+専用の一括追加復元ジャーナル `draw-my-map.library-restore.v1` と同時には処理しません。両方が残る起動では一方を勝手に復旧せず保護モードへ移ります（5.12 節）。
+
 別マップへの枝の移動は、移動先の本体・移動元の本体・インデックスの3つのキーを書き換えます。`localStorage` は複数のキーを一度に書けないので、キー `draw-my-map.branch-move.v1` に原本を残してから書き、途中で失敗・中断しても原本へ戻せるようにします（`services/persistence/branchMoveJournal.ts`、`branchMoveTransaction.ts`）。
 
 ```typescript
@@ -1363,6 +1378,30 @@ export type BranchMoveJournal = {
 - 移動の実行中に原本へ戻せなかったときも、ジャーナルを残して保護モードへ移ります。`useMapLibrary` はセッション番号を進めて旧セッションを無効にするので、遅れて届いた自動保存が移動前の枝を書き戻すことはありません。結果の `enteredProtectedMode` は 2.10 節を参照してください。
 - 同期の `localStorage` の単一タブでの失敗と再読み込みを対象とします。複数のタブをまたぐ排他制御はしません。別のタブの保存は検出できません。
 - **既知の制限**: ジャーナルが壊れていると、保護モードが再読み込みの後も続き、解除の手段は画面にありません。ジャーナルからは原本を取り出せないので、自動では消さず、消すかどうかを利用者が判断する手順も用意していません。データは `draw-my-map.branch-move.v1` と各本体のキーに残っています。
+
+### 5.12 全マップの一括バックアップと追加復元（Phase 16・候補007）
+
+`LibraryBackupV1` は個別 `MapDocument` と異なるローカル平文 JSON です。暗号化も自動クラウド送信もしません。`libraryBackupCodec.ts` が余分なキーを落として検証し、`libraryBackupExport.ts` が一覧順に集め、`libraryBackupFile.ts` がファイルを読み書きします。
+
+```typescript
+type LibraryBackupV1 = {
+  format: "draw-my-map-library-backup";
+  version: 1;
+  exportedAt: string; // 有効な日時
+  currentMapId: string; // maps 内にある元 ID
+  maps: Array<{ id: string; name: string; createdAt: string; updatedAt: string; document: MapDocumentV3 }>;
+};
+```
+
+マップは1〜1000件、ID は `[A-Za-z0-9_-]{1,64}` で重複不可、名前は最大50コードポイント、日時は有効値、document は V3 に限ります。ファイルは UTF-8 で32 MiB以下です。書き出し時は生成後のバイト数、読込時は `File.text()` 前の `File.size` と解析後のバイト数を検査します。超過時は個別 JSON 書き出しを案内します。ファイル名は `draw-my-map-library-backup-YYYYMMDD-HHMMSS.json` で、マップ名を含みません。通知はダウンロード開始までで、保存完了を意味しません。
+
+書き出しは、保存中の一覧が現在の一覧と一致し、ジャーナルがなく、現在の session の editor snapshot が復元済みである場合だけ用意します。現在のマップには最新 snapshot を採り、別マップには保存本体を読みます。別マップの本体が `null` なら名前と件数を確認画面で示して空の V3 として含めます。読取例外や不正本体では全体を中止し、V1/V2 の保存本体はデコードして V3 として出力しますが、保存本体自体は暗黙に書き換えません。孤立本体は含めず件数を示します。確認後にも session・一覧・snapshot・ジャーナルを再検査します。
+
+追加復元は V3 の一括ファイルだけを受け付けます。個別 V1/V2 JSON の救出はヘッダーの「JSON読み込み」で行います。各マップへ未使用の**新しい** ID を与え、元のノード ID、名前、日時を維持して一覧の末尾に加えます。既存の ID・本体・現在のマップと、現在の editor/session は維持します。確認前のファイル読込中や確認後に session・一覧が変われば再試行を求めます。現在マップの保存待ちは `flush` し、失敗なら追加しません。
+
+`libraryRestoreJournal.ts` の専用ジャーナルは `format: "draw-my-map-library-restore"`, `version: 1`, 操作前後の一覧原文 `indexBefore` / `indexAfter`, 新規本体の `{ id, json }[]` を持ちます。`libraryRestoreTransaction.ts` は **ジャーナル → 新規本体全件 → 最終一覧1回 → ジャーナル削除** の順に同期書込し、最後の削除を確定点にします。途中失敗では一覧原文と書込済み新規本体を戻します。戻せなければ `recoveryRequired` として保護モードへ移し、書込直前に取得した有効な現在 document JSON を `initialJson` に渡します。再マウントで選択・履歴・viewport はリセットされますが、nodes・layoutMode・illustration は保持します。
+
+起動では通常の一覧修復より先に復元・枝移動の両ジャーナルを調べます。復元ジャーナルが正常で他者変更がなければ操作前へ戻して削除します。両方残る、記録不正、他者変更、復旧失敗なら自動上書きせず保護モードです。救出元は非修復で有効な保存中一覧の現在マップを優先し、それが無効・欠損・読取不能のときだけ有効なジャーナルの操作前一覧を使います。選んだ現在本体が有効な V1/V2/V3 なら原文を `initialJson` に渡し、不正・欠損・読取不能なら別マップで代用せず `null` にします。ジャーナルが残る間は枝移動と追加復元を拒否します。複数タブの一般的な競合解決は対象外です。
 
 ## 6. Markdown・箇条書き書き出しと保存形式（Phase 15）
 

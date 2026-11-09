@@ -46,6 +46,7 @@ function setup(options: {
     state.activeIndex = next;
   });
   const flushSlot: { current: FlushRegistration | null } = { current: null };
+  const backupSnapshotSlot: PersistentMapSessionContext["backupSnapshotSlot"] = { current: null };
   const context: PersistentMapSessionContext = {
     storage,
     mapId: "a",
@@ -55,6 +56,7 @@ function setup(options: {
     now: () => new Date(NOW),
     commitIndex,
     flushSlot,
+    backupSnapshotSlot,
   };
   return { session: createPersistentMapSession(context), state, entries, commitIndex, flushSlot };
 }
@@ -148,6 +150,30 @@ describe("createPersistentMapSession", () => {
     expect(flushSlot.current).toBe(current);
     unregister();
     expect(flushSlot.current).toBe(current);
+  });
+
+  it("snapshot は現在の session の登録だけを読み、解除は自分の登録だけを外す", () => {
+    const { session, state } = setup({ sessionNumber: 1, bodies: { [mapBodyKey("a")]: "saved-body" } });
+    const first = { json: "editor-a", hydrated: true, restoreOrigin: "failed" as const, hasSavedBodyThisMount: false };
+    const second = { ...first, json: "editor-b", hasSavedBodyThisMount: true };
+    let latest = first;
+
+    expect(session.readBackupSnapshot()).toBeNull();
+    const unregisterFirst = session.registerBackupSnapshot(() => latest);
+    expect(session.readBackupSnapshot()).toEqual(first);
+    latest = second;
+    expect(session.readBackupSnapshot()).toEqual(second);
+    const unregisterSecond = session.registerBackupSnapshot(() => second);
+    unregisterFirst();
+    expect(session.readBackupSnapshot()).toEqual(second);
+    unregisterSecond();
+    expect(session.readBackupSnapshot()).toBeNull();
+
+    session.registerBackupSnapshot(() => first);
+    state.activeSessionNumber = 2;
+    expect(session.readBackupSnapshot()).toBeNull();
+    session.registerBackupSnapshot(() => first);
+    expect(session.readBackupSnapshot()).toBeNull();
   });
 });
 

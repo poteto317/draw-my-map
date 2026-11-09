@@ -30,10 +30,12 @@ import {
 import { createProtectedStorageSession } from "@/services/persistence/protectedStorageSession";
 import type { MapStorageSession } from "@/types/mapStorageSession";
 import type { OperationNotice } from "@/types/operationNotice";
+import type { LibraryBackupPreview } from "@/services/persistence/libraryBackupExport";
+import type { LibraryRestorePreview } from "@/hooks/mapLibraryState";
 
 type FakeLibrary = Pick<
   UseMapLibraryResult,
-  "createMap" | "switchMap" | "renameMap" | "deleteMap" | "moveBranchToMap"
+  "createMap" | "switchMap" | "renameMap" | "deleteMap" | "moveBranchToMap" | "prepareBackup" | "downloadBackup" | "previewRestore" | "confirmRestore"
 >;
 
 function entry(id: string, name: string): MapIndexEntry {
@@ -78,6 +80,10 @@ function createFakeLibrary(): jest.Mocked<FakeLibrary> {
     renameMap: jest.fn<MapLibraryOperationResult, [string, string]>(() => UNCHANGED),
     deleteMap: jest.fn<MapLibraryOperationResult, [string]>(() => UNCHANGED),
     moveBranchToMap: jest.fn<MapLibraryOperationResult, [MapStorageSession, string, number]>(() => UNCHANGED),
+    prepareBackup: jest.fn(() => ({ ok: false as const, error: "準備失敗" })),
+    downloadBackup: jest.fn<MapLibraryOperationResult, [LibraryBackupPreview]>(() => UNCHANGED),
+    previewRestore: jest.fn<Promise<{ ok: false; error: string }>, [File]>(async () => ({ ok: false, error: "読込失敗" })),
+    confirmRestore: jest.fn<MapLibraryOperationResult, [LibraryRestorePreview]>(() => UNCHANGED),
   };
 }
 
@@ -102,6 +108,43 @@ function renderDialogState(overrides: Partial<HookProps> = {}) {
 }
 
 const EMPTY_NOTICES = { status: "", alert: "", sequence: expect.any(Number) };
+
+describe("既存操作後のバックアップ・復元の入口", () => {
+  it("名前変更成功後の一覧からバックアップ確認を開ける", () => {
+    const library = createFakeLibrary();
+    const preview = { missingBodyNames: [], orphanBodyCount: 0 } as unknown as LibraryBackupPreview;
+    library.prepareBackup.mockReturnValue({ ok: true, value: preview });
+    const { result } = renderDialogState({ library });
+    act(() => {
+      result.current.openList();
+      result.current.openRename("b");
+      result.current.submitRename("b", "変更後");
+    });
+    expect(result.current.screen).toEqual({ kind: "list" });
+
+    act(() => result.current.prepareBackup());
+
+    expect(library.prepareBackup).toHaveBeenCalledTimes(1);
+    expect(result.current.screen).toEqual({ kind: "backupConfirm", preview });
+  });
+
+  it("非再マウントの削除成功後の一覧からファイルを読み込める", async () => {
+    const library = createFakeLibrary();
+    const file = new File(["{}"], "backup.json");
+    const { result } = renderDialogState({ library });
+    act(() => {
+      result.current.openList();
+      result.current.openDelete("b");
+      result.current.confirmDelete("b");
+    });
+    expect(result.current.screen).toEqual({ kind: "list" });
+
+    await act(async () => result.current.selectRestoreFile(file));
+
+    expect(library.previewRestore).toHaveBeenCalledWith(file);
+    expect(result.current.notices.alert).toBe("読込失敗");
+  });
+});
 
 describe("useMapLibraryDialogState の枝の別マップへの移動", () => {
   const session = createProtectedStorageSession("a", null);
@@ -852,6 +895,11 @@ describe("useMapLibraryDialogState と MapLibraryDialog のフォーカスの戻
             onSubmitCreate={state.submitCreate}
             onSubmitRename={state.submitRename}
             onConfirmDelete={state.confirmDelete}
+            onPrepareBackup={state.prepareBackup}
+            onDownloadBackup={state.downloadBackup}
+            onSelectRestoreFile={state.selectRestoreFile}
+            onConfirmRestore={state.confirmRestore}
+            storageMode="persistent"
             onMouseClick={() => {}}
           />
         )}

@@ -28,8 +28,24 @@ import {
   mapBodyKey,
 } from "@/services/persistence/mapLibraryStorage";
 import { MAP_STORAGE_KEY } from "@/services/persistence/mapStorage";
+import { LIBRARY_RESTORE_JOURNAL_KEY } from "@/services/persistence/libraryRestoreJournal";
 import { createRecordingStorage } from "@/testing/mapLibraryTestStorage";
-import type { MapStorageSession } from "@/types/mapStorageSession";
+import type { MapBackupSnapshot, MapStorageSession } from "@/types/mapStorageSession";
+
+const EMPTY_V3 = '{"version":3,"layoutMode":"manual","nodes":[]}';
+const BACKUP_FILE_JSON = JSON.stringify({
+  format: "draw-my-map-library-backup", version: 1, exportedAt: "2026-10-21T03:04:05.000Z",
+  currentMapId: "source", maps: [{
+    id: "source", name: "移行元", createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z", document: JSON.parse(EMPTY_V3),
+  }],
+});
+
+function backupFile(text: () => Promise<string> = async () => BACKUP_FILE_JSON): File {
+  const file = new File([BACKUP_FILE_JSON], "backup.json", { type: "application/json" });
+  Object.defineProperty(file, "text", { value: text });
+  return file;
+}
 
 // Fast Refresh は state と ref を保ったまま、依存配列に関係なくすべての effect を再実行する。
 // その再実行を再現するため、フラグを立てた後の1回の描画で呼ばれた依存配列付きの useEffect を、
@@ -136,6 +152,7 @@ function setup(
     strict?: boolean;
     failRemoveItem?: (key: string) => boolean;
     beforeRemoveItem?: (key: string) => void;
+    onGenerateId?: () => void;
   } = {},
 ) {
   let failIndexWrite = false;
@@ -145,10 +162,14 @@ function setup(
     failRemoveItem: options.failRemoveItem,
     beforeRemoveItem: options.beforeRemoveItem,
   });
+  const generateId = idSequence(options.ids ?? []);
   const deps: MapLibraryDeps = {
     getStorage: () => recording.storage,
     now: () => new Date(NOW),
-    generateId: idSequence(options.ids ?? []),
+    generateId: () => {
+      options.onGenerateId?.();
+      return generateId();
+    },
   };
   const rendered = renderHook(() => useMapLibrary(deps), {
     wrapper: options.strict ? StrictMode : undefined,
@@ -1330,5 +1351,211 @@ describe("useMapLibrary", () => {
       expect(viewAfter.currentMap.id).toBe("memory");
       expect(viewAfter.currentMap.name).toBe("無題のマップ");
     });
+  });
+});
+
+describe("useMapLibrary のライブラリバックアップ境界", () => {
+  it("保存成功実績の無い復元失敗 editor は書き出せず、実保存後は最新 snapshot を含める", () => {
+    const { result } = setup({ initial: singleMapInitial() });
+    const session = readyView(result.current.view).storageSession;
+    let json = EMPTY_V3;
+    let saved = false;
+    session.registerBackupSnapshot(() => ({ json, hydrated: true, restoreOrigin: "failed", hasSavedBodyThisMount: saved }));
+    expect(result.current.prepareBackup().ok).toBe(false);
+    act(() => { expect(session.writeBody(json).status).toBe("saved"); });
+    saved = true;
+    json = '{"version":3,"layoutMode":"auto","nodes":[]}';
+    const prepared = result.current.prepareBackup();
+    expect(prepared.ok).toBe(true);
+    if (prepared.ok) expect(JSON.parse(prepared.value.json).maps[0].document.layoutMode).toBe("auto");
+  });
+
+  it("確認後に一覧が変われば download を拒否し、click 例外も成功にしない", () => {
+    const { result, entries, storage } = setup({ initial: singleMapInitial() });
+    readyView(result.current.view).storageSession.registerBackupSnapshot(() => ({
+      json: EMPTY_V3, hydrated: true, restoreOrigin: "restored", hasSavedBodyThisMount: false,
+    }));
+    const prepared = result.current.prepareBackup();
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+    storage.setItem(MAP_INDEX_STORAGE_KEY, `${entries()[MAP_INDEX_STORAGE_KEY]} `);
+    expect(result.current.downloadBackup(prepared.value).ok).toBe(false);
+    storage.setItem(MAP_INDEX_STORAGE_KEY, prepared.value.indexRaw);
+    const oldCreate = Object.getOwnPropertyDescriptor(URL, "createObjectURL");
+    const oldRevoke = Object.getOwnPropertyDescriptor(URL, "revokeObjectURL");
+    URL.createObjectURL = jest.fn(() => "blob:test");
+    URL.revokeObjectURL = jest.fn();
+    const click = jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => { throw new Error("click failed"); });
+    expect(result.current.downloadBackup(prepared.value).ok).toBe(false);
+    click.mockRestore();
+    if (oldCreate) Object.defineProperty(URL, "createObjectURL", oldCreate);
+    else delete (URL as unknown as Record<string, unknown>).createObjectURL;
+    if (oldRevoke) Object.defineProperty(URL, "revokeObjectURL", oldRevoke);
+    else delete (URL as unknown as Record<string, unknown>).revokeObjectURL;
+  });
+
+  it("file 読込中の A→B→A で古い preview を返さない", async () => {
+    const { result } = setup({ initial: twoMapsInitial() });
+    let release!: (json: string) => void;
+    const file = backupFile(() => new Promise(resolve => { release = resolve; }));
+    let pending!: ReturnType<typeof result.current.previewRestore>;
+    act(() => { pending = result.current.previewRestore(file); });
+    act(() => {
+      result.current.switchMap("map-2");
+      result.current.switchMap("map-1");
+      release(BACKUP_FILE_JSON);
+    });
+    const preview = await pending;
+    expect(preview.ok).toBe(false);
+  });
+
+  it("flush failed と flush による一覧更新は追加復元を拒否する", async () => {
+    const { result, entries } = setup({ initial: singleMapInitial() });
+    const preview = await result.current.previewRestore(backupFile());
+    expect(preview.ok).toBe(true);
+    if (!preview.ok) return;
+    const session = readyView(result.current.view).storageSession;
+    const unregister = session.registerFlush(() => ({ status: "failed", error: "raw secret" }));
+    expect(result.current.confirmRestore(preview.value).ok).toBe(false);
+    unregister();
+    session.registerBackupSnapshot(() => ({ json: EMPTY_V3, hydrated: true, restoreOrigin: "restored", hasSavedBodyThisMount: false }));
+    session.registerFlush(() => { session.writeBody(EMPTY_V3); return { status: "saved" }; });
+    act(() => { expect(result.current.confirmRestore(preview.value).ok).toBe(false); });
+    expect(storedIndex(entries()).maps).toHaveLength(1);
+  });
+
+  it("flush unchanged だけでは初回復元失敗の editor を復元資格ありと扱わない", async () => {
+    const { result, entries } = setup({ initial: singleMapInitial(), ids: ["new-source"] });
+    const session = readyView(result.current.view).storageSession;
+    session.registerBackupSnapshot(() => ({
+      json: EMPTY_V3, hydrated: true, restoreOrigin: "failed", hasSavedBodyThisMount: false,
+    }));
+    const preview = await result.current.previewRestore(backupFile());
+    expect(preview.ok).toBe(true);
+    if (!preview.ok) return;
+    expect(result.current.confirmRestore(preview.value).ok).toBe(false);
+    expect(storedIndex(entries()).maps).toHaveLength(1);
+    expect(entries()[LIBRARY_RESTORE_JOURNAL_KEY]).toBeUndefined();
+  });
+
+  it("初回復元失敗の実保存後は後続の編集を追加復元できる", async () => {
+    const { result, entries } = setup({ initial: singleMapInitial(), ids: ["new-source"] });
+    const session = readyView(result.current.view).storageSession;
+    let json = EMPTY_V3;
+    let saved = false;
+    session.registerBackupSnapshot(() => ({ json, hydrated: true, restoreOrigin: "failed", hasSavedBodyThisMount: saved }));
+    const preview = await result.current.previewRestore(backupFile());
+    expect(preview.ok).toBe(true);
+    if (!preview.ok) return;
+    expect(result.current.confirmRestore(preview.value).ok).toBe(false);
+    act(() => { expect(session.writeBody(json).status).toBe("saved"); });
+    saved = true;
+    json = '{"version":3,"layoutMode":"auto","nodes":[]}';
+    const afterSave = await result.current.previewRestore(backupFile());
+    expect(afterSave.ok).toBe(true);
+    if (!afterSave.ok) return;
+    act(() => { expect(result.current.confirmRestore(afterSave.value).ok).toBe(true); });
+    expect(storedIndex(entries()).maps).toHaveLength(2);
+    expect(readyView(result.current.view).storageSession).toBe(session);
+  });
+
+  it("追加復元の書込直前に未保存の復元失敗 snapshot へ変われば書き込まない", async () => {
+    let snapshot: MapBackupSnapshot = { json: EMPTY_V3, hydrated: true, restoreOrigin: "restored", hasSavedBodyThisMount: false };
+    const { result, entries } = setup({
+      initial: singleMapInitial(), ids: ["new-source"],
+      onGenerateId: () => { snapshot = { ...snapshot, restoreOrigin: "failed" }; },
+    });
+    readyView(result.current.view).storageSession.registerBackupSnapshot(() => snapshot);
+    const preview = await result.current.previewRestore(backupFile());
+    expect(preview.ok).toBe(true);
+    if (!preview.ok) return;
+    expect(result.current.confirmRestore(preview.value).ok).toBe(false);
+    expect(storedIndex(entries()).maps).toHaveLength(1);
+    expect(entries()[LIBRARY_RESTORE_JOURNAL_KEY]).toBeUndefined();
+  });
+
+  it("復元成功は既存 session と現在本体を維持して新規 ID を追加する", async () => {
+    const { result, entries } = setup({ initial: singleMapInitial(), ids: ["new-source"] });
+    const session = readyView(result.current.view).storageSession;
+    session.registerBackupSnapshot(() => ({ json: EMPTY_V3, hydrated: true, restoreOrigin: "restored", hasSavedBodyThisMount: false }));
+    const preview = await result.current.previewRestore(backupFile());
+    expect(preview.ok).toBe(true);
+    if (!preview.ok) return;
+    let outcome: ReturnType<typeof result.current.confirmRestore> | undefined;
+    act(() => { outcome = result.current.confirmRestore(preview.value); });
+    expect(outcome).toMatchObject({ ok: true, remounted: false });
+    expect(readyView(result.current.view).storageSession).toBe(session);
+    expect(storedIndex(entries()).currentMapId).toBe("only");
+    expect(entries()[mapBodyKey("only")]).toBe("body-only");
+    expect(entries()[mapBodyKey("new-source")]).toBe(EMPTY_V3);
+  });
+
+  it("復元確定中に再入した一覧操作と backup/restore を拒否する", async () => {
+    let reentered: boolean[] = [];
+    const state: {
+      result?: ReturnType<typeof useMapLibrary>;
+      restorePreview?: Awaited<ReturnType<ReturnType<typeof useMapLibrary>["previewRestore"]>>;
+      backupPreview?: ReturnType<ReturnType<typeof useMapLibrary>["prepareBackup"]>;
+      session?: MapStorageSession;
+    } = {};
+    const { result } = setup({
+      initial: singleMapInitial(), ids: ["new-source"],
+      beforeRemoveItem: (key) => {
+        if (key !== LIBRARY_RESTORE_JOURNAL_KEY) return;
+        reentered = [
+          state.result!.createMap("再入"), state.result!.switchMap("only"),
+          state.result!.renameMap("only", "再入"), state.result!.deleteMap("only"),
+          state.result!.moveBranchToMap(state.session!, "only", 1),
+          state.result!.downloadBackup(state.backupPreview!.ok ? state.backupPreview!.value : ({} as never)),
+          state.result!.confirmRestore(state.restorePreview!.ok ? state.restorePreview!.value : ({} as never)),
+        ].map(outcome => outcome.ok);
+        reentered.push(state.result!.prepareBackup().ok);
+      },
+    });
+    state.result = result.current;
+    const session = state.session = readyView(result.current.view).storageSession;
+    session.registerBackupSnapshot(() => ({ json: EMPTY_V3, hydrated: true, restoreOrigin: "restored", hasSavedBodyThisMount: false }));
+    state.backupPreview = result.current.prepareBackup();
+    const preview = await result.current.previewRestore(backupFile());
+    state.restorePreview = preview;
+    expect(preview.ok).toBe(true);
+    if (!preview.ok) return;
+    act(() => { expect(result.current.confirmRestore(preview.value).ok).toBe(true); });
+    expect(reentered).toEqual([false, false, false, false, false, false, false, false]);
+  });
+
+  it("rollback 不能時は書込直前の最新 JSON を保護 session へ渡す", async () => {
+    const { result } = setup({ initial: singleMapInitial(), ids: ["new-source"],
+      failRemoveItem: key => key === LIBRARY_RESTORE_JOURNAL_KEY });
+    const session = readyView(result.current.view).storageSession;
+    let json = EMPTY_V3;
+    session.registerBackupSnapshot(() => ({ json, hydrated: true, restoreOrigin: "restored", hasSavedBodyThisMount: false }));
+    const preview = await result.current.previewRestore(backupFile());
+    expect(preview.ok).toBe(true);
+    if (!preview.ok) return;
+    json = '{"version":3,"layoutMode":"auto","nodes":[]}';
+    let outcome: ReturnType<typeof result.current.confirmRestore> | undefined;
+    act(() => { outcome = result.current.confirmRestore(preview.value); });
+    expect(outcome).toMatchObject({ ok: false, enteredProtectedMode: true });
+    const view = readyView(result.current.view);
+    expect(view.storageMode).toBe("protected");
+    expect(view.storageSession).not.toBe(session);
+    expect(view.storageSession.readBody()).toEqual({ ok: true, value: json });
+  });
+
+  it("復元計画中に editor が変われば保護 session は書込直前の内容を採る", async () => {
+    const latest = '{"version":3,"layoutMode":"auto","nodes":[]}';
+    let json = EMPTY_V3;
+    const { result } = setup({ initial: singleMapInitial(), ids: ["new-source"],
+      failRemoveItem: key => key === LIBRARY_RESTORE_JOURNAL_KEY,
+      onGenerateId: () => { json = latest; },
+    });
+    const session = readyView(result.current.view).storageSession;
+    session.registerBackupSnapshot(() => ({ json, hydrated: true, restoreOrigin: "restored", hasSavedBodyThisMount: false }));
+    const preview = await result.current.previewRestore(backupFile());
+    expect(preview.ok).toBe(true);
+    if (!preview.ok) return;
+    act(() => { expect(result.current.confirmRestore(preview.value)).toMatchObject({ ok: false, enteredProtectedMode: true }); });
+    expect(readyView(result.current.view).storageSession.readBody()).toEqual({ ok: true, value: latest });
   });
 });

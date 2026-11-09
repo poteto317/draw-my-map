@@ -36,6 +36,10 @@ export type UseMapLibraryDialogStateResult = {
   switchTo: (mapId: string) => void;
   submitRename: (mapId: string, nameInput: string) => void;
   confirmDelete: (mapId: string) => void;
+  prepareBackup: () => void;
+  downloadBackup: () => void;
+  selectRestoreFile: (file: File) => Promise<void>;
+  confirmRestore: () => void;
   moveBranchToMap: UseMapLibraryResult["moveBranchToMap"];
   consumeFocusTarget: () => void;
   consumeHeaderFocusRequest: () => void;
@@ -43,7 +47,7 @@ export type UseMapLibraryDialogStateResult = {
 
 type MapLibraryOperations = Pick<
   UseMapLibraryResult,
-  "createMap" | "switchMap" | "renameMap" | "deleteMap" | "moveBranchToMap"
+  "createMap" | "switchMap" | "renameMap" | "deleteMap" | "moveBranchToMap" | "prepareBackup" | "downloadBackup" | "previewRestore" | "confirmRestore"
 >;
 
 type DialogState = {
@@ -177,6 +181,11 @@ function backFrom(state: DialogState): DialogState {
     case "rename":
     case "delete":
       return backToList(state, { kind: "row", mapId: screen.mapId, action: screen.kind });
+    case "backupConfirm":
+      return backToList(state, { kind: "backupButton" });
+    case "restoreReading":
+    case "restoreConfirm":
+      return backToList(state, { kind: "restoreButton" });
   }
 }
 
@@ -190,6 +199,15 @@ export function useMapLibraryDialogState(options: {
   // 操作の関数を描画ごとに変えないため、最新の library と maps は ref から読む（L-521）
   const libraryRef = useRef(library);
   const mapsRef = useRef(maps);
+  const screenRef = useRef<MapLibraryDialogScreen>(INITIAL_STATE.screen);
+  const generationRef = useRef(0);
+  const readingRef = useRef(false);
+
+  const transition = (screen: MapLibraryDialogScreen) => {
+    generationRef.current += 1;
+    screenRef.current = screen;
+    readingRef.current = false;
+  };
 
   useLayoutEffect(() => {
     libraryRef.current = library;
@@ -212,46 +230,114 @@ export function useMapLibraryDialogState(options: {
 
   // 同じイベントの中で続けて変えても前の更新を消さないよう、関数形式で更新する（L-453）
   const openList = useCallback(() => {
+    transition({ kind: "list" });
     setState((prev) => openScreen(prev, { kind: "list" }));
   }, []);
 
   const openCreateFromHeader = useCallback(() => {
+    transition({ kind: "create", origin: "header" });
     setState((prev) => openScreen(prev, { kind: "create", origin: "header" }));
   }, []);
 
   const openCreateFromList = useCallback(() => {
+    transition({ kind: "create", origin: "list" });
     setState((prev) => openScreen(prev, { kind: "create", origin: "list" }));
   }, []);
 
   const openRename = useCallback((mapId: string) => {
+    transition({ kind: "rename", mapId });
     setState((prev) => openScreen(prev, { kind: "rename", mapId }));
   }, []);
 
   const openDelete = useCallback((mapId: string) => {
+    transition({ kind: "delete", mapId });
     setState((prev) => openScreen(prev, { kind: "delete", mapId }));
   }, []);
 
   const back = useCallback(() => {
+    const kind = screenRef.current.kind;
+    transition(kind === "list" || kind === "closed" ? { kind: "closed" } : { kind: "list" });
     setState(backFrom);
   }, []);
 
   const close = useCallback(() => {
+    transition({ kind: "closed" });
     setState((prev) => closeDialog(prev, "list"));
+  }, []);
+
+  const prepareBackup = useCallback(() => {
+    if (screenRef.current.kind !== "list" || readingRef.current) return;
+    const prepared = libraryRef.current.prepareBackup();
+    if (!prepared.ok) {
+      setState((prev) => showFailure(prev, { kind: "error", message: prepared.error }));
+      return;
+    }
+    transition({ kind: "backupConfirm", preview: prepared.value });
+    setState((prev) => openScreen(prev, { kind: "backupConfirm", preview: prepared.value }));
+  }, []);
+
+  const downloadBackup = useCallback(() => {
+    const screen = screenRef.current;
+    if (screen.kind !== "backupConfirm") return;
+    transition({ kind: "list" });
+    const result = libraryRef.current.downloadBackup(screen.preview);
+    setState((prev) => result.ok
+      ? returnToList(prev, result, { kind: "backupButton" })
+      : { ...backToList(prev, { kind: "backupButton" }), notices: nextNotices(prev, "", result.notice.message) });
+  }, []);
+
+  const selectRestoreFile = useCallback(async (file: File) => {
+    if (screenRef.current.kind !== "list" || readingRef.current) return;
+    transition({ kind: "restoreReading" });
+    readingRef.current = true;
+    const generation = generationRef.current;
+    setState((prev) => openScreen(prev, { kind: "restoreReading" }));
+    let prepared: Awaited<ReturnType<MapLibraryOperations["previewRestore"]>>;
+    try {
+      prepared = await libraryRef.current.previewRestore(file);
+    } catch {
+      prepared = { ok: false, error: "バックアップを読み込めませんでした。再試行してください。" };
+    }
+    if (generationRef.current !== generation || (screenRef.current as MapLibraryDialogScreen).kind !== "restoreReading") return;
+    readingRef.current = false;
+    if (!prepared.ok) {
+      transition({ kind: "list" });
+      setState((prev) => ({ ...backToList(prev, { kind: "restoreButton" }), notices: nextNotices(prev, "", prepared.error) }));
+      return;
+    }
+    transition({ kind: "restoreConfirm", preview: prepared.value });
+    setState((prev) => openScreen(prev, { kind: "restoreConfirm", preview: prepared.value }));
+  }, []);
+
+  const confirmRestore = useCallback(() => {
+    const screen = screenRef.current;
+    if (screen.kind !== "restoreConfirm") return;
+    transition({ kind: "list" });
+    const result = libraryRef.current.confirmRestore(screen.preview);
+    setState((prev) => {
+      if (!result.ok && result.enteredProtectedMode) return closeAfterEnteringProtectedMode(prev, result.notice);
+      if (!result.ok) return { ...backToList(prev, { kind: "restoreButton" }), notices: nextNotices(prev, "", result.notice.message) };
+      return returnToList(prev, result, { kind: "restoreButton" });
+    });
+    if (!result.ok && result.enteredProtectedMode) transition({ kind: "closed" });
   }, []);
 
   const submitCreate = useCallback((nameInput: string) => {
     const result = libraryRef.current.createMap(nameInput);
+    if (result.ok) transition({ kind: "closed" });
     setState((prev) => (result.ok ? closeAfterSuccess(prev, result) : showFailure(prev, result.notice)));
   }, []);
 
   // 開いているマップは本物が「変化なし」（remounted: false）を返すので、何もせず閉じる
   const switchTo = useCallback((mapId: string) => {
     const result = libraryRef.current.switchMap(mapId);
+    if (result.ok) transition({ kind: "closed" });
     setState((prev) => (result.ok ? closeAfterSuccess(prev, result) : showFailure(prev, result.notice)));
   }, []);
 
   const submitRename = useCallback((mapId: string, nameInput: string) => {
     const result = libraryRef.current.renameMap(mapId, nameInput);
+    if (result.ok) transition({ kind: "list" });
     setState((prev) =>
       result.ok
         ? returnToList(prev, result, { kind: "row", mapId, action: "rename" })
@@ -263,6 +349,7 @@ export function useMapLibraryDialogState(options: {
     // 戻し先は削除前の表示順で決める
     const focusAfterRemoval = selectFocusAfterRemoval(mapsRef.current, mapId);
     const result = libraryRef.current.deleteMap(mapId);
+    if (result.ok) transition({ kind: result.remounted ? "closed" : "list" });
     setState((prev) => {
       if (!result.ok) return showFailure(prev, result.notice);
       return result.remounted
@@ -278,6 +365,7 @@ export function useMapLibraryDialogState(options: {
     rootId: number,
   ): MapLibraryOperationResult => {
     const result = libraryRef.current.moveBranchToMap(sourceSession, targetId, rootId);
+    if (result.ok || result.enteredProtectedMode) transition({ kind: "closed" });
     setState((prev) => {
       if (result.ok) return closeAfterSuccess(prev, result);
       return result.enteredProtectedMode ? closeAfterEnteringProtectedMode(prev, result.notice) : prev;
@@ -312,6 +400,10 @@ export function useMapLibraryDialogState(options: {
     switchTo,
     submitRename,
     confirmDelete,
+    prepareBackup,
+    downloadBackup,
+    selectRestoreFile,
+    confirmRestore,
     moveBranchToMap,
     consumeFocusTarget,
     consumeHeaderFocusRequest,

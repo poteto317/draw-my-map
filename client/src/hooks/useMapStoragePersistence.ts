@@ -49,5 +49,9 @@ export function useMapStoragePersistence({
     [flushPendingSave, storageSession],
   );
 
-  return autoSave;
+  return {
+    ...autoSave,
+    hydrated: restoration.hydrated,
+    restoreOrigin: restoration.restoreOrigin,
+  };
 }

@@ -2,6 +2,7 @@ import { createMapIndexEntry, encodeMapIndex } from "@/domain/mapLibrary/mapInde
 import { createRecordingStorage } from "@/testing/mapLibraryTestStorage";
 import { MAP_INDEX_STORAGE_KEY as INDEX, mapBodyKey } from "../mapLibraryStorage";
 import { BRANCH_MOVE_JOURNAL_KEY as JOURNAL } from "../branchMoveJournal";
+import { LIBRARY_RESTORE_JOURNAL_KEY } from "../libraryRestoreJournal";
 import { recoverBranchMove, writeBranchMove, type BranchMoveWriteInput } from "../branchMoveTransaction";
 const RECOVERY_ERROR = "枝の移動前の保存データを復元できませんでした。この画面での変更は保存されません。ページを閉じる前にJSONで書き出してください。";
 const BROKEN_JOURNAL_ERROR = "枝の移動の記録が壊れているため、保存データを守って開きました。この画面での変更は保存されません。移動前のデータはブラウザの localStorage のキー「draw-my-map.branch-move.v1」に残っています。";
@@ -30,6 +31,11 @@ it("既存journalがあるときは書かず、復旧が要る失敗を返す", 
   const { storage, operations } = createRecordingStorage({ initial: { ...original, [JOURNAL]: "changed" } });
   expect(writeBranchMove(storage, input)).toEqual({ ok: false, error: RECOVERY_ERROR, recoveryRequired: true });
   expect(operations).toEqual([]);
+});
+it("復元journalが残る間は枝移動を始めず復旧を要求する", () => {
+  const f = createRecordingStorage({ initial: { ...original, [LIBRARY_RESTORE_JOURNAL_KEY]: "occupied" } });
+  expect(writeBranchMove(f.storage, input)).toEqual({ ok: false, error: RECOVERY_ERROR, recoveryRequired: true });
+  expect(f.operations).toEqual([]);
 });
 it("書く前のjournalの自己検査に通らないときは、原本が一致していても何も書かず、やり直せる失敗を返す", () => {
   const broken = "{broken";

@@ -10,6 +10,7 @@ import {
   type MapLibraryStorage,
 } from "@/services/persistence/mapLibraryStorage";
 import type { MapStorageSession } from "@/types/mapStorageSession";
+import type { LibraryBackupV1 } from "@/domain/mapLibrary/libraryBackupCodec";
 import type { OperationNotice } from "@/types/operationNotice";
 
 // useMapLibrary が持つ状態と、そこから導く表示用の値・操作の結果。React に依存しない
@@ -53,6 +54,12 @@ export type LibraryState =
     };
 
 export type PersistentLibraryState = Extract<LibraryState, { mode: "persistent" }>;
+
+export type LibraryRestorePreview = {
+  backup: LibraryBackupV1;
+  indexRaw: string;
+  session: MapStorageSession;
+};
 
 export const UNCHANGED_OPERATION_RESULT: MapLibraryOperationResult = {
   ok: true,

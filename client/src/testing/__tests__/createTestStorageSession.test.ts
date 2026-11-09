@@ -1,6 +1,17 @@
 import { createTestStorageSession } from "@/testing/createTestStorageSession";
 
 describe("createTestStorageSession", () => {
+  it("snapshot の未登録・更新・解除を再現し、保存済み本体を代用しない", () => {
+    const storage = createTestStorageSession({ initialJson: "persisted" });
+    const snapshot = { json: "editor", hydrated: true, restoreOrigin: "failed" as const, hasSavedBodyThisMount: false };
+    expect(storage.session.readBackupSnapshot()).toBeNull();
+    const unregister = storage.session.registerBackupSnapshot(() => snapshot);
+    expect(storage.session.readBackupSnapshot()).toEqual(snapshot);
+    unregister();
+    expect(storage.session.readBackupSnapshot()).toBeNull();
+    expect(storage.session.readBody()).toEqual({ ok: true, value: "persisted" });
+  });
+
   it("登録した flush の数を数え、解除で減らす", () => {
     const storage = createTestStorageSession();
     expect(storage.registeredFlushCount()).toBe(0);

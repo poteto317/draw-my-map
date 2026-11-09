@@ -1,6 +1,7 @@
 import { decodeMapIndex } from "@/domain/mapLibrary/mapIndex";
 import { DEFAULT_MAP_NAME } from "@/domain/mapLibrary/mapName";
 import { BRANCH_MOVE_JOURNAL_KEY, decodeBranchMoveJournal, encodeBranchMoveJournal, type BranchMoveJournal } from "./branchMoveJournal";
+import { LIBRARY_RESTORE_JOURNAL_KEY } from "./libraryRestoreJournal";
 import { isQuotaExceededError, MAP_INDEX_STORAGE_KEY, mapBodyKey, type MapLibraryStorage } from "./mapLibraryStorage";
 
 export type BranchMoveWriteInput = Omit<BranchMoveJournal, "version"> & {
@@ -87,7 +88,8 @@ function planWrites(journal: BranchMoveJournal, input: BranchMoveWriteInput): Pl
 // ジャーナルが残っていれば復旧が要る。読み取りの失敗はまだ何も書いていないので、やり直せる失敗にする
 function checkWritable(storage: MapLibraryStorage, journal: BranchMoveJournal): WriteResult {
   try {
-    if (storage.getItem(BRANCH_MOVE_JOURNAL_KEY) !== null) {
+    if (storage.getItem(BRANCH_MOVE_JOURNAL_KEY) !== null ||
+      storage.getItem(LIBRARY_RESTORE_JOURNAL_KEY) !== null) {
       return { ok: false, error: RECOVERY_ERROR, recoveryRequired: true };
     }
     if (originals(journal).some(({ key, value }) => storage.getItem(key) !== value)) {

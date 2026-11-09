@@ -34,12 +34,20 @@ Draw My Map のフロントエンドおよびエッジバックエンドの主�
    - `useMapStorageAutoSave` は現在のマップ本体の復元由来・確認済み snapshot・書き込み結果から7種類の保存状態を導き、`MapSaveStatus` がヘッダーに常設表示します。失敗時の JSON 救出案内は既存の操作通知が担当します。表示はマップ一覧や別タブの状態を含みません（[機能仕様 6.1 節](../docs/specifications/features.md#61-localstorage-自動保存)）。
    - `MapDocument` JSON 形式でのインポート / エクスポート（旧バージョン互換性・自動マイグレーション対応）。
    - 高解像度 PNG および ベクター SVG 形式での画像エクスポート。
-   - map / outline 共通ヘッダーの「Markdown書き出し」「箇条書き書き出し」で正本の全ノードを `.md` / `.txt` の UTF-8 テキストとしてダウンロード開始。折りたたみ・表示フィルター・保存失敗・保護モードによらず全件を対象にします。空・100万 UTF-16 文字超過・不正構造では通知します。出力は「箇条書きから追加」へ貼り付けられます。正しい構造・非空ラベル・10,000行以下では件数・親子・順序を復元できますが、ID・座標・サイズ・重要度・イラスト・履歴・マップ名は保持しません。完全バックアップには JSON を使います（[仕様](../docs/specifications/features.md#20-markdown箇条書きへの書き出し)）。
+   - map / outline 共通ヘッダーの「Markdown書き出し」「箇条書き書き出し」で正本の全ノードを `.md` / `.txt` の UTF-8 テキストとしてダウンロード開始。折りたたみ・表示フィルター・保存失敗・保護モードによらず全件を対象にします。空・100万 UTF-16 文字超過・不正構造では通知します。出力は「箇条書きから追加」へ貼り付けられます。正しい構造・非空ラベル・10,000行以下では件数・親子・順序を復元できますが、ID・座標・サイズ・重要度・イラスト・履歴・マップ名は保持しません。開いている1マップの完全な保存には個別 JSON、全マップの保存には一括 JSON を使います（[仕様](../docs/specifications/features.md#20-markdown箇条書きへの書き出し)）。
    - 自動配置の折りたたみ中は表示用投影座標を使用し、正本の全ノードと保存座標は維持します。JSON、`localStorage`、PNG / SVG は正本の全件を扱い、手動配置へ戻すと保存座標を表示します。
 4. **AI イラスト生成 API (Next.js Route Handler)**:
    - `POST /api/illustrations` エンドポイントによる Cloudflare Workers AI 連携。
    - 日本語ノードテキストの自動英訳（`@cf/meta/m2m100-1.2b`）と画像生成（`@cf/black-forest-labs/flux-1-schnell`）。
    - クライアント側での 128px JPEG 縮小とノードへの紐付け・再生成・削除。
+
+---
+
+## 全マップのバックアップと追加復元
+
+ヘッダーの「JSON書き出し」「JSON読み込み」は現在の1マップ用です。「マップ一覧」の「全マップをバックアップ」は、保存中の一覧と現在 editor の最新内容から、全マップを平文 JSON 1ファイルにまとめます。別マップの本体欠損は確認画面で名前・件数を示し空マップとして含め、孤立本体は件数を示して除外します。「バックアップから復元」は内容を確認して各マップを新しい ID で追加し、既存データと現在 editor を保ちます。上限は32 MiB・1000マップです。実ブラウザの確認手順は [ブラウザテスト Y 節](../docs/testing/browser-test-cases.md#y-全マップの一括バックアップ追加復元phase-16候補007) を参照してください。
+
+責務は `domain/mapLibrary/libraryBackupCodec.ts`（形式・上限）、`services/persistence/libraryBackupExport.ts`（一覧・本体・最新 snapshot）、`libraryBackupFile.ts`（読込とダウンロード）、`libraryRestoreJournal.ts`・`libraryRestoreTransaction.ts`（追加復元と起動復旧）、`hooks/useMapLibrary.ts`（session 照合と操作順）、`useMapLibraryDialogState.ts`（確認画面・通知・フォーカス）に分けています。初回の本体復元が失敗した場合は、同じ editor mount で本体が実際に保存されるまで一括操作を受け付けません。復旧できない保存失敗では保護モードになり、現在マップの個別 JSON 書き出しを案内します。
 
 ---
 

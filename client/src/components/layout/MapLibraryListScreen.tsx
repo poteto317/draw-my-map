@@ -1,4 +1,8 @@
+"use client";
+
+import { useRef, useState } from "react";
 import { mapLibraryListButtonAttributes } from "@/components/layout/mapLibraryListButtons";
+import { suppressBackupRestoreActionKey } from "@/components/layout/suppressBackupRestoreActionKey";
 import type { MapIndexEntry } from "@/domain/mapLibrary/mapIndex";
 import { formatMapUpdatedAt } from "@/domain/mapLibrary/mapTimestamp";
 
@@ -11,6 +15,9 @@ type MapLibraryListScreenProps = {
   onSwitch: (mapId: string) => void;
   onOpenRename: (mapId: string) => void;
   onOpenDelete: (mapId: string) => void;
+  onPrepareBackup: () => void;
+  onSelectRestoreFile: (file: File) => void;
+  storageMode: "persistent" | "protected";
 };
 
 const buttonClassName = "shrink-0 rounded-md bg-zinc-100 px-3 py-1 text-sm text-zinc-700 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:bg-zinc-700 dark:text-zinc-200";
@@ -24,7 +31,14 @@ export function MapLibraryListScreen({
   onSwitch,
   onOpenRename,
   onOpenDelete,
+  onPrepareBackup,
+  onSelectRestoreFile,
+  storageMode,
 }: MapLibraryListScreenProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [protectedNotice, setProtectedNotice] = useState("");
+  const isProtected = storageMode === "protected";
+  const rejectProtected = () => setProtectedNotice("保護モードでは操作できません。現在のマップを「JSON書き出し」で救出してください。");
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
@@ -88,6 +102,41 @@ export function MapLibraryListScreen({
           );
         })}
       </ul>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          className={buttonClassName}
+          data-map-library-action="backup"
+          onKeyDown={suppressBackupRestoreActionKey}
+          onClick={() => isProtected ? rejectProtected() : onPrepareBackup()}
+        >
+          全マップをバックアップ
+        </button>
+        <button
+          type="button"
+          className={buttonClassName}
+          data-map-library-action="restore"
+          onKeyDown={suppressBackupRestoreActionKey}
+          onClick={() => isProtected ? rejectProtected() : fileInputRef.current?.click()}
+        >
+          バックアップから復元
+        </button>
+        <input
+          ref={fileInputRef}
+          aria-label="バックアップファイル"
+          type="file"
+          accept=".json,application/json"
+          className="hidden"
+          tabIndex={-1}
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            event.currentTarget.value = "";
+            if (isProtected) { rejectProtected(); return; }
+            if (file) onSelectRestoreFile(file);
+          }}
+        />
+      </div>
+      {protectedNotice && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{protectedNotice}</p>}
       <div className="flex justify-end">
         <button type="button" className={buttonClassName} onClick={onClose}>
           閉じる

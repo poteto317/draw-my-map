@@ -10,5 +10,7 @@ export function createProtectedStorageSession(
     readBody: () => ({ ok: true, value: initialJson }),
     writeBody: () => ({ status: "inactive" }),
     registerFlush: () => () => {},
+    registerBackupSnapshot: () => () => {},
+    readBackupSnapshot: () => null,
   };
 }

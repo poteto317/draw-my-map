@@ -51,6 +51,21 @@ function flushInAct<T>(flush: () => T): T {
 }
 
 describe("useMapStoragePersistence", () => {
+  it("復元完了と初回失敗 origin を autoSave の結果とともに返す", () => {
+    const storage = createTestStorageSession({ initialJson: "{" });
+    const { result } = renderHook(() => useMapStoragePersistence({
+      currentSnapshot: emptyMapJson,
+      replaceMap: jest.fn(),
+      storageSession: storage.session,
+      storageMode: "persistent",
+      publishNotice: jest.fn(),
+      clearSaveFailureNotice: jest.fn(),
+    }));
+    expect(result.current.hydrated).toBe(true);
+    expect(result.current.restoreOrigin).toBe("failed");
+    expect(result.current.hasSavedBodyThisMount()).toBe(false);
+  });
+
   beforeEach(() => {
     jest.useFakeTimers();
   });

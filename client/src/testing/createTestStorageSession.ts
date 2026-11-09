@@ -1,5 +1,6 @@
 import type {
   MapBodyWriteResult,
+  MapBackupSnapshot,
   MapFlushResult,
   MapStorageSession,
 } from "@/types/mapStorageSession";
@@ -32,6 +33,7 @@ export function createTestStorageSession(
   const writes: string[] = [];
   let writeOutcome: WriteOutcome = "saved";
   const flushes = new Set<() => MapFlushResult>();
+  const snapshots = new Set<() => MapBackupSnapshot>();
 
   const session: MapStorageSession = {
     mapId,
@@ -54,6 +56,12 @@ export function createTestStorageSession(
         flushes.delete(registered);
       };
     },
+    registerBackupSnapshot: (snapshot) => {
+      const registered = () => snapshot();
+      snapshots.add(registered);
+      return () => { snapshots.delete(registered); };
+    },
+    readBackupSnapshot: () => [...snapshots].at(-1)?.() ?? null,
   };
 
   return {

@@ -16,6 +16,7 @@ import {
   BRANCH_MOVE_JOURNAL_KEY,
   encodeBranchMoveJournal,
 } from "../branchMoveJournal";
+import { encodeLibraryRestoreJournal, LIBRARY_RESTORE_JOURNAL_KEY } from "../libraryRestoreJournal";
 import {
   MAP_INDEX_BACKUP_STORAGE_KEY,
   MAP_INDEX_STORAGE_KEY,
@@ -746,6 +747,42 @@ describe("runMapLibraryStartup", () => {
 
       expect(result.mode).toBe("protected");
       expect(result.notice?.message).toBe(UNAVAILABLE_WARNING);
+    });
+  });
+
+  describe("中断したライブラリ復元の復旧", () => {
+    const originalIndex = createSingleMapIndex(createMapIndexEntry("source", "元", NOW), false);
+    const before = encodeMapIndex(originalIndex);
+    const after = encodeMapIndex({ ...originalIndex, maps: [...originalIndex.maps,
+      createMapIndexEntry("added", "追加", NOW)] });
+    const body = JSON.stringify({ version: 3, layoutMode: "manual", nodes: [] });
+    const journal = encodeLibraryRestoreJournal({ format: "draw-my-map-library-restore", version: 1,
+      indexBefore: before, indexAfter: after, bodies: [{ id: "added", json: body }] });
+
+    it("通常の一覧読取より先に復旧し、旧一覧で開く", () => {
+      const f = createRecordingStorage({ initial: { [MAP_INDEX_STORAGE_KEY]: after,
+        [LIBRARY_RESTORE_JOURNAL_KEY]: journal, [mapBodyKey("added")]: body } });
+      expect(runMapLibraryStartup(f.storage, createDeps())).toMatchObject({ mode: "persistent", index: originalIndex });
+      expect(f.entries()).toEqual({ [MAP_INDEX_STORAGE_KEY]: before });
+    });
+
+    it("両 journal がある場合は枝移動の復旧も実行せず保護する", () => {
+      const f = createRecordingStorage({ initial: { [MAP_INDEX_STORAGE_KEY]: after,
+        [LIBRARY_RESTORE_JOURNAL_KEY]: journal, [BRANCH_MOVE_JOURNAL_KEY]: "{" } });
+      const result = runMapLibraryStartup(f.storage, createDeps());
+      expect(result.mode).toBe("protected");
+      expect(result.notice?.message).toContain(LIBRARY_RESTORE_JOURNAL_KEY);
+      expect(result.notice?.message).toContain(BRANCH_MOVE_JOURNAL_KEY);
+      expect(f.operations).toEqual([]);
+      expect(f.entries()[MAP_INDEX_STORAGE_KEY]).toBe(after);
+    });
+
+    it("復元 journal が壊れた場合、一覧修復を行わず保護する", () => {
+      const f = createRecordingStorage({ initial: { [LIBRARY_RESTORE_JOURNAL_KEY]: "{" } });
+      const result = runMapLibraryStartup(f.storage, createDeps());
+      expect(result.mode).toBe("protected");
+      expect(result.notice?.message).toContain(LIBRARY_RESTORE_JOURNAL_KEY);
+      expect(f.operations).toEqual([]);
     });
   });
 });

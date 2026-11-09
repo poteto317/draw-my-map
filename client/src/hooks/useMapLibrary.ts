@@ -35,6 +35,8 @@ import {
   renameMapEntry,
   replaceLastMapEntry,
   setCurrentMap,
+  decodeMapIndex,
+  encodeMapIndex,
   type MapIndexEntry,
   type MapIndexV1,
 } from "@/domain/mapLibrary/mapIndex";
@@ -45,6 +47,7 @@ import {
 import {
   createPersistentMapSession,
   flushRegisteredSession,
+  type BackupSnapshotRegistration,
   type FlushRegistration,
 } from "@/hooks/mapLibrarySession";
 import {
@@ -59,12 +62,23 @@ import {
   type MapLibraryOperationResult,
   type MapLibraryView,
   type PersistentLibraryState,
+  type LibraryRestorePreview,
 } from "@/hooks/mapLibraryState";
 import {
+  MAP_INDEX_STORAGE_KEY,
   removeMapBody,
   writeMapIndex,
   type MapLibraryStorage,
 } from "@/services/persistence/mapLibraryStorage";
+import { downloadLibraryBackup, readLibraryBackupFile } from "@/services/persistence/libraryBackupFile";
+import {
+  isLibraryBackupPreviewCurrent,
+  prepareLibraryBackup,
+  type LibraryBackupPreview,
+} from "@/services/persistence/libraryBackupExport";
+import { planLibraryRestore, writeLibraryRestore } from "@/services/persistence/libraryRestoreTransaction";
+import { parseMapDocumentJson } from "@/domain/persistence/mapDocumentDecoder";
+import { isEligibleMapBackupSnapshot } from "@/domain/persistence/mapBackupSnapshot";
 import {
   runMapLibraryStartup,
   type MapLibraryStartupResult,
@@ -72,10 +86,11 @@ import {
 import { readBranchMoveIndex, transferStoredBranch } from "@/services/persistence/mapBranchTransfer";
 import { createProtectedStorageSession } from "@/services/persistence/protectedStorageSession";
 import type { MapFlushResult, MapStorageSession } from "@/types/mapStorageSession";
+import type { MapDocumentResult } from "@/types/mapDocument";
 import type { OperationNotice } from "@/types/operationNotice";
 
 // 表示用の値と操作の結果の型は mapLibraryState が定義する。既存の import 先を保つため再エクスポートする
-export type { MapLibraryOperationResult, MapLibraryView } from "@/hooks/mapLibraryState";
+export type { LibraryRestorePreview, MapLibraryOperationResult, MapLibraryView } from "@/hooks/mapLibraryState";
 
 export type MapLibraryDeps = {
   getStorage: () => MapLibraryStorage | null;
@@ -90,7 +105,31 @@ export type UseMapLibraryResult = {
   renameMap: (id: string, nameInput: string) => MapLibraryOperationResult;
   deleteMap: (id: string) => MapLibraryOperationResult;
   moveBranchToMap: (sourceSession: MapStorageSession, targetId: string, rootId: number) => MapLibraryOperationResult;
+  prepareBackup: () => MapDocumentResult<LibraryBackupPreview>;
+  downloadBackup: (preview: LibraryBackupPreview) => MapLibraryOperationResult;
+  previewRestore: (file: File) => Promise<MapDocumentResult<LibraryRestorePreview>>;
+  confirmRestore: (preview: LibraryRestorePreview) => MapLibraryOperationResult;
 };
+
+const BACKUP_RETRY = "マップ一覧を開き直して、バックアップを再試行してください。";
+const RESTORE_RETRY = "マップ一覧が変わりました。バックアップからの復元を確認し直してください。";
+const RESTORE_FLUSH_FAILED = "現在のマップを保存できませんでした。保存してから復元を再試行してください。";
+
+function readMatchingIndexRaw(current: PersistentLibraryState): string | null {
+  try {
+    const raw = current.storage.getItem(MAP_INDEX_STORAGE_KEY);
+    if (raw === null) return null;
+    const decoded = decodeMapIndex(raw);
+    return decoded.kind === "ok" && !decoded.repaired &&
+      encodeMapIndex(decoded.index) === encodeMapIndex(current.index) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+function operationError(message: string): MapLibraryOperationResult {
+  return failedOperation({ kind: "error", message });
+}
 
 export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
   const [library, setLibrary] = useState<LibraryState | null>(null);
@@ -103,6 +142,11 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
   // セッション番号の正本。進めるのは advanceSessionNumber だけで、state には写さない
   const sessionNumberRef = useRef(0);
   const flushRef = useRef<FlushRegistration | null>(null);
+  const backupSnapshotRef = useRef<BackupSnapshotRegistration | null>(null);
+  const revisionRef = useRef(0);
+  const restoreLockRef = useRef(false);
+  const backupPreviewsRef = useRef(new WeakMap<LibraryBackupPreview, number>());
+  const restorePreviewsRef = useRef(new WeakMap<LibraryRestorePreview, number>());
 
   useLayoutEffect(() => {
     depsRef.current = deps;
@@ -110,6 +154,7 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
   }, [deps, library]);
 
   const commitLibrary = useCallback((next: LibraryState) => {
+    revisionRef.current += 1;
     libraryRef.current = next;
     setLibrary(next);
   }, []);
@@ -137,6 +182,7 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
         now: () => depsRef.current.now(),
         commitIndex,
         flushSlot: flushRef,
+        backupSnapshotSlot: backupSnapshotRef,
       }),
     [commitIndex],
   );
@@ -218,6 +264,7 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
   const view = useMemo((): MapLibraryView => toMapLibraryView(library), [library]);
 
   const createMap = useCallback((nameInput: string): MapLibraryOperationResult => {
+    if (restoreLockRef.current) return operationError(RESTORE_RETRY);
     if (libraryRef.current?.mode !== "persistent") {
       return failedOperation(indexWriteFailedNotice("マップを作成"));
     }
@@ -251,6 +298,7 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
   }, [commitNewSession, flushCurrentSession]);
 
   const switchMap = useCallback((id: string): MapLibraryOperationResult => {
+    if (restoreLockRef.current) return operationError(RESTORE_RETRY);
     const before = libraryRef.current;
     if (before?.mode !== "persistent" || findMapEntry(before.index, id) === null) {
       return failedOperation(indexWriteFailedNotice("マップを切り替え"));
@@ -279,6 +327,7 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
 
   const renameMap = useCallback(
     (id: string, nameInput: string): MapLibraryOperationResult => {
+      if (restoreLockRef.current) return operationError(RESTORE_RETRY);
       const current = libraryRef.current;
       if (current?.mode !== "persistent") {
         return failedOperation(indexWriteFailedNotice("名前を変更"));
@@ -347,6 +396,7 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
   );
 
   const deleteMap = useCallback((id: string): MapLibraryOperationResult => {
+    if (restoreLockRef.current) return operationError(RESTORE_RETRY);
     const current = libraryRef.current;
     const target = current?.mode === "persistent" ? findMapEntry(current.index, id) : null;
     if (current?.mode !== "persistent" || target === null) {
@@ -407,6 +457,7 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
     targetId: string,
     rootId: number,
   ): MapLibraryOperationResult => {
+    if (restoreLockRef.current) return operationError(RESTORE_RETRY);
     const before = libraryRef.current;
     if (!isActiveBranchMoveSource(before, sourceSession)
       || before.index.currentMapId === targetId || findMapEntry(before.index, targetId) === null) {
@@ -433,5 +484,108 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
     return succeededOperation(branchMovedToMapNotice(), true);
   }, [commitNewSession, flushCurrentSession, protectAfterBranchMove]);
 
-  return { view, createMap, switchMap, renameMap, deleteMap, moveBranchToMap };
+  const prepareBackup = useCallback((): MapDocumentResult<LibraryBackupPreview> => {
+    const current = libraryRef.current;
+    if (restoreLockRef.current || current?.mode !== "persistent") {
+      return { ok: false, error: BACKUP_RETRY };
+    }
+    const prepared = prepareLibraryBackup(current.storage, current.index, current.session, depsRef.current.now());
+    if (prepared.ok) backupPreviewsRef.current.set(prepared.value, revisionRef.current);
+    return prepared;
+  }, []);
+
+  const downloadBackup = useCallback((preview: LibraryBackupPreview): MapLibraryOperationResult => {
+    const current = libraryRef.current;
+    if (restoreLockRef.current || current?.mode !== "persistent" ||
+      backupPreviewsRef.current.get(preview) !== revisionRef.current ||
+      !isLibraryBackupPreviewCurrent(current.storage, current.index, current.session, preview)) {
+      return operationError(BACKUP_RETRY);
+    }
+    try {
+      downloadLibraryBackup(preview.json, preview.fileNameDate);
+      return succeededOperation({ kind: "status", message: "バックアップのダウンロードを開始しました。" }, false);
+    } catch {
+      return operationError("バックアップのダウンロードを開始できませんでした。再試行してください。");
+    }
+  }, []);
+
+  const previewRestore = useCallback(async (file: File): Promise<MapDocumentResult<LibraryRestorePreview>> => {
+    const current = libraryRef.current;
+    if (restoreLockRef.current || current?.mode !== "persistent") {
+      return { ok: false, error: RESTORE_RETRY };
+    }
+    const indexRaw = readMatchingIndexRaw(current);
+    if (indexRaw === null) return { ok: false, error: RESTORE_RETRY };
+    const revision = revisionRef.current;
+    const read = await readLibraryBackupFile(file);
+    // File.text() 中に切替や A→B→A が起きても、開始時の結果を採用しない。
+    const latest = libraryRef.current;
+    if (restoreLockRef.current || latest?.mode !== "persistent" ||
+      latest.session !== current.session || revisionRef.current !== revision ||
+      readMatchingIndexRaw(latest) !== indexRaw) {
+      return { ok: false, error: RESTORE_RETRY };
+    }
+    if (!read.ok) return read;
+    const preview = { backup: read.value, indexRaw, session: current.session };
+    restorePreviewsRef.current.set(preview, revision);
+    return { ok: true, value: preview };
+  }, []);
+
+  const confirmRestore = useCallback((preview: LibraryRestorePreview): MapLibraryOperationResult => {
+    if (restoreLockRef.current) return operationError(RESTORE_RETRY);
+    restoreLockRef.current = true;
+    try {
+      const before = libraryRef.current;
+      if (before?.mode !== "persistent" || before.session !== preview.session ||
+        restorePreviewsRef.current.get(preview) !== revisionRef.current) {
+        return operationError(RESTORE_RETRY);
+      }
+      if (flushCurrentSession().status === "failed") return operationError(RESTORE_FLUSH_FAILED);
+      const current = libraryRef.current;
+      if (current?.mode !== "persistent" || current.session !== preview.session ||
+        restorePreviewsRef.current.get(preview) !== revisionRef.current ||
+        readMatchingIndexRaw(current) !== preview.indexRaw) return operationError(RESTORE_RETRY);
+
+      // unchanged は保存や初回復元の証拠ではない。実際の editor 登録を確認する。
+      const snapshot = current.session.readBackupSnapshot();
+      if (!isEligibleMapBackupSnapshot(snapshot) ||
+        !parseMapDocumentJson(snapshot.json).ok) {
+        return operationError("現在のマップの復元が完了していません。マップを開き直してから再試行してください。");
+      }
+      const planned = planLibraryRestore(
+        current.storage, current.index, preview.indexRaw, preview.backup, depsRef.current.generateId,
+      );
+      if (!planned.ok) return operationError(planned.error);
+      if (libraryRef.current !== current || revisionRef.current !== restorePreviewsRef.current.get(preview) ||
+        readMatchingIndexRaw(current) !== preview.indexRaw) return operationError(RESTORE_RETRY);
+      // 書込の直前に取得する。失敗時の保護 session に raw JSON を渡す。
+      const latest = current.session.readBackupSnapshot();
+      if (!isEligibleMapBackupSnapshot(latest) ||
+        !parseMapDocumentJson(latest.json).ok) {
+        return operationError("現在のマップの復元が完了していません。マップを開き直してから再試行してください。");
+      }
+      const written = writeLibraryRestore(current.storage, planned.value);
+      if (written.status === "saved") {
+        commitIndex(planned.value.indexAfter);
+        return succeededOperation({ kind: "status", message: "バックアップのマップを追加しました。" }, false);
+      }
+      const notice: OperationNotice = { kind: "error", message: written.error };
+      if (written.status === "failed") return failedOperation(notice);
+      const entry = findMapEntry(current.index, current.index.currentMapId)!;
+      advanceSessionNumber();
+      commitLibrary({
+        mode: "protected", entry,
+        session: createProtectedStorageSession(entry.id, latest.json),
+        startupNotice: notice,
+      });
+      return protectedModeFailure(notice);
+    } catch {
+      return operationError("バックアップから復元できませんでした。確認して再試行してください。");
+    } finally {
+      restoreLockRef.current = false;
+    }
+  }, [advanceSessionNumber, commitIndex, commitLibrary, flushCurrentSession]);
+
+  return { view, createMap, switchMap, renameMap, deleteMap, moveBranchToMap,
+    prepareBackup, downloadBackup, previewRestore, confirmRestore };
 }

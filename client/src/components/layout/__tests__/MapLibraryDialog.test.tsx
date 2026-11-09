@@ -38,6 +38,11 @@ function createProps(overrides: Partial<Props> = {}): Props {
     onSubmitCreate: jest.fn(),
     onSubmitRename: jest.fn(),
     onConfirmDelete: jest.fn(),
+    onPrepareBackup: jest.fn(),
+    onDownloadBackup: jest.fn(),
+    onSelectRestoreFile: jest.fn(),
+    onConfirmRestore: jest.fn(),
+    storageMode: "persistent",
     onMouseClick: jest.fn(),
     ...overrides,
   };

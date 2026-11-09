@@ -9,12 +9,13 @@ import {
   writeMapIndex,
   type MapLibraryStorage,
 } from "@/services/persistence/mapLibraryStorage";
-import type { MapFlushResult, MapStorageSession } from "@/types/mapStorageSession";
+import type { MapBackupSnapshot, MapFlushResult, MapStorageSession } from "@/types/mapStorageSession";
 
 // useMapLibrary が通常のモードのマップごとに渡す保存のセッション。
 // セッション番号で古いエディタからの保存と flush の登録を拒み、保存のたびに更新日時を進める
 
 export type FlushRegistration = { session: number; flush: () => MapFlushResult };
+export type BackupSnapshotRegistration = { session: number; snapshot: () => MapBackupSnapshot };
 
 export type PersistentMapSessionContext = {
   storage: MapLibraryStorage;
@@ -30,12 +31,13 @@ export type PersistentMapSessionContext = {
   commitIndex: (index: MapIndexV1) => void;
   // 現在のセッションの flush の登録先。1つだけ持つ
   flushSlot: { current: FlushRegistration | null };
+  backupSnapshotSlot: { current: BackupSnapshotRegistration | null };
 };
 
 export function createPersistentMapSession(
   context: PersistentMapSessionContext,
 ): MapStorageSession {
-  const { storage, mapId, sessionNumber, flushSlot } = context;
+  const { storage, mapId, sessionNumber, flushSlot, backupSnapshotSlot } = context;
   return {
     mapId,
     readBody: () => readMapBody(storage, mapId),
@@ -68,6 +70,26 @@ export function createPersistentMapSession(
       return () => {
         if (flushSlot.current === registration) flushSlot.current = null;
       };
+    },
+    registerBackupSnapshot: (snapshot) => {
+      if (sessionNumber !== context.getActiveSessionNumber() || context.getActiveIndex() === null) {
+        return () => {};
+      }
+      const registration: BackupSnapshotRegistration = { session: sessionNumber, snapshot };
+      backupSnapshotSlot.current = registration;
+      return () => {
+        if (backupSnapshotSlot.current === registration) backupSnapshotSlot.current = null;
+      };
+    },
+    readBackupSnapshot: () => {
+      const registration = backupSnapshotSlot.current;
+      if (
+        sessionNumber !== context.getActiveSessionNumber()
+        || context.getActiveIndex() === null
+        || registration === null
+        || registration.session !== sessionNumber
+      ) return null;
+      return registration.snapshot();
     },
   };
 }

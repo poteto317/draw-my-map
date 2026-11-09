@@ -1,4 +1,7 @@
 import { recoverBranchMove, type BlockedBranchMoveRecovery } from "./branchMoveTransaction";
+import { BRANCH_MOVE_JOURNAL_KEY } from "./branchMoveJournal";
+import { recoverLibraryRestore, type BlockedLibraryRestoreRecovery } from "./libraryRestoreTransaction";
+import { LIBRARY_RESTORE_JOURNAL_KEY } from "./libraryRestoreJournal";
 import type { MapIndexV1 } from "@/domain/mapLibrary/mapIndex";
 import {
   planMapLibraryStartup,
@@ -54,19 +57,47 @@ function toBlockedByBranchMove(recovery: BlockedBranchMoveRecovery): MapLibraryS
   };
 }
 
+function toBlockedByLibraryRestore(recovery: BlockedLibraryRestoreRecovery): MapLibraryStartupResult {
+  return {
+    mode: "protected",
+    mapId: recovery.mapId,
+    mapName: recovery.mapName,
+    initialJson: recovery.initialJson,
+    notice: { kind: "error", message: recovery.error },
+  };
+}
+
 // 分岐の判定は planMapLibraryStartup に任せ、ここでは計画どおりに書き、
 // 各書き込みが成功したときだけ次へ進む。storage が null なら書き込みは失敗として扱う。
 export function runMapLibraryStartup(
   storage: MapLibraryStorage | null,
   deps: MapLibraryStartupDeps,
 ): MapLibraryStartupResult {
-  // 中断した枝の移動を通常の起動より先に原本へ戻す。ジャーナルを読めないときは未復旧かもしれない本体を
-  // 開かないように、ほかのキーが読めても保存領域を使えない起動として扱う
-  const recovery = storage === null ? null : recoverBranchMove(storage);
-  if (recovery?.kind === "blocked") return toBlockedByBranchMove(recovery);
-  const snapshot: MapLibraryStartupSnapshot = recovery?.kind === "unavailable"
-    ? { kind: "unavailable" }
-    : readMapLibrarySnapshot(storage);
+  // どちらの復旧にも着手する前に両 journal を確認する。
+  let recoveryUnavailable = false;
+  if (storage !== null) {
+    let restoreRaw: string | null;
+    let branchRaw: string | null;
+    try {
+      restoreRaw = storage.getItem(LIBRARY_RESTORE_JOURNAL_KEY);
+      branchRaw = storage.getItem(BRANCH_MOVE_JOURNAL_KEY);
+    } catch {
+      recoveryUnavailable = true;
+      restoreRaw = null;
+      branchRaw = null;
+    }
+    if (!recoveryUnavailable && restoreRaw !== null) {
+      const recovery = recoverLibraryRestore(storage);
+      if (recovery.kind === "blocked") return toBlockedByLibraryRestore(recovery);
+      if (recovery.kind === "unavailable") recoveryUnavailable = true;
+    } else if (!recoveryUnavailable && branchRaw !== null) {
+      const recovery = recoverBranchMove(storage);
+      if (recovery.kind === "blocked") return toBlockedByBranchMove(recovery);
+      if (recovery.kind === "unavailable") recoveryUnavailable = true;
+    }
+  }
+  const snapshot: MapLibraryStartupSnapshot = recoveryUnavailable
+    ? { kind: "unavailable" } : readMapLibrarySnapshot(storage);
   const plan = planMapLibraryStartup(snapshot, deps);
   switch (plan.kind) {
     case "protected":

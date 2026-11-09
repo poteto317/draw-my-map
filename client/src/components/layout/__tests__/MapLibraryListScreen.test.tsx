@@ -38,6 +38,9 @@ function renderList(overrides: Partial<Props> = {}) {
     onSwitch: jest.fn(),
     onOpenRename: jest.fn(),
     onOpenDelete: jest.fn(),
+    onPrepareBackup: jest.fn(),
+    onSelectRestoreFile: jest.fn(),
+    storageMode: "persistent",
     ...overrides,
   };
   render(<MapLibraryListScreen {...props} />);
@@ -51,6 +54,30 @@ function rows() {
 }
 
 describe("MapLibraryListScreen", () => {
+  it("同じファイルを続けて選べ、毎回復元の読込を開始する", async () => {
+    const user = userEvent.setup();
+    const props = renderList();
+    const file = new File(["{}"], "backup.json", { type: "application/json" });
+    const input = screen.getByLabelText("バックアップファイル", { selector: "input" }) as HTMLInputElement;
+    expect(input).toHaveAttribute("accept", ".json,application/json");
+    await user.upload(input, file);
+    expect(props.onSelectRestoreFile).toHaveBeenCalledWith(file);
+    expect(input.value).toBe("");
+    await user.upload(input, file);
+    expect(props.onSelectRestoreFile).toHaveBeenCalledTimes(2);
+    await user.click(screen.getByRole("button", { name: "全マップをバックアップ" }));
+    expect(props.onPrepareBackup).toHaveBeenCalledTimes(1);
+  });
+
+  it("保護モードはバックアップと復元を拒否し、JSON書き出しへ案内する", async () => {
+    const user = userEvent.setup();
+    const props = renderList({ storageMode: "protected" });
+    await user.click(screen.getByRole("button", { name: "全マップをバックアップ" }));
+    await user.click(screen.getByRole("button", { name: "バックアップから復元" }));
+    expect(props.onPrepareBackup).not.toHaveBeenCalled();
+    expect(props.onSelectRestoreFile).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent("JSON書き出し");
+  });
   it("見出し・新しいマップ・閉じるのボタンを表示する", () => {
     renderList();
 

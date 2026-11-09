@@ -612,3 +612,22 @@ type OutlineRows = {
 HTTP エンドポイントと保存形式は追加しません。`MapRestoreOrigin = "restored" | "empty" | "failed"` は `useMapStorageRestoration` が本体の初回読込結果として返し、`MapSaveStatus = "checking" | "saved" | "beforeSave" | "restoreFailed" | "pending" | "failed" | "protected"` は `deriveMapSaveStatus` が現在のエディタの表示用に返します。入力は `hydrated`, `restoreOrigin`, `currentSnapshot`, `initialPersistedSnapshot`, `confirmedSnapshot`, `forcedSnapshot`, `hasSaveFailure`, `storageMode` です。仮の初期 snapshot と `inactive` / `unchanged` は保存成功の根拠にしません。
 
 `useMapStorageAutoSave` は既存の `requestSnapshotSave(snapshot)` と同期 `flushPendingSave()` を保ち、返り値に `saveStatus` を追加します。`useMapStoragePersistence`、`useMapPersistence`、`MapEditor` はシェルの必須 `storageMode: "persistent" | "protected"` を受け渡し、`MapEditor` が `AppHeader` の必須 `saveStatus` に結果を渡します。`MapSaveStatus` は単一の `role="status"` / `aria-live="polite"` と独立した `aria-label` を持ちます。失敗の `role="alert"` と JSON 救出案内は既存通知のままです。詳細な遷移は [data-model.md の 5.5 節](./data-model.md#55-自動保存ライフサイクルusemapstorageautosaveと-flush) を参照してください。
+
+## 13. 一括バックアップ・追加復元のクライアントAPI
+
+HTTP エンドポイントは追加しません。`MapStorageSession` は既存の `readBody`、`writeBody`、`registerFlush` に加え、必須の `registerBackupSnapshot: (snapshot: () => MapBackupSnapshot) => () => void` と `readBackupSnapshot: () => MapBackupSnapshot | null` を持ちます。`MapBackupSnapshot` は `{ json, hydrated, restoreOrigin, hasSavedBodyThisMount }` です。`useMapPersistence` が layout effect で最新 editor document と、同じ mount の `writeBody: saved` 実績を登録します。古い session と保護 session は `null` を返します。初回 `restoreOrigin: "failed"` は保存成功実績が出るまで一括操作を許可しません。`saveStatus` と `flush: unchanged` は資格の証拠ではありません。
+
+`useMapLibrary` の返値には次の4操作を必須で追加します。結果のエラーは `MapDocumentResult` または通知付き `MapLibraryOperationResult` で返します。
+
+```typescript
+prepareBackup(): MapDocumentResult<LibraryBackupPreview>;
+downloadBackup(preview: LibraryBackupPreview): MapLibraryOperationResult;
+previewRestore(file: File): Promise<MapDocumentResult<LibraryRestorePreview>>;
+confirmRestore(preview: LibraryRestorePreview): MapLibraryOperationResult;
+```
+
+`LibraryBackupPreview` は JSON、現在 snapshot、日時、欠損本体名、孤立本体数、保存中一覧原文、session を持ちます。`LibraryRestorePreview` は `{ backup: LibraryBackupV1; indexRaw: string; session: MapStorageSession }` です。書き出し確認では欠損本体を空 V3 として含める件数と名前、除外する孤立本体の件数を示します。確認後の `downloadBackup` は一覧・session・snapshot を再検査し、成功は `remounted: false` と「バックアップのダウンロードを開始しました。」の通知を返します。
+
+`previewRestore` は `File.size` を先に検査し、非同期読込後に session・一覧・世代を再照合します。`confirmRestore` は保存待ちの flush、現在 snapshot の資格と妥当性、一覧と journal の整合を確認し、新 ID の追加を確定します。成功は `remounted: false` と「バックアップのマップを追加しました。」を返し、現在 editor を保ちます。復旧不能時は `enteredProtectedMode: true` を含む失敗でシェル通知へ渡し、再マウントします。
+
+`useMapLibraryDialogState` は `backupConfirm`・`restoreReading`・`restoreConfirm` の画面遷移、非同期世代照合、通知・フォーカス先を担当します。`MapLibraryDialog` は `onPrepareBackup`、`onDownloadBackup`、`onSelectRestoreFile`、`onConfirmRestore` を受け、確認画面の既定フォーカスをキャンセルにします。通常の成功・失敗はダイアログ内で示し、保護モードへの移行は既存の `MapLibraryNoticeRegion` とヘッダーの「JSON書き出し」へのフォーカスで示します。`MapEditor` の9系統の操作通知と、常設 `MapSaveStatus` は増えません。

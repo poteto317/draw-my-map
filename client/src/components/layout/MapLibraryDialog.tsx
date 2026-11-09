@@ -3,9 +3,12 @@
 import { useId, useLayoutEffect, useRef } from "react";
 import { handleDialogClickCapture } from "@/components/layout/dialogClickCapture";
 import { MapLibraryDeleteConfirm } from "@/components/layout/MapLibraryDeleteConfirm";
+import { MapLibraryBackupConfirm } from "@/components/layout/MapLibraryBackupConfirm";
+import { MapLibraryRestoreConfirm } from "@/components/layout/MapLibraryRestoreConfirm";
 import { MapLibraryListScreen } from "@/components/layout/MapLibraryListScreen";
 import { MapLibraryNameForm } from "@/components/layout/MapLibraryNameForm";
 import { mapLibraryListButtonSelector } from "@/components/layout/mapLibraryListButtons";
+import { suppressBackupRestoreActionKey } from "@/components/layout/suppressBackupRestoreActionKey";
 import { useReannouncedNotice } from "@/components/layout/useReannouncedNotice";
 import {
   listFocusableElements,
@@ -38,6 +41,11 @@ type MapLibraryDialogProps = {
   onSubmitCreate: (nameInput: string) => void;
   onSubmitRename: (mapId: string, nameInput: string) => void;
   onConfirmDelete: (mapId: string) => void;
+  onPrepareBackup: () => void;
+  onDownloadBackup: () => void;
+  onSelectRestoreFile: (file: File) => void;
+  onConfirmRestore: () => void;
+  storageMode: "persistent" | "protected";
   // ダイアログの中のマウスのクリック（detail > 0）ごとに呼ぶ。閉じた直後のダブルクリックの続きを
   // キャンバスが無視するために、シェルがクリックの時刻を控える
   onMouseClick: () => void;
@@ -60,6 +68,11 @@ export function MapLibraryDialog({
   onSubmitCreate,
   onSubmitRename,
   onConfirmDelete,
+  onPrepareBackup,
+  onDownloadBackup,
+  onSelectRestoreFile,
+  onConfirmRestore,
+  storageMode,
   onMouseClick,
 }: MapLibraryDialogProps) {
   const headingId = useId();
@@ -105,12 +118,14 @@ export function MapLibraryDialog({
 
     let element: HTMLElement | null;
     if (focusTarget.kind !== "screenDefault") {
-      element = dialog.querySelector<HTMLElement>(mapLibraryListButtonSelector(focusTarget));
+      element = focusTarget.kind === "backupButton" || focusTarget.kind === "restoreButton"
+        ? dialog.querySelector<HTMLElement>(`[data-map-library-action="${focusTarget.kind === "backupButton" ? "backup" : "restore"}"]`)
+        : dialog.querySelector<HTMLElement>(mapLibraryListButtonSelector(focusTarget));
     } else if (screen.kind === "list") {
       element = dialog.querySelector<HTMLElement>(
         mapLibraryListButtonSelector({ kind: "row", mapId: currentMapId, action: "open" }),
       );
-    } else if (screen.kind === "delete") {
+    } else if (screen.kind === "delete" || screen.kind === "backupConfirm" || screen.kind === "restoreConfirm" || screen.kind === "restoreReading") {
       // 取り消せない操作なので、既定を安全側にする
       element = cancelButtonRef.current;
     } else {
@@ -134,6 +149,9 @@ export function MapLibraryDialog({
             onSwitch={onSwitch}
             onOpenRename={onOpenRename}
             onOpenDelete={onOpenDelete}
+            onPrepareBackup={onPrepareBackup}
+            onSelectRestoreFile={onSelectRestoreFile}
+            storageMode={storageMode}
           />
         );
       case "create":
@@ -174,6 +192,12 @@ export function MapLibraryDialog({
             onCancel={onCancel}
           />
         );
+      case "backupConfirm":
+        return <MapLibraryBackupConfirm headingId={headingId} descriptionId={descriptionId} preview={screen.preview} cancelButtonRef={cancelButtonRef} onConfirm={onDownloadBackup} onCancel={onCancel} />;
+      case "restoreReading":
+        return <div className="flex flex-col gap-3"><h2 id={headingId}>バックアップを読み込み中</h2><p>読み込み中です…</p><button ref={cancelButtonRef} type="button" onKeyDown={suppressBackupRestoreActionKey} onClick={onCancel}>キャンセル</button></div>;
+      case "restoreConfirm":
+        return <MapLibraryRestoreConfirm headingId={headingId} descriptionId={descriptionId} preview={screen.preview} cancelButtonRef={cancelButtonRef} onConfirm={onConfirmRestore} onCancel={onCancel} />;
     }
   };
   const screenContent = renderScreen();
@@ -206,7 +230,7 @@ export function MapLibraryDialog({
             key={screenKey}
             role="group"
             aria-labelledby={headingId}
-            aria-describedby={screen.kind === "delete" ? descriptionId : undefined}
+            aria-describedby={screen.kind === "delete" || screen.kind === "backupConfirm" || screen.kind === "restoreConfirm" ? descriptionId : undefined}
           >
             {screenContent}
           </div>

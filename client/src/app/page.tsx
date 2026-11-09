@@ -95,6 +95,11 @@ export default function Home() {
               onSubmitCreate={dialog.submitCreate}
               onSubmitRename={dialog.submitRename}
               onConfirmDelete={dialog.confirmDelete}
+              onPrepareBackup={dialog.prepareBackup}
+              onDownloadBackup={dialog.downloadBackup}
+              onSelectRestoreFile={dialog.selectRestoreFile}
+              onConfirmRestore={dialog.confirmRestore}
+              storageMode={view.storageMode}
               onMouseClick={() => {
                 dialogMouseClickedAtRef.current = Date.now();
               }}

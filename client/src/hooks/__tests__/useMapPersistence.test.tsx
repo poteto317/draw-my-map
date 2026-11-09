@@ -84,6 +84,45 @@ function node(label: string): Node {
 }
 
 describe("useMapPersistence", () => {
+  it("最新 editor JSON と初回失敗後の保存実績を session に登録する", () => {
+    const storage = createTestStorageSession({ initialJson: "{" });
+    const { rerender, unmount } = renderHook(
+      ({ nodes }) => useMapPersistence({
+        nodes,
+        layoutMode: "manual",
+        replaceMap: jest.fn(),
+        storageSession: storage.session,
+        storageMode: "persistent",
+        mapName: "旅行",
+      }),
+      { initialProps: { nodes: [] as Node[] } },
+    );
+    expect(storage.session.readBackupSnapshot()).toMatchObject({
+      hydrated: true, restoreOrigin: "failed", hasSavedBodyThisMount: false,
+    });
+    expect(storage.session.readBackupSnapshot()?.json).toContain('"nodes": []');
+    expect(storage.session.readBody()).toEqual({ ok: true, value: "{" });
+    expect(storage.callRegisteredFlush()).toEqual({ status: "unchanged" });
+    expect(storage.session.readBackupSnapshot()?.hasSavedBodyThisMount).toBe(false);
+
+    storage.setWriteOutcome("failed");
+    rerender({ nodes: [node("A")] });
+    act(() => { expect(storage.callRegisteredFlush().status).toBe("failed"); });
+    expect(storage.session.readBackupSnapshot()?.hasSavedBodyThisMount).toBe(false);
+    storage.setWriteOutcome("saved");
+    act(() => { expect(storage.callRegisteredFlush()).toEqual({ status: "saved" }); });
+    expect(storage.session.readBackupSnapshot()?.hasSavedBodyThisMount).toBe(true);
+
+    rerender({ nodes: [node("B")] });
+    expect(JSON.parse(storage.session.readBackupSnapshot()!.json).nodes[0].label).toBe("B");
+    expect(storage.session.readBackupSnapshot()?.hasSavedBodyThisMount).toBe(true);
+    storage.setWriteOutcome("failed");
+    act(() => { expect(storage.callRegisteredFlush().status).toBe("failed"); });
+    expect(storage.session.readBackupSnapshot()?.hasSavedBodyThisMount).toBe(true);
+    unmount();
+    expect(storage.session.readBackupSnapshot()).toBeNull();
+  });
+
   beforeEach(() => {
     jest.useFakeTimers();
   });

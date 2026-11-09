@@ -32,6 +32,41 @@ function flushInAct<T>(flush: () => T): T {
 }
 
 describe("useMapStorageAutoSave", () => {
+  it("同一 mount の writeBody saved だけを記録し、後の pending と failed でも保持する", () => {
+    const storage = createTestStorageSession();
+    const { result, rerender } = renderHook(
+      ({ snapshot }) => useMapStorageAutoSave({
+        currentSnapshot: snapshot,
+        hydrated: true,
+        initialPersistedSnapshot: emptyMapJson,
+        restoreOrigin: "failed",
+        storageMode: "persistent",
+        publishNotice: jest.fn(),
+        writeBody: storage.session.writeBody,
+        clearSaveFailureNotice: jest.fn(),
+      }),
+      { initialProps: { snapshot: emptyMapJson } },
+    );
+    expect(result.current.hasSavedBodyThisMount()).toBe(false);
+    expect(flushInAct(result.current.flushPendingSave)).toEqual({ status: "unchanged" });
+    expect(result.current.hasSavedBodyThisMount()).toBe(false);
+
+    rerender({ snapshot: changedMapJson });
+    storage.setWriteOutcome("failed");
+    expect(flushInAct(result.current.flushPendingSave).status).toBe("failed");
+    expect(result.current.hasSavedBodyThisMount()).toBe(false);
+    storage.setWriteOutcome("saved");
+    expect(flushInAct(result.current.flushPendingSave)).toEqual({ status: "saved" });
+    expect(result.current.hasSavedBodyThisMount()).toBe(true);
+
+    rerender({ snapshot: otherMapJson });
+    expect(result.current.saveStatus).toBe("pending");
+    expect(result.current.hasSavedBodyThisMount()).toBe(true);
+    storage.setWriteOutcome("failed");
+    expect(flushInAct(result.current.flushPendingSave).status).toBe("failed");
+    expect(result.current.hasSavedBodyThisMount()).toBe(true);
+  });
+
   beforeEach(() => {
     jest.useFakeTimers();
   });
