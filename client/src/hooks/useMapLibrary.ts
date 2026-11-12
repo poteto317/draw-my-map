@@ -28,6 +28,11 @@ import {
   switchFlushFailedNotice,
 } from "@/domain/mapLibrary/mapLibraryMessages";
 import {
+  conflictBranchMoveRejectedNotice,
+  conflictRestoreRejectedNotice,
+  conflictSwitchMapRejectedNotice,
+} from "@/domain/mapLibrary/mapConflictMessages";
+import {
   addMapEntry,
   createMapIndexEntry,
   findMapEntry,
@@ -67,6 +72,7 @@ import {
 import {
   MAP_INDEX_STORAGE_KEY,
   removeMapBody,
+  writeMapBody,
   writeMapIndex,
   type MapLibraryStorage,
 } from "@/services/persistence/mapLibraryStorage";
@@ -109,6 +115,7 @@ export type UseMapLibraryResult = {
   downloadBackup: (preview: LibraryBackupPreview) => MapLibraryOperationResult;
   previewRestore: (file: File) => Promise<MapDocumentResult<LibraryRestorePreview>>;
   confirmRestore: (preview: LibraryRestorePreview) => MapLibraryOperationResult;
+  saveCurrentAsNewMap: (nameInput: string, snapshotJson: string) => MapLibraryOperationResult;
 };
 
 const BACKUP_RETRY = "マップ一覧を開き直して、バックアップを再試行してください。";
@@ -272,7 +279,8 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
     if (!validation.ok) {
       return failedOperation({ kind: "error", message: validation.message });
     }
-    if (flushCurrentSession().status === "failed") {
+    const createFlush = flushCurrentSession();
+    if (createFlush.status === "failed") {
       return failedOperation(createFlushFailedNotice());
     }
     // flush で更新日時が変わるので、flush の後のインデックスを基準にする
@@ -306,7 +314,11 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
     if (before.index.currentMapId === id) {
       return UNCHANGED_OPERATION_RESULT;
     }
-    if (flushCurrentSession().status === "failed") {
+    const switchFlush = flushCurrentSession();
+    if (switchFlush.status === "conflict") {
+      return failedOperation(conflictSwitchMapRejectedNotice());
+    }
+    if (switchFlush.status === "failed") {
       return failedOperation(switchFlushFailedNotice());
     }
     // flush で更新日時が変わるので、flush の後のインデックスを基準にする
@@ -463,7 +475,11 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
       || before.index.currentMapId === targetId || findMapEntry(before.index, targetId) === null) {
       return failedOperation(branchMoveRejectedNotice());
     }
-    if (flushCurrentSession().status === "failed") {
+    const moveFlush = flushCurrentSession();
+    if (moveFlush.status === "conflict") {
+      return failedOperation(conflictBranchMoveRejectedNotice());
+    }
+    if (moveFlush.status === "failed") {
       return failedOperation(branchMoveFlushFailedNotice());
     }
     // flush による更新・再入を反映し、保存領域の最新インデックスも読み直す。
@@ -540,7 +556,9 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
         restorePreviewsRef.current.get(preview) !== revisionRef.current) {
         return operationError(RESTORE_RETRY);
       }
-      if (flushCurrentSession().status === "failed") return operationError(RESTORE_FLUSH_FAILED);
+      const restoreFlush = flushCurrentSession();
+      if (restoreFlush.status === "conflict") return failedOperation(conflictRestoreRejectedNotice());
+      if (restoreFlush.status === "failed") return operationError(RESTORE_FLUSH_FAILED);
       const current = libraryRef.current;
       if (current?.mode !== "persistent" || current.session !== preview.session ||
         restorePreviewsRef.current.get(preview) !== revisionRef.current ||
@@ -586,6 +604,48 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
     }
   }, [advanceSessionNumber, commitIndex, commitLibrary, flushCurrentSession]);
 
+  const saveCurrentAsNewMap = useCallback(
+    (nameInput: string, snapshotJson: string): MapLibraryOperationResult => {
+      if (restoreLockRef.current) return operationError(RESTORE_RETRY);
+      if (libraryRef.current?.mode !== "persistent") {
+        return failedOperation(indexWriteFailedNotice("マップを作成"));
+      }
+      const validation = validateMapNameInput(nameInput);
+      if (!validation.ok) {
+        return failedOperation({ kind: "error", message: validation.message });
+      }
+
+      // 旧マップへの flush は完全にバイパス（知見 L-061）
+      const current = libraryRef.current;
+      if (current?.mode !== "persistent") {
+        return failedOperation(indexWriteFailedNotice("マップを作成"));
+      }
+      const { storage, index } = current;
+      const { generateId, now } = depsRef.current;
+      const id = pickNewMapId(storage, index, generateId);
+      if (id === null) {
+        return failedOperation(mapIdUnavailableNotice());
+      }
+
+      const writtenBody = writeMapBody(storage, id, snapshotJson);
+      if (!writtenBody.ok) {
+        return failedOperation(indexWriteFailedNotice("マップを作成"));
+      }
+
+      const entry = createMapIndexEntry(id, validation.name, now().toISOString());
+      const withEntry = addMapEntry(index, entry);
+      const next = setCurrentMap(withEntry, id);
+      if (next === null || !writeMapIndex(storage, next).ok) {
+        removeMapBody(storage, id);
+        return failedOperation(indexWriteFailedNotice("マップを作成"));
+      }
+
+      commitNewSession(current, next);
+      return succeededOperation(mapCreatedNotice(validation.name), true);
+    },
+    [commitNewSession],
+  );
+
   return { view, createMap, switchMap, renameMap, deleteMap, moveBranchToMap,
-    prepareBackup, downloadBackup, previewRestore, confirmRestore };
+    prepareBackup, downloadBackup, previewRestore, confirmRestore, saveCurrentAsNewMap };
 }

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { autoSaveFailedNotice } from "@/domain/mapLibrary/mapLibraryMessages";
+import type { ConflictState } from "@/domain/mapLibrary/mapConflict";
 import { deriveMapSaveStatus, type MapRestoreOrigin, type MapSaveStatus } from "@/domain/persistence/mapSaveStatus";
 import type { MapBodyWriteResult, MapFlushResult } from "@/types/mapStorageSession";
 import type { OperationNotice } from "@/types/operationNotice";
@@ -15,6 +16,9 @@ type UseMapStorageAutoSaveOptions = {
   publishNotice: (notice: OperationNotice) => void;
   writeBody: (json: string) => MapBodyWriteResult;
   clearSaveFailureNotice: () => void;
+  conflictState?: ConflictState;
+  onWriteConflict?: () => void;
+  onSaveSuccess?: (snapshot: string) => void;
 };
 
 type UseMapStorageAutoSaveResult = {
@@ -22,6 +26,8 @@ type UseMapStorageAutoSaveResult = {
   flushPendingSave: () => MapFlushResult;
   saveStatus: MapSaveStatus;
   hasSavedBodyThisMount: () => boolean;
+  hasPendingEdits: boolean;
+  rebaseConfirmedSnapshot: (snapshotJson: string) => void;
 };
 
 export function useMapStorageAutoSave({
@@ -33,6 +39,9 @@ export function useMapStorageAutoSave({
   publishNotice,
   writeBody,
   clearSaveFailureNotice,
+  conflictState,
+  onWriteConflict,
+  onSaveSuccess,
 }: UseMapStorageAutoSaveOptions): UseMapStorageAutoSaveResult {
   const [saveRequestRevision, setSaveRequestRevision] = useState(0);
   const [statusEvidence, setStatusEvidence] = useState<{
@@ -54,10 +63,19 @@ export function useMapStorageAutoSave({
   const writeBodyRef = useRef(writeBody);
   const publishNoticeRef = useRef(publishNotice);
   const clearSaveFailureNoticeRef = useRef(clearSaveFailureNotice);
+  const conflictStateRef = useRef(conflictState);
+  const onWriteConflictRef = useRef(onWriteConflict);
+  const onSaveSuccessRef = useRef(onSaveSuccess);
   const handleWriteResultRef = useRef<(snapshot: string, written: MapBodyWriteResult, forceGeneration: number) => MapFlushResult>(() => ({ status: "unchanged" }));
 
   const confirmedSnapshot = statusEvidence.confirmedSnapshot
     ?? (restoreOrigin === "restored" ? initialPersistedSnapshot : null);
+
+  const hasPendingEdits =
+    confirmedSnapshot !== null
+      ? currentSnapshot !== confirmedSnapshot
+      : currentSnapshot !== initialPersistedSnapshot;
+
   if (previousSnapshot !== currentSnapshot) {
     setPreviousSnapshot(currentSnapshot);
     if ((statusEvidence.hasSaveFailure || statusEvidence.forcedSnapshot !== null)
@@ -76,6 +94,7 @@ export function useMapStorageAutoSave({
     forcedSnapshot: statusEvidence.forcedSnapshot,
     hasSaveFailure: statusEvidence.hasSaveFailure,
     storageMode,
+    conflictState,
   });
 
   useLayoutEffect(() => {
@@ -83,7 +102,18 @@ export function useMapStorageAutoSave({
     writeBodyRef.current = writeBody;
     publishNoticeRef.current = publishNotice;
     clearSaveFailureNoticeRef.current = clearSaveFailureNotice;
+    conflictStateRef.current = conflictState;
+    onWriteConflictRef.current = onWriteConflict;
+    onSaveSuccessRef.current = onSaveSuccess;
     handleWriteResultRef.current = (snapshot, written, forceGeneration) => {
+      if (written.status === "conflict") {
+        onWriteConflictRef.current?.();
+        if (pendingTimerRef.current !== null) {
+          window.clearTimeout(pendingTimerRef.current);
+          pendingTimerRef.current = null;
+        }
+        return { status: "conflict" };
+      }
       if (written.status === "failed") {
         hasSaveFailureRef.current = true;
         publishNoticeRef.current(autoSaveFailedNotice());
@@ -100,6 +130,7 @@ export function useMapStorageAutoSave({
       hasSaveFailureRef.current = false;
       clearSaveFailureNoticeRef.current();
       setStatusEvidence({ confirmedSnapshot: snapshot, forcedSnapshot: forcedSnapshotRef.current, hasSaveFailure: false });
+      onSaveSuccessRef.current?.(snapshot);
       return { status: "saved" };
     };
     if (hydrated && !baselineInitializedRef.current) {
@@ -119,9 +150,12 @@ export function useMapStorageAutoSave({
     }
   }, [
     clearSaveFailureNotice,
+    conflictState,
     currentSnapshot,
     hydrated,
     initialPersistedSnapshot,
+    onWriteConflict,
+    onSaveSuccess,
     publishNotice,
     restoreOrigin,
     writeBody,
@@ -129,6 +163,13 @@ export function useMapStorageAutoSave({
 
   useEffect(() => {
     if (!hydrated) return;
+    if (conflictState && conflictState !== "none") {
+      if (pendingTimerRef.current !== null) {
+        window.clearTimeout(pendingTimerRef.current);
+        pendingTimerRef.current = null;
+      }
+      return;
+    }
 
     const mustSaveCurrentSnapshot = forcedSnapshotRef.current === currentSnapshot;
     if (
@@ -138,6 +179,9 @@ export function useMapStorageAutoSave({
 
     const timer = window.setTimeout(() => {
       pendingTimerRef.current = null;
+      if (conflictStateRef.current && conflictStateRef.current !== "none") {
+        return;
+      }
       const forceGeneration = forceGenerationRef.current;
       const written = writeBody(currentSnapshot);
       handleWriteResultRef.current(currentSnapshot, written, forceGeneration);
@@ -149,6 +193,7 @@ export function useMapStorageAutoSave({
       if (pendingTimerRef.current === timer) pendingTimerRef.current = null;
     };
   }, [
+    conflictState,
     currentSnapshot,
     hydrated,
     initialPersistedSnapshot,
@@ -164,6 +209,21 @@ export function useMapStorageAutoSave({
   }, []);
 
   const flushPendingSave = useCallback((): MapFlushResult => {
+    if (conflictStateRef.current === "conflict" || conflictStateRef.current === "externallyDeleted") {
+      if (pendingTimerRef.current !== null) {
+        window.clearTimeout(pendingTimerRef.current);
+        pendingTimerRef.current = null;
+      }
+      return { status: "conflict" };
+    }
+    if (conflictStateRef.current === "externalUpdate") {
+      if (pendingTimerRef.current !== null) {
+        window.clearTimeout(pendingTimerRef.current);
+        pendingTimerRef.current = null;
+      }
+      return { status: "unchanged" };
+    }
+
     // 復元前は保存の基準が無いので、空のマップで本体を上書きしない
     if (!baselineInitializedRef.current) return { status: "unchanged" };
 
@@ -185,5 +245,29 @@ export function useMapStorageAutoSave({
 
   const hasSavedBodyThisMount = useCallback(() => hasSavedBodyThisMountRef.current, []);
 
-  return { requestSnapshotSave, flushPendingSave, saveStatus, hasSavedBodyThisMount };
+  const rebaseConfirmedSnapshot = useCallback((snapshotJson: string) => {
+    if (pendingTimerRef.current !== null) {
+      window.clearTimeout(pendingTimerRef.current);
+      pendingTimerRef.current = null;
+    }
+    baselineInitializedRef.current = true;
+    lastPersistedSnapshotRef.current = snapshotJson;
+    confirmedSnapshotRef.current = snapshotJson;
+    setStatusEvidence((previous) => ({
+      ...previous,
+      confirmedSnapshot: snapshotJson,
+      forcedSnapshot: null,
+      hasSaveFailure: false,
+    }));
+    onSaveSuccessRef.current?.(snapshotJson);
+  }, []);
+
+  return {
+    requestSnapshotSave,
+    flushPendingSave,
+    saveStatus,
+    hasSavedBodyThisMount,
+    hasPendingEdits,
+    rebaseConfirmedSnapshot,
+  };
 }

@@ -1,6 +1,6 @@
 # Draw My Map API 仕様書
 
-本書は、**Draw My Map** におけるノードアイコン・イラスト生成エンドポイント（`POST /api/illustrations`）の詳細な API 仕様、内部アーキテクチャ、処理パイプライン、クライアント側画像処理、および本番公開に向けた運用・セキュリティ考慮事項をまとめた技術仕様書です。9〜12章ではクライアントAPIを扱います。
+本書は、**Draw My Map** におけるノードアイコン・イラスト生成エンドポイント（`POST /api/illustrations`）の詳細な API 仕様、内部アーキテクチャ、処理パイプライン、クライアント側画像処理、および本番公開に向けた運用・セキュリティ考慮事項をまとめた技術仕様書です。9〜14章ではクライアントAPIを扱います。
 
 ---
 
@@ -18,6 +18,8 @@
 10. [アウトライン編集と共有フォーカスのクライアントAPI](#10-アウトライン編集と共有フォーカスのクライアントapi)
 11. [アウトライン書き出しのクライアントAPI](#11-アウトライン書き出しのクライアントapi)
 12. [保存状態表示のクライアントAPI](#12-保存状態表示のクライアントapi)
+13. [一括バックアップ・追加復元のクライアントAPI](#13-一括バックアップ追加復元のクライアントapi)
+14. [複数タブの編集競合検出のクライアントAPI](#14-複数タブの編集競合検出のクライアントapi)
 
 ---
 
@@ -631,3 +633,91 @@ confirmRestore(preview: LibraryRestorePreview): MapLibraryOperationResult;
 `previewRestore` は `File.size` を先に検査し、非同期読込後に session・一覧・世代を再照合します。`confirmRestore` は保存待ちの flush、現在 snapshot の資格と妥当性、一覧と journal の整合を確認し、新 ID の追加を確定します。成功は `remounted: false` と「バックアップのマップを追加しました。」を返し、現在 editor を保ちます。復旧不能時は `enteredProtectedMode: true` を含む失敗でシェル通知へ渡し、再マウントします。
 
 `useMapLibraryDialogState` は `backupConfirm`・`restoreReading`・`restoreConfirm` の画面遷移、非同期世代照合、通知・フォーカス先を担当します。`MapLibraryDialog` は `onPrepareBackup`、`onDownloadBackup`、`onSelectRestoreFile`、`onConfirmRestore` を受け、確認画面の既定フォーカスをキャンセルにします。通常の成功・失敗はダイアログ内で示し、保護モードへの移行は既存の `MapLibraryNoticeRegion` とヘッダーの「JSON書き出し」へのフォーカスで示します。`MapEditor` の9系統の操作通知と、常設 `MapSaveStatus` は増えません。
+
+## 14. 複数タブの編集競合検出のクライアントAPI
+
+HTTP エンドポイントは追加せず、ブラウザの window `storage` イベントと同期ストレージ照合を用いたクライアント内部APIです。
+
+### 14.1 ドメインロジック層 (`domain/mapLibrary/`)
+
+#### `mapConflict.ts`
+純粋関数群であり、React や副作用に依存しません。
+- `classifyStorageChange(params: { key: string | null; newValue: string | null; currentMapId: string; hasPendingEdits: boolean; isCurrentMapInIndex: boolean }): ConflictState`
+  - 受信した `StorageEvent` から `"none" | "conflict" | "externalUpdate" | "externallyDeleted"` を判定します。
+- `isDocumentContentEqual(docA: MapDocumentV3, docB: MapDocumentV3): boolean`
+  - ノード配列順・各ノードフィールド（ID・親ID・座標・寸法・重要度・イラスト）を正規化比較し、表記差や余剰プロパティに影響されないドキュメント同一性を判定します（知見 L-530）。
+- `createConflictCopyName(baseName: string): string`
+  - 「別名で保存」時の安全な退避名を生成します。末尾に「（退避）」を付与し、50コードポイント上限を超えないよう手前で切り詰めます。
+
+#### `mapConflictMessages.ts`
+UI 通知および確認ダイアログの文言定数・生成関数群です。
+- `MAP_CONFLICT_NOTICE_MESSAGE`: 競合時の通知文言。
+- `MAP_EXTERNALLY_DELETED_NOTICE_MESSAGE`: 外部削除時の通知文言。
+- `MAP_EXTERNAL_UPDATE_NOTICE_MESSAGE`: クリーン時外部更新の通知文言。
+- `MAP_CONFLICT_ACTION_LABELS`: 各種ボタンラベル（`saveAsCopy`, `reloadExternal`, `exportJson` 等）。
+- `MAP_CONFLICT_BLOCKED_SWITCH_MESSAGE`: 競合中マップ切替の中断文言。
+- `MAP_CONFLICT_BLOCKED_BRANCH_MOVE_MESSAGE`: 競合中枝移動の拒否文言。
+- `MAP_CONFLICT_BLOCKED_RESTORE_MESSAGE`: 競合中一括復元の拒否文言。
+
+### 14.2 サービス層 (`services/persistence/`)
+
+#### `storageEventHub.ts`
+- `export type StorageEventListener = (event: StorageEvent) => void;`
+- `export function subscribeStorageEvent(listener: StorageEventListener): () => void`
+  - `window.addEventListener("storage", listener)` を安全に登録し、解除関数を返します。
+  - window が存在しない環境では安全な no-op 解除関数を返します。
+  - テスト環境でスパイやモックに差し替え可能なファサードを提供します。
+
+### 14.3 フック層 (`hooks/`)
+
+#### `useStorageConflictMonitor.ts`
+```typescript
+export interface UseStorageConflictMonitorOptions {
+  mapId: string;
+  sessionNumber: number;
+  hasPendingEdits: boolean;
+  storage: MapLibraryStorage;
+  onExternalChange: (kind: Exclude<ConflictState, "none">) => void;
+}
+export function useStorageConflictMonitor(options: UseStorageConflictMonitorOptions): void
+```
+- `subscribeStorageEvent` を購読し、`sessionNumber` の一致を確認した上で `classifyStorageChange` を呼び出します（知見 L-037, L-571）。
+- `useLatestRef` を介して最新の options を参照し、React StrictMode の二重実行でもリスナーが喪失しないライフサイクルを保証します（知見 L-469）。
+- `"none"` 以外の外部変更を検知した場合に `onExternalChange` を呼び出します。
+
+#### `MapStorageSession` の拡張
+```typescript
+export interface MapStorageSession {
+  readonly mapId: string;
+  readonly sessionNumber: number;
+  readonly storage: MapLibraryStorage;
+  // ...
+}
+```
+- `createPersistentMapSession`:
+  - `lastPersistedSnapshotRef` を保持。
+  - `writeBody` 直前に `storage.readMapBody(mapId)` を同期実行し、不一致時は `{ status: "conflict" }` を返却。
+  - 成功時は `lastPersistedSnapshotRef` を更新。
+  - `flushPendingSave` も `writeBody` が `conflict` を返した場合は `{ status: "conflict" }` を返却。
+
+#### `useMapLibrary.ts`
+- `saveCurrentAsNewMap(name: string, snapshotJson: string): MapLibraryOperationResult`
+  - 旧マップへの flush を完全にバイパス（知見 L-061）し、新マップを作成・保存して切り替えます。
+- 既存操作のガード:
+  - `switchMap`: flush が `conflict` の場合は切り替えを安全に中断し、競合通知を残します。
+  - `moveBranchToMap`: flush が `conflict` の場合は枝移動を拒否し、エラー通知を表示します。
+  - `confirmRestore`: flush が `conflict` の場合は一括復元を拒否します。
+  - `createMap`: flush が `conflict` の場合は旧マップ flush を安全にバイパスして新規作成を継続します。
+
+### 14.4 UI コンポーネント (`components/layout/`)
+
+- `MapConflictNotice.tsx`:
+  - 操作通知バーの最上段に配置される 10 系統目の通知コンポーネント。
+  - 常設ライブリージョン `role="alert"` / `aria-live="assertive"` を持ち、スクリーンリーダーに即座に通知します（知見 L-153）。
+  - 各状態に応じた文言と「別名で保存」「最新を読み込む」「JSON書き出し」のアクションボタンを描画します。
+- `MapConflictConfirmDialog.tsx`:
+  - 競合時に未保存編集を破棄して最新内容を読み込む際の確認モーダルダイアログ。
+  - 初期フォーカスは安全側の「キャンセル」に設定（知見 L-408）。
+  - `suppressBackupRestoreActionKey` と同様のキーリピート連打抑止を適用。
+- `MapSaveStatus.tsx`:
+  - `"conflict"`（赤色「競合が発生しました」）および `"externallyDeleted"`（赤色「削除されました」）の常設バッジを描画。

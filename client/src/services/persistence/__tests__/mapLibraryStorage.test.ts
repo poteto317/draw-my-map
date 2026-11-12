@@ -4,6 +4,7 @@ import {
   MAP_INDEX_STORAGE_KEY,
   getBrowserMapLibraryStorage,
   hasMapBody,
+  isMapInStorageIndex,
   mapBodyKey,
   readMapBody,
   readMapLibrarySnapshot,
@@ -209,6 +210,39 @@ describe("mapLibraryStorage", () => {
 
       const ng = createRecordingStorage({ failGetItem: true });
       expect(hasMapBody(ng.storage, "abc")).toBe(true);
+    });
+  });
+
+  describe("isMapInStorageIndex", () => {
+    it("インデックス内に mapId が存在すれば true を返す", () => {
+      const { storage } = createRecordingStorage({
+        initial: { [MAP_INDEX_STORAGE_KEY]: encodeMapIndex(index) },
+      });
+      expect(isMapInStorageIndex(storage, "abc")).toBe(true);
+    });
+
+    it("インデックス内に mapId が存在しなければ false を返す", () => {
+      const { storage } = createRecordingStorage({
+        initial: { [MAP_INDEX_STORAGE_KEY]: encodeMapIndex(index) },
+      });
+      expect(isMapInStorageIndex(storage, "xyz")).toBe(false);
+    });
+
+    it("インデックスが存在しない（null）場合は false を返す", () => {
+      const { storage } = createRecordingStorage();
+      expect(isMapInStorageIndex(storage, "abc")).toBe(false);
+    });
+
+    it("インデックスが破損データ（JSON 不正）の場合は false を返す", () => {
+      const { storage } = createRecordingStorage({
+        initial: { [MAP_INDEX_STORAGE_KEY]: "{ invalid json" },
+      });
+      expect(isMapInStorageIndex(storage, "abc")).toBe(false);
+    });
+
+    it("storage 読み取りが例外を投げる場合は安全に false を返す", () => {
+      const { storage } = createRecordingStorage({ failGetItem: true });
+      expect(isMapInStorageIndex(storage, "abc")).toBe(false);
     });
   });
 

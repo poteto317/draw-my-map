@@ -1,3 +1,4 @@
+import type { MapLibraryStorage } from "@/services/persistence/mapLibraryStorage";
 import type {
   MapBodyWriteResult,
   MapBackupSnapshot,
@@ -11,6 +12,8 @@ type CreateTestStorageSessionOptions = {
   mapId?: string;
   initialJson?: string | null;
   readError?: string;
+  sessionNumber?: number;
+  storage?: MapLibraryStorage;
 };
 
 export type TestStorageSession = {
@@ -25,11 +28,25 @@ export type TestStorageSession = {
 
 const TEST_WRITE_ERROR = "テスト用の保存失敗";
 
+const defaultDummyStorage: MapLibraryStorage = {
+  getItem: () => null,
+  setItem: () => {},
+  removeItem: () => {},
+  key: () => null,
+  length: 0,
+};
+
 // フックのテスト用の偽セッション。failed・inactive のときは本物と同じく書かない
 export function createTestStorageSession(
   options: CreateTestStorageSessionOptions = {},
 ): TestStorageSession {
-  const { mapId = "test-map", initialJson = null, readError } = options;
+  const {
+    mapId = "test-map",
+    initialJson = null,
+    readError,
+    sessionNumber = 0,
+    storage = defaultDummyStorage,
+  } = options;
   const writes: string[] = [];
   let writeOutcome: WriteOutcome = "saved";
   const flushes = new Set<() => MapFlushResult>();
@@ -37,6 +54,8 @@ export function createTestStorageSession(
 
   const session: MapStorageSession = {
     mapId,
+    sessionNumber,
+    storage,
     readBody: () => (readError === undefined
       ? { ok: true, value: initialJson }
       : { ok: false, error: readError }),
@@ -44,6 +63,7 @@ export function createTestStorageSession(
       if (writeOutcome === "failed") {
         return { status: "failed", error: TEST_WRITE_ERROR };
       }
+      if (writeOutcome === "conflict") return { status: "conflict" };
       if (writeOutcome === "inactive") return { status: "inactive" };
       writes.push(json);
       return { status: "saved" };
@@ -62,6 +82,7 @@ export function createTestStorageSession(
       return () => { snapshots.delete(registered); };
     },
     readBackupSnapshot: () => [...snapshots].at(-1)?.() ?? null,
+    rebaseSnapshot: jest.fn(),
   };
 
   return {

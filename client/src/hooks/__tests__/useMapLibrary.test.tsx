@@ -1558,4 +1558,118 @@ describe("useMapLibrary のライブラリバックアップ境界", () => {
     act(() => { expect(result.current.confirmRestore(preview.value)).toMatchObject({ ok: false, enteredProtectedMode: true }); });
     expect(readyView(result.current.view).storageSession.readBody()).toEqual({ ok: true, value: latest });
   });
+
+  describe("競合検知とガード（Task 3）", () => {
+    it("saveCurrentAsNewMap は旧マップの flush をバイパスし、新マップを保存して切り替える（知見 L-061）", () => {
+      const { result, entries } = setup({
+        initial: twoMapsInitial(),
+        ids: ["evacuated-map-id"],
+      });
+      const session = readyView(result.current.view).storageSession;
+      const flushSpy = jest.fn(() => ({ status: "conflict" as const }));
+      session.registerFlush(flushSpy);
+
+      const snapshotJson = '{"version":3,"layoutMode":"manual","nodes":[{"id":1,"label":"退避ノード"}]}';
+      let outcome: ReturnType<ReturnType<typeof useMapLibrary>["saveCurrentAsNewMap"]>;
+      act(() => {
+        outcome = result.current.saveCurrentAsNewMap("退避マップ", snapshotJson);
+      });
+
+      // 旧マップへの flush は一切呼ばれない
+      expect(flushSpy).not.toHaveBeenCalled();
+      expect(outcome!.ok).toBe(true);
+
+      const view = readyView(result.current.view);
+      expect(view.currentMap.id).toBe("evacuated-map-id");
+      expect(view.currentMap.name).toBe("退避マップ");
+      expect(entries()[mapBodyKey("evacuated-map-id")]).toBe(snapshotJson);
+      expect(storedIndex(entries()).currentMapId).toBe("evacuated-map-id");
+    });
+
+    it("saveCurrentAsNewMap は不正なマップ名の場合は保存せずエラーを返す", () => {
+      const { result, entries } = setup({ initial: twoMapsInitial(), ids: ["evac-id"] });
+      let outcome: ReturnType<ReturnType<typeof useMapLibrary>["saveCurrentAsNewMap"]>;
+      act(() => {
+        outcome = result.current.saveCurrentAsNewMap("a".repeat(51), "{}");
+      });
+      expect(outcome!.ok).toBe(false);
+      expect(storedIndex(entries()).currentMapId).toBe("map-1");
+    });
+
+    it("switchMap は flush が conflict を返したときに安全に中断し、競合通知を返す", () => {
+      const { result } = setup({ initial: twoMapsInitial() });
+      const session = readyView(result.current.view).storageSession;
+      session.registerFlush(() => ({ status: "conflict" }));
+
+      let outcome: ReturnType<ReturnType<typeof useMapLibrary>["switchMap"]>;
+      act(() => {
+        outcome = result.current.switchMap("map-2");
+      });
+
+      expect(outcome!.ok).toBe(false);
+      expect(outcome!.notice?.message).toBe(
+        "競合中のため切り替えられません。『別名で保存』または『最新を読み込む』で解決してください。",
+      );
+      expect(readyView(result.current.view).currentMap.id).toBe("map-1");
+    });
+
+    it("moveBranchToMap は flush が conflict を返したときに枝移動を拒否する", () => {
+      const { result } = setup({ initial: twoMapsInitial() });
+      const session = readyView(result.current.view).storageSession;
+      session.registerFlush(() => ({ status: "conflict" }));
+
+      let outcome: ReturnType<ReturnType<typeof useMapLibrary>["moveBranchToMap"]>;
+      act(() => {
+        outcome = result.current.moveBranchToMap(session, "map-2", 1);
+      });
+
+      expect(outcome!.ok).toBe(false);
+      expect(outcome!.notice?.message).toBe(
+        "別タブでマップが更新または削除されているため、枝を移動できませんでした。",
+      );
+    });
+
+    it("confirmRestore は flush が conflict を返したときに復元を拒否する", async () => {
+      const { result } = setup({ initial: singleMapInitial(), ids: ["new-source"] });
+      const session = readyView(result.current.view).storageSession;
+      session.registerBackupSnapshot(() => ({
+        json: EMPTY_V3,
+        hydrated: true,
+        restoreOrigin: "restored",
+        hasSavedBodyThisMount: false,
+      }));
+      const preview = await result.current.previewRestore(backupFile());
+      expect(preview.ok).toBe(true);
+      if (!preview.ok) return;
+
+      // flush が conflict を返すように登録
+      session.registerFlush(() => ({ status: "conflict" }));
+
+      let outcome: ReturnType<ReturnType<typeof useMapLibrary>["confirmRestore"]>;
+      act(() => {
+        outcome = result.current.confirmRestore(preview.value);
+      });
+
+      expect(outcome!.ok).toBe(false);
+      expect(outcome!.notice?.message).toBe(
+        "別タブで競合または更新が発生しているため、一括復元できませんでした。",
+      );
+    });
+
+    it("createMap は flush が conflict の場合でも旧マップ flush をバイパスして新規マップ作成を継続する", () => {
+      const { result, entries } = setup({ initial: twoMapsInitial(), ids: ["created-map-id"] });
+      const session = readyView(result.current.view).storageSession;
+      session.registerFlush(() => ({ status: "conflict" }));
+
+      let outcome: ReturnType<ReturnType<typeof useMapLibrary>["createMap"]>;
+      act(() => {
+        outcome = result.current.createMap("新規マップ");
+      });
+
+      expect(outcome!.ok).toBe(true);
+      expect(readyView(result.current.view).currentMap.id).toBe("created-map-id");
+      expect(readyView(result.current.view).currentMap.name).toBe("新規マップ");
+      expect(storedIndex(entries()).currentMapId).toBe("created-map-id");
+    });
+  });
 });

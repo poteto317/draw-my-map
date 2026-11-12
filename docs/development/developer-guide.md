@@ -180,7 +180,7 @@ WebGL・Canvas が無いため、テストでは `pixi.js` を `jest.mock` で�
 
 ### 4.5 `localStorage` は1か所からだけ触る
 
-`window.localStorage` を直接読み書きするのは `services/persistence/mapLibraryStorage.ts` だけです。読み書きは例外（容量超過・プライベートモードの `SecurityError`）を投げ得るため、このモジュールは例外を外へ出さず、結果型で返します。新しい保存先が必要なときも、このモジュールに関数を足してください。ただし枝の移動のジャーナルの書き込みと復旧は、途中で継続する手順があるので `services/persistence/branchMoveTransaction.ts` も、移動の前の補正待ちのインデックスの読み取りは `services/persistence/mapBranchTransfer.ts` の `readBranchMoveIndex` も、注入された storage を直接呼びます。この2か所は呼び出し元が注入する storage を使うので、ブラウザの `localStorage` を直接参照しません。
+`window.localStorage` を直接読み書きするのは `services/persistence/mapLibraryStorage.ts` だけです。読み書きは例外（容量超過・プライベートモードの `SecurityError`）を投げ得るため、このモジュールは例外を外へ出さず、結果型で返します。新しい保存先が必要なときも、このモジュールに関数を足してください。ただし枝の移動のジャーナルの書き込みと復旧は、途中で継続する手順があるので `services/persistence/branchMoveTransaction.ts` も、移動の前の補正待ちのインデックスの読み取りは `services/persistence/mapBranchTransfer.ts` の `readBranchMoveIndex` も、追加復元のジャーナルの書き込みと復旧は `services/persistence/libraryRestoreTransaction.ts` も、注入された storage を直接呼びます。これらの箇所は呼び出し元が注入する storage を使うので、ブラウザの `localStorage` を直接参照しません。
 
 ### 4.6 表示だけの状態を保存形式に入れない
 

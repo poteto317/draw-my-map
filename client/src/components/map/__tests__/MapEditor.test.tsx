@@ -11,6 +11,18 @@ import {
   resetMapStageTestRuntime,
 } from "@/components/map/testing/mapStageTestRuntime";
 import { createTestStorageSession, type TestStorageSession } from "@/testing/createTestStorageSession";
+import { mapBodyKey } from "@/services/persistence/mapLibraryStorage";
+import {
+  CONFLICT_NOTICE_MESSAGE,
+  EXTERNALLY_DELETED_NOTICE_MESSAGE,
+  EXTERNAL_UPDATE_NOTICE_MESSAGE,
+  RELOAD_SUCCESS_MESSAGE,
+  SAVE_AS_COPY_BUTTON_LABEL,
+  RELOAD_EXTERNAL_BUTTON_LABEL,
+  RELOAD_CONFIRM_ACTION_LABEL,
+} from "@/domain/mapLibrary/mapConflictMessages";
+import { createConflictCopyName } from "@/domain/mapLibrary/mapConflict";
+import type { MapLibraryOperationResult } from "@/hooks/useMapLibrary";
 
 // ページのテストと同じく、Pixi・画像化・ダウンロードだけを差し替える
 jest.mock("pixi.js", () => {
@@ -68,6 +80,7 @@ type RenderEditorOptions = {
   mapControls?: ReactNode;
   storage?: TestStorageSession;
   dialogMouseClickedAtRef?: RefObject<number | null>;
+  onSaveCurrentAsNewMap?: (name: string, snapshotJson: string) => MapLibraryOperationResult;
 };
 
 async function renderEditor({
@@ -76,6 +89,7 @@ async function renderEditor({
   mapControls = null,
   storage = createTestStorageSession(),
   dialogMouseClickedAtRef = { current: null },
+  onSaveCurrentAsNewMap,
 }: RenderEditorOptions = {}) {
   const rendered = await renderReady(
     <MapEditor
@@ -88,6 +102,7 @@ async function renderEditor({
       mapControls={mapControls}
       shortcutsEnabled={shortcutsEnabled}
       dialogMouseClickedAtRef={dialogMouseClickedAtRef}
+      onSaveCurrentAsNewMap={onSaveCurrentAsNewMap}
     />,
   );
   mockStageBounds(stageContainer());
@@ -638,6 +653,275 @@ describe("MapEditor", () => {
       expect(within(outlineDialog()).getByRole("radio", {
         name: "選択中のノード「新しいノード」の子として追加",
       })).toBeInTheDocument();
+    });
+  });
+
+  describe("複数タブの編集競合検出", () => {
+    it("未保存編集があるときに別タブで更新されたら、競合通知を表示する", async () => {
+      const { storage } = await renderEditor();
+      addNodeAt(300, 200); // 未保存の編集を作る
+
+      const newBody = `${JSON.stringify({
+        version: 3,
+        layoutMode: "manual",
+        nodes: [{ id: 99, parentId: null, label: "別タブのノード", importance: "medium", x: 100, y: 100, width: 100, height: 60 }],
+      })}\n`;
+
+      act(() => {
+        window.dispatchEvent(
+          new StorageEvent("storage", {
+            key: mapBodyKey(storage.session.mapId),
+            newValue: newBody,
+          }),
+        );
+      });
+
+      expect(screen.getAllByText(CONFLICT_NOTICE_MESSAGE).length).toBeGreaterThan(0);
+      expect(screen.getByRole("button", { name: SAVE_AS_COPY_BUTTON_LABEL })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: RELOAD_EXTERNAL_BUTTON_LABEL })).toBeInTheDocument();
+    });
+
+    it("競合中に「別名で保存」を実行すると、退避名で onSaveCurrentAsNewMap が呼ばれて成功後に通知が消える", async () => {
+      const onSaveCurrentAsNewMap = jest.fn().mockReturnValue({ ok: true });
+      const { storage } = await renderEditor({
+        mapName: "旅行計画",
+        onSaveCurrentAsNewMap,
+      });
+      addNodeAt(300, 200);
+
+      act(() => {
+        window.dispatchEvent(
+          new StorageEvent("storage", {
+            key: mapBodyKey(storage.session.mapId),
+            newValue: "{}\n",
+          }),
+        );
+      });
+
+      expect(screen.getAllByText(CONFLICT_NOTICE_MESSAGE).length).toBeGreaterThan(0);
+
+      fireEvent.click(screen.getByRole("button", { name: SAVE_AS_COPY_BUTTON_LABEL }));
+
+      expect(onSaveCurrentAsNewMap).toHaveBeenCalledTimes(1);
+      expect(onSaveCurrentAsNewMap).toHaveBeenCalledWith(
+        createConflictCopyName("旅行計画"),
+        expect.stringContaining("\"version\": 3"),
+      );
+      expect(screen.queryByText(CONFLICT_NOTICE_MESSAGE)).not.toBeInTheDocument();
+    });
+
+    it("未保存編集がある競合中に「最新を読み込む」を押すと確認ダイアログが表示され、確定で最新内容が反映される", async () => {
+      const { storage } = await renderEditor();
+      addNodeAt(300, 200);
+
+      const latestDocJson = `${JSON.stringify({
+        version: 3,
+        layoutMode: "manual",
+        nodes: [{ id: 777, parentId: null, label: "最新の外部ノード", importance: "medium", x: 150, y: 150, width: 100, height: 60 }],
+      })}\n`;
+
+      // readBody が最新内容を返すようモック
+      const readSpy = jest.spyOn(storage.session, "readBody").mockReturnValue({ ok: true, value: latestDocJson });
+
+      try {
+        act(() => {
+          window.dispatchEvent(
+            new StorageEvent("storage", {
+              key: mapBodyKey(storage.session.mapId),
+              newValue: latestDocJson,
+            }),
+          );
+        });
+
+        expect(screen.getAllByText(CONFLICT_NOTICE_MESSAGE).length).toBeGreaterThan(0);
+
+        // 「最新を読み込む」をクリック
+        fireEvent.click(screen.getByRole("button", { name: RELOAD_EXTERNAL_BUTTON_LABEL }));
+
+        // 確認ダイアログが表示される
+        const confirmDialog = screen.getByRole("dialog");
+        expect(confirmDialog).toBeInTheDocument();
+
+        // 確定ボタンを押す
+        fireEvent.click(within(confirmDialog).getByRole("button", { name: RELOAD_CONFIRM_ACTION_LABEL }));
+
+        // 競合通知が消え、最新読込完了通知が表示される
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+        expect(screen.queryByText(CONFLICT_NOTICE_MESSAGE)).not.toBeInTheDocument();
+        expect(screen.getByText(RELOAD_SUCCESS_MESSAGE)).toBeInTheDocument();
+        expect(exportedMap().nodes).toEqual([expect.objectContaining({ id: 777, label: "最新の外部ノード" })]);
+      } finally {
+        readSpy.mockRestore();
+      }
+    });
+
+    it("「別名で保存」が失敗した場合はエラー通知を表示し競合状態を維持する", async () => {
+      const onSaveCurrentAsNewMap = jest.fn().mockReturnValue({
+        ok: false,
+        notice: { kind: "error", message: "名前が重複しています。" },
+      });
+      const { storage } = await renderEditor({
+        mapName: "旅行計画",
+        onSaveCurrentAsNewMap,
+      });
+      addNodeAt(300, 200);
+
+      act(() => {
+        window.dispatchEvent(
+          new StorageEvent("storage", {
+            key: mapBodyKey(storage.session.mapId),
+            newValue: "{}\n",
+          }),
+        );
+      });
+
+      expect(screen.getAllByText(CONFLICT_NOTICE_MESSAGE).length).toBeGreaterThan(0);
+
+      fireEvent.click(screen.getByRole("button", { name: SAVE_AS_COPY_BUTTON_LABEL }));
+
+      expect(onSaveCurrentAsNewMap).toHaveBeenCalledTimes(1);
+      // 失敗通知が表示され、競合通知も維持される
+      expect(screen.getByText("名前が重複しています。")).toBeInTheDocument();
+      expect(screen.getAllByText(CONFLICT_NOTICE_MESSAGE).length).toBeGreaterThan(0);
+    });
+
+    it("「最新を読み込む」確定時にストレージ上が削除されていた場合は externallyDeleted に遷移する", async () => {
+      const { storage } = await renderEditor();
+      addNodeAt(300, 200);
+
+      act(() => {
+        window.dispatchEvent(
+          new StorageEvent("storage", {
+            key: mapBodyKey(storage.session.mapId),
+            newValue: "{}\n",
+          }),
+        );
+      });
+
+      expect(screen.getAllByText(CONFLICT_NOTICE_MESSAGE).length).toBeGreaterThan(0);
+
+      // ストレージ上は削除されていた（value: null）
+      const readSpy = jest.spyOn(storage.session, "readBody").mockReturnValue({ ok: true, value: null });
+
+      try {
+        fireEvent.click(screen.getByRole("button", { name: RELOAD_EXTERNAL_BUTTON_LABEL }));
+        const confirmDialog = screen.getByRole("dialog");
+        fireEvent.click(within(confirmDialog).getByRole("button", { name: RELOAD_CONFIRM_ACTION_LABEL }));
+
+        // ダイアログは閉じ、externallyDeleted 通知へ遷移する
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+        expect(screen.getAllByText(EXTERNALLY_DELETED_NOTICE_MESSAGE).length).toBeGreaterThan(0);
+      } finally {
+        readSpy.mockRestore();
+      }
+    });
+
+    it("「最新を読み込む」確定時にパース失敗が生じた場合はエラー通知を表示する", async () => {
+      const { storage } = await renderEditor();
+      addNodeAt(300, 200);
+
+      act(() => {
+        window.dispatchEvent(
+          new StorageEvent("storage", {
+            key: mapBodyKey(storage.session.mapId),
+            newValue: "{}\n",
+          }),
+        );
+      });
+
+      // 壊れた JSON
+      const readSpy = jest.spyOn(storage.session, "readBody").mockReturnValue({ ok: true, value: "invalid json" });
+
+      try {
+        fireEvent.click(screen.getByRole("button", { name: RELOAD_EXTERNAL_BUTTON_LABEL }));
+        const confirmDialog = screen.getByRole("dialog");
+        fireEvent.click(within(confirmDialog).getByRole("button", { name: RELOAD_CONFIRM_ACTION_LABEL }));
+
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+        expect(screen.getByText("JSONを解析できませんでした。")).toBeInTheDocument();
+      } finally {
+        readSpy.mockRestore();
+      }
+    });
+
+    it("確認ダイアログのクリックで dialogMouseClickedAtRef が更新される", async () => {
+      const dialogMouseClickedAtRef = { current: null as number | null };
+      const { storage } = await renderEditor({ dialogMouseClickedAtRef });
+      addNodeAt(300, 200);
+
+      act(() => {
+        window.dispatchEvent(
+          new StorageEvent("storage", {
+            key: mapBodyKey(storage.session.mapId),
+            newValue: "{}\n",
+          }),
+        );
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: RELOAD_EXTERNAL_BUTTON_LABEL }));
+      const confirmDialog = screen.getByRole("dialog");
+
+      fireEvent.click(confirmDialog, { detail: 1 });
+      expect(dialogMouseClickedAtRef.current).not.toBeNull();
+      expect(typeof dialogMouseClickedAtRef.current).toBe("number");
+    });
+
+    it("未編集時の externalUpdate からキャンバス編集を行うと即座に conflict へ昇格する", async () => {
+      const { storage } = await renderEditor({
+        storage: createTestStorageSession({ initialJson: savedJson }),
+      });
+
+      // 保存済み・未編集の状態で外部更新イベント
+      act(() => {
+        window.dispatchEvent(
+          new StorageEvent("storage", {
+            key: mapBodyKey(storage.session.mapId),
+            newValue: "{}\n",
+          }),
+        );
+      });
+
+      expect(screen.getAllByText(EXTERNAL_UPDATE_NOTICE_MESSAGE).length).toBeGreaterThan(0);
+      expect(screen.queryByText(CONFLICT_NOTICE_MESSAGE)).not.toBeInTheDocument();
+
+      // キャンバスを編集（ノード追加）
+      addNodeAt(400, 300);
+
+      // conflict へ昇格
+      expect(screen.getAllByText(CONFLICT_NOTICE_MESSAGE).length).toBeGreaterThan(0);
+      expect(screen.getByRole("button", { name: SAVE_AS_COPY_BUTTON_LABEL })).toBeInTheDocument();
+    });
+
+    it("最新内容の再読み込みを行うと storageSession.rebaseSnapshot が呼ばれる", async () => {
+      const latestDocJson = `${JSON.stringify({
+        version: 3,
+        layoutMode: "manual",
+        nodes: [{ id: 777, parentId: null, label: "最新の外部ノード", importance: "medium", x: 150, y: 150, width: 100, height: 60 }],
+      })}\n`;
+      const testStorage = createTestStorageSession({ initialJson: savedJson });
+      const rebaseSpy = jest.fn();
+      testStorage.session.rebaseSnapshot = rebaseSpy;
+      testStorage.session.readBody = () => ({ ok: true, value: latestDocJson });
+
+      await renderEditor({ storage: testStorage });
+
+      // 未保存編集ありにして確認ダイアログを開く
+      addNodeAt(300, 200);
+
+      act(() => {
+        window.dispatchEvent(
+          new StorageEvent("storage", {
+            key: mapBodyKey(testStorage.session.mapId),
+            newValue: latestDocJson,
+          }),
+        );
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: RELOAD_EXTERNAL_BUTTON_LABEL }));
+      const confirmDialog = screen.getByRole("dialog");
+      fireEvent.click(within(confirmDialog).getByRole("button", { name: RELOAD_CONFIRM_ACTION_LABEL }));
+
+      expect(rebaseSpy).toHaveBeenCalledWith(latestDocJson);
     });
   });
 });

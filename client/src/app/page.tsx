@@ -65,6 +65,7 @@ export default function Home() {
             shortcutsEnabled={dialog.screen.kind === "closed"}
             dialogMouseClickedAtRef={dialogMouseClickedAtRef}
             exportButtonRef={exportButtonRef}
+            onSaveCurrentAsNewMap={(name, json) => library.saveCurrentAsNewMap(name, json)}
             mapControls={(
               <MapLibraryControls
                 mapName={view.currentMap.name}

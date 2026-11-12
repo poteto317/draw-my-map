@@ -31,6 +31,8 @@ import {
   hasOperationNotice,
   MapOperationNoticeList,
 } from "@/components/layout/MapOperationNoticeList";
+import { MapConflictNotice } from "@/components/layout/MapConflictNotice";
+import { MapConflictConfirmDialog } from "@/components/layout/MapConflictConfirmDialog";
 import { OutlineImportControl } from "@/components/layout/OutlineImportControl";
 import { OutlineImportDialog } from "@/components/layout/OutlineImportDialog";
 import { resolveOutlineParentCandidate } from "@/components/layout/outlineParentCandidate";
@@ -75,6 +77,7 @@ type MapEditorProps = {
   exportButtonRef: RefObject<HTMLButtonElement | null>;
   mapMoveTargets: readonly BranchMoveMapTarget[];
   onMoveBranchToMap: (rootId: number, targetMapId: string) => MapLibraryOperationResult;
+  onSaveCurrentAsNewMap?: (name: string, snapshotJson: string) => MapLibraryOperationResult;
   shortcutsEnabled: boolean;
   // 画面の外のダイアログで最後にマウスでクリックした時刻。ダイアログが1回目のクリックで閉じると、
   // ダブルクリックの2回目と dblclick が MapStage のキャンバスへ届くので、メニューの項目と同じ時間窓で無視する
@@ -93,6 +96,7 @@ export function MapEditor({
   exportButtonRef,
   mapMoveTargets,
   onMoveBranchToMap,
+  onSaveCurrentAsNewMap,
   shortcutsEnabled,
   dialogMouseClickedAtRef,
 }: MapEditorProps) {
@@ -179,6 +183,7 @@ export function MapEditor({
     storageSession,
     storageMode,
     mapName,
+    onSaveCurrentAsNewMap,
   });
   const imageExport = useMapImageExport({
     nodes,
@@ -271,7 +276,8 @@ export function MapEditor({
   // 入口をすべて同じ値で止める（L-061）
   const editorShortcutsEnabled = shortcutsEnabled
     && outlineImport.screen === "closed"
-    && branchMove.screen === "closed";
+    && branchMove.screen === "closed"
+    && !persistence.isConfirmOpen;
   useMapHistoryShortcuts({ undo, redo, enabled: editorShortcutsEnabled });
   const outlineModel = useMemo(() => buildOutlineRows(nodes), [nodes]);
   const outlineExport = useOutlineExport({ model: outlineModel, mapName });
@@ -312,6 +318,7 @@ export function MapEditor({
     nodeSearchNavigation.notice,
     outlineImport.notice,
     treeEditNotice,
+    persistence.conflictActionNotice,
   ];
 
   // 閉じる描画で根の inert が外れた後に当てる（L-155）。"input"・"preview" はダイアログが当てる
@@ -434,6 +441,12 @@ export function MapEditor({
             ? <MapOperationNoticeList notices={operationNotices} />
             : null}
         />
+        <MapConflictNotice
+          conflictState={persistence.conflictState}
+          onSaveAsCopy={persistence.handleSaveAsCopy}
+          onReloadExternal={persistence.handleReloadExternal}
+          onExportJson={persistence.exportJson}
+        />
         <AppWorkspace
           canvas={viewMode === "outline" ? (
             <OutlineEditor nodes={nodes} model={outlineModel} selectedNodeId={selectedNodeId}
@@ -529,6 +542,16 @@ export function MapEditor({
           onBack={outlineImport.back}
           onTargetChange={outlineImport.setTarget}
           onSubmit={outlineImport.submit}
+          onMouseClick={() => {
+            dialogMouseClickedAtRef.current = Date.now();
+          }}
+        />
+      )}
+      {persistence.isConfirmOpen && (
+        <MapConflictConfirmDialog
+          isOpen={persistence.isConfirmOpen}
+          onConfirm={persistence.handleConfirmReload}
+          onCancel={persistence.handleCancelConfirm}
           onMouseClick={() => {
             dialogMouseClickedAtRef.current = Date.now();
           }}

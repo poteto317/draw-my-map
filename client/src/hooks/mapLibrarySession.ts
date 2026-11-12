@@ -38,9 +38,22 @@ export function createPersistentMapSession(
   context: PersistentMapSessionContext,
 ): MapStorageSession {
   const { storage, mapId, sessionNumber, flushSlot, backupSnapshotSlot } = context;
+  const initialBody = readMapBody(storage, mapId);
+  let isSnapshotInitialized = initialBody.ok;
+  let lastPersistedSnapshotRef: string | null = initialBody.ok ? initialBody.value : null;
+
   return {
     mapId,
-    readBody: () => readMapBody(storage, mapId),
+    sessionNumber,
+    storage,
+    readBody: () => {
+      const result = readMapBody(storage, mapId);
+      if (!isSnapshotInitialized && result.ok) {
+        lastPersistedSnapshotRef = result.value;
+        isSnapshotInitialized = true;
+      }
+      return result;
+    },
     writeBody: (json) => {
       const index = context.getActiveIndex();
       // セッション番号で照合する。マップ id だけでは A → B → A を区別できない（L-571、L-103）
@@ -51,8 +64,17 @@ export function createPersistentMapSession(
       ) {
         return { status: "inactive" };
       }
+      const currentResult = readMapBody(storage, mapId);
+      if (!currentResult.ok) {
+        return { status: "failed", error: currentResult.error };
+      }
+      if (currentResult.value !== lastPersistedSnapshotRef) {
+        return { status: "conflict" };
+      }
       const written = writeMapBody(storage, mapId, json);
       if (!written.ok) return { status: "failed", error: written.error };
+      lastPersistedSnapshotRef = json;
+      isSnapshotInitialized = true;
       // 更新日時の書き込みに失敗しても本体は保存済み。次の保存で書き直す
       const touched = touchMapEntry(index, mapId, context.now().toISOString());
       if (touched !== null && writeMapIndex(storage, touched).ok) {
@@ -65,7 +87,14 @@ export function createPersistentMapSession(
       if (sessionNumber !== context.getActiveSessionNumber()) {
         return () => {};
       }
-      const registration: FlushRegistration = { session: sessionNumber, flush };
+      const guardedFlush = (): MapFlushResult => {
+        const outcome = flush();
+        if (outcome.status === "unchanged") {
+          return { status: "unchanged" };
+        }
+        return outcome;
+      };
+      const registration: FlushRegistration = { session: sessionNumber, flush: guardedFlush };
       flushSlot.current = registration;
       return () => {
         if (flushSlot.current === registration) flushSlot.current = null;
@@ -90,6 +119,10 @@ export function createPersistentMapSession(
         || registration.session !== sessionNumber
       ) return null;
       return registration.snapshot();
+    },
+    rebaseSnapshot: (snapshotJson: string) => {
+      lastPersistedSnapshotRef = snapshotJson;
+      isSnapshotInitialized = true;
     },
   };
 }

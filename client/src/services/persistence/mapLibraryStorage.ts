@@ -1,5 +1,7 @@
 import {
+  decodeMapIndex,
   encodeMapIndex,
+  findMapEntry,
   isValidMapId,
   type MapIndexV1,
 } from "@/domain/mapLibrary/mapIndex";
@@ -142,6 +144,20 @@ export function writeMapIndex(
   index: MapIndexV1,
 ): StorageWriteResult {
   return setItemSafely(storage, MAP_INDEX_STORAGE_KEY, encodeMapIndex(index));
+}
+
+export function isMapInStorageIndex(
+  storage: MapLibraryStorage,
+  mapId: string,
+): boolean {
+  try {
+    const raw = storage.getItem(MAP_INDEX_STORAGE_KEY);
+    if (raw === null) return false;
+    const decoded = decodeMapIndex(raw);
+    return decoded.kind === "ok" && findMapEntry(decoded.index, mapId) !== null;
+  } catch {
+    return false;
+  }
 }
 
 export function readMapBody(

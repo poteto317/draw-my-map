@@ -29,9 +29,11 @@ Draw My Map のフロントエンドおよびエッジバックエンドの主�
    - 途中への親ノード挿入（Phase 14）。ヘッダーの「親を挿入」と `Alt`（`Option`）+ `Enter` で、選択ノードと親の間に新しいノードを1つ入れ、選択ノードの枝を新しいノードの唯一の子にします。新しいノードは選択ノードの元の位置と重要度を引き継ぎ、挿入の直後にラベルの入力欄が開きます。規則は `domain/nodes/nodeParentInsertion.ts`（`canInsertParentNode`・`insertParentNode`）と、新しいノードの値の `nodePlacement.ts`（`createParentNode`）で、手動配置の平行移動は上げ下げと共通の `nodeIndentPlacement.ts` を使います。`useNodes.insertParentNode` が `applyTreeChange` を1回だけ呼ぶため、1回の挿入を 1 操作として Undo / Redo できます。ボタンの状態と通知は `useNodeParentInsertionAction` が持ち、成功したときは通知を出さず枠を空にして、`MapStage` の `useNodeLabelEditRequest` がラベルの編集を始めます。失敗の通知（「親ノードを挿入できませんでした。」）は並べ替え・上げ下げと共有する9系統目に出します。`Enter` の押し続けでは、兄弟の追加も親の挿入も1回だけです（詳細は [features.md の 16 章](../docs/specifications/features.md#16-途中への親ノード挿入)）。
    - ノードだけ削除（Phase 14）。「親を挿入」の直後の「ノードだけ削除」で選択1個を削除し、隠れた子孫も残します。純粋候補は `domain/nodes/nodeOnlyDeletion.ts`、1回の構造確定・履歴・選択は `useNodes.deleteNodeOnly`、有効状態と既存9系統目への通知は `useNodeOnlyDeletionAction`、表示と連続起動の抑止は `NodeOnlyDeleteControl` が担当します。手動配置では座標維持、自動配置では再配置し、保存形式はV3のままです。`Delete` / `Backspace` の枝削除は従来どおりです（[機能18章](../docs/specifications/features.md#18-ノードだけ削除)、[API9章](../docs/specifications/api.md#9-ノードだけ削除のクライアントapi)）。実ブラウザは [U節](../docs/testing/browser-test-cases.md#phase-14-ノードだけ削除) の中間・葉・根、隠れた子、保存再読み込み、キー操作・フォーカス・従来削除の手順で確認します（未実施）。
    - 枝の切り取り・移動（Phase 14）。ヘッダーの「枝を移動」のダイアログで、選択ノードと全子孫を同じマップの別の親・新しいルート、または別のマップの新しいルートへ移す。同一マップは 1 回で Undo / Redo でき、別のマップはジャーナルで保護して書き、成功の後に移動先を開く。
+   - アウトライン表示・編集（Phase 15）。ヘッダーの「マップ」「アウトライン」切り替えで、同じマップを階層的な文章として表示・編集します。折りたたみや重要度に関係なく全ノードを表示し、ラベル編集、ルート・子・兄弟の末尾追加、兄弟順序変更、階層変更、子孫を残すノードだけ削除に対応します。選択は右のイラストパネルと共通です（詳細は [features.md の 19 章](../docs/specifications/features.md#19-アウトライン表示編集)）。
 3. **データ永続化とエクスポート (Domain & Services)**:
    - `localStorage` へのマップごとの変更後300msの自動保存と復元。マップの一覧（インデックス）を `draw-my-map.maps.v1`、各マップの本体（Version 3 の JSON）を `draw-my-map.maps.v1.doc.<id>` に保存し、`localStorage` を直接読み書きするのは `services/persistence/mapLibraryStorage.ts` だけです（枝の移動のジャーナルの書き込みと復旧の `branchMoveTransaction.ts` と、移動の前のインデックスの読み取り `mapBranchTransfer.ts` の `readBranchMoveIndex` は、注入された storage を直接呼びます）。Phase 11 までの単一のキー `draw-my-map.map.v1` は、起動時に1件のマップとして移行し、次の起動で消します。保存はセッション番号で照合し、切り替えの後に前のマップの保存待ちが届いても書き込みません。
-   - `useMapStorageAutoSave` は現在のマップ本体の復元由来・確認済み snapshot・書き込み結果から7種類の保存状態を導き、`MapSaveStatus` がヘッダーに常設表示します。失敗時の JSON 救出案内は既存の操作通知が担当します。表示はマップ一覧や別タブの状態を含みません（[機能仕様 6.1 節](../docs/specifications/features.md#61-localstorage-自動保存)）。
+   - `useMapStorageAutoSave` は現在のマップ本体の復元由来・確認済み snapshot・書き込み結果、および複数タブ競合状態から9種類の保存状態を導き、`MapSaveStatus` がヘッダーに常設表示します（通常状態のほか、別タブでの更新・削除時には警告バッジ「競合が発生しました」「削除されました」を表示）。競合検知時は自動保存タイマーを即座にブロックします（[機能仕様 6.1 節](../docs/specifications/features.md#61-localstorage-自動保存)）。
+   - 複数タブの編集競合検出（Phase 16 候補008）。`services/persistence/storageEventHub.ts` による `storage` イベント監視と、`writeBody` 直前の楽観ロック照合により、別タブでの更新・削除を早期検知します。未保存データをメモリ上で保護したまま、操作通知バー（10系統目）から「別名で保存（flush バイパス）」、「最新の内容を読み込む（破棄確認付き）」、「JSON書き出し」を選択できます（詳細は下記の「複数タブの編集競合検出」および [features.md の 21 章](../docs/specifications/features.md#21-複数タブの編集競合検出)）。
    - `MapDocument` JSON 形式でのインポート / エクスポート（旧バージョン互換性・自動マイグレーション対応）。
    - 高解像度 PNG および ベクター SVG 形式での画像エクスポート。
    - map / outline 共通ヘッダーの「Markdown書き出し」「箇条書き書き出し」で正本の全ノードを `.md` / `.txt` の UTF-8 テキストとしてダウンロード開始。折りたたみ・表示フィルター・保存失敗・保護モードによらず全件を対象にします。空・100万 UTF-16 文字超過・不正構造では通知します。出力は「箇条書きから追加」へ貼り付けられます。正しい構造・非空ラベル・10,000行以下では件数・親子・順序を復元できますが、ID・座標・サイズ・重要度・イラスト・履歴・マップ名は保持しません。開いている1マップの完全な保存には個別 JSON、全マップの保存には一括 JSON を使います（[仕様](../docs/specifications/features.md#20-markdown箇条書きへの書き出し)）。
@@ -48,6 +50,23 @@ Draw My Map のフロントエンドおよびエッジバックエンドの主�
 ヘッダーの「JSON書き出し」「JSON読み込み」は現在の1マップ用です。「マップ一覧」の「全マップをバックアップ」は、保存中の一覧と現在 editor の最新内容から、全マップを平文 JSON 1ファイルにまとめます。別マップの本体欠損は確認画面で名前・件数を示し空マップとして含め、孤立本体は件数を示して除外します。「バックアップから復元」は内容を確認して各マップを新しい ID で追加し、既存データと現在 editor を保ちます。上限は32 MiB・1000マップです。実ブラウザの確認手順は [ブラウザテスト Y 節](../docs/testing/browser-test-cases.md#y-全マップの一括バックアップ追加復元phase-16候補007) を参照してください。
 
 責務は `domain/mapLibrary/libraryBackupCodec.ts`（形式・上限）、`services/persistence/libraryBackupExport.ts`（一覧・本体・最新 snapshot）、`libraryBackupFile.ts`（読込とダウンロード）、`libraryRestoreJournal.ts`・`libraryRestoreTransaction.ts`（追加復元と起動復旧）、`hooks/useMapLibrary.ts`（session 照合と操作順）、`useMapLibraryDialogState.ts`（確認画面・通知・フォーカス）に分けています。初回の本体復元が失敗した場合は、同じ editor mount で本体が実際に保存されるまで一括操作を受け付けません。復旧できない保存失敗では保護モードになり、現在マップの個別 JSON 書き出しを案内します。
+
+---
+
+## 複数タブの編集競合検出
+
+同一ブラウザの複数タブで Draw My Map を開いているとき、別タブでのマップ更新・削除によって未保存データが黙って上書きされたり、古い状態の自動保存で別タブの最新内容を消去してしまう事故を防ぎます。実ブラウザの確認手順は [ブラウザテスト Z 節](../docs/testing/browser-test-cases.md#z-複数タブの編集競合検出phase-16候補008) を参照してください。
+
+- **二重防御メカニズム**:
+  1. `services/persistence/storageEventHub.ts` が window の `storage` イベントを購読し、`hooks/useStorageConflictMonitor.ts` が `sessionNumber`（セッション世代）の照合を行った上で `domain/mapLibrary/mapConflict.ts`（`classifyStorageChange`）により本体の更新・削除を早期検知します。
+  2. `mapLibrarySession.ts` 内で `lastPersistedSnapshotRef` を保持し、`writeBody` 実行直前にもストレージ上の最新値と照合する楽観ロック検証を行います。不一致時は `{ status: "conflict" }` を返して書き込みを中止し、自動保存タイマーを停止します。
+- **UI と解決手段**:
+  - `MapSaveStatus` に `"conflict"`（「競合が発生しました」）または `"externallyDeleted"`（「削除されました」）の赤色警告バッジを常設表示。
+  - 操作通知バー（`MapOperationNotice` 10系統目）に `MapConflictNotice` を表示し、以下の手段を提供します:
+    - **別名で保存**: 旧マップへの flush を完全にバイパス（知見 L-061）し、新マップ名（例: `<マップ名>（退避）`）で新規マップとして安全に退避保存して切り替えます。
+    - **最新の内容を読み込む**: 未保存編集がある場合は `MapConflictConfirmDialog` で破棄確認（初期フォーカスは安全側のキャンセル、キーリピート抑止）を行った上で最新データを読み込みます。未保存編集がない場合は確認ダイアログなしで即座に読み込みます。
+    - **JSON書き出し**: 現在のメモリ上のドキュメントを即座にローカルへダウンロードします。
+- **既存全操作のガード**: 競合中におけるマップ切り替え（`switchMap`）、枝の別マップ移動（`moveBranchToMap`）、一括追加復元（`confirmRestore`）は安全に中断・拒否し、新規作成（`createMap`）は旧マップ flush を安全にバイパスして遷移します。
 
 ---
 
@@ -78,14 +97,15 @@ client/src/
 │   └── testing/          # ページ (Home) の結合テストの共通ヘルパーと jest.mock 用のモックの中身 (pageTestHelpers, pageModuleMocks)
 ├── components/           # React UI コンポーネント (DOM オーバーレイ & Pixi キャンバス)
 │   ├── layout/           # アプリケーション全体のレイアウト、ヘッダー、パネル、ダイアログ
-│   └── map/              # キャンバスコンテナ、Pixi シーンレンダラー、操作コーディネーター
+│   ├── map/              # キャンバスコンテナ、Pixi シーンレンダラー、操作コーディネーター
+│   └── outline/          # 階層アウトライン編集ビュー、ツールバー
 ├── config/               # 定数設定 (ノード形状、初期値、スタイル、イラスト設定)
 ├── domain/               # フレームワーク非依存の純粋ビジネスロジック (コアロジック)
 │   ├── clipboard/        # 枝のクリップボード専用形式の書き出し・検証
 │   ├── history/          # 編集履歴（Undo / Redo）の純粋な遷移
 │   ├── illustration/     # イラストのトリミング、プロンプト加工、データ URL 処理
 │   ├── imageExport/      # PNG / SVG エクスポート用の境界計算、ベクター座標計算
-│   ├── mapLibrary/       # 複数マップのインデックスの型・解析・更新、起動の計画、マップ名とファイル名の規則、通知の文言
+│   ├── mapLibrary/       # 複数マップのインデックスの型・解析・更新、起動の計画、マップ名とファイル名の規則、一括バックアップ、複数タブ競合判定・通知文言
 │   ├── nodes/            # ノードツリー操作、重なり判定、自動レイアウト、重要度判定、枝の折りたたみと表示用の配置、手動配置の共通規則、箇条書きの森の挿入、兄弟ノードの順序変更（並べ替え・手動配置の縦位置の入れ替え・通知の文言）、階層の上げ下げ（規則・手動配置の平行移動・通知の文言。兄弟の走査は並べ替えと共有）、途中への親ノード挿入（規則・失敗の通知の文言。手動配置の平行移動は上げ下げと共有）
 │   ├── outline/          # 箇条書きのテキストの解析（上限・行の分割・ラベル・階層）、プレビュー用の木、文言
 │   ├── search/           # ノードラベルの正規化・索引化・部分一致検索、検索結果の祖先展開の判定
@@ -97,7 +117,8 @@ client/src/
 ├── services/             # 外部環境との入出力・副作用アダプター (ブラウザ / Web API)
 │   ├── illustration/     # Route Handler クライアント、サムネイル縮小処理
 │   ├── imageExport/      # DOM Canvas / SVG のラスタライズとファイルダウンロード
-│   └── persistence/      # localStorage 読み書き（mapLibraryStorage.ts が中心。枝の移動のジャーナルの `branchMoveTransaction.ts` と `readBranchMoveIndex` は注入された storage を直接呼ぶ）、枝の移動、起動の実行、マップ id の生成、JSON ファイルリーダー/ダウンローダー
+│   ├── outlineExport/    # Markdown / 箇条書きテキストファイルダウンロード
+│   └── persistence/      # localStorage 読み書き（mapLibraryStorage.ts が中心）、storage イベント監視、バックアップ・復元、枝の移動、起動の実行、マップ id の生成、JSON ファイルリーダー/ダウンローダー
 ├── testing/              # テスト用ヘルパー、モック、フィクスチャ (createTestNode, jpegFixture, createTestStorageSession, mapLibraryTestStorage)。ページの結合テスト専用のものは app/testing/
 └── types/                # アプリケーション共通の TypeScript 型定義
 ```

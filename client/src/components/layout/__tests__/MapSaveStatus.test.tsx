@@ -10,6 +10,8 @@ describe("MapSaveStatus", () => {
     ["pending", "保存待ち"],
     ["failed", "保存失敗"],
     ["protected", "ブラウザへ保存できません"],
+    ["conflict", "競合が発生しました"],
+    ["externallyDeleted", "削除されました"],
   ] as const)("%s を %s と通知する", (status, label) => {
     render(<MapSaveStatus status={status} />);
 

@@ -685,5 +685,154 @@ describe("useMapStorageAutoSave", () => {
       act(() => jest.advanceTimersByTime(300));
       expect(storage.writes).toEqual([]);
     });
+
+    it("writeBody が conflict を返したとき、onWriteConflict を呼びタイマーを停止する", () => {
+      const storage = createTestStorageSession();
+      const onWriteConflict = jest.fn();
+      const { result, rerender } = renderHook(
+        ({ snapshot }) =>
+          useMapStorageAutoSave({
+            currentSnapshot: snapshot,
+            hydrated: true,
+            initialPersistedSnapshot: emptyMapJson,
+            restoreOrigin: "restored",
+            storageMode: "persistent",
+            publishNotice: jest.fn(),
+            writeBody: storage.session.writeBody,
+            clearSaveFailureNotice: jest.fn(),
+            onWriteConflict,
+          }),
+        { initialProps: { snapshot: emptyMapJson } },
+      );
+
+      storage.setWriteOutcome("conflict");
+      rerender({ snapshot: changedMapJson });
+      act(() => jest.advanceTimersByTime(300));
+
+      expect(onWriteConflict).toHaveBeenCalledTimes(1);
+      expect(result.current.hasSavedBodyThisMount()).toBe(false);
+    });
+
+    it("conflictState が conflict または externallyDeleted のとき、新たな自動保存タイマーを発行せず flush も拒否する", () => {
+      const storage = createTestStorageSession();
+      const { result, rerender } = renderHook(
+        ({ snapshot, conflictState }) =>
+          useMapStorageAutoSave({
+            currentSnapshot: snapshot,
+            hydrated: true,
+            initialPersistedSnapshot: emptyMapJson,
+            restoreOrigin: "restored",
+            storageMode: "persistent",
+            publishNotice: jest.fn(),
+            writeBody: storage.session.writeBody,
+            clearSaveFailureNotice: jest.fn(),
+            conflictState,
+          }),
+        { initialProps: { snapshot: emptyMapJson, conflictState: "conflict" as "conflict" | "externallyDeleted" } },
+      );
+
+      expect(result.current.saveStatus).toBe("conflict");
+
+      rerender({ snapshot: changedMapJson, conflictState: "conflict" });
+      act(() => jest.advanceTimersByTime(300));
+      expect(storage.writes).toEqual([]);
+
+      const flushed = flushInAct(result.current.flushPendingSave);
+      expect(flushed).toEqual({ status: "conflict" });
+      expect(storage.writes).toEqual([]);
+
+      rerender({ snapshot: changedMapJson, conflictState: "externallyDeleted" });
+      expect(result.current.saveStatus).toBe("externallyDeleted");
+      expect(flushInAct(result.current.flushPendingSave)).toEqual({ status: "conflict" });
+    });
+
+    it("conflictState が externalUpdate のとき、自動保存タイマーを抑止し flush は unchanged を返して書き込まない", () => {
+      const storage = createTestStorageSession();
+      const { result, rerender } = renderHook(
+        ({ snapshot, conflictState }) =>
+          useMapStorageAutoSave({
+            currentSnapshot: snapshot,
+            hydrated: true,
+            initialPersistedSnapshot: emptyMapJson,
+            restoreOrigin: "restored",
+            storageMode: "persistent",
+            publishNotice: jest.fn(),
+            writeBody: storage.session.writeBody,
+            clearSaveFailureNotice: jest.fn(),
+            conflictState,
+          }),
+        { initialProps: { snapshot: emptyMapJson, conflictState: "externalUpdate" as const } },
+      );
+
+      // externalUpdate の状態で変更が発生しても自動保存タイマーは動作しない
+      rerender({ snapshot: changedMapJson, conflictState: "externalUpdate" });
+      act(() => jest.advanceTimersByTime(300));
+      expect(storage.writes).toEqual([]);
+
+      // flushPendingSave は unchanged を返して旧マップの上書きを防ぐ
+      const flushed = flushInAct(result.current.flushPendingSave);
+      expect(flushed).toEqual({ status: "unchanged" });
+      expect(storage.writes).toEqual([]);
+    });
+
+    it("未保存編集の有無（hasPendingEdits）を正しく導出する", () => {
+      const storage = createTestStorageSession();
+      const { result, rerender } = renderHook(
+        ({ snapshot }) =>
+          useMapStorageAutoSave({
+            currentSnapshot: snapshot,
+            hydrated: true,
+            initialPersistedSnapshot: emptyMapJson,
+            restoreOrigin: "restored",
+            storageMode: "persistent",
+            publishNotice: jest.fn(),
+            writeBody: storage.session.writeBody,
+            clearSaveFailureNotice: jest.fn(),
+          }),
+        { initialProps: { snapshot: emptyMapJson } },
+      );
+
+      // 初期状態では未保存編集なし
+      expect(result.current.hasPendingEdits).toBe(false);
+
+      // 編集発生
+      rerender({ snapshot: changedMapJson });
+      expect(result.current.hasPendingEdits).toBe(true);
+
+      // 保存完了
+      act(() => jest.advanceTimersByTime(300));
+      expect(result.current.hasPendingEdits).toBe(false);
+    });
+
+    it("rebaseConfirmedSnapshot で confirmedSnapshot が更新され hasPendingEdits が解消される", () => {
+      const storage = createTestStorageSession();
+      const { result, rerender } = renderHook(
+        ({ snapshot }) =>
+          useMapStorageAutoSave({
+            currentSnapshot: snapshot,
+            hydrated: true,
+            initialPersistedSnapshot: emptyMapJson,
+            restoreOrigin: "restored",
+            storageMode: "persistent",
+            publishNotice: jest.fn(),
+            writeBody: storage.session.writeBody,
+            clearSaveFailureNotice: jest.fn(),
+          }),
+        { initialProps: { snapshot: emptyMapJson } },
+      );
+
+      // ローカル編集発生
+      rerender({ snapshot: changedMapJson });
+      expect(result.current.hasPendingEdits).toBe(true);
+
+      // 外部最新の snapshot にリベース
+      act(() => {
+        result.current.rebaseConfirmedSnapshot(changedMapJson);
+      });
+
+      // hasPendingEdits が false になり saveStatus も saved になる
+      expect(result.current.hasPendingEdits).toBe(false);
+      expect(result.current.saveStatus).toBe("saved");
+    });
   });
 });

@@ -1,3 +1,5 @@
+import type { ConflictState } from "@/domain/mapLibrary/mapConflict";
+
 export type MapRestoreOrigin = "restored" | "empty" | "failed";
 
 export type MapSaveStatus =
@@ -7,7 +9,9 @@ export type MapSaveStatus =
   | "restoreFailed"
   | "pending"
   | "failed"
-  | "protected";
+  | "protected"
+  | "conflict"
+  | "externallyDeleted";
 
 type MapSaveStatusInput = {
   hydrated: boolean;
@@ -18,6 +22,7 @@ type MapSaveStatusInput = {
   forcedSnapshot: string | null;
   hasSaveFailure: boolean;
   storageMode: "persistent" | "protected";
+  conflictState?: ConflictState;
 };
 
 export function deriveMapSaveStatus({
@@ -29,7 +34,10 @@ export function deriveMapSaveStatus({
   forcedSnapshot,
   hasSaveFailure,
   storageMode,
+  conflictState,
 }: MapSaveStatusInput): MapSaveStatus {
+  if (conflictState === "conflict") return "conflict";
+  if (conflictState === "externallyDeleted") return "externallyDeleted";
   if (storageMode === "protected") return "protected";
   if (!hydrated || restoreOrigin === null) return "checking";
 

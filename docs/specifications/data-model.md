@@ -44,6 +44,9 @@
    - 5.9 [マップの一覧の操作通知メッセージ (OperationNotice) 一覧](#59-マップの一覧の操作通知メッセージ-operationnotice-一覧)
    - 5.10 [枝のクリップボード形式](#510-枝のクリップボード形式)
    - 5.11 [枝の移動のジャーナル](#511-枝の移動のジャーナル)
+   - 5.12 [全マップの一括バックアップと追加復元（Phase 16・候補007）](#512-全マップの一括バックアップと追加復元phase-16候補007)
+   - 5.13 [複数タブの編集競合検出（Phase 16・候補008）](#513-複数タブの編集競合検出phase-16候補008)
+6. [Markdown・箇条書き書き出しと保存形式（Phase 15）](#6-markdown箇条書き書き出しと保存形式phase-15)
 
 ---
 
@@ -1163,20 +1166,23 @@ sequenceDiagram
 4. **失敗時**: `AUTO_SAVE_FAILURE_MESSAGE`（`domain/mapLibrary/mapLibraryMessages.ts`）の「ブラウザへ自動保存できませんでした。不要なマップを削除するか、JSONで書き出してください。」を通知し、次の変更で再試行します。
 5. **アンマウント**: 保存待ちのタイマーを破棄するだけで、書き込みません。再マウントを伴う操作（切り替え・新規作成）は、シェルが事前に flush します。
 
-#### 保存状態の導出（Phase 16・候補006）
+#### 保存状態の導出（Phase 16・候補006・候補008）
 
-`MapSaveStatus` は `checking | saved | beforeSave | restoreFailed | pending | failed | protected` の7状態です。表示文言は順に「保存状態を確認中」「保存済み」「保存前」「復元できませんでした」「保存待ち」「保存失敗」「ブラウザへ保存できません」です。`MapStorageSession` や V3 JSON に保存するフィールドではなく、現在のエディタのメモリ上で導出します。
+`MapSaveStatus` は `checking | saved | beforeSave | restoreFailed | pending | failed | protected | conflict | externallyDeleted` の9状態です。表示文言は順に「保存状態を確認中」「保存済み」「保存前」「復元できませんでした」「保存待ち」「保存失敗」「ブラウザへ保存できません」「競合が発生しました」「削除されました」です。`MapStorageSession` や V3 JSON に保存するフィールドではなく、現在のエディタのメモリ上で導出します。
+
+複数タブの競合状態 `conflictState` が `"conflict"` のときは `"conflict"`、`"externallyDeleted"` のときは `"externallyDeleted"` を最優先で判定します。
 
 `useMapStorageRestoration` は本体の初回読込結果を `restored`（有効な本体）、`empty`（本体なし）、`failed`（読み取り・解析失敗）で伝えます。`serializeMapDocument(createMapDocument(...))` の現在の snapshot 文字列を完全一致で比較し、V2/V3 の復元では正規化した文字列を確認済み基準にします。V1 は旧文字列を初期比較基準として V3 への書き戻しを待ちます。本体なしと復元失敗の仮の初期基準を、書き込み成功の証拠にはしません。
 
-`storageMode="protected"` を最優先し、復元前は `checking`、明示的な強制保存要求がない確認済み基準への一致は `saved` と判定します。その後、直近の書き込み失敗を `failed` として優先し、仮の初期基準と同じなら `beforeSave` / `restoreFailed`、差分や強制要求があれば `pending` です。同じ snapshot を要求しても `saved` が返るまで `pending` です。書き込み失敗後は新しい編集や仮の基準への復帰では `failed` を維持し、確認済み基準への復帰または次の `saved` で解除します。確認済み基準へ内容変更で戻った際、別 snapshot 向けの古い強制要求は失効させます。仮の基準では失効させず、現在 snapshot 自体への強制要求は実際の `saved` まで維持します。古い強制要求は後続の成功でも消しますが、書き込み中に届いた新しい要求は残します。
+`conflictState` の優先判定の後、`storageMode="protected"` を最優先し、復元前は `checking`、明示的な強制保存要求がない確認済み基準への一致は `saved` と判定します。その後、直近の書き込み失敗を `failed` として優先し、仮の初期基準と同じなら `beforeSave` / `restoreFailed`、差分や強制要求があれば `pending` です。同じ snapshot を要求しても `saved` が返るまで `pending` です。書き込み失敗後は新しい編集や仮の基準への復帰では `failed` を維持し、確認済み基準への復帰または次の `saved` で解除します。確認済み基準へ内容変更で戻った際、別 snapshot 向けの古い強制要求は失効させます。仮の基準では失効させず、現在 snapshot 自体への強制要求は実際の `saved` まで維持します。古い強制要求は後続の成功でも消しますが、書き込み中に届いた新しい要求は残します。
 
-`writeBody` の `saved` だけが確認済み基準を進めます。これはマップ本体の成功であり、一覧インデックスの更新が失敗しても成立します。通常タイマーと同期 flush の成功は同じ結果処理を通り、保存失敗通知だけを消します。`failed` は基準を進めず、失敗だけを理由にタイマーを張り直しません。`inactive` と flush の `unchanged` は成功の証拠ではありません。`inactive` は旧セッションと保護モードの双方で起こり得るため、表示上の保護モードはシェルの `storageMode` から判定します。A→B→A の再マウントでも旧エディタの結果を引き継ぎません。
+`writeBody` の `saved` だけが確認済み基準を進めます。これはマップ本体の成功であり、一覧インデックスの更新が失敗しても成立します。通常タイマーと同期 flush の成功は同じ結果処理を通り、保存失敗通知だけを消します。`writeBody` が `conflict` を返した場合は基準を進めず、自動保存タイマーを停止して競合通知を発火します。`failed` は基準を進めず、失敗だけを理由にタイマーを張り直しません。`inactive` と flush の `unchanged` は成功の証拠ではありません。`inactive` は旧セッションと保護モードの双方で起こり得るため、表示上の保護モードはシェルの `storageMode` から判定します。A→B→A の再マウントでも旧エディタの結果を引き継ぎません。
 
 #### flush（`flushPendingSave(): MapFlushResult`）
 
 - 復元が終わる前は `unchanged` を返し、何も書きません（空のマップの内容で、まだ読み込んでいない本体を上書きしないため）。
-- 保存待ちのタイマーを取り消し、最新の `currentSnapshot`（`useLayoutEffect` で同期する ref から読む）が最後に保存した内容と異なるか、強制保存の要求が残っている場合だけ、`writeBody` を同期で呼びます。`saved` なら最後に保存した内容を更新し、`clearSaveFailureNotice()` を呼んで `saved` を返します。`failed` なら、エディタの操作通知バーに自動保存の失敗と同じ通知（`autoSaveFailedNotice()`、`publishNotice` は ref から呼ぶ）を出して `failed` を返します。`inactive` なら `unchanged` を返します。操作ごとの失敗の通知（ダイアログ内）は、呼び出し元が出します。ダイアログ内の通知は閉じると消えるため、エディタにも出して、未保存であることを画面に残します（ダイアログを開いている間はエディタが `inert` なので、読み上げは重なりません）。
+- 競合検知中（`conflictState === "conflict"` または `"externallyDeleted"`）は書き込まず即座に `{ status: "conflict" }` を返します。
+- 保存待ちのタイマーを取り消し、最新の `currentSnapshot`（`useLayoutEffect` で同期する ref から読む）が最後に保存した内容と異なるか、強制保存の要求が残っている場合だけ、`writeBody` を同期で呼びます。`saved` なら最後に保存した内容を更新し、`clearSaveFailureNotice()` を呼んで `saved` を返します。`writeBody` が `conflict` を返したときは `{ status: "conflict" }` を返します。`failed` なら、エディタの操作通知バーに自動保存の失敗と同じ通知（`autoSaveFailedNotice()`、`publishNotice` は ref から呼ぶ）を出して `failed` を返します。`inactive` なら `unchanged` を返します。操作ごとの失敗の通知（ダイアログ内）は、呼び出し元が出します。ダイアログ内の通知は閉じると消えるため、エディタにも出して、未保存であることを画面に残します（ダイアログを開いている間はエディタが `inert` なので、読み上げは重なりません）。
 - `useMapStoragePersistence` は `useLayoutEffect` で `storageSession.registerFlush(flushPendingSave)` を呼び、cleanup で登録を外します。`useMapLibrary` は「登録したセッション番号」と組で持ち、現在のセッション番号の登録だけを呼びます。登録が無ければ `unchanged` として扱います。
 - `clearSaveFailureNotice` は `useMapPersistence` が渡す関数で、関数形式の state 更新で「現在の通知が自動保存の失敗の通知（`kind: "error"` で文言が `AUTO_SAVE_FAILURE_MESSAGE`）なら `null` にする」だけを行います。JSON の読み込みの結果など、ほかの通知は消しません。
 
@@ -1401,7 +1407,74 @@ type LibraryBackupV1 = {
 
 `libraryRestoreJournal.ts` の専用ジャーナルは `format: "draw-my-map-library-restore"`, `version: 1`, 操作前後の一覧原文 `indexBefore` / `indexAfter`, 新規本体の `{ id, json }[]` を持ちます。`libraryRestoreTransaction.ts` は **ジャーナル → 新規本体全件 → 最終一覧1回 → ジャーナル削除** の順に同期書込し、最後の削除を確定点にします。途中失敗では一覧原文と書込済み新規本体を戻します。戻せなければ `recoveryRequired` として保護モードへ移し、書込直前に取得した有効な現在 document JSON を `initialJson` に渡します。再マウントで選択・履歴・viewport はリセットされますが、nodes・layoutMode・illustration は保持します。
 
-起動では通常の一覧修復より先に復元・枝移動の両ジャーナルを調べます。復元ジャーナルが正常で他者変更がなければ操作前へ戻して削除します。両方残る、記録不正、他者変更、復旧失敗なら自動上書きせず保護モードです。救出元は非修復で有効な保存中一覧の現在マップを優先し、それが無効・欠損・読取不能のときだけ有効なジャーナルの操作前一覧を使います。選んだ現在本体が有効な V1/V2/V3 なら原文を `initialJson` に渡し、不正・欠損・読取不能なら別マップで代用せず `null` にします。ジャーナルが残る間は枝移動と追加復元を拒否します。複数タブの一般的な競合解決は対象外です。
+起動では通常の一覧修復より先に復元・枝移動の両ジャーナルを調べます。復元ジャーナルが正常で他者変更がなければ操作前へ戻して削除します。両方残る、記録不正、他者変更、復旧失敗なら自動上書きせず保護モードです。救出元は非修復で有効な保存中一覧の現在マップを優先し、それが無効・欠損・読取不能のときだけ有効なジャーナルの操作前一覧を使います。選んだ現在本体が有効な V1/V2/V3 なら原文を `initialJson` に渡し、不正・欠損・読取不能なら別マップで代用せず `null` にします。ジャーナルが残る間は枝移動と追加復元を拒否します。複数タブの一般的な競合解決は 5.13 節に委ねます。
+
+### 5.13 複数タブの編集競合検出（Phase 16・候補008）
+
+同一ブラウザの複数タブで Draw My Map を開いているとき、別タブでのマップ更新・削除によるデータ破損や古いメモリ状態による誤上書きを防止するためのデータモデルと排他制御仕様です。
+
+#### 1. 関連する型定義
+
+```typescript
+// メモリ上でのみ管理する競合状態（localStorage には保存しない）
+export type ConflictState =
+  | "none"
+  | "conflict"          // 別タブ更新があり、自タブにも未保存編集がある
+  | "externalUpdate"    // 別タブ更新があるが、自タブは未保存編集なし（クリーン）
+  | "externallyDeleted"; // 別タブで現在マップの本体または一覧項目が削除された
+
+// マップ本体の書き込み結果型
+export type MapBodyWriteResult =
+  | { status: "saved" }
+  | { status: "conflict" } // 追記: 楽観ロック照合不一致
+  | { status: "failed"; error: string }
+  | { status: "inactive" };
+
+// 同期 flush の結果型
+export type MapFlushResult =
+  | { status: "saved" }
+  | { status: "unchanged" }
+  | { status: "conflict" } // 追記: 楽観ロック照合不一致または競合検知中
+  | { status: "failed"; error: string };
+
+// セッション管理インターフェース
+export interface MapStorageSession {
+  readonly mapId: string;
+  readonly sessionNumber: number; // セッション世代番号（ABA問題防止照合用）
+  readonly storage: MapLibraryStorage; // 楽観ロック照合・最新読込用の注入ストレージ
+  readBody(): MapDocumentResult<string | null>;
+  writeBody(json: string): MapBodyWriteResult;
+  registerFlush(flush: () => MapFlushResult): () => void;
+  registerBackupSnapshot(snapshot: () => MapBackupSnapshot): () => void;
+  readBackupSnapshot(): MapBackupSnapshot | null;
+}
+```
+
+#### 2. ストレージ変化の分類ロジック（`classifyStorageChange`）
+
+`domain/mapLibrary/mapConflict.ts` の純粋関数 `classifyStorageChange` は、受信した `StorageEvent` の情報から決定論的に `ConflictState` を導出します:
+
+| 条件 | 導出される状態 |
+| :--- | :--- |
+| `key === mapBodyKey(currentMapId)` かつ `newValue !== null` かつ `hasPendingEdits === true` | `"conflict"` |
+| `key === mapBodyKey(currentMapId)` かつ `newValue !== null` かつ `hasPendingEdits === false` | `"externalUpdate"` |
+| `key === mapBodyKey(currentMapId)` かつ `newValue === null` | `"externallyDeleted"` |
+| `key === MAP_INDEX_STORAGE_KEY` かつ `isCurrentMapInIndex === false` | `"externallyDeleted"` |
+| その他（他マップの変更・無関係なキー） | `"none"` |
+
+#### 3. 楽観ロック照合仕様（`writeBody` 直前の検証）
+
+`createPersistentMapSession` の内部で `lastPersistedSnapshotRef`（最後に自タブで正常保存または初期復元されたスナップショット文字列）を保持します。
+`session.writeBody(bodyJson)` が呼び出された際、以下の順序で同期検証を実行します:
+1. `storage.readMapBody(mapId)` を同期実行する。
+2. 読み取り結果が失敗（`read.ok === false`）の場合は書き込みを中止し、`{ status: "failed", error: read.error }` を返す。
+3. 読み取り結果が成功（`read.ok === true`）であり、かつ `read.data !== lastPersistedSnapshotRef.current`（ストレージ上の最新値が自タブの保持する基準値と不一致）の場合は、書き込みを行わずに即座に `{ status: "conflict" }` を返す。
+4. 一致している場合のみ安全にストレージ本体（およびインデックスの更新日時）を書き込み、成功時に `lastPersistedSnapshotRef.current = bodyJson` を更新して `{ status: "saved" }` を返す。
+
+#### 4. 退避名生成仕様（`createConflictCopyName`）
+
+「別名で保存」時に呼び出される純粋関数 `createConflictCopyName(baseName)` は、既存のマップ名末尾に `（退避）` を付与します。
+- コードポイント数（`countMapNameLength`）を基準に計測し、合計が 50 コードポイントを超える場合は手前で切り詰めた上で `（退避）` を結合します（最大 50 文字の不変条件を厳格に保持）。
 
 ## 6. Markdown・箇条書き書き出しと保存形式（Phase 15）
 

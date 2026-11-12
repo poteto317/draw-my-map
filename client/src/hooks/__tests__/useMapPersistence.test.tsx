@@ -1,8 +1,9 @@
-import { StrictMode, type ReactNode } from "react";
+import { StrictMode, useState, type ReactNode } from "react";
 import { act, renderHook } from "@testing-library/react";
 import { AUTO_SAVE_FAILURE_MESSAGE } from "@/domain/mapLibrary/mapLibraryMessages";
 import { useMapPersistence } from "@/hooks/useMapPersistence";
 import type { Node } from "@/types/node";
+import type { NodeLayoutMode } from "@/types/nodeLayout";
 import { createTestNode } from "@/testing/createTestNode";
 import { createTestStorageSession } from "@/testing/createTestStorageSession";
 
@@ -644,6 +645,169 @@ describe("useMapPersistence", () => {
         kind: "error",
         message: "JSONを解析できませんでした。現在のマップは変更されていません。",
       });
+    });
+
+    it("hasPendingEdits を公開し未保存編集の有無を反映する", () => {
+      const storage = createTestStorageSession();
+      const { result, rerender } = renderHook(
+        ({ nodes }) =>
+          useMapPersistence({
+            nodes,
+            layoutMode: "manual",
+            replaceMap: jest.fn(),
+            storageSession: storage.session,
+            storageMode: "persistent",
+            mapName: "旅行",
+          }),
+        { initialProps: { nodes: [] as Node[] } },
+      );
+
+      expect(result.current.hasPendingEdits).toBe(false);
+
+      rerender({ nodes: [node("新ノード")] });
+      expect(result.current.hasPendingEdits).toBe(true);
+    });
+
+    it("保存済みマップでマウント後に nodes を空配列に変更した際にも hasPendingEdits が true を維持すること", () => {
+      const storage = createTestStorageSession({ initialJson: storedMapJson });
+      let currentSetNodes: ((nodes: readonly Node[]) => void) | null = null;
+      const { result } = renderHook(() => {
+        const [nodes, setNodes] = useState<readonly Node[]>([]);
+        currentSetNodes = setNodes;
+        return useMapPersistence({
+          nodes,
+          layoutMode: "auto",
+          replaceMap: (state) => setNodes(state.nodes),
+          storageSession: storage.session,
+          storageMode: "persistent",
+          mapName: "旅行",
+        });
+      });
+
+      // 復元が反映されて保存済みスナップショットと一致するため hasPendingEdits は false
+      expect(result.current.hasPendingEdits).toBe(false);
+
+      // ノードが全削除された場合、isPendingRestoration に戻らず hasPendingEdits が true になる
+      act(() => {
+        currentSetNodes?.([]);
+      });
+      expect(result.current.hasPendingEdits).toBe(true);
+    });
+
+    it("空マップ（ノード0件）で復元後にレイアウトモードのみを変更した際にも hasPendingEdits が true になること", () => {
+      const emptyMapJson = `{
+  "version": 3,
+  "layoutMode": "manual",
+  "nodes": []
+}\n`;
+      const storage = createTestStorageSession({ initialJson: emptyMapJson });
+      const replaceMap = jest.fn();
+      const { result, rerender } = renderHook(
+        ({ layoutMode }) =>
+          useMapPersistence({
+            nodes: [],
+            layoutMode,
+            replaceMap,
+            storageSession: storage.session,
+            storageMode: "persistent",
+            mapName: "旅行",
+          }),
+        { initialProps: { layoutMode: "manual" as NodeLayoutMode } },
+      );
+
+      // 復元完了後は保存済みスナップショットと一致するため hasPendingEdits は false
+      expect(result.current.hasPendingEdits).toBe(false);
+      expect(replaceMap).toHaveBeenCalledTimes(1);
+      expect(replaceMap).toHaveBeenCalledWith({
+        layoutMode: "manual",
+        nodes: [],
+      });
+
+      // ノードが0件のままレイアウトモードのみを変更した場合でも hasPendingEdits が true になる
+      rerender({ layoutMode: "auto" });
+      expect(result.current.hasPendingEdits).toBe(true);
+    });
+
+    it("conflictState と onWriteConflict を正しく中継する", () => {
+      const storage = createTestStorageSession();
+      const onWriteConflict = jest.fn();
+      const { result } = renderHook(() =>
+        useMapPersistence({
+          nodes: [],
+          layoutMode: "manual",
+          replaceMap: jest.fn(),
+          storageSession: storage.session,
+          storageMode: "persistent",
+          mapName: "旅行",
+          conflictState: "conflict",
+          onWriteConflict,
+        }),
+      );
+
+      expect(result.current.saveStatus).toBe("conflict");
+    });
+
+    it("rebaseSnapshot を呼ぶと storageSession.rebaseSnapshot と autoSave の基準値が更新される", () => {
+      const storage = createTestStorageSession();
+      const { result, rerender } = renderHook(
+        ({ label }) =>
+          useMapPersistence({
+            nodes: [node(label)],
+            layoutMode: "manual",
+            replaceMap: jest.fn(),
+            storageSession: storage.session,
+            storageMode: "persistent",
+            mapName: "旅行",
+          }),
+        { initialProps: { label: "A" } },
+      );
+
+      rerender({ label: "B" });
+      expect(result.current.hasPendingEdits).toBe(true);
+
+      act(() => {
+        result.current.rebaseSnapshot(mapBJson);
+      });
+
+      expect(storage.session.rebaseSnapshot).toHaveBeenCalledWith(mapBJson);
+      expect(result.current.hasPendingEdits).toBe(false);
+    });
+
+    it("競合制御の状態とハンドラ群を公開し外部イベントと再読込を処理する", () => {
+      const storage = createTestStorageSession({ initialJson: mapAJson });
+      const replaceMap = jest.fn();
+      const { result, rerender } = renderHook(
+        ({ label }) =>
+          useMapPersistence({
+            nodes: [node(label)],
+            layoutMode: "manual",
+            replaceMap,
+            storageSession: storage.session,
+            storageMode: "persistent",
+            mapName: "旅行",
+          }),
+        { initialProps: { label: "A" } },
+      );
+
+      // 初期状態
+      expect(result.current.conflictState).toBe("none");
+      expect(result.current.isConfirmOpen).toBe(false);
+      expect(result.current.conflictActionNotice).toBeNull();
+
+      // 編集発生
+      rerender({ label: "B" });
+      expect(result.current.hasPendingEdits).toBe(true);
+
+      // 未保存編集がある状態で最新読込を押すと確認モーダルが開く
+      act(() => {
+        result.current.handleReloadExternal();
+      });
+      expect(result.current.isConfirmOpen).toBe(true);
+
+      act(() => {
+        result.current.handleCancelConfirm();
+      });
+      expect(result.current.isConfirmOpen).toBe(false);
     });
   });
 });

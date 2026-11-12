@@ -53,6 +53,12 @@ const cases: Array<[string, Partial<StatusInput>, ReturnType<typeof deriveMapSav
   ["仮基準とは異なる保存成功基準に一致すれば保存済み", {
     restoreOrigin: "empty", initialPersistedSnapshot: "initial", confirmedSnapshot: "saved-v3",
   }, "saved"],
+  ["競合状態ならconflictを最優先で返却", { conflictState: "conflict" }, "conflict"],
+  ["外部削除状態ならexternallyDeletedを最優先で返却", { conflictState: "externallyDeleted" }, "externallyDeleted"],
+  ["競合状態は保護モードや復元前より優先", { conflictState: "conflict", storageMode: "protected", hydrated: false }, "conflict"],
+  ["外部削除状態は保存失敗より優先", { conflictState: "externallyDeleted", hasSaveFailure: true }, "externallyDeleted"],
+  ["noneなら通常の判定（保存済み）", { conflictState: "none" }, "saved"],
+  ["externalUpdateなら通常の判定（保存済み）", { conflictState: "externalUpdate" }, "saved"],
 ];
 
 describe("deriveMapSaveStatus", () => {
