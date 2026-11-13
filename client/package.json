@@ -2,6 +2,13 @@
   "name": "client",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
+  "author": "poteto317",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/poteto317/draw-my-map.git",
+    "directory": "client"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
