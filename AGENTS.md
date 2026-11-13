@@ -65,7 +65,7 @@ PRのマージ後は次の順で後処理を行う。
 
 ## 開発フロー（dev-flow-kit）
 
-機能開発は、dev-flow-kit（https://github.com/poteto317/dev-flow-kit 、ローカルの clone は `$DEV_FLOW_KIT`）の開発ループで進める。
+機能開発は、dev-flow-kit（https://github.com/poteto317/dev-flow-kit 。ローカルではリポジトリを任意の場所に clone し、そのルートを `$DEV_FLOW_KIT` とする）の開発ループで進める。
 
 - **起動方法**: Claude Code で `/feature [機能の説明]` を実行する。機能の説明を省くと、ロードマップから次の未完了項目を選ぶ。以降は確認が必要なときだけ止まり、次の順に自動で進む。
   `feature` → `refactor-srp` → `review-loop` → `commit-ja` → `pr-ja` → `pr-review-loop` → `pr-merge` → `review-digest` → `lessons-push`

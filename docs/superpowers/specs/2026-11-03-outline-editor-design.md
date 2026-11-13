@@ -149,7 +149,7 @@ ROADMAPは最終タスクで候補004だけを完了とし、Phase15は候補005
 
 ## 関連するレビュー知見
 
-`$DEV_FLOW_KIT/scripts/README.md` と `lessons/review-lessons.md` の優先度Aチェックリスト、および以下の関連本文を参照した。
+`$DEV_FLOW_KIT/scripts/README.md` と `$DEV_FLOW_KIT/lessons/review-lessons.md` の優先度Aチェックリスト、および以下の関連本文を参照した。
 
 - L-001: 追加/構造変更の結果を見て成功時だけ編集・フォーカスへ進む。
 - L-453: 複数の更新で追加・移動を組み合わせず既存の単一状態遷移を利用する。

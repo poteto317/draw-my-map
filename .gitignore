@@ -4,6 +4,10 @@ client/.next/
 client/out/
 client/.env*.local
 
+# Env files at repo root (package-local rules are in client/.gitignore)
+.env
+.env.*
+
 # Go (server)
 server/server      # ビルドされた実行ファイル名（任意）
 server/*.exe       # Windows用

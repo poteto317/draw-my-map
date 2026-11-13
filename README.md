@@ -173,7 +173,8 @@ Figma のような自由度の高い無限キャンバスと、マインドマ�
 ### AI イラスト生成機能のセットアップ（任意）
 
 AI イラスト生成機能を利用するには、Cloudflare Workers AI のアカウント設定が必要です（無料枠の範囲で利用可能）。  
-詳細は [イラスト生成環境構築ガイド](docs/setup/illustration-generation-setup.md) を参照してください。
+詳細は [イラスト生成環境構築ガイド](docs/setup/illustration-generation-setup.md) を参照してください。  
+イラスト API はローカル専用です。認証情報を入れたまま公開 URL へデプロイしないでください（[SECURITY.md](SECURITY.md)）。
 
 ```bash
 # client ディレクトリで設定ファイルを準備
