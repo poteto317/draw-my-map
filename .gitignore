@@ -16,5 +16,6 @@ Thumbs.db
 # Local Git worktrees
 .worktrees/
 
-# Superpowers scratch files
-.superpowers/sdd/
+# Agent / local workflow state (do not commit)
+.claude/
+.superpowers/
