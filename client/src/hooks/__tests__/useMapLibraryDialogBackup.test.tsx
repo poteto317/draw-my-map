@@ -13,13 +13,15 @@ const restore = { backup: { maps: [{ name: "C" }] } } as unknown as LibraryResto
 
 function setup() {
   const library: jest.Mocked<Operations> = {
-    createMap: jest.fn(), switchMap: jest.fn(), renameMap: jest.fn(), deleteMap: jest.fn(), moveBranchToMap: jest.fn(),
+    createMap: jest.fn(), switchMap: jest.fn(), renameMap: jest.fn(), deleteMap: jest.fn(), permanentlyDeleteMap: jest.fn(),
+    refreshTrash: jest.fn(), restoreFromTrash: jest.fn(), permanentlyDeleteFromTrash: jest.fn(), emptyTrash: jest.fn(),
+    moveBranchToMap: jest.fn(),
     prepareBackup: jest.fn(() => ({ ok: true, value: backup })),
     downloadBackup: jest.fn<MapLibraryOperationResult, [LibraryBackupPreview]>(() => ({ ok: true, remounted: false, notice: { kind: "status", message: "ダウンロードを開始しました。" }, saveRetryNotice: null })),
     previewRestore: jest.fn<Promise<MapDocumentResult<LibraryRestorePreview>>, [File]>(async () => ({ ok: true, value: restore })),
     confirmRestore: jest.fn<MapLibraryOperationResult, [LibraryRestorePreview]>(() => ({ ok: true, remounted: false, notice: { kind: "status", message: "追加しました。" }, saveRetryNotice: null })),
   };
-  const hook = renderHook(() => useMapLibraryDialogState({ library, maps, startupNotice: null }));
+  const hook = renderHook(() => useMapLibraryDialogState({ library, maps, trashEntries: [], startupNotice: null }));
   act(() => hook.result.current.openList());
   return { ...hook, library };
 }

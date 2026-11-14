@@ -262,7 +262,7 @@ describe("マップの一覧のダイアログのキーボード操作", () => {
     expect(currentMapName()).toHaveTextContent("マップ: B");
     expect(exportedLabels()).toEqual(["B1"]);
     await waitFor(() => expect(shellNotices().getByRole("status"))
-      .toHaveTextContent("マップ「A」を削除し、「B」を開きました。"));
+      .toHaveTextContent("マップ「A」をゴミ箱に移動し、「B」を開きました。"));
   });
 
   // user-event は KeyboardEvent の repeat を立てないので、このテストは押し続け（repeat）を再現しない。

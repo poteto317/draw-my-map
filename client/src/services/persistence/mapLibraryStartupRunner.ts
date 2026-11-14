@@ -19,6 +19,7 @@ import {
   writeMigratedMap,
   type MapLibraryStorage,
 } from "./mapLibraryStorage";
+import { purgeExpiredTrash } from "./mapTrashStorage";
 
 export type MapLibraryStartupResult =
   | { mode: "persistent"; index: MapIndexV1; notice: OperationNotice | null }
@@ -70,6 +71,17 @@ function toBlockedByLibraryRestore(recovery: BlockedLibraryRestoreRecovery): Map
 // 分岐の判定は planMapLibraryStartup に任せ、ここでは計画どおりに書き、
 // 各書き込みが成功したときだけ次へ進む。storage が null なら書き込みは失敗として扱う。
 export function runMapLibraryStartup(
+  storage: MapLibraryStorage | null,
+  deps: MapLibraryStartupDeps,
+): MapLibraryStartupResult {
+  const result = resolveMapLibraryStartup(storage, deps);
+  if (result.mode === "persistent" && storage !== null) {
+    purgeExpiredTrash(storage, deps.now());
+  }
+  return result;
+}
+
+function resolveMapLibraryStartup(
   storage: MapLibraryStorage | null,
   deps: MapLibraryStartupDeps,
 ): MapLibraryStartupResult {

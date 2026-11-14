@@ -1,14 +1,11 @@
 import {
   findMapEntry,
-  pickUnusedMapId,
   sortMapEntriesForDisplay,
   type MapIndexEntry,
   type MapIndexV1,
 } from "@/domain/mapLibrary/mapIndex";
-import {
-  hasMapBody,
-  type MapLibraryStorage,
-} from "@/services/persistence/mapLibraryStorage";
+import type { MapTrashEntry, MapTrashState } from "@/domain/mapLibrary/mapTrash";
+import type { MapLibraryStorage } from "@/services/persistence/mapLibraryStorage";
 import type { MapStorageSession } from "@/types/mapStorageSession";
 import type { LibraryBackupV1 } from "@/domain/mapLibrary/libraryBackupCodec";
 import type { OperationNotice } from "@/types/operationNotice";
@@ -24,6 +21,8 @@ export type MapLibraryView =
       currentMap: MapIndexEntry;
       storageSession: MapStorageSession;
       startupNotice: OperationNotice | null;
+      trashEntries: readonly MapTrashEntry[];
+      trashStatus: "ok" | "corrupt";
     };
 
 export type MapLibraryOperationResult =
@@ -34,7 +33,13 @@ export type MapLibraryOperationResult =
       saveRetryNotice: OperationNotice | null;
     }
   // enteredProtectedMode: 操作の失敗で保護モードへ移った（編集画面は作り直される）
-  | { ok: false; notice: OperationNotice; enteredProtectedMode?: true };
+  // canPermanentDelete: ゴミ箱移動不可（容量不足・ゴミ箱破損等）時に完全削除フォールバックを提示できる
+  | {
+      ok: false;
+      notice: OperationNotice;
+      enteredProtectedMode?: true;
+      canPermanentDelete?: boolean;
+    };
 
 // 起動の結果から作る、シェルが持つ状態。セッションは (currentMapId, セッション番号) ごとに作り直す。
 // セッション番号は useMapLibrary の ref だけが持ち、session の writeBody・registerFlush が閉じ込める
@@ -45,6 +50,7 @@ export type LibraryState =
       index: MapIndexV1;
       session: MapStorageSession;
       startupNotice: OperationNotice | null;
+      trash: MapTrashState;
     }
   | {
       mode: "protected";
@@ -79,6 +85,12 @@ export function failedOperation(notice: OperationNotice): MapLibraryOperationRes
   return { ok: false, notice };
 }
 
+export function failedPermanentDeleteOperation(
+  notice: OperationNotice,
+): MapLibraryOperationResult {
+  return { ok: false, notice, canPermanentDelete: true };
+}
+
 // 枝の移動を始めたセッションが今も開いているか。flush の再入や切り替えの後は移動しない
 export function isActiveBranchMoveSource(
   library: LibraryState | null,
@@ -101,6 +113,8 @@ export function toMapLibraryView(library: LibraryState | null): MapLibraryView {
       currentMap: library.entry,
       storageSession: library.session,
       startupNotice: library.startupNotice,
+      trashEntries: [],
+      trashStatus: "ok",
     };
   }
   const currentMap = findMapEntry(library.index, library.index.currentMapId);
@@ -115,17 +129,26 @@ export function toMapLibraryView(library: LibraryState | null): MapLibraryView {
     currentMap,
     storageSession: library.session,
     startupNotice: library.startupNotice,
+    trashEntries: library.trash.status === "ok" ? library.trash.entries : [],
+    trashStatus: library.trash.status,
   };
 }
 
-// 新しいマップの id。インデックスの id と、本体が残っている id（孤立した本体）を使用済みとして避ける
-export function pickNewMapId(
-  storage: MapLibraryStorage,
-  index: MapIndexV1,
-  generateId: () => string,
-): string | null {
-  return pickUnusedMapId(
-    generateId,
-    (candidate) => findMapEntry(index, candidate) !== null || hasMapBody(storage, candidate),
-  );
+export function isSameTrashState(a: MapTrashState, b: MapTrashState): boolean {
+  if (a.status !== b.status) return false;
+  if (a.status === "corrupt" || b.status === "corrupt") return true;
+  if (a.entries.length !== b.entries.length) return false;
+  return a.entries.every((entry, index) => {
+    const other = b.entries[index];
+    return (
+      entry.id === other.id &&
+      entry.originalMapId === other.originalMapId &&
+      entry.name === other.name &&
+      entry.createdAt === other.createdAt &&
+      entry.updatedAt === other.updatedAt &&
+      entry.deletedAt === other.deletedAt &&
+      entry.expiresAt === other.expiresAt &&
+      entry.hasBody === other.hasBody
+    );
+  });
 }

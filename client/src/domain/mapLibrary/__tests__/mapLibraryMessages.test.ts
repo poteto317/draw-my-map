@@ -56,15 +56,15 @@ describe("mapLibraryMessages", () => {
     });
     expect(mapDeletedNotice("地図 A")).toEqual({
       kind: "status",
-      message: "マップ「地図 A」を削除しました。",
+      message: "マップ「地図 A」をゴミ箱に移動しました。",
     });
     expect(currentMapDeletedNotice("地図 A", "地図 B")).toEqual({
       kind: "status",
-      message: "マップ「地図 A」を削除し、「地図 B」を開きました。",
+      message: "マップ「地図 A」をゴミ箱に移動し、「地図 B」を開きました。",
     });
     expect(lastMapDeletedNotice("地図 A")).toEqual({
       kind: "status",
-      message: "マップ「地図 A」を削除し、新しい「無題のマップ」を作成しました。",
+      message: "マップ「地図 A」をゴミ箱に移動し、新しい「無題のマップ」を作成しました。",
     });
   });
 

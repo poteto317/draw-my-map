@@ -1,13 +1,14 @@
 import type { MapIndexEntry, MapIndexV1 } from "@/domain/mapLibrary/mapIndex";
+import type { MapTrashEntry } from "@/domain/mapLibrary/mapTrash";
 import {
   failedOperation,
+  failedPermanentDeleteOperation,
   isActiveBranchMoveSource,
-  pickNewMapId,
+  isSameTrashState,
   succeededOperation,
   toMapLibraryView,
   UNCHANGED_OPERATION_RESULT,
 } from "@/hooks/mapLibraryState";
-import { mapBodyKey } from "@/services/persistence/mapLibraryStorage";
 import { createTestStorageSession } from "@/testing/createTestStorageSession";
 import { createRecordingStorage } from "@/testing/mapLibraryTestStorage";
 
@@ -31,6 +32,7 @@ describe("isActiveBranchMoveSource", () => {
     index: indexOf("older", [OLDER]),
     session,
     startupNotice: null,
+    trash: { status: "ok" as const, entries: [] },
   };
 
   it("開いているセッションなら true", () => {
@@ -49,10 +51,20 @@ describe("toMapLibraryView", () => {
     expect(toMapLibraryView(null)).toEqual({ status: "loading" });
   });
 
-  it("通常のモードは一覧を表示順（更新日時の新しい順）に並べ、現在のマップを引く", () => {
+  it("通常のモードは一覧を表示順（更新日時の新しい順）に並べ、現在のマップとゴミ箱状態を返す", () => {
     const { storage } = createRecordingStorage();
     const session = createTestStorageSession().session;
     const notice = { kind: "warning" as const, message: "起動時の通知" };
+    const trashEntry: MapTrashEntry = {
+      id: "deleted-1",
+      originalMapId: "deleted-1",
+      name: "削除済み",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-02T00:00:00.000Z",
+      deletedAt: "2026-02-01T00:00:00.000Z",
+      expiresAt: "2026-03-03T00:00:00.000Z",
+      hasBody: true,
+    };
 
     const view = toMapLibraryView({
       mode: "persistent",
@@ -60,6 +72,7 @@ describe("toMapLibraryView", () => {
       index: indexOf("older", [OLDER, NEWER]),
       session,
       startupNotice: notice,
+      trash: { status: "ok", entries: [trashEntry] },
     });
 
     expect(view).toEqual({
@@ -69,10 +82,37 @@ describe("toMapLibraryView", () => {
       currentMap: OLDER,
       storageSession: session,
       startupNotice: notice,
+      trashEntries: [trashEntry],
+      trashStatus: "ok",
     });
   });
 
-  it("保護モードは1件だけの一覧と、そのマップを現在のマップとして返す", () => {
+  it("ゴミ箱が破損しているときは trashStatus を corrupt・trashEntries を空配列にする", () => {
+    const { storage } = createRecordingStorage();
+    const session = createTestStorageSession().session;
+
+    const view = toMapLibraryView({
+      mode: "persistent",
+      storage,
+      index: indexOf("older", [OLDER]),
+      session,
+      startupNotice: null,
+      trash: { status: "corrupt" },
+    });
+
+    expect(view).toEqual({
+      status: "ready",
+      storageMode: "persistent",
+      maps: [OLDER],
+      currentMap: OLDER,
+      storageSession: session,
+      startupNotice: null,
+      trashEntries: [],
+      trashStatus: "corrupt",
+    });
+  });
+
+  it("保護モードは1件だけの一覧と、そのマップを現在のマップとして返し、ゴミ箱は空の ok とする", () => {
     const session = createTestStorageSession().session;
     const notice = { kind: "warning" as const, message: "保存されません" };
 
@@ -83,6 +123,8 @@ describe("toMapLibraryView", () => {
       currentMap: OLDER,
       storageSession: session,
       startupNotice: notice,
+      trashEntries: [],
+      trashStatus: "ok",
     });
   });
 
@@ -95,6 +137,7 @@ describe("toMapLibraryView", () => {
       index: indexOf("missing", [OLDER]),
       session: createTestStorageSession().session,
       startupNotice: null,
+      trash: { status: "ok", entries: [] },
     })).toThrow("現在のマップがインデックスにありません。");
   });
 });
@@ -125,21 +168,50 @@ describe("操作の結果", () => {
 
     expect(failedOperation(notice)).toEqual({ ok: false, notice });
   });
+
+  it("failedPermanentDeleteOperation は canPermanentDelete: true を持つ失敗", () => {
+    const notice = { kind: "error" as const, message: "ゴミ箱に入れられません" };
+
+    expect(failedPermanentDeleteOperation(notice)).toEqual({
+      ok: false,
+      notice,
+      canPermanentDelete: true,
+    });
+  });
 });
 
-describe("pickNewMapId", () => {
-  it("インデックスにある id と、本体だけが残っている id を避ける", () => {
-    const { storage } = createRecordingStorage({ initial: { [mapBodyKey("orphan")]: "{}" } });
-    const ids = ["older", "orphan", "fresh"];
-    const generateId = jest.fn(() => ids.shift()!);
+describe("isSameTrashState", () => {
+  const sample: MapTrashEntry = {
+    id: "t-1",
+    originalMapId: "t-1",
+    name: "削除済み",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-02T00:00:00.000Z",
+    deletedAt: "2026-02-01T00:00:00.000Z",
+    expiresAt: "2026-03-03T00:00:00.000Z",
+    hasBody: true,
+  };
 
-    expect(pickNewMapId(storage, indexOf("older", [OLDER]), generateId)).toBe("fresh");
-    expect(generateId).toHaveBeenCalledTimes(3);
-  });
-
-  it("本体を読めない id は使用済みとして扱い、使える id を作れなければ null を返す", () => {
-    const { storage } = createRecordingStorage({ failGetItem: true });
-
-    expect(pickNewMapId(storage, indexOf("older", [OLDER]), () => "fresh")).toBeNull();
+  it("同じステータス・同じエントリ配列なら true、異なれば false を返す", () => {
+    expect(isSameTrashState({ status: "corrupt" }, { status: "corrupt" })).toBe(true);
+    expect(isSameTrashState({ status: "corrupt" }, { status: "ok", entries: [] })).toBe(false);
+    expect(
+      isSameTrashState(
+        { status: "ok", entries: [sample] },
+        { status: "ok", entries: [{ ...sample }] },
+      ),
+    ).toBe(true);
+    expect(
+      isSameTrashState(
+        { status: "ok", entries: [sample] },
+        { status: "ok", entries: [{ ...sample, name: "変更" }] },
+      ),
+    ).toBe(false);
+    expect(
+      isSameTrashState(
+        { status: "ok", entries: [sample] },
+        { status: "ok", entries: [] },
+      ),
+    ).toBe(false);
   });
 });

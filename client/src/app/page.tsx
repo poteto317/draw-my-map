@@ -6,6 +6,7 @@ import { MapLibraryDialog } from "@/components/layout/MapLibraryDialog";
 import { MapLibraryNoticeRegion } from "@/components/layout/MapLibraryNoticeRegion";
 import { MapEditor } from "@/components/map/MapEditor";
 import type { MapIndexEntry } from "@/domain/mapLibrary/mapIndex";
+import type { MapTrashEntry } from "@/domain/mapLibrary/mapTrash";
 import { useMapLibrary, type MapLibraryDeps } from "@/hooks/useMapLibrary";
 import { useMapLibraryDialogState } from "@/hooks/useMapLibraryDialogState";
 import { generateMapId } from "@/services/persistence/mapIdGenerator";
@@ -19,6 +20,7 @@ const MAP_LIBRARY_DEPS: MapLibraryDeps = {
 };
 
 const NO_MAPS: readonly MapIndexEntry[] = [];
+const NO_TRASH_ENTRIES: readonly MapTrashEntry[] = [];
 
 // シェル。マップの一覧の状態とダイアログを持ち、現在のマップの MapEditor を id で再マウントする
 export default function Home() {
@@ -28,6 +30,7 @@ export default function Home() {
   const dialog = useMapLibraryDialogState({
     library,
     maps: view.status === "ready" ? view.maps : NO_MAPS,
+    trashEntries: view.status === "ready" ? view.trashEntries : NO_TRASH_ENTRIES,
     startupNotice: view.status === "ready" ? view.startupNotice : null,
   });
   const listButtonRef = useRef<HTMLButtonElement>(null);
@@ -83,6 +86,8 @@ export default function Home() {
               screen={dialog.screen}
               maps={view.maps}
               currentMapId={view.currentMap.id}
+              trashEntries={view.trashEntries}
+              trashStatus={view.trashStatus}
               notices={dialog.notices}
               focusTarget={dialog.focusTarget}
               onFocusTargetApplied={dialog.consumeFocusTarget}
@@ -91,11 +96,18 @@ export default function Home() {
               onOpenCreate={dialog.openCreateFromList}
               onOpenRename={dialog.openRename}
               onOpenDelete={dialog.openDelete}
+              onOpenTrash={dialog.openTrash}
               onSwitch={dialog.switchTo}
               onCancel={dialog.back}
               onSubmitCreate={dialog.submitCreate}
               onSubmitRename={dialog.submitRename}
               onConfirmDelete={dialog.confirmDelete}
+              onConfirmPermanentDeleteActive={dialog.confirmPermanentDeleteActive}
+              onRestoreTrash={dialog.restoreTrash}
+              onOpenTrashPermanentDelete={dialog.openTrashPermanentDelete}
+              onConfirmTrashPermanentDelete={dialog.confirmTrashPermanentDelete}
+              onOpenEmptyTrash={dialog.openEmptyTrash}
+              onConfirmEmptyTrash={dialog.confirmEmptyTrash}
               onPrepareBackup={dialog.prepareBackup}
               onDownloadBackup={dialog.downloadBackup}
               onSelectRestoreFile={dialog.selectRestoreFile}

@@ -1,6 +1,6 @@
 process.env.TZ = "Asia/Tokyo";
 
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MapLibraryListScreen } from "@/components/layout/MapLibraryListScreen";
 import type { MapIndexEntry } from "@/domain/mapLibrary/mapIndex";
@@ -40,6 +40,9 @@ function renderList(overrides: Partial<Props> = {}) {
     onOpenDelete: jest.fn(),
     onPrepareBackup: jest.fn(),
     onSelectRestoreFile: jest.fn(),
+    trashCount: 0,
+    trashStatus: "ok",
+    onOpenTrash: jest.fn(),
     storageMode: "persistent",
     ...overrides,
   };
@@ -162,5 +165,54 @@ describe("MapLibraryListScreen", () => {
 
     expect(props.onOpenCreate).toHaveBeenCalledTimes(1);
     expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("ゴミ箱ボタンを件数・破損状態に応じて表示し、通常操作で onOpenTrash を呼ぶ", async () => {
+    const user = userEvent.setup();
+    const emptyProps = renderList({ trashCount: 0, trashStatus: "ok" });
+    const emptyTrashButton = screen.getByRole("button", { name: "ゴミ箱" });
+    expect(emptyTrashButton).toHaveAttribute("data-map-library-action", "trash");
+    await user.click(emptyTrashButton);
+    expect(emptyProps.onOpenTrash).toHaveBeenCalledTimes(1);
+
+    const { rerender } = render(
+      <MapLibraryListScreen {...emptyProps} trashCount={3} trashStatus="ok" />,
+    );
+    expect(screen.getAllByRole("button", { name: "ゴミ箱（3）" })[0]).toHaveAttribute(
+      "data-map-library-action",
+      "trash",
+    );
+
+    rerender(
+      <MapLibraryListScreen {...emptyProps} trashCount={0} trashStatus="corrupt" />,
+    );
+    expect(screen.getAllByRole("button", { name: "ゴミ箱（要確認）" })[0]).toHaveAttribute(
+      "data-map-library-action",
+      "trash",
+    );
+  });
+
+  it("ゴミ箱ボタンは保護モードでは拒否し、repeat/IME/detail>1 を抑止する", () => {
+    const protectedProps = renderList({ storageMode: "protected" });
+    const protectedTrash = screen.getByRole("button", { name: "ゴミ箱" });
+    fireEvent.click(protectedTrash, { detail: 1 });
+    expect(protectedProps.onOpenTrash).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent("JSON書き出し");
+
+    const normalProps = renderList({ trashCount: 1 });
+    const buttons = screen.getAllByRole("button", { name: /^ゴミ箱/ });
+    const normalTrash = buttons[buttons.length - 1];
+    for (const keyEvent of [
+      { key: "Enter", repeat: true },
+      { key: " ", repeat: true },
+      { key: "Enter", isComposing: true },
+      { key: "Enter", keyCode: 229 },
+    ]) {
+      expect(fireEvent.keyDown(normalTrash, keyEvent)).toBe(false);
+    }
+    fireEvent.click(normalTrash, { detail: 2 });
+    expect(normalProps.onOpenTrash).not.toHaveBeenCalled();
+    fireEvent.click(normalTrash, { detail: 1 });
+    expect(normalProps.onOpenTrash).toHaveBeenCalledTimes(1);
   });
 });

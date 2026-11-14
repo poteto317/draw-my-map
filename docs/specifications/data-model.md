@@ -1,6 +1,6 @@
 # Draw My Map データモデル・永続化仕様書
 
-本書は、**Draw My Map** におけるデータモデル、TypeScript 型定義、JSON 永続化スキーマ（Version 1 〜 Version 3）、デコード・マイグレーション・バリデーション、枝のクリップボード形式（5.10）、箇条書きからの追加で受け渡す型（2.6。保存形式は変えない）、およびブラウザ `localStorage` 永続化アーキテクチャ（複数マップのインデックスと本体、起動時の移行。5.1〜5.9）の完全な技術仕様書です。
+本書は、**Draw My Map** におけるデータモデル、TypeScript 型定義、JSON 永続化スキーマ（Version 1 〜 Version 3）、デコード・マイグレーション・バリデーション、枝のクリップボード形式（5.10）、箇条書きからの追加で受け渡す型（2.6。保存形式は変えない）、およびブラウザ `localStorage` 永続化アーキテクチャ（複数マップのインデックスと本体、起動時の移行、ゴミ箱。5.1〜5.14）の完全な技術仕様書です。
 
 ---
 
@@ -46,6 +46,7 @@
    - 5.11 [枝の移動のジャーナル](#511-枝の移動のジャーナル)
    - 5.12 [全マップの一括バックアップと追加復元（Phase 16・候補007）](#512-全マップの一括バックアップと追加復元phase-16候補007)
    - 5.13 [複数タブの編集競合検出（Phase 16・候補008）](#513-複数タブの編集競合検出phase-16候補008)
+   - 5.14 [削除マップのゴミ箱（Phase 16・候補015）](#514-削除マップのゴミ箱phase-16候補015)
 6. [Markdown・箇条書き書き出しと保存形式（Phase 15）](#6-markdown箇条書き書き出しと保存形式phase-15)
 
 ---
@@ -597,7 +598,12 @@ export type MapLibraryOperationResult =
       notice: OperationNotice | null;
       saveRetryNotice: OperationNotice | null;
     }
-  | { ok: false; notice: OperationNotice; enteredProtectedMode?: true };
+  | {
+      ok: false;
+      notice: OperationNotice;
+      enteredProtectedMode?: true;
+      canPermanentDelete?: boolean;
+    };
 ```
 
 ---
@@ -940,9 +946,11 @@ Phase 12 から、名前を付けた複数のマップを保存します。マ�
 | 旧キー（移行元） | `draw-my-map.map.v1` | `MAP_STORAGE_KEY`（`mapStorage.ts`） | Phase 11 までの単一マップの JSON（Version 1〜3） |
 | 枝の移動のジャーナル | `draw-my-map.branch-move.v1` | `BRANCH_MOVE_JOURNAL_KEY`（`branchMoveJournal.ts`） | 別マップへの移動の間だけ置く原本の JSON（5.11 節） |
 | 一括追加復元のジャーナル | `draw-my-map.library-restore.v1` | `LIBRARY_RESTORE_JOURNAL_KEY`（`libraryRestoreJournal.ts`） | 追加復元の途中で一覧と新規本体を戻すための JSON（5.12 節） |
+| ゴミ箱インデックス | `draw-my-map.trash.v1` | `MAP_TRASH_INDEX_KEY`（`mapTrashStorage.ts`） | `MapTrashIndexV1` の JSON（`encodeMapTrashIndex`。5.14 節） |
+| ゴミ箱本体 | `draw-my-map.trash.v1.doc.<id>` | `mapTrashBodyKey(trashId)`（接頭辞 `MAP_TRASH_BODY_KEY_PREFIX`） | 削除時点のマップ本体 JSON（`hasBody: false` の空マップは作成しない。5.14 節） |
 
 - 本体のキーは `mapBodyKey(id)` の1か所だけで作ります。id は `MAP_ID_PATTERN`（`/^[A-Za-z0-9_-]{1,64}$/`）に合う文字列で、区切りの `.` を含みません。
-- 一覧と本体のキーはすべて `draw-my-map.maps.v1` で始まり、旧キー `draw-my-map.map.v1` とは前方一致で重なりません。本体を列挙するときは接頭辞 `draw-my-map.maps.v1.doc.` で探し、残りが id の形式に合うものだけを本体とみなすため、旧キーや退避キーを本体と取り違えません。
+- 一覧と本体のキーはすべて `draw-my-map.maps.v1` で始まり、旧キー `draw-my-map.map.v1` やゴミ箱キー（`draw-my-map.trash.v1` / `draw-my-map.trash.v1.doc.*`）とは前方一致で重なりません。アクティブ本体を列挙するときは接頭辞 `draw-my-map.maps.v1.doc.` で探し、残りが id の形式に合うものだけを本体とみなすため、旧キー・退避キー・ゴミ箱キーをアクティブ本体や一括バックアップの孤立本体と取り違えません。また、ゴミ箱データは既存の `MapIndexV1`・`draw-my-map.maps.v1.doc.*`・一括バックアップ形式 v1（`LibraryBackupV1`）には含めません。
 - インデックスに載っていない本体（孤立した本体）は、読み込み時に無視し、自動では消しません。インデックスにあって本体が無い項目は、空のマップ（まだ一度も保存していないマップ）として開きます。
 - **本体の保存データ形式**:
   インデント 2 スペースで整形され、末尾に改行コード（`\n`）が付与された Version 3 の JSON 文字列。マップ名は本体に含めず、インデックスにだけ持ちます。
@@ -1079,9 +1087,10 @@ export type MapIndexV1 = {
 | 新規作成（`createMap`） | flush → インデックス（項目の追加・現在の id の変更） | flush の失敗: 中止（何も変わらない）。インデックスの失敗: 中止（本体は書いていないので戻す物は無い） |
 | 切り替え（`switchMap`） | flush → インデックス（現在の id の変更） | flush の失敗: 中止。インデックスの失敗: 中止（flush で書いた本体は、そのマップの最新の内容なので戻さない） |
 | 名前変更（`renameMap`） | インデックス（名前の変更） | 失敗: 名前は変わらない |
-| 開いていない別のマップの削除（`deleteMap`） | インデックス（項目の削除）→ 本体の削除 → 現在のマップの flush（再試行） | インデックスの失敗: 中止。本体の削除の失敗: 孤立した本体として残し、warning。flush の失敗: 自動保存の失敗と同じ文言の error |
-| 開いているマップの削除（ほかにマップがある） | インデックス（項目の削除・現在の id を次のマップへ）→ セッション番号を進める → 本体の削除 → 再マウント | インデックスの失敗: 中止（開いたまま、保存待ちも残る）。本体の削除の失敗: 孤立した本体として残し、warning |
-| 最後の1つの削除 | インデックス（項目を新しい「無題のマップ」に置き換え、現在の id も新しい id へ）→ セッション番号を進める → 本体の削除 → 再マウント | 同上 |
+| 開いていない別のマップの削除（`deleteMap`） | 期限切れゴミ箱清掃 → ゴミ箱本体（`hasBody: true` のみ）→ ゴミ箱インデックス → アクティブインデックス（`writeMapIndexWithQuota`）→ 旧アクティブ本体の削除 → 現在のマップの flush（再試行） | ゴミ箱書込の失敗: ゴミ箱本体を戻して中止（容量不足時は `canPermanentDelete: true`）。アクティブインデックスの失敗: ゴミ箱本体を先に消して容量を確保し、ゴミ箱インデックスを元の文字列へ戻す逆順ロールバック（容量不足時は `canPermanentDelete: true`）。旧本体の削除の失敗: 孤立した本体として残し、warning。flush の失敗: 自動保存の失敗と同じ文言の error |
+| 開いているマップの削除（ほかにマップがある） | 期限切れゴミ箱清掃 → ゴミ箱本体（編集済みスナップショット含む、`hasBody: false` 除く）→ ゴミ箱インデックス → アクティブインデックス（項目の削除・現在の id を次のマップへ）→ セッション番号を進める → 旧アクティブ本体の削除 → 再マウント | ゴミ箱／アクティブインデックスの失敗: 同上のロールバックまたは中止（開いたまま、保存待ちも残る）。旧本体の削除の失敗: 孤立した本体として残し、warning |
+| 最後の1つの削除 | 先に新しい id を採番 → 期限切れゴミ箱清掃 → ゴミ箱本体・ゴミ箱インデックス → アクティブインデックス（項目を新しい「無題のマップ」に置き換え、現在の id も新しい id へ）→ セッション番号を進める → 旧アクティブ本体の削除 → 再マウント | 同上 |
+| フォールバック完全削除（`permanentlyDeleteMap`） | ゴミ箱キーには触れず、アクティブインデックスを更新 → （開いているマップならセッション番号を進める）→ 旧アクティブ本体の削除 → （開いていないマップなら flush 再試行） | アクティブインデックスの失敗: 中止。旧本体の削除の失敗: 孤立した本体として残し、warning |
 | 自動保存・flush（`writeBody`） | 本体 → インデックス（更新日時） | 本体の失敗: 保存の失敗として通知。インデックスの失敗: 保存は成功として扱い、通知しない（本体が正本。次の保存で更新日時を書き直す） |
 | 移行（`writeMigratedMap`） | 本体 → インデックス。本体かインデックスが容量不足のときだけ、（書いた本体の削除 →）旧キーの削除 → 本体 → インデックス（`P: false`）でやり直す | インデックスの失敗: 本体を `removeItem` で戻す（戻す操作の失敗も結果に含める）。やり直しの本体・インデックスの失敗: 本体を `removeItem` で消してから旧キーを元の文字列で書き戻す（書き戻しの失敗は `legacy: "lost"` として結果に含める） |
 | インデックスの作り直し | 退避キー → インデックス | 退避の失敗: インデックスを書かずに保護モード |
@@ -1282,9 +1291,9 @@ sequenceDiagram
 | 新規作成の成功 | `mapCreatedNotice` | `status` | `マップ「<名前>」を作成しました。` | シェル |
 | 切り替えの成功 | `mapSwitchedNotice` | `status` | `マップ「<名前>」を開きました。` | シェル |
 | 名前変更の成功 | `mapRenamedNotice` | `status` | `マップの名前を「<名前>」に変更しました。` | ダイアログ |
-| 開いていないマップの削除の成功 | `mapDeletedNotice` | `status` | `マップ「<名前>」を削除しました。` | ダイアログ |
-| 開いているマップの削除の成功 | `currentMapDeletedNotice` | `status` | `マップ「<名前>」を削除し、「<次の名前>」を開きました。` | シェル |
-| 最後のマップの削除の成功 | `lastMapDeletedNotice` | `status` | `マップ「<名前>」を削除し、新しい「無題のマップ」を作成しました。` | シェル |
+| 開いていないマップの削除（ゴミ箱移動）の成功 | `mapDeletedNotice` | `status` | `マップ「<名前>」をゴミ箱に移動しました。` | ダイアログ |
+| 開いているマップの削除（ゴミ箱移動）の成功 | `currentMapDeletedNotice` | `status` | `マップ「<名前>」をゴミ箱に移動し、「<次の名前>」を開きました。` | シェル |
+| 最後のマップの削除（ゴミ箱移動）の成功 | `lastMapDeletedNotice` | `status` | `マップ「<名前>」をゴミ箱に移動し、新しい「無題のマップ」を作成しました。` | シェル |
 | 切り替えの前の flush の失敗 | `switchFlushFailedNotice` | `error` | `現在のマップを保存できなかったため、マップを切り替えませんでした。不要なマップを削除するか、JSONで書き出してください。` | ダイアログ（エディタの操作通知バーにも自動保存の失敗の通知） |
 | 新規作成の前の flush の失敗 | `createFlushFailedNotice` | `error` | `現在のマップを保存できなかったため、新しいマップを作成しませんでした。不要なマップを削除するか、JSONで書き出してください。` | ダイアログ（エディタの操作通知バーにも自動保存の失敗の通知） |
 | インデックスの書き込みの失敗 | `indexWriteFailedNotice(operation)` | `error` | `マップの一覧を保存できなかったため、<操作>できませんでした。不要なマップを削除してください。`（`<操作>` は `マップを作成`・`マップを切り替え`・`名前を変更`・`マップを削除`） | ダイアログ |
@@ -1475,6 +1484,108 @@ export interface MapStorageSession {
 
 「別名で保存」時に呼び出される純粋関数 `createConflictCopyName(baseName)` は、既存のマップ名末尾に `（退避）` を付与します。
 - コードポイント数（`countMapNameLength`）を基準に計測し、合計が 50 コードポイントを超える場合は手前で切り詰めた上で `（退避）` を結合します（最大 50 文字の不変条件を厳格に保持）。
+
+### 5.14 削除マップのゴミ箱（Phase 16・候補015）
+
+削除したマップを 30 日間保持し、復元・個別完全削除・ゴミ箱を空にする操作・期限切れ自動削除・容量不足および破損時のフォールバック完全削除を実現する永続化仕様です。既存の `MapIndexV1`・`draw-my-map.maps.v1.doc.*`・一括バックアップ形式 v1（`LibraryBackupV1`）にはゴミ箱データを含めず、独立したキー空間で管理します。
+
+#### 1. ストレージキーと型定義（`mapTrash.ts`, `mapTrashStorage.ts`, `mapLibraryState.ts`）
+
+- **ストレージキー** (`client/src/services/persistence/mapTrashStorage.ts`):
+  - `MAP_TRASH_INDEX_KEY = "draw-my-map.trash.v1"`
+  - `MAP_TRASH_BODY_KEY_PREFIX = "draw-my-map.trash.v1.doc."`（`mapTrashBodyKey(trashId)` で生成）
+- **保持期間定数** (`client/src/domain/mapLibrary/mapTrash.ts`):
+  - `TRASH_RETENTION_DAYS = 30`
+  - `TRASH_RETENTION_MS = TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000`
+
+```typescript
+export type MapTrashEntry = {
+  id: string;            // ゴミ箱エントリ固有ID（MAP_ID_PATTERN）
+  originalMapId: string; // 元のマップID（MAP_ID_PATTERN）
+  name: string;          // 削除時の正規化済みマップ名（1〜50コードポイント）
+  createdAt: string;     // 元の作成日時（ISO 8601）
+  updatedAt: string;     // 元の更新日時（ISO 8601）
+  deletedAt: string;     // ゴミ箱へ移動した日時（ISO 8601）
+  expiresAt: string;     // 保持期限（deletedAt + 30日、ISO 8601）
+  hasBody: boolean;      // ゴミ箱本体キーが存在するか（未編集・未保存の空マップは false）
+};
+
+export type MapTrashIndexV1 = {
+  version: 1;
+  items: MapTrashEntry[];
+};
+
+export type MapTrashState =
+  | { status: "ok"; entries: readonly MapTrashEntry[] }
+  | { status: "corrupt" };
+
+export type MapTrashDecodeResult =
+  | { kind: "ok"; index: MapTrashIndexV1; repaired: boolean }
+  | { kind: "corrupt" };
+```
+
+- `MapLibraryView` の `status: "ready"` 状態には `trashEntries: readonly MapTrashEntry[]` と `trashStatus: "ok" | "corrupt"` を保持します（保護モード時は `trashEntries: [], trashStatus: "ok"`）。
+- `MapLibraryOperationResult` の失敗型には `canPermanentDelete?: boolean` を持ち、ゴミ箱移動が容量不足・本体読取失敗・ゴミ箱破損で失敗したときに完全削除フォールバックを提示します。
+
+#### 2. デコード・正規化・期限判定・ソート・ID 採番
+
+- **デコード (`decodeMapTrashIndex`)**:
+  - JSON 構文不正・`version !== 1`・`!Array.isArray(parsed.items)` の場合は `{ kind: "corrupt" }` を返します。
+  - 各行は `isValidMapId(id)`、`isValidMapId(originalMapId)`、`typeof name === "string"`、`typeof hasBody === "boolean"` を要求し、不正行と重複 `id` はスキップして `repaired = true` とします。
+  - `name` は `normalizeStoredMapName`、日時（`createdAt`・`updatedAt`・`deletedAt`・`expiresAt`）は `normalizeMapTimestamp` で正規化し、補正があれば `repaired = true` とします。`expiresAt` が欠落または不正（`repaired = true`）であっても `deletedAt` が有効（`UNKNOWN_MAP_TIMESTAMP` でない）場合は、`expiresAt = deletedAt + TRASH_RETENTION_MS`（30 日後）の ISO 8601 文字列を再計算して復元します。`deletedAt` も不正で期限を決められない場合は `expiresAt = UNKNOWN_MAP_TIMESTAMP` とし、自動削除の対象にしません（手動の完全削除や「ゴミ箱を空にする」で削除できます）。
+- **期限切れ判定 (`isTrashEntryExpired`)**: `expiresAt` が `UNKNOWN_MAP_TIMESTAMP` または `Date.parse(entry.expiresAt)` が非有限のときは期限不明として `false`（期限切れ扱いにせず自動削除しない）を返し、有効な日時のときのみ `<= now.getTime()` で期限切れ（`true`）と判定します。
+- **残り日数計算 (`calculateTrashRemainingDays` / `formatTrashRemainingDays`)**: `expiresAt` が `UNKNOWN_MAP_TIMESTAMP` または非有限なら `null`（表示 `"期限不明"`）、有効な日時で `diffMs = Date.parse(entry.expiresAt) - now.getTime()` が `<= 0` なら `0`（表示 `"期限切れ"`）、`> 0` なら `Math.ceil(diffMs / 86_400_000)` 日（表示 `"あと N 日"`）。
+- **表示順ソート (`sortMapTrashEntriesForDisplay`)**: `deletedAt` 降順 → `updatedAt` 降順 → `id` 昇順。
+- **ゴミ箱 ID 採番 (`pickTrashId`)**: 元の `target.id` がゴミ箱インデックスにも `mapTrashBodyKey(target.id)` にも存在しない（読み取り成功かつ `null`）場合は再利用し、衝突・読取失敗時は `pickUnusedMapId` で新規採番します。
+
+#### 3. 起動時および操作時の期限切れ自動削除（`purgeExpiredTrash`）
+
+- `runMapLibraryStartup` において、`mode === "persistent"` の起動が確定した直後に `purgeExpiredTrash(storage, deps.now())` を実行します（保護モード結果では呼びません）。その後 `useMapLibrary` の起動 `useEffect` が `readMapTrashState(storage)` で初期 `trash` 状態を設定します。
+- また、一覧画面を開くとき（`openList`）・ゴミ箱画面を開くとき（`openTrash`）の `refreshTrash()`（進行中ジャーナルがある場合は清掃せず `readMapTrashState` のみ）、および `deleteMap`・`restoreFromTrash`・`permanentlyDeleteFromTrash` の前にも `purgeExpiredTrash` を実行します。
+- `MAP_TRASH_INDEX_KEY` が不在のとき、および期限切れ項目が 0 件かつ `!repaired` のときは、`setItem` / `removeItem` を呼ばずに終了します（起動時の書き込み数を増やしません）。
+- `MAP_TRASH_INDEX_KEY` が `corrupt` または `unavailable` のときは上書き・削除せず `{ status: "corrupt" }` を返し、通常の一覧・編集画面を保護モードへ落としません。
+- 期限切れまたは修復時は、期限切れ項目の `hasBody: true` に対して `removeTrashBody` を呼び、本体削除の成否にかかわらず期限切れ項目をインデックスから除外します。残った `active` が 0 件なら `removeMapTrashIndex` で `draw-my-map.trash.v1` を削除し、1 件以上なら `writeMapTrashIndex` で書き戻します。
+
+#### 4. 操作フロー・ロールバック・破損回復
+
+1. **ゴミ箱移動（`deleteMap`）**:
+   - `restoreLockRef`・`!persistent`・進行中ジャーナル（`BRANCH_MOVE_JOURNAL_KEY` / `LIBRARY_RESTORE_JOURNAL_KEY`）を検査し、最後の 1 件削除時は先に `pickNewMapId` を確保します。
+   - `purgeExpiredTrash` で空き容量を回収し、`resolveBodyJsonForTrashMove` で本体を取得します。開いているマップでは `readMapBody` と `readBackupSnapshot` を照合し、`readMapBody` が `null` かつ `restoreOrigin === "empty"` かつ `!hasSavedBodyThisMount` かつ空の手動配置ドキュメント（`nodes.length === 0 && layoutMode === "manual"`）なら未編集・未保存の空マップとして `bodyJson = null`（`hasBody: false`）、それ以外の適格スナップショットなら未保存編集を含む `snap.json` を採用します。`readMapBody` 失敗時は `canPermanentDelete: true` 付きで中止します。
+   - ゴミ箱インデックスが `corrupt` / `unavailable` の場合は上書きせず `canPermanentDelete: true` 付きで中止します。
+   - `writeTrashBody`（`hasBody: true` のみ）→ `writeMapTrashIndex` → `writeMapIndexWithQuota` の順に書き込みます。`writeMapIndexWithQuota` 失敗時は **先に `removeTrashBody` でゴミ箱本体を削除して容量を確保し、次に `MAP_TRASH_INDEX_KEY` を変更前の文字列（以前は不在なら `removeItem`）へ戻す逆順ロールバック** を行います。`QuotaExceededError` の場合は `canPermanentDelete: true` を返します。
+   - アクティブ一覧更新後は、開いているマップなら先に `advanceSessionNumber()` してから `removeMapBody` を呼び、次のマップまたは新しい空マップへ切り替えます。開いていないマップなら `removeMapBody` 後に `flushCurrentSession()` を再試行します。
+2. **フォールバック完全削除（`permanentlyDeleteMap`）**:
+   - `deleteMap` が `canPermanentDelete: true` で失敗したとき、確認画面の「ゴミ箱に入れずに完全に削除」から呼び出されます。ゴミ箱キーには一切触れず、アクティブ一覧の更新・（現在マップ時）`advanceSessionNumber()`・`removeMapBody`・（非現在マップ時）`flushCurrentSession()` 再試行を行います。
+3. **復元（`restoreFromTrash`）**:
+   - `purgeExpiredTrash` 後にエントリを確認し、`hasBody: true` なら `readTrashBody` と `parseMapDocumentJsonWithVersion` で妥当性を検証します。
+   - `readMatchingIndexRaw` でストレージ上の最新アクティブ一覧と現在の一覧が一致することを確認し、他タブ変更等で不一致なら安全に中止します。
+   - 元の `originalMapId` が現在のアクティブ一覧にも `hasMapBody` にも無ければ再利用し、衝突時は `pickNewMapId` で新規採番します（元の `name`・`createdAt`・`updatedAt` を保持）。
+   - `hasBody: true` なら `writeMapBody` → `writeMapIndex` の順に書き込み、一覧書込失敗時は書き込んだ `mapBodyKey(restoredId)` を `removeMapBody` でロールバックします（ロールバック失敗時は `trashRestoreRollbackFailedNotice`）。
+   - `currentMapId` と現在の編集セッションは維持したまま `commitIndex` 相当の更新を行い、ゴミ箱インデックスから対象を除外（残 0 件時は `removeMapTrashIndex`）→ `removeTrashBody` で後始末します（ゴミ箱後始末のみ失敗時は復元済みを保ちつつ `warning` 通知）。
+4. **個別完全削除（`permanentlyDeleteFromTrash`）・ゴミ箱を空にする（`emptyTrash`）**:
+   - `permanentlyDeleteFromTrash` は先に `MAP_TRASH_INDEX_KEY` を更新（残 0 件時は `removeItem`）し、成功後に `hasBody: true` なら `removeTrashBody` を実行します。
+   - `emptyTrash` は通常時、最新一覧の各本体（`hasBody: true`）および孤立した `draw-my-map.trash.v1.doc.*` キーを削除し、すべて除外できたら `removeMapTrashIndex`、一部失敗時は残存項目だけを書き戻して `warning` を返します。なお UI 上 `trashStatus === "ok"` だったのにストレージ上で `corrupt` に変わっていた場合は黙って全削除せず `trashState` を `"corrupt"` へ同期してエラーを返します。
+   - UI 上 `trashStatus === "corrupt"` で `emptyTrash` を確定した場合のみ、`forceClearCorruptTrash` が `MAP_TRASH_BODY_KEY_PREFIX` で始まる全キーを削除し、すべて削除できた場合のみ `removeMapTrashIndex` を実行してゴミ箱を初期化します（デッドロック防止）。
+
+#### 5. ゴミ箱関連の操作通知メッセージ (`client/src/domain/mapLibrary/mapTrashMessages.ts`)
+
+| 場面 | 関数 | 種別 (`kind`) | 通知メッセージ (`message`) |
+| :--- | :--- | :---: | :--- |
+| ゴミ箱移動の失敗（一般） | `trashMoveFailedNotice` | `error` | `マップをゴミ箱へ移動できませんでした。` |
+| 容量不足でゴミ箱移動不可 | `trashQuotaExceededNotice` | `error` | `保存容量が不足しているため、マップをゴミ箱へ移動できませんでした。ゴミ箱の容量を空けるか、ゴミ箱に入れずに完全に削除してください。` |
+| 本体読取失敗でゴミ箱移動不可 | `trashBodyReadFailedForMoveNotice` | `error` | `マップの保存データを読み取れないため、ゴミ箱へ移動できませんでした。ゴミ箱に入れずに完全に削除してください。` |
+| ゴミ箱破損でゴミ箱移動不可 | `trashCorruptForMoveNotice` | `error` | `ゴミ箱のデータが破損しているため、マップをゴミ箱へ移動できませんでした。ゴミ箱を空にするか、ゴミ箱に入れずに完全に削除してください。` |
+| ゴミ箱読み込み失敗（破損） | `trashCorruptNotice` | `error` | `ゴミ箱の読み込みに失敗しました。ゴミ箱を空にして初期化してください。` |
+| 復元成功 | `trashRestoredNotice` | `status` | `マップ「<名前>」をマップ一覧に復元しました。` |
+| 復元成功（ゴミ箱後始末失敗） | `trashRestoredCleanupFailedNotice` | `warning` | `マップ「<名前>」をマップ一覧に復元しましたが、ゴミ箱の後始末に失敗しました。` |
+| 対象不在（他タブ削除・期限切れ） | `trashEntryNotFoundNotice` | `error` | `対象のマップはゴミ箱に見つかりませんでした。` |
+| 復元時の本体読取失敗 / 本体欠損 / 本体破損 | `trashRestoreBodyReadFailedNotice` / `trashRestoreBodyMissingNotice` / `trashRestoreBodyCorruptNotice` | `error` | `ゴミ箱のマップデータを読み取れなかったため、復元できませんでした。` 等（原因別文言） |
+| 復元時の一覧不一致 | `trashRestoreIndexChangedNotice` | `error` | `マップ一覧が変更または更新されたため復元できませんでした。ページを再読み込みしてからやり直してください。` |
+| 復元時の書込失敗 / ロールバック失敗 | `trashRestoreWriteFailedNotice` / `trashRestoreRollbackFailedNotice` | `error` | `マップを復元できませんでした。不要なマップやゴミ箱のデータを削除してからやり直してください。` 等 |
+| ゴミ箱からの個別完全削除成功 / 本体残存警告 / 失敗 | `trashEntryPermanentlyDeletedNotice` / `trashEntryPermanentlyDeletedBodyWarningNotice` / `trashPermanentDeleteFailedNotice` | `status` / `warning` / `error` | `マップ「<名前>」を完全に削除しました。` 等 |
+| ゴミ箱を空にする成功 / 一部失敗警告 / 失敗 | `trashEmptiedNotice` / `trashEmptyPartialWarningNotice` / `trashEmptyFailedNotice` | `status` / `warning` / `error` | `ゴミ箱を空にしました。` 等 |
+| 破損ゴミ箱の初期化成功 / 失敗 | `trashCorruptClearedNotice` / `trashCorruptClearFailedNotice` | `status` / `error` | `壊れたゴミ箱のデータを初期化しました。` / `ゴミ箱のデータを初期化できませんでした。` |
+| フォールバック完全削除（通常 / 現在 / 最後） | `mapPermanentlyDeletedNotice` / `currentMapPermanentlyDeletedNotice` / `lastMapPermanentlyDeletedNotice`（本体残存警告は `permanentBodyRemovalFailedNotice` 等） | `status`（`warning`） | `マップ「<名前>」を完全に削除しました。` 等 |
 
 ## 6. Markdown・箇条書き書き出しと保存形式（Phase 15）
 

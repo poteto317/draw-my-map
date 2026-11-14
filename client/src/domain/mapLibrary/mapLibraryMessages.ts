@@ -45,19 +45,19 @@ export function mapRenamedNotice(name: string): OperationNotice {
 }
 
 export function mapDeletedNotice(name: string): OperationNotice {
-  return status(`マップ「${name}」を削除しました。`);
+  return status(`マップ「${name}」をゴミ箱に移動しました。`);
 }
 
 export function currentMapDeletedNotice(
   name: string,
   nextName: string,
 ): OperationNotice {
-  return status(`マップ「${name}」を削除し、「${nextName}」を開きました。`);
+  return status(`マップ「${name}」をゴミ箱に移動し、「${nextName}」を開きました。`);
 }
 
 export function lastMapDeletedNotice(name: string): OperationNotice {
   return status(
-    `マップ「${name}」を削除し、新しい「${DEFAULT_MAP_NAME}」を作成しました。`,
+    `マップ「${name}」をゴミ箱に移動し、新しい「${DEFAULT_MAP_NAME}」を作成しました。`,
   );
 }
 

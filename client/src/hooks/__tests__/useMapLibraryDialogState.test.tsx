@@ -19,6 +19,17 @@ import {
   switchFlushFailedNotice,
 } from "@/domain/mapLibrary/mapLibraryMessages";
 import type { MapIndexEntry } from "@/domain/mapLibrary/mapIndex";
+import type { MapTrashEntry } from "@/domain/mapLibrary/mapTrash";
+import {
+  mapPermanentlyDeletedNotice,
+  trashEmptiedNotice,
+  trashEmptyFailedNotice,
+  trashEntryNotFoundNotice,
+  trashEntryPermanentlyDeletedNotice,
+  trashQuotaExceededNotice,
+  trashRestoredCleanupFailedNotice,
+  trashRestoredNotice,
+} from "@/domain/mapLibrary/mapTrashMessages";
 import type {
   MapLibraryOperationResult,
   UseMapLibraryResult,
@@ -35,7 +46,20 @@ import type { LibraryRestorePreview } from "@/hooks/mapLibraryState";
 
 type FakeLibrary = Pick<
   UseMapLibraryResult,
-  "createMap" | "switchMap" | "renameMap" | "deleteMap" | "moveBranchToMap" | "prepareBackup" | "downloadBackup" | "previewRestore" | "confirmRestore"
+  | "createMap"
+  | "switchMap"
+  | "renameMap"
+  | "deleteMap"
+  | "permanentlyDeleteMap"
+  | "refreshTrash"
+  | "restoreFromTrash"
+  | "permanentlyDeleteFromTrash"
+  | "emptyTrash"
+  | "moveBranchToMap"
+  | "prepareBackup"
+  | "downloadBackup"
+  | "previewRestore"
+  | "confirmRestore"
 >;
 
 function entry(id: string, name: string): MapIndexEntry {
@@ -47,8 +71,22 @@ function entry(id: string, name: string): MapIndexEntry {
   };
 }
 
+function trashItem(id: string, name: string): MapTrashEntry {
+  return {
+    id,
+    originalMapId: `orig-${id}`,
+    name,
+    createdAt: "2026-10-01T00:00:00.000Z",
+    updatedAt: "2026-10-21T00:00:00.000Z",
+    deletedAt: "2026-11-10T00:00:00.000Z",
+    expiresAt: "2026-12-10T00:00:00.000Z",
+    hasBody: true,
+  };
+}
+
 // 表示順
 const threeMaps: MapIndexEntry[] = [entry("a", "A"), entry("b", "B"), entry("c", "C")];
+const threeTrash: MapTrashEntry[] = [trashItem("t1", "T1"), trashItem("t2", "T2"), trashItem("t3", "T3")];
 
 // 本物と同じ結果型を返す（L-171）。既定は本物が開いているマップの切り替えなどで返す「変化なし」
 const UNCHANGED: MapLibraryOperationResult = {
@@ -79,6 +117,11 @@ function createFakeLibrary(): jest.Mocked<FakeLibrary> {
     switchMap: jest.fn<MapLibraryOperationResult, [string]>(() => UNCHANGED),
     renameMap: jest.fn<MapLibraryOperationResult, [string, string]>(() => UNCHANGED),
     deleteMap: jest.fn<MapLibraryOperationResult, [string]>(() => UNCHANGED),
+    permanentlyDeleteMap: jest.fn<MapLibraryOperationResult, [string]>(() => UNCHANGED),
+    refreshTrash: jest.fn<void, []>(),
+    restoreFromTrash: jest.fn<MapLibraryOperationResult, [string]>(() => UNCHANGED),
+    permanentlyDeleteFromTrash: jest.fn<MapLibraryOperationResult, [string]>(() => UNCHANGED),
+    emptyTrash: jest.fn<MapLibraryOperationResult, []>(() => UNCHANGED),
     moveBranchToMap: jest.fn<MapLibraryOperationResult, [MapStorageSession, string, number]>(() => UNCHANGED),
     prepareBackup: jest.fn(() => ({ ok: false as const, error: "準備失敗" })),
     downloadBackup: jest.fn<MapLibraryOperationResult, [LibraryBackupPreview]>(() => UNCHANGED),
@@ -90,6 +133,7 @@ function createFakeLibrary(): jest.Mocked<FakeLibrary> {
 type HookProps = {
   library: FakeLibrary;
   maps: readonly MapIndexEntry[];
+  trashEntries: readonly MapTrashEntry[];
   startupNotice: OperationNotice | null;
 };
 
@@ -97,6 +141,7 @@ function renderDialogState(overrides: Partial<HookProps> = {}) {
   const initialProps: HookProps = {
     library: createFakeLibrary(),
     maps: threeMaps,
+    trashEntries: [],
     startupNotice: null,
     ...overrides,
   };
@@ -768,12 +813,19 @@ describe("useMapLibraryDialogState", () => {
         "openCreateFromList",
         "openRename",
         "openDelete",
+        "openTrash",
         "back",
         "close",
         "submitCreate",
         "switchTo",
         "submitRename",
         "confirmDelete",
+        "confirmPermanentDeleteActive",
+        "restoreTrash",
+        "openTrashPermanentDelete",
+        "confirmTrashPermanentDelete",
+        "openEmptyTrash",
+        "confirmEmptyTrash",
         "consumeFocusTarget",
         "consumeHeaderFocusRequest",
       ] as const;
@@ -847,13 +899,16 @@ describe("useMapLibraryDialogState と MapLibraryDialog のフォーカスの戻
   function Harness({
     fakeLibrary,
     initialMaps,
+    initialTrash = [],
     onHeaderFocusRequest,
   }: {
     fakeLibrary: FakeLibrary;
     initialMaps: readonly MapIndexEntry[];
+    initialTrash?: readonly MapTrashEntry[];
     onHeaderFocusRequest: (request: string) => void;
   }) {
     const [maps, setMaps] = useState(initialMaps);
+    const [trashEntries, setTrashEntries] = useState(initialTrash);
     // 本物の useMapLibrary と同じく、開いていないマップの削除の成功で maps から対象を除く
     const library = useMemo<FakeLibrary>(() => ({
       ...fakeLibrary,
@@ -864,8 +919,25 @@ describe("useMapLibraryDialogState と MapLibraryDialog のフォーカスの戻
         }
         return result;
       },
+      restoreFromTrash: (trashId) => {
+        const result = fakeLibrary.restoreFromTrash(trashId);
+        setTrashEntries((current) => current.filter((item) => item.id !== trashId));
+        return result;
+      },
+      permanentlyDeleteFromTrash: (trashId) => {
+        const result = fakeLibrary.permanentlyDeleteFromTrash(trashId);
+        setTrashEntries((current) => current.filter((item) => item.id !== trashId));
+        return result;
+      },
+      emptyTrash: () => {
+        const result = fakeLibrary.emptyTrash();
+        if (result.ok) {
+          setTrashEntries([]);
+        }
+        return result;
+      },
     }), [fakeLibrary]);
-    const state = useMapLibraryDialogState({ library, maps, startupNotice: null });
+    const state = useMapLibraryDialogState({ library, maps, trashEntries, startupNotice: null });
     useLayoutEffect(() => {
       if (state.headerFocusRequest !== null) onHeaderFocusRequest(state.headerFocusRequest);
     }, [state.headerFocusRequest, onHeaderFocusRequest]);
@@ -882,6 +954,9 @@ describe("useMapLibraryDialogState と MapLibraryDialog のフォーカスの戻
             screen={state.screen}
             maps={maps}
             currentMapId="a"
+            trashEntries={trashEntries}
+            trashStatus="ok"
+            now={new Date("2026-11-14T12:00:00.000Z")}
             notices={state.notices}
             focusTarget={state.focusTarget}
             onFocusTargetApplied={state.consumeFocusTarget}
@@ -890,11 +965,18 @@ describe("useMapLibraryDialogState と MapLibraryDialog のフォーカスの戻
             onOpenCreate={state.openCreateFromList}
             onOpenRename={state.openRename}
             onOpenDelete={state.openDelete}
+            onOpenTrash={state.openTrash}
             onSwitch={state.switchTo}
             onCancel={state.back}
             onSubmitCreate={state.submitCreate}
             onSubmitRename={state.submitRename}
             onConfirmDelete={state.confirmDelete}
+            onConfirmPermanentDeleteActive={state.confirmPermanentDeleteActive}
+            onRestoreTrash={state.restoreTrash}
+            onOpenTrashPermanentDelete={state.openTrashPermanentDelete}
+            onConfirmTrashPermanentDelete={state.confirmTrashPermanentDelete}
+            onOpenEmptyTrash={state.openEmptyTrash}
+            onConfirmEmptyTrash={state.confirmEmptyTrash}
             onPrepareBackup={state.prepareBackup}
             onDownloadBackup={state.downloadBackup}
             onSelectRestoreFile={state.selectRestoreFile}
@@ -910,6 +992,7 @@ describe("useMapLibraryDialogState と MapLibraryDialog のフォーカスの戻
   function renderHarness(
     initialMaps: readonly MapIndexEntry[],
     library: jest.Mocked<FakeLibrary> = createFakeLibrary(),
+    initialTrash: readonly MapTrashEntry[] = [],
   ) {
     const onHeaderFocusRequest = jest.fn();
     library.deleteMap.mockImplementation((id) => {
@@ -920,6 +1003,7 @@ describe("useMapLibraryDialogState と MapLibraryDialog のフォーカスの戻
       <Harness
         fakeLibrary={library}
         initialMaps={initialMaps}
+        initialTrash={initialTrash}
         onHeaderFocusRequest={onHeaderFocusRequest}
       />,
     );
@@ -948,7 +1032,7 @@ describe("useMapLibraryDialogState と MapLibraryDialog のフォーカスの戻
     await waitFor(() => expect(screen.getByRole("button", { name: /^C/ })).toHaveFocus());
     // ダイアログ内の通知は次のフレームで入る
     await waitFor(() =>
-      expect(screen.getByRole("status")).toHaveTextContent("マップ「D」を削除しました。"),
+      expect(screen.getByRole("status")).toHaveTextContent("マップ「D」をゴミ箱に移動しました。"),
     );
   });
 
@@ -1054,5 +1138,268 @@ describe("useMapLibraryDialogState と MapLibraryDialog のフォーカスの戻
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(onHeaderFocusRequest).toHaveBeenLastCalledWith("list");
+  });
+
+  it("ゴミ箱から個別完全削除を確定して対象が消えても alert が消えず、最後は一覧に戻るへ移す", async () => {
+    const user = userEvent.setup();
+    const library = createFakeLibrary();
+    library.permanentlyDeleteFromTrash
+      .mockReturnValueOnce(failedResult(trashEntryNotFoundNotice()))
+      .mockReturnValueOnce(keptResult(trashEntryPermanentlyDeletedNotice("T2")));
+    renderHarness([entry("a", "A")], library, [trashItem("t1", "T1"), trashItem("t2", "T2")]);
+    await openList(user);
+
+    await user.click(screen.getByRole("button", { name: "ゴミ箱（2）" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "復元: T1" })).toHaveFocus());
+
+    await user.click(screen.getByRole("button", { name: "完全に削除: T1" }));
+    await user.click(screen.getByRole("button", { name: "完全に削除" }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "復元: T2" })).toHaveFocus());
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(trashEntryNotFoundNotice().message),
+    );
+
+    await user.click(screen.getByRole("button", { name: "完全に削除: T2" }));
+    await user.click(screen.getByRole("button", { name: "完全に削除" }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "一覧に戻る" })).toHaveFocus());
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent("マップ「T2」を完全に削除しました。"),
+    );
+  });
+
+  it("trashPermanentDelete と trashEmptyConfirm からキャンセルや Escape で戻った後、続けて別のゴミ箱操作ができる", async () => {
+    const user = userEvent.setup();
+    const library = createFakeLibrary();
+    library.restoreFromTrash.mockReturnValue(keptResult(trashRestoredNotice("T2")));
+    library.emptyTrash.mockReturnValue(keptResult(trashEmptiedNotice()));
+    renderHarness([entry("a", "A")], library, [trashItem("t1", "T1"), trashItem("t2", "T2")]);
+    await openList(user);
+
+    await user.click(screen.getByRole("button", { name: "ゴミ箱（2）" }));
+    await user.click(screen.getByRole("button", { name: "完全に削除: T1" }));
+    await user.click(screen.getByRole("button", { name: "キャンセル" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "完全に削除: T1" })).toHaveFocus());
+
+    await user.click(screen.getByRole("button", { name: "ゴミ箱を空にする" }));
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.getByRole("button", { name: "ゴミ箱を空にする" })).toHaveFocus());
+
+    // 戻った後に別のゴミ箱操作（T2 の復元 → ゴミ箱を空にする）を続けて実行できる
+    await user.click(screen.getByRole("button", { name: "復元: T2" }));
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent("マップ「T2」をマップ一覧に復元しました。"),
+    );
+    await waitFor(() => expect(screen.getByRole("button", { name: "復元: T1" })).toHaveFocus());
+
+    await user.click(screen.getByRole("button", { name: "ゴミ箱を空にする" }));
+    await user.click(screen.getByRole("button", { name: "ゴミ箱を空にする" }));
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent("ゴミ箱を空にしました。"),
+    );
+  });
+});
+
+describe("useMapLibraryDialogState のゴミ箱遷移と完全削除フォールバック", () => {
+  it("openList と openTrash は refreshTrash を呼び、back は 2 階層を順に元のボタンへ戻す", () => {
+    const library = createFakeLibrary();
+    const { result } = renderDialogState({ library, trashEntries: threeTrash });
+
+    act(() => result.current.openList());
+    expect(library.refreshTrash).toHaveBeenCalledTimes(1);
+
+    act(() => result.current.openTrash());
+    expect(library.refreshTrash).toHaveBeenCalledTimes(2);
+    expect(result.current.screen).toEqual({ kind: "trash" });
+    expect(result.current.focusTarget).toEqual({ kind: "screenDefault" });
+
+    act(() => result.current.openTrashPermanentDelete("t2"));
+    expect(result.current.screen).toEqual({ kind: "trashPermanentDelete", trashId: "t2" });
+    act(() => result.current.back());
+    expect(result.current.screen).toEqual({ kind: "trash" });
+    expect(result.current.focusTarget).toEqual({
+      kind: "trashRow",
+      trashId: "t2",
+      action: "permanentDelete",
+    });
+
+    act(() => result.current.openEmptyTrash());
+    expect(result.current.screen).toEqual({ kind: "trashEmptyConfirm" });
+    act(() => result.current.back());
+    expect(result.current.screen).toEqual({ kind: "trash" });
+    expect(result.current.focusTarget).toEqual({ kind: "emptyTrashButton" });
+
+    act(() => result.current.back());
+    expect(result.current.screen).toEqual({ kind: "list" });
+    expect(result.current.focusTarget).toEqual({ kind: "trashButton" });
+  });
+
+  it("confirmDelete が canPermanentDelete: true で失敗すると完全削除を許可し、back で破棄される", () => {
+    const library = createFakeLibrary();
+    library.deleteMap.mockReturnValue({
+      ok: false,
+      notice: trashQuotaExceededNotice(),
+      canPermanentDelete: true,
+    });
+    const { result } = renderDialogState({ library });
+    act(() => result.current.openList());
+    act(() => result.current.openDelete("b"));
+
+    act(() => result.current.confirmDelete("b"));
+    expect(result.current.screen).toEqual({
+      kind: "delete",
+      mapId: "b",
+      allowPermanentDelete: true,
+    });
+    expect(result.current.notices.alert).toBe(trashQuotaExceededNotice().message);
+
+    act(() => result.current.back());
+    act(() => result.current.openDelete("b"));
+    expect(result.current.screen).toEqual({ kind: "delete", mapId: "b" });
+  });
+
+  it("confirmPermanentDeleteActive は通常成功・再マウント成功・通常失敗（allowPermanentDelete 維持）・保護モード遷移を処理する", () => {
+    const library = createFakeLibrary();
+    const protectedNotice: OperationNotice = { kind: "error", message: "保護モードへ移行しました。" };
+    library.deleteMap.mockReturnValueOnce({
+      ok: false,
+      notice: trashQuotaExceededNotice(),
+      canPermanentDelete: true,
+    });
+    library.permanentlyDeleteMap
+      .mockReturnValueOnce(failedResult(indexWriteFailedNotice("マップを削除")))
+      .mockReturnValueOnce(keptResult(mapPermanentlyDeletedNotice("B")))
+      .mockReturnValueOnce(remountedResult(mapPermanentlyDeletedNotice("A")))
+      .mockReturnValueOnce({ ok: false, notice: protectedNotice, enteredProtectedMode: true });
+    const { result } = renderDialogState({ library });
+    act(() => result.current.openList());
+    act(() => result.current.openDelete("b"));
+    act(() => result.current.confirmDelete("b"));
+    expect(result.current.screen).toEqual({
+      kind: "delete",
+      mapId: "b",
+      allowPermanentDelete: true,
+    });
+
+    // 通常失敗時は allowPermanentDelete: true 画面に留まり alert を出す
+    act(() => result.current.confirmPermanentDeleteActive("b"));
+    expect(result.current.screen).toEqual({
+      kind: "delete",
+      mapId: "b",
+      allowPermanentDelete: true,
+    });
+    expect(result.current.notices.alert).toBe(indexWriteFailedNotice("マップを削除").message);
+
+    // 非再マウント成功
+    act(() => result.current.confirmPermanentDeleteActive("b"));
+    expect(result.current.screen).toEqual({ kind: "list" });
+    expect(result.current.focusTarget).toEqual({ kind: "row", mapId: "c", action: "open" });
+    expect(result.current.notices.status).toBe(mapPermanentlyDeletedNotice("B").message);
+
+    // 再マウント成功
+    act(() => result.current.openDelete("a"));
+    act(() => result.current.confirmPermanentDeleteActive("a"));
+    expect(result.current.screen).toEqual({ kind: "closed" });
+    expect(result.current.shellNotice?.notice).toEqual(mapPermanentlyDeletedNotice("A"));
+
+    // enteredProtectedMode: true による保護モード遷移
+    act(() => result.current.openList());
+    act(() => result.current.openDelete("c"));
+    act(() => result.current.confirmPermanentDeleteActive("c"));
+    expect(result.current.screen).toEqual({ kind: "closed" });
+    expect(result.current.shellNotice?.notice).toEqual(protectedNotice);
+    expect(result.current.headerFocusRequest).toBe("export");
+  });
+
+  it("ゴミ箱操作で enteredProtectedMode: true が返るとダイアログを閉じて保護モードへ遷移する", () => {
+    const library = createFakeLibrary();
+    const protectedNotice: OperationNotice = { kind: "error", message: "保護モードへ移行しました。" };
+    library.restoreFromTrash.mockReturnValueOnce({
+      ok: false,
+      notice: protectedNotice,
+      enteredProtectedMode: true,
+    });
+    const { result } = renderDialogState({ library, trashEntries: threeTrash });
+    act(() => result.current.openTrash());
+
+    act(() => result.current.restoreTrash("t1"));
+    expect(result.current.screen).toEqual({ kind: "closed" });
+    expect(result.current.shellNotice?.notice).toEqual(protectedNotice);
+    expect(result.current.headerFocusRequest).toBe("export");
+  });
+
+  it("trashPermanentDelete / trashEmptyConfirm から back で戻った後に続けて別のゴミ箱操作を行える", () => {
+    const library = createFakeLibrary();
+    library.restoreFromTrash.mockReturnValue(keptResult(trashRestoredNotice("T1")));
+    library.permanentlyDeleteFromTrash.mockReturnValue(keptResult(trashEntryPermanentlyDeletedNotice("T2")));
+    const { result } = renderDialogState({ library, trashEntries: threeTrash });
+    act(() => result.current.openTrash());
+
+    act(() => result.current.openTrashPermanentDelete("t1"));
+    act(() => result.current.back());
+    expect(result.current.screen).toEqual({ kind: "trash" });
+    expect(result.current.focusTarget).toEqual({
+      kind: "trashRow",
+      trashId: "t1",
+      action: "permanentDelete",
+    });
+
+    act(() => result.current.restoreTrash("t1"));
+    expect(result.current.notices.status).toBe(trashRestoredNotice("T1").message);
+
+    act(() => result.current.openEmptyTrash());
+    act(() => result.current.back());
+    expect(result.current.screen).toEqual({ kind: "trash" });
+    expect(result.current.focusTarget).toEqual({ kind: "emptyTrashButton" });
+
+    act(() => result.current.openTrashPermanentDelete("t2"));
+    act(() => result.current.confirmTrashPermanentDelete("t2"));
+    expect(result.current.notices.status).toBe(trashEntryPermanentlyDeletedNotice("T2").message);
+  });
+
+  it("restoreTrash は成功・後始末警告・失敗のそれぞれで安全なフォーカス先と通知を設定する", () => {
+    const library = createFakeLibrary();
+    library.restoreFromTrash
+      .mockReturnValueOnce(keptResult(trashRestoredNotice("T1")))
+      .mockReturnValueOnce(keptResult(trashRestoredCleanupFailedNotice("T2")))
+      .mockReturnValueOnce(failedResult(trashEntryNotFoundNotice()));
+    const { result } = renderDialogState({ library, trashEntries: threeTrash });
+    act(() => result.current.openTrash());
+
+    act(() => result.current.restoreTrash("t1"));
+    expect(result.current.screen).toEqual({ kind: "trash" });
+    expect(result.current.focusTarget).toEqual({ kind: "trashRow", trashId: "t2", action: "restore" });
+    expect(result.current.notices.status).toBe(trashRestoredNotice("T1").message);
+
+    act(() => result.current.restoreTrash("t2"));
+    expect(result.current.notices.status).toBe("");
+    expect(result.current.notices.alert).toBe(trashRestoredCleanupFailedNotice("T2").message);
+
+    act(() => result.current.restoreTrash("t3"));
+    expect(result.current.screen).toEqual({ kind: "trash" });
+    expect(result.current.focusTarget).toEqual({ kind: "trashRow", trashId: "t2", action: "restore" });
+    expect(result.current.notices.alert).toBe(trashEntryNotFoundNotice().message);
+  });
+
+  it("confirmEmptyTrash は成功時に backToListButton、失敗時に emptyTrashButton へ戻す", () => {
+    const library = createFakeLibrary();
+    library.emptyTrash
+      .mockReturnValueOnce(failedResult(trashEmptyFailedNotice()))
+      .mockReturnValueOnce(keptResult(trashEmptiedNotice()));
+    const { result } = renderDialogState({ library, trashEntries: threeTrash });
+    act(() => result.current.openTrash());
+    act(() => result.current.openEmptyTrash());
+
+    act(() => result.current.confirmEmptyTrash());
+    expect(result.current.screen).toEqual({ kind: "trash" });
+    expect(result.current.focusTarget).toEqual({ kind: "emptyTrashButton" });
+    expect(result.current.notices.alert).toBe(trashEmptyFailedNotice().message);
+
+    act(() => result.current.openEmptyTrash());
+    act(() => result.current.confirmEmptyTrash());
+    expect(result.current.screen).toEqual({ kind: "trash" });
+    expect(result.current.focusTarget).toEqual({ kind: "backToListButton" });
+    expect(result.current.notices.status).toBe(trashEmptiedNotice().message);
   });
 });

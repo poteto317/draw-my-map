@@ -1,9 +1,9 @@
 import type { MapLibraryDialogFocusTarget } from "@/types/mapLibraryDialog";
 
-// 一覧の画面で、フォーカスの戻し先にできるボタン
-export type MapLibraryListButton = Exclude<
+// 一覧の画面で、フォーカスの戻し先にできる作成・行ボタン
+export type MapLibraryListButton = Extract<
   MapLibraryDialogFocusTarget,
-  { kind: "screenDefault" }
+  { kind: "listCreateButton" } | { kind: "row" }
 >;
 
 type MapLibraryListButtonAttributes = {
