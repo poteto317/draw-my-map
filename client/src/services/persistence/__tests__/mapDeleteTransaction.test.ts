@@ -24,6 +24,7 @@ import {
   trashBodyReadFailedForMoveNotice,
   trashCorruptForMoveNotice,
   trashMoveFailedNotice,
+  trashMoveRollbackFailedNotice,
   trashQuotaExceededNotice,
 } from "@/domain/mapLibrary/mapTrashMessages";
 import { BRANCH_MOVE_JOURNAL_KEY } from "@/services/persistence/branchMoveJournal";
@@ -445,6 +446,7 @@ describe("mapDeleteTransaction", () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
+        expect(result.notice).toEqual(trashMoveRollbackFailedNotice());
         expect(result.nextTrash?.status).toBe("ok");
         if (result.nextTrash?.status === "ok") {
           expect(result.nextTrash.entries.map((item) => item.id)).toEqual(["map-2", "old-t"]);

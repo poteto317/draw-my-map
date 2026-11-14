@@ -127,10 +127,12 @@ describe("mapTrashStorage", () => {
       const older = makeTrashEntry({
         id: "t-old",
         deletedAt: "2026-11-01T00:00:00.000Z",
+        expiresAt: "2026-12-01T00:00:00.000Z",
       });
       const newer = makeTrashEntry({
         id: "t-new",
         deletedAt: "2026-11-12T00:00:00.000Z",
+        expiresAt: "2026-12-12T00:00:00.000Z",
       });
       const { storage } = createRecordingStorage({
         initial: {

@@ -379,6 +379,7 @@ describe("useMapLibrary", () => {
       });
       const valid = trashEntry({
         id: "valid-1",
+        deletedAt: "2026-10-11T00:00:00.000Z",
         expiresAt: "2026-11-10T00:00:00.000Z",
       });
       const { result, entries } = setup({
@@ -2328,7 +2329,8 @@ describe("useMapLibrary のライブラリバックアップ境界", () => {
     describe("refreshTrash と進行中ジャーナルガード", () => {
       it("refreshTrash は他タブの更新・期限切れ清掃・破損検知で view.trashEntries と view.trashStatus を同期する", () => {
         const { result, storage, operations } = setup({ initial: singleMapInitial() });
-        const valid = trashEntry({ id: "t-valid", expiresAt: "2026-11-10T00:00:00.000Z" });
+        // 既定の deletedAt + 30日 の expiresAt（2026-11-09）を使う
+        const valid = trashEntry({ id: "t-valid" });
         const expired = trashEntry({ id: "t-expired", expiresAt: "2026-10-01T00:00:00.000Z" });
         storage.setItem(
           MAP_TRASH_INDEX_KEY,

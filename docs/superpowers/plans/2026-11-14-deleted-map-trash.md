@@ -62,12 +62,12 @@
   - JSON 構文不正・`version !== 1`・`!Array.isArray(items)` で `{ kind: "corrupt" }`。
   - 各行は `isValidMapId(id)`、`isValidMapId(originalMapId)`、`typeof name === "string"`、`typeof hasBody === "boolean"` を要求し、重複 `id` はスキップして `repaired = true`。
   - `name` は `mapIndex.ts` と同様に `normalizeStoredMapName(name)` で正規化し、元文字列と異なれば `repaired = true`。
-  - `createdAt`・`updatedAt`・`deletedAt`・`expiresAt` は `normalizeMapTimestamp` で正規化し、補正があれば `repaired = true`（`expiresAt` が不正で `UNKNOWN_MAP_TIMESTAMP` になった項目は期限切れ判定で自動清掃される）。
+  - `createdAt`・`updatedAt`・`deletedAt`・`expiresAt` は `normalizeMapTimestamp` で正規化し、補正があれば `repaired = true`（`expiresAt` が不正、または `deletedAt + 30日` を超える場合でも、`deletedAt` が有効なら `deletedAt + 30日` で再計算する。`deletedAt` も不正で `expiresAt` が `UNKNOWN_MAP_TIMESTAMP` のままの項目は期限不明として扱い、自動では削除しない）。
 - `export function encodeMapTrashIndex(index: MapTrashIndexV1): string`
 - `export function createMapTrashEntry(params: { id: string; entry: MapIndexEntry; deletedAt: Date; hasBody: boolean }): MapTrashEntry`
   - `expiresAt` は `new Date(deletedAt.getTime() + TRASH_RETENTION_MS).toISOString()`。
 - `export function isTrashEntryExpired(entry: MapTrashEntry, now: Date): boolean`
-  - `expiresAt` が無効日時または `Date.parse(entry.expiresAt) <= now.getTime()` なら `true`。
+  - `expiresAt` が無効日時・`UNKNOWN_MAP_TIMESTAMP` なら `false`、有効な日時が `Date.parse(entry.expiresAt) <= now.getTime()` なら `true`。
 - `export function partitionExpiredTrashEntries(items: readonly MapTrashEntry[], now: Date): { active: MapTrashEntry[]; expired: MapTrashEntry[] }`
 - `export function sortMapTrashEntriesForDisplay(items: readonly MapTrashEntry[]): MapTrashEntry[]`
   - `deletedAt` 降順 → `updatedAt` 降順 → `id` 昇順。
@@ -80,7 +80,7 @@
 - `mapTrashMessages.ts`:
   - ゴミ箱移動失敗・容量不足・破損時エラー・復元成功/失敗/部分警告・個別完全削除成功/警告・空にする成功/部分警告/破損初期化の通知関数を定義。
 
-- [ ] **Step 1: RED テストを追加。** `mapTrash.test.ts` で decode/encode（正常・不正外枠・`normalizeStoredMapName` 含む不正行修復・重複ID除去）、`createMapTrashEntry`（30日後 `expiresAt`）、`isTrashEntryExpired`（境界 `=== now` で期限切れ、`> now` で有効、不正日付で期限切れ）、`partitionExpiredTrashEntries`、`sortMapTrashEntriesForDisplay`、`calculateTrashRemainingDays` / `formatTrashRemainingDays`、`mapTrashMessages` をテストする。
+- [ ] **Step 1: RED テストを追加。** `mapTrash.test.ts` で decode/encode（正常・不正外枠・`normalizeStoredMapName` 含む不正行修復・重複ID除去）、`createMapTrashEntry`（30日後 `expiresAt`）、`isTrashEntryExpired`（境界 `=== now` で期限切れ、`> now` で有効、不正日付・`UNKNOWN_MAP_TIMESTAMP` は期限切れ扱いしない）、`partitionExpiredTrashEntries`、`sortMapTrashEntriesForDisplay`、`calculateTrashRemainingDays` / `formatTrashRemainingDays`、`mapTrashMessages` をテストする。
 - [ ] **Step 2: RED 確認。** `cd client && npm test -- --runInBand src/domain/mapLibrary/__tests__/mapTrash.test.ts` で FAIL を確認。
 - [ ] **Step 3: 最小実装。** `mapTrash.ts` と `mapTrashMessages.ts` を実装。
 - [ ] **Step 4: GREEN 確認。** `cd client && npm test -- --runInBand src/domain/mapLibrary/__tests__/mapTrash.test.ts && npm run typecheck && npm run lint` が PASS。

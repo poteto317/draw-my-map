@@ -33,6 +33,7 @@ import {
   trashBodyReadFailedForMoveNotice,
   trashCorruptForMoveNotice,
   trashMoveFailedNotice,
+  trashMoveRollbackFailedNotice,
   trashQuotaExceededNotice,
 } from "@/domain/mapLibrary/mapTrashMessages";
 import { isEligibleMapBackupSnapshot } from "@/domain/persistence/mapBackupSnapshot";
@@ -241,25 +242,24 @@ function resolveBodyJsonForTrashMove(
   return { ok: true, bodyJson: body.value };
 }
 
+// ゴミ箱への書き込みを取り消す。本体の削除とインデックスの戻しがすべて成功したら true。
 function rollbackTrashMoveWrite(
   storage: MapLibraryStorage,
   trashId: string,
   hasBody: boolean,
   trashIndexBeforeRaw: string | null,
-): void {
+): boolean {
   // 容量不足時も後続のインデックス復元が通るよう、先にゴミ箱本体を消して空きを作る
-  if (hasBody) {
-    removeTrashBody(storage, trashId);
-  }
+  const bodyRemoved = hasBody ? removeTrashBody(storage, trashId) : true;
   if (trashIndexBeforeRaw === null) {
-    removeMapTrashIndex(storage);
-    return;
+    return removeMapTrashIndex(storage) && bodyRemoved;
   }
   try {
     storage.setItem(MAP_TRASH_INDEX_KEY, trashIndexBeforeRaw);
   } catch {
-    // 戻し I/O 失敗時も呼び出し元へ元の書き込みエラーを返す
+    return false;
   }
+  return bodyRemoved;
 }
 
 /** アクティブマップをゴミ箱へ移動するトランザクション（本体 → ゴミ箱インデックス → アクティブ一覧）。 */
@@ -328,10 +328,17 @@ export function moveMapToTrash(input: MoveMapToTrashInput): MoveMapToTrashResult
 
   const activeWrite = writeMapIndexWithQuota(storage, plan.nextIndex);
   if (!activeWrite.ok) {
-    rollbackTrashMoveWrite(storage, trashId, hasBody, trashIndexBeforeRaw);
+    const rolledBack = rollbackTrashMoveWrite(
+      storage,
+      trashId,
+      hasBody,
+      trashIndexBeforeRaw,
+    );
     return {
       ok: false,
-      notice: indexWriteFailedNotice("マップを削除"),
+      notice: rolledBack
+        ? indexWriteFailedNotice("マップを削除")
+        : trashMoveRollbackFailedNotice(),
       ...(activeWrite.quotaExceeded ? { canPermanentDelete: true } : {}),
       nextTrash: readMapTrashState(storage),
     };

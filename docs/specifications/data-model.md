@@ -1087,7 +1087,7 @@ export type MapIndexV1 = {
 | 新規作成（`createMap`） | flush → インデックス（項目の追加・現在の id の変更） | flush の失敗: 中止（何も変わらない）。インデックスの失敗: 中止（本体は書いていないので戻す物は無い） |
 | 切り替え（`switchMap`） | flush → インデックス（現在の id の変更） | flush の失敗: 中止。インデックスの失敗: 中止（flush で書いた本体は、そのマップの最新の内容なので戻さない） |
 | 名前変更（`renameMap`） | インデックス（名前の変更） | 失敗: 名前は変わらない |
-| 開いていない別のマップの削除（`deleteMap`） | 期限切れゴミ箱清掃 → ゴミ箱本体（`hasBody: true` のみ）→ ゴミ箱インデックス → アクティブインデックス（`writeMapIndexWithQuota`）→ 旧アクティブ本体の削除 → 現在のマップの flush（再試行） | ゴミ箱書込の失敗: ゴミ箱本体を戻して中止（容量不足時は `canPermanentDelete: true`）。アクティブインデックスの失敗: ゴミ箱本体を先に消して容量を確保し、ゴミ箱インデックスを元の文字列へ戻す逆順ロールバック（容量不足時は `canPermanentDelete: true`）。旧本体の削除の失敗: 孤立した本体として残し、warning。flush の失敗: 自動保存の失敗と同じ文言の error |
+| 開いていない別のマップの削除（`deleteMap`） | 期限切れゴミ箱清掃 → ゴミ箱本体（`hasBody: true` のみ）→ ゴミ箱インデックス → アクティブインデックス（`writeMapIndexWithQuota`）→ 旧アクティブ本体の削除 → 現在のマップの flush（再試行） | ゴミ箱書込の失敗: ゴミ箱本体を戻して中止（容量不足時は `canPermanentDelete: true`）。アクティブインデックスの失敗: ゴミ箱本体を先に消して容量を確保し、ゴミ箱インデックスを元の文字列へ戻す逆順ロールバック（容量不足時は `canPermanentDelete: true`。ロールバックにも失敗したら `trashMoveRollbackFailedNotice`）。旧本体の削除の失敗: 孤立した本体として残し、warning。flush の失敗: 自動保存の失敗と同じ文言の error |
 | 開いているマップの削除（ほかにマップがある） | 期限切れゴミ箱清掃 → ゴミ箱本体（編集済みスナップショット含む、`hasBody: false` 除く）→ ゴミ箱インデックス → アクティブインデックス（項目の削除・現在の id を次のマップへ）→ セッション番号を進める → 旧アクティブ本体の削除 → 再マウント | ゴミ箱／アクティブインデックスの失敗: 同上のロールバックまたは中止（開いたまま、保存待ちも残る）。旧本体の削除の失敗: 孤立した本体として残し、warning |
 | 最後の1つの削除 | 先に新しい id を採番 → 期限切れゴミ箱清掃 → ゴミ箱本体・ゴミ箱インデックス → アクティブインデックス（項目を新しい「無題のマップ」に置き換え、現在の id も新しい id へ）→ セッション番号を進める → 旧アクティブ本体の削除 → 再マウント | 同上 |
 | フォールバック完全削除（`permanentlyDeleteMap`） | ゴミ箱キーには触れず、アクティブインデックスを更新 → （開いているマップならセッション番号を進める）→ 旧アクティブ本体の削除 → （開いていないマップなら flush 再試行） | アクティブインデックスの失敗: 中止。旧本体の削除の失敗: 孤立した本体として残し、warning |
@@ -1532,9 +1532,9 @@ export type MapTrashDecodeResult =
 - **デコード (`decodeMapTrashIndex`)**:
   - JSON 構文不正・`version !== 1`・`!Array.isArray(parsed.items)` の場合は `{ kind: "corrupt" }` を返します。
   - 各行は `isValidMapId(id)`、`isValidMapId(originalMapId)`、`typeof name === "string"`、`typeof hasBody === "boolean"` を要求し、不正行と重複 `id` はスキップして `repaired = true` とします。
-  - `name` は `normalizeStoredMapName`、日時（`createdAt`・`updatedAt`・`deletedAt`・`expiresAt`）は `normalizeMapTimestamp` で正規化し、補正があれば `repaired = true` とします。`expiresAt` が欠落または不正（`repaired = true`）であっても `deletedAt` が有効（`UNKNOWN_MAP_TIMESTAMP` でない）場合は、`expiresAt = deletedAt + TRASH_RETENTION_MS`（30 日後）の ISO 8601 文字列を再計算して復元します。`deletedAt` も不正で期限を決められない場合は `expiresAt = UNKNOWN_MAP_TIMESTAMP` とし、自動削除の対象にしません（手動の完全削除や「ゴミ箱を空にする」で削除できます）。
+  - `name` は `normalizeStoredMapName`、日時（`createdAt`・`updatedAt`・`deletedAt`・`expiresAt`）は `normalizeMapTimestamp` で正規化し、補正があれば `repaired = true` とします。`expiresAt` が欠落または不正（`repaired = true`）であっても `deletedAt` が有効（`UNKNOWN_MAP_TIMESTAMP` でない）場合は、`expiresAt = deletedAt + TRASH_RETENTION_MS`（30 日後）の ISO 8601 文字列を再計算して復元します。`expiresAt` が有効でも `deletedAt + TRASH_RETENTION_MS` を超える場合（期限が保持期間より先に延びている）は、`deletedAt` が有効なら同じく `deletedAt + 30日` に直して `repaired = true` とします。`deletedAt` も不正で期限を決められない場合は `expiresAt = UNKNOWN_MAP_TIMESTAMP` とし、自動削除の対象にしません（手動の完全削除や「ゴミ箱を空にする」で削除できます）。
 - **期限切れ判定 (`isTrashEntryExpired`)**: `expiresAt` が `UNKNOWN_MAP_TIMESTAMP` または `Date.parse(entry.expiresAt)` が非有限のときは期限不明として `false`（期限切れ扱いにせず自動削除しない）を返し、有効な日時のときのみ `<= now.getTime()` で期限切れ（`true`）と判定します。
-- **残り日数計算 (`calculateTrashRemainingDays` / `formatTrashRemainingDays`)**: `expiresAt` が `UNKNOWN_MAP_TIMESTAMP` または非有限なら `null`（表示 `"期限不明"`）、有効な日時で `diffMs = Date.parse(entry.expiresAt) - now.getTime()` が `<= 0` なら `0`（表示 `"期限切れ"`）、`> 0` なら `Math.ceil(diffMs / 86_400_000)` 日（表示 `"あと N 日"`）。
+- **残り日数計算 (`calculateTrashRemainingDays` / `formatTrashRemainingDays`)**: `expiresAt` が `UNKNOWN_MAP_TIMESTAMP` または非有限なら `null`（表示 `"期限不明"`）、有効な日時で `diffMs = Date.parse(entry.expiresAt) - now.getTime()` が `<= 0` なら `0`（表示 `"期限切れ"`）、`> 0` なら `Math.min(Math.ceil(diffMs / 86_400_000), TRASH_RETENTION_DAYS)` 日（最大 30。時計が戻った端末で `deletedAt` が未来でも 30 を超えない。表示 `"あと N 日"`）。
 - **表示順ソート (`sortMapTrashEntriesForDisplay`)**: `deletedAt` 降順 → `updatedAt` 降順 → `id` 昇順。
 - **ゴミ箱 ID 採番 (`pickTrashId`)**: 元の `target.id` がゴミ箱インデックスにも `mapTrashBodyKey(target.id)` にも存在しない（読み取り成功かつ `null`）場合は再利用し、衝突・読取失敗時は `pickUnusedMapId` で新規採番します。
 
@@ -1552,7 +1552,7 @@ export type MapTrashDecodeResult =
    - `restoreLockRef`・`!persistent`・進行中ジャーナル（`BRANCH_MOVE_JOURNAL_KEY` / `LIBRARY_RESTORE_JOURNAL_KEY`）を検査し、最後の 1 件削除時は先に `pickNewMapId` を確保します。
    - `purgeExpiredTrash` で空き容量を回収し、`resolveBodyJsonForTrashMove` で本体を取得します。開いているマップでは `readMapBody` と `readBackupSnapshot` を照合し、`readMapBody` が `null` かつ `restoreOrigin === "empty"` かつ `!hasSavedBodyThisMount` かつ空の手動配置ドキュメント（`nodes.length === 0 && layoutMode === "manual"`）なら未編集・未保存の空マップとして `bodyJson = null`（`hasBody: false`）、それ以外の適格スナップショットなら未保存編集を含む `snap.json` を採用します。`readMapBody` 失敗時は `canPermanentDelete: true` 付きで中止します。
    - ゴミ箱インデックスが `corrupt` / `unavailable` の場合は上書きせず `canPermanentDelete: true` 付きで中止します。
-   - `writeTrashBody`（`hasBody: true` のみ）→ `writeMapTrashIndex` → `writeMapIndexWithQuota` の順に書き込みます。`writeMapIndexWithQuota` 失敗時は **先に `removeTrashBody` でゴミ箱本体を削除して容量を確保し、次に `MAP_TRASH_INDEX_KEY` を変更前の文字列（以前は不在なら `removeItem`）へ戻す逆順ロールバック** を行います。`QuotaExceededError` の場合は `canPermanentDelete: true` を返します。
+   - `writeTrashBody`（`hasBody: true` のみ）→ `writeMapTrashIndex` → `writeMapIndexWithQuota` の順に書き込みます。`writeMapIndexWithQuota` 失敗時は **先に `removeTrashBody` でゴミ箱本体を削除して容量を確保し、次に `MAP_TRASH_INDEX_KEY` を変更前の文字列（以前は不在なら `removeItem`）へ戻す逆順ロールバック** を行います。`QuotaExceededError` の場合は `canPermanentDelete: true` を返します。ロールバック（ゴミ箱本体の削除とゴミ箱インデックスの戻し）がすべて成功すれば通知は `indexWriteFailedNotice("マップを削除")`、どれかに失敗すれば `trashMoveRollbackFailedNotice` を返します。どちらの場合も `nextTrash` は `readMapTrashState` で実ストレージの状態に同期します。
    - アクティブ一覧更新後は、開いているマップなら先に `advanceSessionNumber()` してから `removeMapBody` を呼び、次のマップまたは新しい空マップへ切り替えます。開いていないマップなら `removeMapBody` 後に `flushCurrentSession()` を再試行します。
 2. **フォールバック完全削除（`permanentlyDeleteMap`）**:
    - `deleteMap` が `canPermanentDelete: true` で失敗したとき、確認画面の「ゴミ箱に入れずに完全に削除」から呼び出されます。ゴミ箱キーには一切触れず、アクティブ一覧の更新・（現在マップ時）`advanceSessionNumber()`・`removeMapBody`・（非現在マップ時）`flushCurrentSession()` 再試行を行います。
@@ -1575,6 +1575,7 @@ export type MapTrashDecodeResult =
 | 容量不足でゴミ箱移動不可 | `trashQuotaExceededNotice` | `error` | `保存容量が不足しているため、マップをゴミ箱へ移動できませんでした。ゴミ箱の容量を空けるか、ゴミ箱に入れずに完全に削除してください。` |
 | 本体読取失敗でゴミ箱移動不可 | `trashBodyReadFailedForMoveNotice` | `error` | `マップの保存データを読み取れないため、ゴミ箱へ移動できませんでした。ゴミ箱に入れずに完全に削除してください。` |
 | ゴミ箱破損でゴミ箱移動不可 | `trashCorruptForMoveNotice` | `error` | `ゴミ箱のデータが破損しているため、マップをゴミ箱へ移動できませんでした。ゴミ箱を空にするか、ゴミ箱に入れずに完全に削除してください。` |
+| ゴミ箱移動の取り消し失敗（アクティブ一覧の書込失敗後のロールバック失敗） | `trashMoveRollbackFailedNotice` | `error` | `マップの削除に失敗し、ゴミ箱への移動の取り消しにも失敗しました。ページを再読み込みしてゴミ箱を確認してください。` |
 | ゴミ箱読み込み失敗（破損） | `trashCorruptNotice` | `error` | `ゴミ箱の読み込みに失敗しました。ゴミ箱を空にして初期化してください。` |
 | 復元成功 | `trashRestoredNotice` | `status` | `マップ「<名前>」をマップ一覧に復元しました。` |
 | 復元成功（ゴミ箱後始末失敗） | `trashRestoredCleanupFailedNotice` | `warning` | `マップ「<名前>」をマップ一覧に復元しましたが、ゴミ箱の後始末に失敗しました。` |
