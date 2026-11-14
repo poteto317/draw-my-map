@@ -18,10 +18,18 @@ import {
 } from "../branchMoveJournal";
 import { encodeLibraryRestoreJournal, LIBRARY_RESTORE_JOURNAL_KEY } from "../libraryRestoreJournal";
 import {
+  encodeMapTrashIndex,
+  type MapTrashEntry,
+} from "@/domain/mapLibrary/mapTrash";
+import {
   MAP_INDEX_BACKUP_STORAGE_KEY,
   MAP_INDEX_STORAGE_KEY,
   mapBodyKey,
 } from "../mapLibraryStorage";
+import {
+  MAP_TRASH_INDEX_KEY,
+  mapTrashBodyKey,
+} from "../mapTrashStorage";
 import { runMapLibraryStartup } from "../mapLibraryStartupRunner";
 import { MAP_STORAGE_KEY } from "../mapStorage";
 
@@ -783,6 +791,126 @@ describe("runMapLibraryStartup", () => {
       expect(result.mode).toBe("protected");
       expect(result.notice?.message).toContain(LIBRARY_RESTORE_JOURNAL_KEY);
       expect(f.operations).toEqual([]);
+    });
+  });
+
+  describe("起動時のゴミ箱期限切れ清掃", () => {
+    function makeTrashEntry(
+      overrides: Partial<MapTrashEntry> & { id: string },
+    ): MapTrashEntry {
+      return {
+        id: overrides.id,
+        originalMapId: overrides.originalMapId ?? `orig-${overrides.id}`,
+        name: overrides.name ?? `ゴミ箱 ${overrides.id}`,
+        createdAt: overrides.createdAt ?? "2026-09-01T00:00:00.000Z",
+        updatedAt: overrides.updatedAt ?? "2026-09-05T00:00:00.000Z",
+        deletedAt: overrides.deletedAt ?? "2026-09-10T00:00:00.000Z",
+        expiresAt: overrides.expiresAt ?? "2026-10-10T00:00:00.000Z",
+        hasBody: overrides.hasBody ?? true,
+      };
+    }
+
+    it("通常モード起動時に期限切れのゴミ箱エントリと本体を清掃する", () => {
+      const index = untitledIndex("map-x", false);
+      const expired = makeTrashEntry({
+        id: "t-exp",
+        expiresAt: NOW, // NOW と一致は期限切れ
+        hasBody: true,
+      });
+      const active = makeTrashEntry({
+        id: "t-act",
+        deletedAt: "2026-10-15T00:00:00.000Z",
+        expiresAt: "2026-11-14T00:00:00.000Z",
+        hasBody: true,
+      });
+      const { storage, entries } = createRecordingStorage({
+        initial: {
+          [MAP_INDEX_STORAGE_KEY]: encodeMapIndex(index),
+          [MAP_TRASH_INDEX_KEY]: encodeMapTrashIndex({
+            version: 1,
+            items: [expired, active],
+          }),
+          [mapTrashBodyKey("t-exp")]: '{"expired":true}',
+          [mapTrashBodyKey("t-act")]: '{"active":true}',
+        },
+      });
+
+      expect(runMapLibraryStartup(storage, createDeps())).toEqual({
+        mode: "persistent",
+        index,
+        notice: null,
+      });
+      expect(entries()).toEqual({
+        [MAP_INDEX_STORAGE_KEY]: encodeMapIndex(index),
+        [MAP_TRASH_INDEX_KEY]: encodeMapTrashIndex({
+          version: 1,
+          items: [active],
+        }),
+        [mapTrashBodyKey("t-act")]: '{"active":true}',
+      });
+    });
+
+    it("期限切れがなければゴミ箱の書き込み・削除を行わない", () => {
+      const index = untitledIndex("map-x", false);
+      const active = makeTrashEntry({
+        id: "t-act",
+        expiresAt: "2026-11-14T00:00:00.000Z",
+      });
+      const { storage, operations } = createRecordingStorage({
+        initial: {
+          [MAP_INDEX_STORAGE_KEY]: encodeMapIndex(index),
+          [MAP_TRASH_INDEX_KEY]: encodeMapTrashIndex({
+            version: 1,
+            items: [active],
+          }),
+          [mapTrashBodyKey("t-act")]: '{"active":true}',
+        },
+      });
+
+      expect(runMapLibraryStartup(storage, createDeps()).mode).toBe("persistent");
+      expect(operations).toEqual([]);
+    });
+
+    it("ゴミ箱インデックスが破損していても通常モード起動を成功させ、破損データを削除しない", () => {
+      const index = untitledIndex("map-x", false);
+      const { storage, operations, entries } = createRecordingStorage({
+        initial: {
+          [MAP_INDEX_STORAGE_KEY]: encodeMapIndex(index),
+          [MAP_TRASH_INDEX_KEY]: "{broken",
+          [mapTrashBodyKey("t-1")]: "{}",
+        },
+      });
+
+      expect(runMapLibraryStartup(storage, createDeps())).toEqual({
+        mode: "persistent",
+        index,
+        notice: null,
+      });
+      expect(operations).toEqual([]);
+      expect(entries()[MAP_TRASH_INDEX_KEY]).toBe("{broken");
+      expect(entries()[mapTrashBodyKey("t-1")]).toBe("{}");
+    });
+
+    it("保護モード結果になった場合はゴミ箱清掃を実行しない", () => {
+      const expired = makeTrashEntry({
+        id: "t-exp",
+        expiresAt: "2026-10-01T00:00:00.000Z",
+        hasBody: true,
+      });
+      const { storage, operations, entries } = createRecordingStorage({
+        initial: {
+          [BRANCH_MOVE_JOURNAL_KEY]: "{",
+          [MAP_TRASH_INDEX_KEY]: encodeMapTrashIndex({
+            version: 1,
+            items: [expired],
+          }),
+          [mapTrashBodyKey("t-exp")]: '{"expired":true}',
+        },
+      });
+
+      expect(runMapLibraryStartup(storage, createDeps()).mode).toBe("protected");
+      expect(operations).toEqual([]);
+      expect(entries()[mapTrashBodyKey("t-exp")]).toBe('{"expired":true}');
     });
   });
 });

@@ -17,8 +17,16 @@ type MapLibraryListScreenProps = {
   onOpenDelete: (mapId: string) => void;
   onPrepareBackup: () => void;
   onSelectRestoreFile: (file: File) => void;
+  trashCount: number;
+  trashStatus: "ok" | "corrupt";
+  onOpenTrash: () => void;
   storageMode: "persistent" | "protected";
 };
+
+function trashButtonLabel(trashCount: number, trashStatus: "ok" | "corrupt"): string {
+  if (trashStatus === "corrupt") return "ゴミ箱（要確認）";
+  return trashCount > 0 ? `ゴミ箱（${trashCount}）` : "ゴミ箱";
+}
 
 const buttonClassName = "shrink-0 rounded-md bg-zinc-100 px-3 py-1 text-sm text-zinc-700 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:bg-zinc-700 dark:text-zinc-200";
 
@@ -33,6 +41,9 @@ export function MapLibraryListScreen({
   onOpenDelete,
   onPrepareBackup,
   onSelectRestoreFile,
+  trashCount,
+  trashStatus,
+  onOpenTrash,
   storageMode,
 }: MapLibraryListScreenProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -103,6 +114,22 @@ export function MapLibraryListScreen({
         })}
       </ul>
       <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          className={buttonClassName}
+          data-map-library-action="trash"
+          onKeyDown={suppressBackupRestoreActionKey}
+          onClick={(event) => {
+            if (event.detail > 1) return;
+            if (isProtected) {
+              rejectProtected();
+              return;
+            }
+            onOpenTrash();
+          }}
+        >
+          {trashButtonLabel(trashCount, trashStatus)}
+        </button>
         <button
           type="button"
           className={buttonClassName}

@@ -3,10 +3,13 @@ import {
   encodeMapIndex,
   findMapEntry,
   isValidMapId,
+  pickUnusedMapId,
   type MapIndexV1,
 } from "@/domain/mapLibrary/mapIndex";
 import type { MapLibraryStartupSnapshot } from "@/domain/mapLibrary/mapLibraryStartup";
 import type { MapDocumentResult } from "@/types/mapDocument";
+import { BRANCH_MOVE_JOURNAL_KEY } from "./branchMoveJournal";
+import { LIBRARY_RESTORE_JOURNAL_KEY } from "./libraryRestoreJournal";
 import {
   readStoredMapJson,
   removeStoredMapJson,
@@ -146,6 +149,24 @@ export function writeMapIndex(
   return setItemSafely(storage, MAP_INDEX_STORAGE_KEY, encodeMapIndex(index));
 }
 
+export function writeMapIndexWithQuota(
+  storage: MapLibraryStorage,
+  index: MapIndexV1,
+): { ok: true } | { ok: false; quotaExceeded: boolean; error: string } {
+  const outcome = trySetItem(
+    storage,
+    MAP_INDEX_STORAGE_KEY,
+    encodeMapIndex(index),
+  );
+  return outcome === "ok"
+    ? { ok: true }
+    : {
+        ok: false,
+        quotaExceeded: outcome === "quotaExceeded",
+        error: WRITE_ERROR,
+      };
+}
+
 export function isMapInStorageIndex(
   storage: MapLibraryStorage,
   mapId: string,
@@ -195,6 +216,49 @@ export function removeMapBody(
 export function hasMapBody(storage: MapLibraryStorage, id: string): boolean {
   const body = readMapBody(storage, id);
   return !body.ok || body.value !== null;
+}
+
+// 新しいマップの id。インデックスの id と、本体が残っている id（孤立した本体）を使用済みとして避ける
+export function pickNewMapId(
+  storage: MapLibraryStorage,
+  index: MapIndexV1,
+  generateId: () => string,
+): string | null {
+  return pickUnusedMapId(
+    generateId,
+    (candidate) => findMapEntry(index, candidate) !== null || hasMapBody(storage, candidate),
+  );
+}
+
+/** 進行中の枝移動・ライブラリ復元ジャーナルがあるか（読取失敗時は安全側で true） */
+export function hasActiveJournal(storage: MapLibraryStorage): boolean {
+  try {
+    return (
+      storage.getItem(BRANCH_MOVE_JOURNAL_KEY) !== null ||
+      storage.getItem(LIBRARY_RESTORE_JOURNAL_KEY) !== null
+    );
+  } catch {
+    return true;
+  }
+}
+
+/** ストレージ上のインデックス JSON が期待する論理状態と一致すれば生の文字列を返す（ロールバック用） */
+export function readMatchingIndexRaw(
+  storage: MapLibraryStorage,
+  index: MapIndexV1,
+): string | null {
+  try {
+    const raw = storage.getItem(MAP_INDEX_STORAGE_KEY);
+    if (raw === null) return null;
+    const decoded = decodeMapIndex(raw);
+    return decoded.kind === "ok" &&
+      !decoded.repaired &&
+      encodeMapIndex(decoded.index) === encodeMapIndex(index)
+      ? raw
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 export function writeCorruptIndexBackup(

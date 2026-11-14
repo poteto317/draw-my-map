@@ -1,18 +1,24 @@
+import { BRANCH_MOVE_JOURNAL_KEY } from "@/services/persistence/branchMoveJournal";
+import { LIBRARY_RESTORE_JOURNAL_KEY } from "@/services/persistence/libraryRestoreJournal";
 import {
   MAP_BODY_KEY_PREFIX,
   MAP_INDEX_BACKUP_STORAGE_KEY,
   MAP_INDEX_STORAGE_KEY,
   getBrowserMapLibraryStorage,
+  hasActiveJournal,
   hasMapBody,
   isMapInStorageIndex,
   mapBodyKey,
+  pickNewMapId,
   readMapBody,
   readMapLibrarySnapshot,
+  readMatchingIndexRaw,
   removeLegacyMap,
   removeMapBody,
   writeCorruptIndexBackup,
   writeMapBody,
   writeMapIndex,
+  writeMapIndexWithQuota,
   writeMigratedMap,
 } from "@/services/persistence/mapLibraryStorage";
 import { createRecordingStorage } from "@/testing/mapLibraryTestStorage";
@@ -131,6 +137,31 @@ describe("mapLibraryStorage", () => {
       });
     });
 
+    it("writeMapIndexWithQuota", () => {
+      const ok = createRecordingStorage();
+      expect(writeMapIndexWithQuota(ok.storage, index)).toEqual({ ok: true });
+      expect(ok.entries()).toEqual({
+        [MAP_INDEX_STORAGE_KEY]: encodeMapIndex(index),
+      });
+
+      const quotaNg = createRecordingStorage({ failSetItem: () => true });
+      expect(writeMapIndexWithQuota(quotaNg.storage, index)).toEqual({
+        ok: false,
+        quotaExceeded: true,
+        error: expect.any(String),
+      });
+
+      const securityNg = createRecordingStorage({
+        failSetItem: () => true,
+        failSetItemError: "SecurityError",
+      });
+      expect(writeMapIndexWithQuota(securityNg.storage, index)).toEqual({
+        ok: false,
+        quotaExceeded: false,
+        error: expect.any(String),
+      });
+    });
+
     it("writeMapBody", () => {
       const ok = createRecordingStorage();
       expect(writeMapBody(ok.storage, "abc", "{}")).toEqual({ ok: true });
@@ -210,6 +241,25 @@ describe("mapLibraryStorage", () => {
 
       const ng = createRecordingStorage({ failGetItem: true });
       expect(hasMapBody(ng.storage, "abc")).toBe(true);
+    });
+  });
+
+  describe("pickNewMapId", () => {
+    it("インデックスにある id と、本体だけが残っている id を避ける", () => {
+      const { storage } = createRecordingStorage({
+        initial: { [mapBodyKey("orphan")]: "{}" },
+      });
+      const ids = ["abc", "orphan", "fresh"];
+      const generateId = jest.fn(() => ids.shift()!);
+
+      expect(pickNewMapId(storage, index, generateId)).toBe("fresh");
+      expect(generateId).toHaveBeenCalledTimes(3);
+    });
+
+    it("本体を読めない id は使用済みとして扱い、使える id を作れなければ null を返す", () => {
+      const { storage } = createRecordingStorage({ failGetItem: true });
+
+      expect(pickNewMapId(storage, index, () => "fresh")).toBeNull();
     });
   });
 
@@ -591,6 +641,83 @@ describe("mapLibraryStorage", () => {
           [mapBodyKey("abc")]: bodyJson,
           [MAP_INDEX_STORAGE_KEY]: encodeMapIndex(retryIndex),
         });
+      });
+    });
+
+    describe("readMatchingIndexRaw", () => {
+      it("ストレージ上のインデックスと一致する場合は生の JSON を返す", () => {
+        const indexA = createSingleMapIndex(
+          createMapIndexEntry("a", "A", "2026-01-01T00:00:00.000Z"),
+          false,
+        );
+        const raw = encodeMapIndex(indexA);
+        const { storage } = createRecordingStorage({
+          initial: { [MAP_INDEX_STORAGE_KEY]: raw },
+        });
+
+        expect(readMatchingIndexRaw(storage, indexA)).toBe(raw);
+      });
+
+      it("キー未存在・インデックス不一致・破損・修復・例外発生時は null を返す", () => {
+        const indexA = createSingleMapIndex(
+          createMapIndexEntry("a", "A", "2026-01-01T00:00:00.000Z"),
+          false,
+        );
+        const indexB = createSingleMapIndex(
+          createMapIndexEntry("b", "B", "2026-01-01T00:00:00.000Z"),
+          false,
+        );
+
+        const empty = createRecordingStorage();
+        expect(readMatchingIndexRaw(empty.storage, indexA)).toBeNull();
+
+        const mismatched = createRecordingStorage({
+          initial: { [MAP_INDEX_STORAGE_KEY]: encodeMapIndex(indexB) },
+        });
+        expect(readMatchingIndexRaw(mismatched.storage, indexA)).toBeNull();
+
+        const corrupt = createRecordingStorage({
+          initial: { [MAP_INDEX_STORAGE_KEY]: "{not-json" },
+        });
+        expect(readMatchingIndexRaw(corrupt.storage, indexA)).toBeNull();
+
+        const repaired = createRecordingStorage({
+          initial: {
+            [MAP_INDEX_STORAGE_KEY]: JSON.stringify({
+              version: 1,
+              legacyCleanupPending: false,
+              items: [
+                {
+                  id: "a",
+                  name: "A",
+                  updatedAt: "2026-01-01T00:00:00.000Z",
+                },
+                { id: "" },
+              ],
+            }),
+          },
+        });
+        expect(readMatchingIndexRaw(repaired.storage, indexA)).toBeNull();
+
+        const throwing = createRecordingStorage({ failGetItem: true });
+        expect(readMatchingIndexRaw(throwing.storage, indexA)).toBeNull();
+      });
+    });
+
+    describe("hasActiveJournal", () => {
+      it("枝移動または復元ジャーナルが存在する場合と読取失敗時は true を返す", () => {
+        expect(hasActiveJournal(createRecordingStorage().storage)).toBe(false);
+        expect(
+          hasActiveJournal(
+            createRecordingStorage({ initial: { [BRANCH_MOVE_JOURNAL_KEY]: "{}" } }).storage,
+          ),
+        ).toBe(true);
+        expect(
+          hasActiveJournal(
+            createRecordingStorage({ initial: { [LIBRARY_RESTORE_JOURNAL_KEY]: "{}" } }).storage,
+          ),
+        ).toBe(true);
+        expect(hasActiveJournal(createRecordingStorage({ failGetItem: true }).storage)).toBe(true);
       });
     });
   });

@@ -2,8 +2,11 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { MapLibraryDialog } from "@/components/layout/MapLibraryDialog";
 import type { MapIndexEntry } from "@/domain/mapLibrary/mapIndex";
+import type { MapTrashEntry } from "@/domain/mapLibrary/mapTrash";
 
 type Props = Parameters<typeof MapLibraryDialog>[0];
+
+const NOW = new Date("2026-11-14T12:00:00.000Z");
 
 const maps: MapIndexEntry[] = [
   {
@@ -20,11 +23,37 @@ const maps: MapIndexEntry[] = [
   },
 ];
 
+const trashEntries: MapTrashEntry[] = [
+  {
+    id: "t1",
+    originalMapId: "m1",
+    name: "削除済みA",
+    createdAt: "2026-10-01T00:00:00.000Z",
+    updatedAt: "2026-10-21T03:00:00.000Z",
+    deletedAt: "2026-11-10T01:05:00.000Z",
+    expiresAt: "2026-12-10T01:05:00.000Z",
+    hasBody: true,
+  },
+  {
+    id: "t2",
+    originalMapId: "m2",
+    name: "削除済みB",
+    createdAt: "2026-10-01T00:00:00.000Z",
+    updatedAt: "2026-10-20T03:00:00.000Z",
+    deletedAt: "2026-11-09T01:05:00.000Z",
+    expiresAt: "2026-12-09T01:05:00.000Z",
+    hasBody: false,
+  },
+];
+
 function createProps(overrides: Partial<Props> = {}): Props {
   return {
     screen: { kind: "list" },
     maps,
     currentMapId: "a",
+    trashEntries: [],
+    trashStatus: "ok",
+    now: NOW,
     notices: { status: "", alert: "", sequence: 0 },
     focusTarget: null,
     onFocusTargetApplied: jest.fn(),
@@ -33,11 +62,18 @@ function createProps(overrides: Partial<Props> = {}): Props {
     onOpenCreate: jest.fn(),
     onOpenRename: jest.fn(),
     onOpenDelete: jest.fn(),
+    onOpenTrash: jest.fn(),
     onSwitch: jest.fn(),
     onCancel: jest.fn(),
     onSubmitCreate: jest.fn(),
     onSubmitRename: jest.fn(),
     onConfirmDelete: jest.fn(),
+    onConfirmPermanentDeleteActive: jest.fn(),
+    onRestoreTrash: jest.fn(),
+    onOpenTrashPermanentDelete: jest.fn(),
+    onConfirmTrashPermanentDelete: jest.fn(),
+    onOpenEmptyTrash: jest.fn(),
+    onConfirmEmptyTrash: jest.fn(),
     onPrepareBackup: jest.fn(),
     onDownloadBackup: jest.fn(),
     onSelectRestoreFile: jest.fn(),
@@ -67,7 +103,7 @@ describe("MapLibraryDialog", () => {
       { kind: "delete", mapId: "b" } as const,
       "マップを削除",
       () => screen.getByRole("button", { name: "キャンセル" }),
-      "マップ「B」を削除します。削除したマップは元に戻せません。",
+      "マップ「B」をゴミ箱に移動します。ゴミ箱から 30 日間復元できます。",
     ],
   ])("%o の画面の既定のフォーカス先は、見出しを名前に持つ group の中にある", async (screenState, name, focused, description) => {
     render(
@@ -249,7 +285,7 @@ describe("MapLibraryDialog", () => {
     const descriptionId = group.getAttribute("aria-describedby");
     expect(descriptionId).toBeTruthy();
     expect(document.getElementById(descriptionId as string)).toHaveTextContent(
-      /^マップ「B」を削除します。削除したマップは元に戻せません。$/,
+      /^マップ「B」をゴミ箱に移動します。ゴミ箱から 30 日間復元できます。$/,
     );
   });
 
@@ -427,7 +463,7 @@ describe("MapLibraryDialog", () => {
       );
 
       expect(descriptionText()).toBe(
-        "マップ「A」を削除します。削除したマップは元に戻せません。開いているマップです。削除すると「B」を開きます。",
+        "マップ「A」をゴミ箱に移動します。ゴミ箱から 30 日間復元できます。開いているマップです。削除すると「B」を開きます。",
       );
     });
 
@@ -443,7 +479,7 @@ describe("MapLibraryDialog", () => {
       );
 
       expect(descriptionText()).toBe(
-        "マップ「B」を削除します。削除したマップは元に戻せません。",
+        "マップ「B」をゴミ箱に移動します。ゴミ箱から 30 日間復元できます。",
       );
     });
 
@@ -459,7 +495,7 @@ describe("MapLibraryDialog", () => {
       );
 
       expect(descriptionText()).toBe(
-        "マップ「A」を削除します。削除したマップは元に戻せません。最後のマップのため、削除すると空の「無題のマップ」を作成します。",
+        "マップ「A」をゴミ箱に移動します。ゴミ箱から 30 日間復元できます。最後のマップのため、削除すると空の「無題のマップ」を作成します。",
       );
     });
   });
@@ -568,5 +604,156 @@ describe("MapLibraryDialog", () => {
     expect(props.onOpenRename).toHaveBeenCalledWith("a");
     expect(props.onOpenCreate).toHaveBeenCalledTimes(1);
     expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  describe("ゴミ箱と完全削除フォールバック", () => {
+    it("削除確認で allowPermanentDelete が true のとき完全削除ボタンを出し、押下で onConfirmPermanentDeleteActive を呼ぶ", async () => {
+      const user = userEvent.setup();
+      const props = createProps({
+        screen: { kind: "delete", mapId: "b", allowPermanentDelete: true },
+      });
+      render(<MapLibraryDialog {...props} />);
+
+      await user.click(screen.getByRole("button", { name: "ゴミ箱に入れずに完全に削除" }));
+      expect(props.onConfirmPermanentDeleteActive).toHaveBeenCalledTimes(1);
+      expect(props.onConfirmPermanentDeleteActive).toHaveBeenCalledWith("b");
+    });
+
+    it("一覧のゴミ箱ボタンから onOpenTrash を呼び、trashButton フォーカス先でゴミ箱ボタンにフォーカスする", async () => {
+      const user = userEvent.setup();
+      const props = createProps({
+        trashEntries,
+        focusTarget: { kind: "trashButton" },
+      });
+      render(<MapLibraryDialog {...props} />);
+
+      const trashButton = screen.getByRole("button", { name: "ゴミ箱（2）" });
+      await waitFor(() => expect(trashButton).toHaveFocus());
+
+      await user.click(trashButton);
+      expect(props.onOpenTrash).toHaveBeenCalledTimes(1);
+    });
+
+    it("ゴミ箱画面の既定フォーカス先は項目があれば先頭行の「復元」、空または破損時は「一覧に戻る」", async () => {
+      const { rerender } = render(
+        <MapLibraryDialog
+          {...createProps({
+            screen: { kind: "trash" },
+            trashEntries,
+            focusTarget: { kind: "screenDefault" },
+          })}
+        />,
+      );
+
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "復元: 削除済みA" })).toHaveFocus(),
+      );
+
+      rerender(
+        <MapLibraryDialog
+          {...createProps({
+            screen: { kind: "trash" },
+            trashEntries: [],
+            focusTarget: { kind: "screenDefault" },
+          })}
+        />,
+      );
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "一覧に戻る" })).toHaveFocus(),
+      );
+    });
+
+    it("trashRow・emptyTrashButton・backToListButton の各フォーカス先を適用し、trashRow 不在時は一覧に戻るへフォールバックする", async () => {
+      const props = createProps({
+        screen: { kind: "trash" },
+        trashEntries,
+        focusTarget: { kind: "trashRow", trashId: "t2", action: "permanentDelete" },
+      });
+      const { rerender } = render(<MapLibraryDialog {...props} />);
+
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "完全に削除: 削除済みB" })).toHaveFocus(),
+      );
+
+      rerender(
+        <MapLibraryDialog
+          {...props}
+          focusTarget={{ kind: "emptyTrashButton" }}
+        />,
+      );
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "ゴミ箱を空にする" })).toHaveFocus(),
+      );
+
+      rerender(
+        <MapLibraryDialog
+          {...props}
+          focusTarget={{ kind: "backToListButton" }}
+        />,
+      );
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "一覧に戻る" })).toHaveFocus(),
+      );
+
+      rerender(
+        <MapLibraryDialog
+          {...props}
+          focusTarget={{ kind: "trashRow", trashId: "missing", action: "restore" }}
+        />,
+      );
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "一覧に戻る" })).toHaveFocus(),
+      );
+    });
+
+    it("trashPermanentDelete と trashEmptyConfirm は aria-describedby とキャンセル既定フォーカスを持ち、確定コールバックを呼ぶ", async () => {
+      const user = userEvent.setup();
+      const props = createProps({
+        screen: { kind: "trashPermanentDelete", trashId: "t1" },
+        trashEntries,
+        focusTarget: { kind: "screenDefault" },
+      });
+      const { rerender } = render(<MapLibraryDialog {...props} />);
+
+      const permGroup = screen.getByRole("group", { name: "完全に削除" });
+      await waitFor(() =>
+        expect(within(permGroup).getByRole("button", { name: "キャンセル" })).toHaveFocus(),
+      );
+      expect(permGroup).toHaveAccessibleDescription(
+        "ゴミ箱からマップ「削除済みA」を完全に削除します。この操作は元に戻せません。",
+      );
+      await user.click(within(permGroup).getByRole("button", { name: "完全に削除" }));
+      expect(props.onConfirmTrashPermanentDelete).toHaveBeenCalledWith("t1");
+
+      rerender(
+        <MapLibraryDialog
+          {...props}
+          screen={{ kind: "trashEmptyConfirm" }}
+          focusTarget={{ kind: "screenDefault" }}
+        />,
+      );
+      const emptyGroup = screen.getByRole("group", { name: "ゴミ箱を空にする" });
+      await waitFor(() =>
+        expect(within(emptyGroup).getByRole("button", { name: "キャンセル" })).toHaveFocus(),
+      );
+      expect(emptyGroup).toHaveAccessibleDescription(
+        "ゴミ箱内の 2 件のマップをすべて完全に削除します。この操作は元に戻せません。",
+      );
+      await user.click(within(emptyGroup).getByRole("button", { name: "ゴミ箱を空にする" }));
+      expect(props.onConfirmEmptyTrash).toHaveBeenCalledTimes(1);
+    });
+
+    it("trashPermanentDelete の対象が不在のときは描画せず onCancel を1回呼び、focusTarget を消費しない", () => {
+      const props = createProps({
+        screen: { kind: "trashPermanentDelete", trashId: "missing" },
+        trashEntries,
+        focusTarget: { kind: "screenDefault" },
+      });
+      render(<MapLibraryDialog {...props} />);
+
+      expect(screen.queryByRole("button", { name: "完全に削除" })).not.toBeInTheDocument();
+      expect(props.onCancel).toHaveBeenCalledTimes(1);
+      expect(props.onFocusTargetApplied).not.toHaveBeenCalled();
+    });
   });
 });

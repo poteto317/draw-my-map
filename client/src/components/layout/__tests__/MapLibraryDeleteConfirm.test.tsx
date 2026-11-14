@@ -45,7 +45,7 @@ describe("MapLibraryDeleteConfirm", () => {
       "heading",
     );
     expect(description()).toHaveTextContent(
-      /^マップ「旅行の計画」を削除します。削除したマップは元に戻せません。$/,
+      /^マップ「旅行の計画」をゴミ箱に移動します。ゴミ箱から 30 日間復元できます。$/,
     );
   });
 
@@ -57,7 +57,7 @@ describe("MapLibraryDeleteConfirm", () => {
     );
 
     expect(description()).toHaveTextContent(
-      /^マップ「旅行の計画」を削除します。削除したマップは元に戻せません。開いているマップです。削除すると「読書メモ」を開きます。$/,
+      /^マップ「旅行の計画」をゴミ箱に移動します。ゴミ箱から 30 日間復元できます。開いているマップです。削除すると「読書メモ」を開きます。$/,
     );
   });
 
@@ -67,7 +67,7 @@ describe("MapLibraryDeleteConfirm", () => {
     );
 
     expect(description()).toHaveTextContent(
-      /^マップ「旅行の計画」を削除します。削除したマップは元に戻せません。最後のマップのため、削除すると空の「無題のマップ」を作成します。$/,
+      /^マップ「旅行の計画」をゴミ箱に移動します。ゴミ箱から 30 日間復元できます。最後のマップのため、削除すると空の「無題のマップ」を作成します。$/,
     );
   });
 
@@ -117,5 +117,49 @@ describe("MapLibraryDeleteConfirm", () => {
     // キーボードによる click は detail が 0
     fireEvent.click(confirmButton(), { detail: 0 });
     expect(props.onConfirm).toHaveBeenCalledTimes(2);
+  });
+
+  it("allowPermanentDelete が無効のときは「ゴミ箱に入れずに完全に削除」ボタンを表示しない", () => {
+    render(<MapLibraryDeleteConfirm {...createProps()} />);
+
+    expect(
+      screen.queryByRole("button", { name: "ゴミ箱に入れずに完全に削除" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("allowPermanentDelete が true のときは完全削除ボタンを表示し、通常操作のみ onConfirmPermanentDelete を呼ぶ", () => {
+    const onConfirmPermanentDelete = jest.fn();
+    render(
+      <MapLibraryDeleteConfirm
+        {...createProps({
+          allowPermanentDelete: true,
+          onConfirmPermanentDelete,
+        })}
+      />,
+    );
+
+    const permanentButton = screen.getByRole("button", {
+      name: "ゴミ箱に入れずに完全に削除",
+    });
+
+    for (const keyEvent of [
+      { key: "Enter", repeat: true },
+      { key: " ", repeat: true },
+      { key: "Enter", isComposing: true },
+      { key: "Enter", keyCode: 229 },
+    ]) {
+      expect(fireEvent.keyDown(permanentButton, keyEvent)).toBe(false);
+    }
+    expect(fireEvent.keyDown(permanentButton, { key: "Enter" })).toBe(true);
+    expect(fireEvent.keyDown(permanentButton, { key: " " })).toBe(true);
+
+    fireEvent.click(permanentButton, { detail: 2 });
+    expect(onConfirmPermanentDelete).not.toHaveBeenCalled();
+
+    fireEvent.click(permanentButton, { detail: 1 });
+    expect(onConfirmPermanentDelete).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(permanentButton, { detail: 0 });
+    expect(onConfirmPermanentDelete).toHaveBeenCalledTimes(2);
   });
 });

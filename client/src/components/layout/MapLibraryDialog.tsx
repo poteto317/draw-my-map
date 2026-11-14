@@ -1,12 +1,15 @@
 "use client";
 
-import { useId, useLayoutEffect, useRef } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import { handleDialogClickCapture } from "@/components/layout/dialogClickCapture";
 import { MapLibraryDeleteConfirm } from "@/components/layout/MapLibraryDeleteConfirm";
 import { MapLibraryBackupConfirm } from "@/components/layout/MapLibraryBackupConfirm";
 import { MapLibraryRestoreConfirm } from "@/components/layout/MapLibraryRestoreConfirm";
 import { MapLibraryListScreen } from "@/components/layout/MapLibraryListScreen";
 import { MapLibraryNameForm } from "@/components/layout/MapLibraryNameForm";
+import { MapLibraryTrashEmptyConfirm } from "@/components/layout/MapLibraryTrashEmptyConfirm";
+import { MapLibraryTrashPermanentDeleteConfirm } from "@/components/layout/MapLibraryTrashPermanentDeleteConfirm";
+import { MapLibraryTrashScreen } from "@/components/layout/MapLibraryTrashScreen";
 import { mapLibraryListButtonSelector } from "@/components/layout/mapLibraryListButtons";
 import { suppressBackupRestoreActionKey } from "@/components/layout/suppressBackupRestoreActionKey";
 import { useReannouncedNotice } from "@/components/layout/useReannouncedNotice";
@@ -18,6 +21,7 @@ import {
   describeMapRemoval,
   type MapIndexEntry,
 } from "@/domain/mapLibrary/mapIndex";
+import type { MapTrashEntry } from "@/domain/mapLibrary/mapTrash";
 import type {
   MapLibraryDialogFocusTarget,
   MapLibraryDialogNotices,
@@ -28,6 +32,9 @@ type MapLibraryDialogProps = {
   screen: OpenMapLibraryDialogScreen;
   maps: readonly MapIndexEntry[]; // 表示順
   currentMapId: string;
+  trashEntries: readonly MapTrashEntry[];
+  trashStatus: "ok" | "corrupt";
+  now?: Date;
   notices: MapLibraryDialogNotices;
   focusTarget: MapLibraryDialogFocusTarget | null;
   onFocusTargetApplied: () => void;
@@ -36,11 +43,18 @@ type MapLibraryDialogProps = {
   onOpenCreate: () => void;
   onOpenRename: (mapId: string) => void;
   onOpenDelete: (mapId: string) => void;
+  onOpenTrash: () => void;
   onSwitch: (mapId: string) => void;
   onCancel: () => void;
   onSubmitCreate: (nameInput: string) => void;
   onSubmitRename: (mapId: string, nameInput: string) => void;
   onConfirmDelete: (mapId: string) => void;
+  onConfirmPermanentDeleteActive: (mapId: string) => void;
+  onRestoreTrash: (trashId: string) => void;
+  onOpenTrashPermanentDelete: (trashId: string) => void;
+  onConfirmTrashPermanentDelete: (trashId: string) => void;
+  onOpenEmptyTrash: () => void;
+  onConfirmEmptyTrash: () => void;
   onPrepareBackup: () => void;
   onDownloadBackup: () => void;
   onSelectRestoreFile: (file: File) => void;
@@ -51,10 +65,82 @@ type MapLibraryDialogProps = {
   onMouseClick: () => void;
 };
 
+const LIBRARY_ACTION_BY_TARGET = {
+  backupButton: "backup",
+  restoreButton: "restore",
+  trashButton: "trash",
+  emptyTrashButton: "emptyTrash",
+  backToListButton: "backToList",
+} as const;
+
+function queryLibraryAction(dialog: HTMLElement, action: string): HTMLElement | null {
+  return dialog.querySelector<HTMLElement>(`[data-map-library-action="${action}"]`);
+}
+
+function resolveFocusElement(
+  dialog: HTMLElement,
+  focusTarget: MapLibraryDialogFocusTarget,
+  screenKind: OpenMapLibraryDialogScreen["kind"],
+  currentMapId: string,
+  refs: { cancelButton: HTMLButtonElement | null; nameInput: HTMLInputElement | null },
+): HTMLElement | null {
+  if (focusTarget.kind === "screenDefault") {
+    switch (screenKind) {
+      case "list":
+        return dialog.querySelector<HTMLElement>(
+          mapLibraryListButtonSelector({ kind: "row", mapId: currentMapId, action: "open" }),
+        );
+      case "trash":
+        return (
+          dialog.querySelector<HTMLElement>('[data-trash-action="restore"]')
+          ?? queryLibraryAction(dialog, "backToList")
+        );
+      case "delete":
+      case "backupConfirm":
+      case "restoreConfirm":
+      case "restoreReading":
+      case "trashPermanentDelete":
+      case "trashEmptyConfirm":
+        // 取り消せない操作または中断操作なので、既定を安全側にする
+        return refs.cancelButton;
+      case "create":
+      case "rename":
+        return refs.nameInput;
+    }
+  }
+  if (focusTarget.kind === "trashRow") {
+    return (
+      dialog.querySelector<HTMLElement>(
+        `[data-trash-id="${focusTarget.trashId}"][data-trash-action="${focusTarget.action}"]`,
+      ) ?? queryLibraryAction(dialog, "backToList")
+    );
+  }
+  if (focusTarget.kind === "listCreateButton" || focusTarget.kind === "row") {
+    return dialog.querySelector<HTMLElement>(mapLibraryListButtonSelector(focusTarget));
+  }
+  const action = LIBRARY_ACTION_BY_TARGET[focusTarget.kind];
+  return queryLibraryAction(dialog, action) ?? queryLibraryAction(dialog, "backToList");
+}
+
+function getScreenKey(screen: OpenMapLibraryDialogScreen): string {
+  switch (screen.kind) {
+    case "rename":
+    case "delete":
+      return `${screen.kind}:${screen.mapId}`;
+    case "trashPermanentDelete":
+      return `${screen.kind}:${screen.trashId}`;
+    default:
+      return screen.kind;
+  }
+}
+
 export function MapLibraryDialog({
   screen,
   maps,
   currentMapId,
+  trashEntries,
+  trashStatus,
+  now,
   notices,
   focusTarget,
   onFocusTargetApplied,
@@ -63,11 +149,18 @@ export function MapLibraryDialog({
   onOpenCreate,
   onOpenRename,
   onOpenDelete,
+  onOpenTrash,
   onSwitch,
   onCancel,
   onSubmitCreate,
   onSubmitRename,
   onConfirmDelete,
+  onConfirmPermanentDeleteActive,
+  onRestoreTrash,
+  onOpenTrashPermanentDelete,
+  onConfirmTrashPermanentDelete,
+  onOpenEmptyTrash,
+  onConfirmEmptyTrash,
   onPrepareBackup,
   onDownloadBackup,
   onSelectRestoreFile,
@@ -75,6 +168,12 @@ export function MapLibraryDialog({
   storageMode,
   onMouseClick,
 }: MapLibraryDialogProps) {
+  const [defaultNow, setDefaultNow] = useState(() => new Date());
+  const effectiveNow = now ?? defaultNow;
+  const handleOpenTrash = () => {
+    if (now === undefined) setDefaultNow(new Date());
+    onOpenTrash();
+  };
   const headingId = useId();
   const descriptionId = useId();
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -96,16 +195,21 @@ export function MapLibraryDialog({
     screen.kind === "rename"
       ? (maps.find((map) => map.id === screen.mapId) ?? null)
       : null;
+  const trashPermanentDeleteTarget =
+    screen.kind === "trashPermanentDelete"
+      ? (trashEntries.find((entry) => entry.id === screen.trashId) ?? null)
+      : null;
   const isTargetMissing =
     (screen.kind === "delete" && removal === null)
-    || (screen.kind === "rename" && renameTarget === null);
+    || (screen.kind === "rename" && renameTarget === null)
+    || (screen.kind === "trashPermanentDelete" && trashPermanentDeleteTarget === null);
 
   useLayoutEffect(() => {
     onFocusTargetAppliedRef.current = onFocusTargetApplied;
     onCancelRef.current = onCancel;
   }, [onFocusTargetApplied, onCancel]);
 
-  // 対象がもう無い名前変更・削除の画面は描画せず、キャンセルと同じく一覧へ戻す
+  // 対象がもう無い名前変更・削除・ゴミ箱個別削除の画面は描画せず、キャンセルと同じく前画面へ戻す
   useLayoutEffect(() => {
     if (isTargetMissing) onCancelRef.current();
   }, [isTargetMissing]);
@@ -113,24 +217,16 @@ export function MapLibraryDialog({
   // 画面が描画された後に当てる。行のボタンは要素の参照ではなく属性で探す
   useLayoutEffect(() => {
     const dialog = dialogRef.current;
-    // 対象が無い画面は一覧へ戻るので、フォーカス先は戻った後の画面のために残す
+    // 対象が無い画面は前画面へ戻るので、フォーカス先は戻った後の画面のために残す
     if (focusTarget === null || dialog === null || isTargetMissing) return;
 
-    let element: HTMLElement | null;
-    if (focusTarget.kind !== "screenDefault") {
-      element = focusTarget.kind === "backupButton" || focusTarget.kind === "restoreButton"
-        ? dialog.querySelector<HTMLElement>(`[data-map-library-action="${focusTarget.kind === "backupButton" ? "backup" : "restore"}"]`)
-        : dialog.querySelector<HTMLElement>(mapLibraryListButtonSelector(focusTarget));
-    } else if (screen.kind === "list") {
-      element = dialog.querySelector<HTMLElement>(
-        mapLibraryListButtonSelector({ kind: "row", mapId: currentMapId, action: "open" }),
-      );
-    } else if (screen.kind === "delete" || screen.kind === "backupConfirm" || screen.kind === "restoreConfirm" || screen.kind === "restoreReading") {
-      // 取り消せない操作なので、既定を安全側にする
-      element = cancelButtonRef.current;
-    } else {
-      element = nameInputRef.current;
-    }
+    const element = resolveFocusElement(
+      dialog,
+      focusTarget,
+      screen.kind,
+      currentMapId,
+      { cancelButton: cancelButtonRef.current, nameInput: nameInputRef.current },
+    );
 
     (element ?? listFocusableElements(dialog)[0])?.focus();
     onFocusTargetAppliedRef.current();
@@ -151,6 +247,9 @@ export function MapLibraryDialog({
             onOpenDelete={onOpenDelete}
             onPrepareBackup={onPrepareBackup}
             onSelectRestoreFile={onSelectRestoreFile}
+            trashCount={trashEntries.length}
+            trashStatus={trashStatus}
+            onOpenTrash={handleOpenTrash}
             storageMode={storageMode}
           />
         );
@@ -190,6 +289,45 @@ export function MapLibraryDialog({
             cancelButtonRef={cancelButtonRef}
             onConfirm={() => onConfirmDelete(screen.mapId)}
             onCancel={onCancel}
+            allowPermanentDelete={screen.allowPermanentDelete}
+            onConfirmPermanentDelete={() => onConfirmPermanentDeleteActive(screen.mapId)}
+          />
+        );
+      case "trash":
+        return (
+          <MapLibraryTrashScreen
+            headingId={headingId}
+            entries={trashEntries}
+            trashStatus={trashStatus}
+            now={effectiveNow}
+            onRestore={onRestoreTrash}
+            onOpenPermanentDelete={onOpenTrashPermanentDelete}
+            onOpenEmptyTrash={onOpenEmptyTrash}
+            onBackToList={onCancel}
+          />
+        );
+      case "trashPermanentDelete":
+        if (trashPermanentDeleteTarget === null) return null;
+        return (
+          <MapLibraryTrashPermanentDeleteConfirm
+            headingId={headingId}
+            descriptionId={descriptionId}
+            target={trashPermanentDeleteTarget}
+            cancelButtonRef={cancelButtonRef}
+            onConfirm={() => onConfirmTrashPermanentDelete(screen.trashId)}
+            onCancel={onCancel}
+          />
+        );
+      case "trashEmptyConfirm":
+        return (
+          <MapLibraryTrashEmptyConfirm
+            headingId={headingId}
+            descriptionId={descriptionId}
+            trashStatus={trashStatus}
+            count={trashEntries.length}
+            cancelButtonRef={cancelButtonRef}
+            onConfirm={onConfirmEmptyTrash}
+            onCancel={onCancel}
           />
         );
       case "backupConfirm":
@@ -201,10 +339,14 @@ export function MapLibraryDialog({
     }
   };
   const screenContent = renderScreen();
-  // 画面（と対象のマップ）ごとに group を作り直し、入力欄の状態も画面ごとに持ち直す
-  const screenKey = screen.kind === "rename" || screen.kind === "delete"
-    ? `${screen.kind}:${screen.mapId}`
-    : screen.kind;
+  // 画面（と対象のマップ・ゴミ箱項目）ごとに group を作り直し、入力欄の状態も画面ごとに持ち直す
+  const screenKey = getScreenKey(screen);
+  const hasDescription =
+    screen.kind === "delete"
+    || screen.kind === "backupConfirm"
+    || screen.kind === "restoreConfirm"
+    || screen.kind === "trashPermanentDelete"
+    || screen.kind === "trashEmptyConfirm";
 
   return (
     <div
@@ -225,12 +367,12 @@ export function MapLibraryDialog({
       >
         {screenContent !== null && (
           // ダイアログの要素は画面が変わっても同じなので、画面ごとに新しい group を作り、
-          // フォーカスが入ったときに見出しと説明（削除の確認の本文）を読ませる
+          // フォーカスが入ったときに見出しと説明（確認の本文）を読ませる
           <div
             key={screenKey}
             role="group"
             aria-labelledby={headingId}
-            aria-describedby={screen.kind === "delete" || screen.kind === "backupConfirm" || screen.kind === "restoreConfirm" ? descriptionId : undefined}
+            aria-describedby={hasDescription ? descriptionId : undefined}
           >
             {screenContent}
           </div>

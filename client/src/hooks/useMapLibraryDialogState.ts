@@ -1,8 +1,28 @@
 "use client";
 
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import type { ShellNotice } from "@/components/layout/MapLibraryNoticeRegion";
 import type { MapIndexEntry } from "@/domain/mapLibrary/mapIndex";
+import type { MapTrashEntry } from "@/domain/mapLibrary/mapTrash";
+import {
+  backFrom,
+  backToList,
+  closeAfterEnteringProtectedMode,
+  closeAfterSuccess,
+  closeDialog,
+  INITIAL_STATE,
+  nextScreenAfterActiveDeletion,
+  nextScreenOnBack,
+  nextShellNotice,
+  openScreen,
+  returnAfterActiveDeletion,
+  returnToList,
+  returnToTrashAfterAction,
+  selectFocusAfterRemoval,
+  selectFocusAfterTrashRemoval,
+  showFailure,
+  type DialogState,
+  type HeaderFocusRequest,
+} from "@/hooks/mapLibraryDialogState";
 import type {
   MapLibraryOperationResult,
   UseMapLibraryResult,
@@ -14,10 +34,10 @@ import type {
   OpenMapLibraryDialogScreen,
 } from "@/types/mapLibraryDialog";
 import type { MapStorageSession } from "@/types/mapStorageSession";
-import type { OperationNotice } from "@/types/operationNotice";
+import type { OperationNotice, ShellNotice } from "@/types/operationNotice";
 
-// "export" は保護モードの戻し先。「マップ一覧」「新しいマップ」が無効になり、案内する書き出しの入口へ移す
-export type HeaderFocusRequest = "list" | "create" | "export";
+export type { HeaderFocusRequest };
+export { selectFocusAfterRemoval };
 
 export type UseMapLibraryDialogStateResult = {
   screen: MapLibraryDialogScreen;
@@ -30,12 +50,19 @@ export type UseMapLibraryDialogStateResult = {
   openCreateFromList: () => void;
   openRename: (mapId: string) => void;
   openDelete: (mapId: string) => void;
+  openTrash: () => void;
   back: () => void; // Escape と「キャンセル」の共通処理
   close: () => void; // 一覧の「閉じる」
   submitCreate: (nameInput: string) => void;
   switchTo: (mapId: string) => void;
   submitRename: (mapId: string, nameInput: string) => void;
   confirmDelete: (mapId: string) => void;
+  confirmPermanentDeleteActive: (mapId: string) => void;
+  restoreTrash: (trashId: string) => void;
+  openTrashPermanentDelete: (trashId: string) => void;
+  confirmTrashPermanentDelete: (trashId: string) => void;
+  openEmptyTrash: () => void;
+  confirmEmptyTrash: () => void;
   prepareBackup: () => void;
   downloadBackup: () => void;
   selectRestoreFile: (file: File) => Promise<void>;
@@ -47,172 +74,57 @@ export type UseMapLibraryDialogStateResult = {
 
 type MapLibraryOperations = Pick<
   UseMapLibraryResult,
-  "createMap" | "switchMap" | "renameMap" | "deleteMap" | "moveBranchToMap" | "prepareBackup" | "downloadBackup" | "previewRestore" | "confirmRestore"
+  | "createMap"
+  | "switchMap"
+  | "renameMap"
+  | "deleteMap"
+  | "permanentlyDeleteMap"
+  | "refreshTrash"
+  | "restoreFromTrash"
+  | "permanentlyDeleteFromTrash"
+  | "emptyTrash"
+  | "moveBranchToMap"
+  | "prepareBackup"
+  | "downloadBackup"
+  | "previewRestore"
+  | "confirmRestore"
 >;
-
-type DialogState = {
-  screen: MapLibraryDialogScreen;
-  notices: MapLibraryDialogNotices;
-  focusTarget: MapLibraryDialogFocusTarget | null;
-  headerFocusRequest: HeaderFocusRequest | null;
-  shellNotice: ShellNotice | null;
-  // 起動の結果は1回だけ確定するので、シェルの通知に出すのも1回だけ
-  startupNoticeShown: boolean;
-};
-
-const SCREEN_DEFAULT: MapLibraryDialogFocusTarget = { kind: "screenDefault" };
-
-const INITIAL_STATE: DialogState = {
-  screen: { kind: "closed" },
-  notices: { status: "", alert: "", sequence: 0 },
-  focusTarget: null,
-  headerFocusRequest: null,
-  shellNotice: null,
-  startupNoticeShown: false,
-};
-
-// 削除した行の次の行の「開く」。無ければ前の行、どちらも無ければ一覧の「新しいマップ」
-export function selectFocusAfterRemoval(
-  maps: readonly MapIndexEntry[],
-  removedId: string,
-): MapLibraryDialogFocusTarget {
-  const index = maps.findIndex((map) => map.id === removedId);
-  const neighbor = index === -1 ? undefined : (maps[index + 1] ?? maps[index - 1]);
-  return neighbor === undefined
-    ? { kind: "listCreateButton" }
-    : { kind: "row", mapId: neighbor.id, action: "open" };
-}
-
-// 通知を出すたび（空にするときも）sequence を進め、同じ文言の失敗が続いても読み上げ直させる（L-166）
-function nextNotices(
-  state: DialogState,
-  status: string,
-  alert: string,
-): MapLibraryDialogNotices {
-  return { status, alert, sequence: state.notices.sequence + 1 };
-}
-
-function openScreen(
-  state: DialogState,
-  screen: OpenMapLibraryDialogScreen,
-): DialogState {
-  return {
-    ...state,
-    screen,
-    notices: nextNotices(state, "", ""),
-    focusTarget: SCREEN_DEFAULT,
-    headerFocusRequest: null,
-  };
-}
-
-function closeDialog(state: DialogState, request: HeaderFocusRequest): DialogState {
-  return {
-    ...state,
-    screen: { kind: "closed" },
-    notices: nextNotices(state, "", ""),
-    focusTarget: null,
-    headerFocusRequest: request,
-  };
-}
-
-function nextShellNotice(state: DialogState, notice: OperationNotice): ShellNotice {
-  return { sequence: (state.shellNotice?.sequence ?? 0) + 1, notice };
-}
-
-// 画面とフォーカス先は変えず、文言だけを alert に出す
-function showFailure(state: DialogState, notice: OperationNotice): DialogState {
-  return { ...state, notices: nextNotices(state, "", notice.message) };
-}
-
-// 再マウントを伴う成功はシェルの通知に出し、ダイアログ内には重ねない（L-249）
-function closeAfterSuccess(
-  state: DialogState,
-  result: Extract<MapLibraryOperationResult, { ok: true }>,
-): DialogState {
-  const closed = closeDialog(state, "list");
-  if (!result.remounted || result.notice === null) return closed;
-  return { ...closed, shellNotice: nextShellNotice(state, result.notice) };
-}
-
-// 再マウントを伴う失敗（保護モードへの移行）も、シェルの通知だけが利用者に届く
-function closeAfterEnteringProtectedMode(state: DialogState, notice: OperationNotice): DialogState {
-  return { ...closeDialog(state, "export"), shellNotice: nextShellNotice(state, notice) };
-}
-
-// 一覧に戻る成功。status 以外の通知と保存の再試行の失敗は alert に出す
-function returnToList(
-  state: DialogState,
-  result: Extract<MapLibraryOperationResult, { ok: true }>,
-  focusTarget: MapLibraryDialogFocusTarget,
-): DialogState {
-  const { notice, saveRetryNotice } = result;
-  const alerts = [
-    notice !== null && notice.kind !== "status" ? notice.message : null,
-    saveRetryNotice?.message ?? null,
-  ].filter((message): message is string => message !== null);
-  return {
-    ...state,
-    screen: { kind: "list" },
-    notices: nextNotices(
-      state,
-      notice?.kind === "status" ? notice.message : "",
-      alerts.join(" "),
-    ),
-    focusTarget,
-  };
-}
-
-// 一覧へ戻るときは、戻る前の画面の通知を残さない
-function backToList(state: DialogState, focusTarget: MapLibraryDialogFocusTarget): DialogState {
-  return { ...state, screen: { kind: "list" }, notices: nextNotices(state, "", ""), focusTarget };
-}
-
-function backFrom(state: DialogState): DialogState {
-  const { screen } = state;
-  switch (screen.kind) {
-    case "closed":
-      return state;
-    case "list":
-      return closeDialog(state, "list");
-    case "create":
-      return screen.origin === "header"
-        ? closeDialog(state, "create")
-        : backToList(state, { kind: "listCreateButton" });
-    case "rename":
-    case "delete":
-      return backToList(state, { kind: "row", mapId: screen.mapId, action: screen.kind });
-    case "backupConfirm":
-      return backToList(state, { kind: "backupButton" });
-    case "restoreReading":
-    case "restoreConfirm":
-      return backToList(state, { kind: "restoreButton" });
-  }
-}
 
 export function useMapLibraryDialogState(options: {
   library: MapLibraryOperations;
   maps: readonly MapIndexEntry[]; // 表示順
+  trashEntries: readonly MapTrashEntry[]; // 表示順
   startupNotice: OperationNotice | null;
 }): UseMapLibraryDialogStateResult {
-  const { library, maps, startupNotice } = options;
+  const { library, maps, trashEntries, startupNotice } = options;
   const [state, setState] = useState<DialogState>(INITIAL_STATE);
-  // 操作の関数を描画ごとに変えないため、最新の library と maps は ref から読む（L-521）
+  // 操作の関数を描画ごとに変えないため、最新の library・maps・trashEntries は ref から読む（L-521）
   const libraryRef = useRef(library);
   const mapsRef = useRef(maps);
+  const trashEntriesRef = useRef(trashEntries);
   const screenRef = useRef<MapLibraryDialogScreen>(INITIAL_STATE.screen);
   const generationRef = useRef(0);
   const readingRef = useRef(false);
 
-  const transition = (screen: MapLibraryDialogScreen) => {
+  const transition = useCallback((screen: MapLibraryDialogScreen) => {
     generationRef.current += 1;
     screenRef.current = screen;
     readingRef.current = false;
-  };
+  }, []);
+
+  const openDialogScreen = useCallback(
+    (screen: OpenMapLibraryDialogScreen) => {
+      transition(screen);
+      setState((prev) => openScreen(prev, screen));
+    },
+    [transition],
+  );
 
   useLayoutEffect(() => {
     libraryRef.current = library;
     mapsRef.current = maps;
-  }, [library, maps]);
+    trashEntriesRef.current = trashEntries;
+  }, [library, maps, trashEntries]);
 
   // 起動の通知は、Home が loading を描画した後に値へ変わる。effect で遅らせず、
   // レンダー中の条件付きの state 調整で1回だけシェルの通知にする（L-521）
@@ -230,40 +142,54 @@ export function useMapLibraryDialogState(options: {
 
   // 同じイベントの中で続けて変えても前の更新を消さないよう、関数形式で更新する（L-453）
   const openList = useCallback(() => {
-    transition({ kind: "list" });
-    setState((prev) => openScreen(prev, { kind: "list" }));
-  }, []);
+    libraryRef.current.refreshTrash();
+    openDialogScreen({ kind: "list" });
+  }, [openDialogScreen]);
 
-  const openCreateFromHeader = useCallback(() => {
-    transition({ kind: "create", origin: "header" });
-    setState((prev) => openScreen(prev, { kind: "create", origin: "header" }));
-  }, []);
+  const openCreateFromHeader = useCallback(
+    () => openDialogScreen({ kind: "create", origin: "header" }),
+    [openDialogScreen],
+  );
 
-  const openCreateFromList = useCallback(() => {
-    transition({ kind: "create", origin: "list" });
-    setState((prev) => openScreen(prev, { kind: "create", origin: "list" }));
-  }, []);
+  const openCreateFromList = useCallback(
+    () => openDialogScreen({ kind: "create", origin: "list" }),
+    [openDialogScreen],
+  );
 
-  const openRename = useCallback((mapId: string) => {
-    transition({ kind: "rename", mapId });
-    setState((prev) => openScreen(prev, { kind: "rename", mapId }));
-  }, []);
+  const openRename = useCallback(
+    (mapId: string) => openDialogScreen({ kind: "rename", mapId }),
+    [openDialogScreen],
+  );
 
-  const openDelete = useCallback((mapId: string) => {
-    transition({ kind: "delete", mapId });
-    setState((prev) => openScreen(prev, { kind: "delete", mapId }));
-  }, []);
+  const openDelete = useCallback(
+    (mapId: string) => openDialogScreen({ kind: "delete", mapId }),
+    [openDialogScreen],
+  );
+
+  const openTrash = useCallback(() => {
+    libraryRef.current.refreshTrash();
+    openDialogScreen({ kind: "trash" });
+  }, [openDialogScreen]);
+
+  const openTrashPermanentDelete = useCallback(
+    (trashId: string) => openDialogScreen({ kind: "trashPermanentDelete", trashId }),
+    [openDialogScreen],
+  );
+
+  const openEmptyTrash = useCallback(
+    () => openDialogScreen({ kind: "trashEmptyConfirm" }),
+    [openDialogScreen],
+  );
 
   const back = useCallback(() => {
-    const kind = screenRef.current.kind;
-    transition(kind === "list" || kind === "closed" ? { kind: "closed" } : { kind: "list" });
+    transition(nextScreenOnBack(screenRef.current));
     setState(backFrom);
-  }, []);
+  }, [transition]);
 
   const close = useCallback(() => {
     transition({ kind: "closed" });
     setState((prev) => closeDialog(prev, "list"));
-  }, []);
+  }, [transition]);
 
   const prepareBackup = useCallback(() => {
     if (screenRef.current.kind !== "list" || readingRef.current) return;
@@ -272,26 +198,26 @@ export function useMapLibraryDialogState(options: {
       setState((prev) => showFailure(prev, { kind: "error", message: prepared.error }));
       return;
     }
-    transition({ kind: "backupConfirm", preview: prepared.value });
-    setState((prev) => openScreen(prev, { kind: "backupConfirm", preview: prepared.value }));
-  }, []);
+    openDialogScreen({ kind: "backupConfirm", preview: prepared.value });
+  }, [openDialogScreen]);
 
   const downloadBackup = useCallback(() => {
     const screen = screenRef.current;
     if (screen.kind !== "backupConfirm") return;
     transition({ kind: "list" });
     const result = libraryRef.current.downloadBackup(screen.preview);
-    setState((prev) => result.ok
-      ? returnToList(prev, result, { kind: "backupButton" })
-      : { ...backToList(prev, { kind: "backupButton" }), notices: nextNotices(prev, "", result.notice.message) });
-  }, []);
+    setState((prev) =>
+      result.ok
+        ? returnToList(prev, result, { kind: "backupButton" })
+        : backToList(prev, { kind: "backupButton" }, result.notice.message),
+    );
+  }, [transition]);
 
   const selectRestoreFile = useCallback(async (file: File) => {
     if (screenRef.current.kind !== "list" || readingRef.current) return;
-    transition({ kind: "restoreReading" });
+    openDialogScreen({ kind: "restoreReading" });
     readingRef.current = true;
     const generation = generationRef.current;
-    setState((prev) => openScreen(prev, { kind: "restoreReading" }));
     let prepared: Awaited<ReturnType<MapLibraryOperations["previewRestore"]>>;
     try {
       prepared = await libraryRef.current.previewRestore(file);
@@ -302,38 +228,42 @@ export function useMapLibraryDialogState(options: {
     readingRef.current = false;
     if (!prepared.ok) {
       transition({ kind: "list" });
-      setState((prev) => ({ ...backToList(prev, { kind: "restoreButton" }), notices: nextNotices(prev, "", prepared.error) }));
+      setState((prev) => backToList(prev, { kind: "restoreButton" }, prepared.error));
       return;
     }
-    transition({ kind: "restoreConfirm", preview: prepared.value });
-    setState((prev) => openScreen(prev, { kind: "restoreConfirm", preview: prepared.value }));
-  }, []);
+    openDialogScreen({ kind: "restoreConfirm", preview: prepared.value });
+  }, [openDialogScreen, transition]);
 
   const confirmRestore = useCallback(() => {
     const screen = screenRef.current;
     if (screen.kind !== "restoreConfirm") return;
-    transition({ kind: "list" });
     const result = libraryRef.current.confirmRestore(screen.preview);
+    transition(
+      !result.ok && result.enteredProtectedMode ? { kind: "closed" } : { kind: "list" },
+    );
     setState((prev) => {
-      if (!result.ok && result.enteredProtectedMode) return closeAfterEnteringProtectedMode(prev, result.notice);
-      if (!result.ok) return { ...backToList(prev, { kind: "restoreButton" }), notices: nextNotices(prev, "", result.notice.message) };
+      if (!result.ok && result.enteredProtectedMode) {
+        return closeAfterEnteringProtectedMode(prev, result.notice);
+      }
+      if (!result.ok) {
+        return backToList(prev, { kind: "restoreButton" }, result.notice.message);
+      }
       return returnToList(prev, result, { kind: "restoreButton" });
     });
-    if (!result.ok && result.enteredProtectedMode) transition({ kind: "closed" });
-  }, []);
+  }, [transition]);
 
   const submitCreate = useCallback((nameInput: string) => {
     const result = libraryRef.current.createMap(nameInput);
     if (result.ok) transition({ kind: "closed" });
     setState((prev) => (result.ok ? closeAfterSuccess(prev, result) : showFailure(prev, result.notice)));
-  }, []);
+  }, [transition]);
 
   // 開いているマップは本物が「変化なし」（remounted: false）を返すので、何もせず閉じる
   const switchTo = useCallback((mapId: string) => {
     const result = libraryRef.current.switchMap(mapId);
     if (result.ok) transition({ kind: "closed" });
     setState((prev) => (result.ok ? closeAfterSuccess(prev, result) : showFailure(prev, result.notice)));
-  }, []);
+  }, [transition]);
 
   const submitRename = useCallback((mapId: string, nameInput: string) => {
     const result = libraryRef.current.renameMap(mapId, nameInput);
@@ -343,20 +273,69 @@ export function useMapLibraryDialogState(options: {
         ? returnToList(prev, result, { kind: "row", mapId, action: "rename" })
         : showFailure(prev, result.notice),
     );
-  }, []);
+  }, [transition]);
 
-  const confirmDelete = useCallback((mapId: string) => {
-    // 戻し先は削除前の表示順で決める
-    const focusAfterRemoval = selectFocusAfterRemoval(mapsRef.current, mapId);
-    const result = libraryRef.current.deleteMap(mapId);
-    if (result.ok) transition({ kind: result.remounted ? "closed" : "list" });
-    setState((prev) => {
-      if (!result.ok) return showFailure(prev, result.notice);
-      return result.remounted
-        ? closeAfterSuccess(prev, result)
-        : returnToList(prev, result, focusAfterRemoval);
-    });
-  }, []);
+  const runActiveDeletion = useCallback(
+    (mapId: string, deleteOperation: (id: string) => MapLibraryOperationResult) => {
+      // 戻し先は削除前の表示順で決める
+      const focusAfterRemoval = selectFocusAfterRemoval(mapsRef.current, mapId);
+      const result = deleteOperation(mapId);
+      const nextScreen = nextScreenAfterActiveDeletion(result, mapId);
+      if (nextScreen !== null) transition(nextScreen);
+      setState((prev) => returnAfterActiveDeletion(prev, result, mapId, focusAfterRemoval));
+    },
+    [transition],
+  );
+
+  const confirmDelete = useCallback(
+    (mapId: string) => runActiveDeletion(mapId, (id) => libraryRef.current.deleteMap(id)),
+    [runActiveDeletion],
+  );
+
+  const confirmPermanentDeleteActive = useCallback(
+    (mapId: string) => runActiveDeletion(mapId, (id) => libraryRef.current.permanentlyDeleteMap(id)),
+    [runActiveDeletion],
+  );
+
+  const finishTrashTransition = useCallback(
+    (result: MapLibraryOperationResult, nextFocusTarget: MapLibraryDialogFocusTarget) => {
+      if (!result.ok && result.enteredProtectedMode) {
+        transition({ kind: "closed" });
+        setState((prev) => closeAfterEnteringProtectedMode(prev, result.notice));
+        return;
+      }
+      transition({ kind: "trash" });
+      setState((prev) => returnToTrashAfterAction(prev, result, nextFocusTarget));
+    },
+    [transition],
+  );
+
+  const restoreTrash = useCallback(
+    (trashId: string) => {
+      const focusAfterRemoval = selectFocusAfterTrashRemoval(trashEntriesRef.current, trashId);
+      finishTrashTransition(libraryRef.current.restoreFromTrash(trashId), focusAfterRemoval);
+    },
+    [finishTrashTransition],
+  );
+
+  const confirmTrashPermanentDelete = useCallback(
+    (trashId: string) => {
+      const focusAfterRemoval = selectFocusAfterTrashRemoval(trashEntriesRef.current, trashId);
+      finishTrashTransition(
+        libraryRef.current.permanentlyDeleteFromTrash(trashId),
+        focusAfterRemoval,
+      );
+    },
+    [finishTrashTransition],
+  );
+
+  const confirmEmptyTrash = useCallback(() => {
+    const result = libraryRef.current.emptyTrash();
+    const nextFocus: MapLibraryDialogFocusTarget = result.ok
+      ? { kind: "backToListButton" }
+      : { kind: "emptyTrashButton" };
+    finishTrashTransition(result, nextFocus);
+  }, [finishTrashTransition]);
 
   // ダイアログは MapEditor が持つ。再マウントしない失敗は結果を返すだけで、そちらのエラー表示に任せる
   const moveBranchToMap = useCallback((
@@ -371,7 +350,7 @@ export function useMapLibraryDialogState(options: {
       return result.enteredProtectedMode ? closeAfterEnteringProtectedMode(prev, result.notice) : prev;
     });
     return result;
-  }, []);
+  }, [transition]);
 
   const consumeFocusTarget = useCallback(() => {
     setState((prev) => (prev.focusTarget === null ? prev : { ...prev, focusTarget: null }));
@@ -394,12 +373,19 @@ export function useMapLibraryDialogState(options: {
     openCreateFromList,
     openRename,
     openDelete,
+    openTrash,
     back,
     close,
     submitCreate,
     switchTo,
     submitRename,
     confirmDelete,
+    confirmPermanentDeleteActive,
+    restoreTrash,
+    openTrashPermanentDelete,
+    confirmTrashPermanentDelete,
+    openEmptyTrash,
+    confirmEmptyTrash,
     prepareBackup,
     downloadBackup,
     selectRestoreFile,

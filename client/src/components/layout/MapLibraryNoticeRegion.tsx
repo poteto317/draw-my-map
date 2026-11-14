@@ -1,9 +1,9 @@
 "use client";
 
 import { useReannouncedNotice } from "@/components/layout/useReannouncedNotice";
-import type { OperationNotice } from "@/types/operationNotice";
+import type { OperationNotice, ShellNotice } from "@/types/operationNotice";
 
-export type ShellNotice = { sequence: number; notice: OperationNotice };
+export type { ShellNotice };
 
 type MapLibraryNoticeRegionProps = {
   notice: ShellNotice | null;

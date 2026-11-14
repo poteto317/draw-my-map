@@ -22,11 +22,43 @@ import {
   type MapIndexEntry,
   type MapIndexV1,
 } from "@/domain/mapLibrary/mapIndex";
+import {
+  decodeMapTrashIndex,
+  encodeMapTrashIndex,
+  type MapTrashEntry,
+  type MapTrashIndexV1,
+} from "@/domain/mapLibrary/mapTrash";
+import {
+  mapPermanentlyDeletedNotice,
+  currentMapPermanentlyDeletedNotice,
+  lastMapPermanentlyDeletedNotice,
+  permanentBodyRemovalFailedNotice,
+  currentPermanentBodyRemovalFailedNotice,
+  lastPermanentBodyRemovalFailedNotice,
+  trashCorruptClearedNotice,
+  trashCorruptClearFailedNotice,
+  trashCorruptNotice,
+  trashEmptiedNotice,
+  trashEmptyFailedNotice,
+  trashEmptyPartialWarningNotice,
+  trashEntryNotFoundNotice,
+  trashEntryPermanentlyDeletedBodyWarningNotice,
+  trashEntryPermanentlyDeletedNotice,
+  trashPermanentDeleteFailedNotice,
+  trashRestoredCleanupFailedNotice,
+  trashRestoredNotice,
+  trashRestoreWriteFailedNotice,
+} from "@/domain/mapLibrary/mapTrashMessages";
 import { useMapLibrary, type MapLibraryDeps } from "@/hooks/useMapLibrary";
+import { BRANCH_MOVE_JOURNAL_KEY } from "@/services/persistence/branchMoveJournal";
 import {
   MAP_INDEX_STORAGE_KEY,
   mapBodyKey,
 } from "@/services/persistence/mapLibraryStorage";
+import {
+  MAP_TRASH_INDEX_KEY,
+  mapTrashBodyKey,
+} from "@/services/persistence/mapTrashStorage";
 import { MAP_STORAGE_KEY } from "@/services/persistence/mapStorage";
 import { LIBRARY_RESTORE_JOURNAL_KEY } from "@/services/persistence/libraryRestoreJournal";
 import { createRecordingStorage } from "@/testing/mapLibraryTestStorage";
@@ -153,19 +185,25 @@ function setup(
     failRemoveItem?: (key: string) => boolean;
     beforeRemoveItem?: (key: string) => void;
     onGenerateId?: () => void;
+    failSetItem?: (key: string, value: string) => boolean;
+    failSetItemError?: string;
+    now?: () => Date;
   } = {},
 ) {
   let failIndexWrite = false;
   const recording = createRecordingStorage({
     initial: options.initial,
-    failSetItem: (key) => failIndexWrite && key === MAP_INDEX_STORAGE_KEY,
+    failSetItem: (key, value) =>
+      (failIndexWrite && key === MAP_INDEX_STORAGE_KEY) ||
+      Boolean(options.failSetItem?.(key, value)),
+    failSetItemError: options.failSetItemError,
     failRemoveItem: options.failRemoveItem,
     beforeRemoveItem: options.beforeRemoveItem,
   });
   const generateId = idSequence(options.ids ?? []);
   const deps: MapLibraryDeps = {
     getStorage: () => recording.storage,
-    now: () => new Date(NOW),
+    now: () => options.now?.() ?? new Date(NOW),
     generateId: () => {
       options.onGenerateId?.();
       return generateId();
@@ -196,6 +234,28 @@ function storedIndex(entries: Record<string, string>): MapIndexV1 {
     throw new Error("インデックスを読めません。");
   }
   return decoded.index;
+}
+
+function storedTrashIndex(entries: Record<string, string>): MapTrashIndexV1 {
+  const decoded = decodeMapTrashIndex(entries[MAP_TRASH_INDEX_KEY]);
+  if (decoded.kind !== "ok") {
+    throw new Error("ゴミ箱インデックスを読めません。");
+  }
+  return decoded.index;
+}
+
+function trashEntry(overrides: Partial<MapTrashEntry> = {}): MapTrashEntry {
+  return {
+    id: "trash-1",
+    originalMapId: "trash-1",
+    name: "削除済みマップ",
+    createdAt: SEED_TIMESTAMP,
+    updatedAt: SEED_TIMESTAMP,
+    deletedAt: "2026-10-10T00:00:00.000Z",
+    expiresAt: "2026-11-09T00:00:00.000Z",
+    hasBody: true,
+    ...overrides,
+  };
 }
 
 describe("useMapLibrary", () => {
@@ -310,6 +370,47 @@ describe("useMapLibrary", () => {
         "new",
         "old",
       ]);
+    });
+
+    it("起動時にゴミ箱の期限切れ項目が自動清掃され、有効項目だけが trashEntries に入る", () => {
+      const expired = trashEntry({
+        id: "expired-1",
+        expiresAt: "2026-10-20T00:00:00.000Z",
+      });
+      const valid = trashEntry({
+        id: "valid-1",
+        expiresAt: "2026-11-10T00:00:00.000Z",
+      });
+      const { result, entries } = setup({
+        initial: {
+          ...twoMapsInitial(),
+          [MAP_TRASH_INDEX_KEY]: encodeMapTrashIndex({ version: 1, items: [expired, valid] }),
+          [mapTrashBodyKey("expired-1")]: EMPTY_V3,
+          [mapTrashBodyKey("valid-1")]: EMPTY_V3,
+        },
+      });
+
+      const view = readyView(result.current.view);
+      expect(view.storageMode).toBe("persistent");
+      expect(view.trashStatus).toBe("ok");
+      expect(view.trashEntries).toEqual([valid]);
+      expect(entries()[mapTrashBodyKey("expired-1")]).toBeUndefined();
+      expect(entries()[mapTrashBodyKey("valid-1")]).toBe(EMPTY_V3);
+    });
+
+    it("起動時にゴミ箱インデックスが破損していても通常モードを維持し、trashStatus を corrupt にする", () => {
+      const { result } = setup({
+        initial: {
+          ...twoMapsInitial(),
+          [MAP_TRASH_INDEX_KEY]: "{corrupt",
+        },
+      });
+
+      const view = readyView(result.current.view);
+      expect(view.storageMode).toBe("persistent");
+      expect(view.trashStatus).toBe("corrupt");
+      expect(view.trashEntries).toEqual([]);
+      expect(view.startupNotice).toBeNull();
     });
   });
 
@@ -879,7 +980,7 @@ describe("useMapLibrary", () => {
 
   describe("削除", () => {
     describe("開いていない別のマップ", () => {
-      it("インデックス → 本体の順に書き、現在のマップは開いたまま", () => {
+      it("ゴミ箱へ保存 → アクティブ一覧 → 旧本体の順に更新し、現在のマップは開いたまま", () => {
         const { result, operations, entries } = setup({ initial: threeMapsInitial() });
         const sessionBefore = readyView(result.current.view).storageSession;
         const before = operations.length;
@@ -898,10 +999,25 @@ describe("useMapLibrary", () => {
         expect(
           operations.slice(before).map((operation) => [operation.type, operation.key]),
         ).toEqual([
+          ["setItem", mapTrashBodyKey("map-b")],
+          ["setItem", MAP_TRASH_INDEX_KEY],
           ["setItem", MAP_INDEX_STORAGE_KEY],
           ["removeItem", mapBodyKey("map-b")],
         ]);
         expect(entries()[mapBodyKey("map-b")]).toBeUndefined();
+        expect(entries()[mapTrashBodyKey("map-b")]).toBe("body-b");
+        expect(storedTrashIndex(entries()).items).toEqual([
+          {
+            id: "map-b",
+            originalMapId: "map-b",
+            name: "B",
+            createdAt: SEED_TIMESTAMP,
+            updatedAt: "2026-10-20T12:00:00.000Z",
+            deletedAt: NOW,
+            expiresAt: "2026-11-20T03:04:05.000Z",
+            hasBody: true,
+          },
+        ]);
         expect(storedIndex(entries()).currentMapId).toBe("map-a");
         expect(storedIndex(entries()).maps.map((map) => map.id)).toEqual([
           "map-a",
@@ -910,10 +1026,12 @@ describe("useMapLibrary", () => {
         const view = readyView(result.current.view);
         expect(view.currentMap.id).toBe("map-a");
         expect(view.maps.map((map) => map.id)).toEqual(["map-c", "map-a"]);
+        expect(view.trashStatus).toBe("ok");
+        expect(view.trashEntries).toEqual(storedTrashIndex(entries()).items);
         expect(view.storageSession).toBe(sessionBefore);
       });
 
-      it("本体の削除に失敗したら、インデックスからは消え、本体は残り、warning だけを返す", () => {
+      it("本体の削除に失敗したら、一覧とゴミ箱は更新され、本体は残り、warning だけを返す", () => {
         const { result, entries } = setup({
           initial: threeMapsInitial(),
           failRemoveItem: (key) => key === mapBodyKey("map-b"),
@@ -931,6 +1049,7 @@ describe("useMapLibrary", () => {
           saveRetryNotice: null,
         });
         expect(entries()[mapBodyKey("map-b")]).toBe("body-b");
+        expect(entries()[mapTrashBodyKey("map-b")]).toBe("body-b");
         expect(storedIndex(entries()).maps.map((map) => map.id)).toEqual([
           "map-a",
           "map-c",
@@ -939,9 +1058,12 @@ describe("useMapLibrary", () => {
           "map-c",
           "map-a",
         ]);
+        expect(readyView(result.current.view).trashEntries.map((item) => item.id)).toEqual([
+          "map-b",
+        ]);
       });
 
-      it("インデックスの書き込みに失敗したら中止し、本体を消さない", () => {
+      it("インデックスの書き込みが QuotaExceededError で失敗したらゴミ箱を逆順ロールバックし、canPermanentDelete: true を返す", () => {
         const { result, operations, entries, setFailIndexWrite } = setup({
           initial: threeMapsInitial(),
         });
@@ -959,12 +1081,44 @@ describe("useMapLibrary", () => {
         expect(deleted).toEqual({
           ok: false,
           notice: indexWriteFailedNotice("マップを削除"),
+          canPermanentDelete: true,
         });
-        expect(operations.slice(before).map((operation) => operation.type)).toEqual([
-          "setItem",
+        expect(
+          operations.slice(before).map((operation) => [operation.type, operation.key]),
+        ).toEqual([
+          ["setItem", mapTrashBodyKey("map-b")],
+          ["setItem", MAP_TRASH_INDEX_KEY],
+          ["setItem", MAP_INDEX_STORAGE_KEY],
+          ["removeItem", mapTrashBodyKey("map-b")],
+          ["removeItem", MAP_TRASH_INDEX_KEY],
         ]);
         expect(entries()[mapBodyKey("map-b")]).toBe("body-b");
+        expect(entries()[mapTrashBodyKey("map-b")]).toBeUndefined();
+        expect(entries()[MAP_TRASH_INDEX_KEY]).toBeUndefined();
         expect(flush).not.toHaveBeenCalled();
+        expect(result.current.view).toBe(viewBefore);
+      });
+
+      it("インデックスの書き込みが非 QuotaExceededError で失敗したらゴミ箱を戻し、canPermanentDelete は付けない", () => {
+        const { result, entries } = setup({
+          initial: threeMapsInitial(),
+          failSetItem: (key) => key === MAP_INDEX_STORAGE_KEY,
+          failSetItemError: "SecurityError",
+        });
+        const viewBefore = result.current.view;
+
+        let deleted: ReturnType<typeof result.current.deleteMap> | undefined;
+        act(() => {
+          deleted = result.current.deleteMap("map-b");
+        });
+
+        expect(deleted).toEqual({
+          ok: false,
+          notice: indexWriteFailedNotice("マップを削除"),
+        });
+        expect(entries()[mapBodyKey("map-b")]).toBe("body-b");
+        expect(entries()[mapTrashBodyKey("map-b")]).toBeUndefined();
+        expect(entries()[MAP_TRASH_INDEX_KEY]).toBeUndefined();
         expect(result.current.view).toBe(viewBefore);
       });
 
@@ -1066,16 +1220,20 @@ describe("useMapLibrary", () => {
         expect(
           operations.slice(before).map((operation) => [operation.type, operation.key]),
         ).toEqual([
+          ["setItem", mapTrashBodyKey("map-a")],
+          ["setItem", MAP_TRASH_INDEX_KEY],
           ["setItem", MAP_INDEX_STORAGE_KEY],
           ["removeItem", mapBodyKey("map-a")],
         ]);
         expect(entries()[mapBodyKey("map-a")]).toBeUndefined();
+        expect(entries()[mapTrashBodyKey("map-a")]).toBe("body-a");
         expect(storedIndex(entries()).currentMapId).toBe("map-b");
         const view = readyView(result.current.view);
         expect(view.currentMap.id).toBe("map-b");
         expect(view.storageSession.mapId).toBe("map-b");
         expect(view.storageSession).not.toBe(oldSession);
         expect(view.maps.map((map) => map.id)).toEqual(["map-b", "map-c"]);
+        expect(view.trashEntries.map((item) => item.id)).toEqual(["map-a"]);
       });
 
       it("削除した後、インデックスに無いマップの旧セッションの writeBody は inactive で何も書かない", () => {
@@ -1138,9 +1296,11 @@ describe("useMapLibrary", () => {
         expect(deleted).toEqual({
           ok: false,
           notice: indexWriteFailedNotice("マップを削除"),
+          canPermanentDelete: true,
         });
         expect(result.current.view).toBe(viewBefore);
         expect(entries()[mapBodyKey("map-a")]).toBe("body-a");
+        expect(entries()[mapTrashBodyKey("map-a")]).toBeUndefined();
 
         setFailIndexWrite(false);
         let written: ReturnType<MapStorageSession["writeBody"]> | undefined;
@@ -1178,6 +1338,8 @@ describe("useMapLibrary", () => {
         expect(
           operations.slice(before).map((operation) => [operation.type, operation.key]),
         ).toEqual([
+          ["setItem", mapTrashBodyKey("only")],
+          ["setItem", MAP_TRASH_INDEX_KEY],
           ["setItem", MAP_INDEX_STORAGE_KEY],
           ["removeItem", mapBodyKey("only")],
         ]);
@@ -1191,9 +1353,11 @@ describe("useMapLibrary", () => {
         expect(storedIndex(entries()).maps).toEqual([expected]);
         expect(entries()[mapBodyKey("new-1")]).toBeUndefined();
         expect(entries()[mapBodyKey("orphan")]).toBe("old-body");
+        expect(entries()[mapTrashBodyKey("only")]).toBe("body-only");
         const view = readyView(result.current.view);
         expect(view.currentMap).toEqual(expected);
         expect(view.maps).toEqual([expected]);
+        expect(view.trashEntries.map((item) => item.id)).toEqual(["only"]);
         expect(view.storageSession.mapId).toBe("new-1");
         expect(oldSession.writeBody("late")).toEqual({ status: "inactive" });
         expect(entries()[mapBodyKey("only")]).toBeUndefined();
@@ -1347,9 +1511,40 @@ describe("useMapLibrary", () => {
         ok: false,
         notice: indexWriteFailedNotice("マップを削除"),
       });
+
+      let permanentlyDeleted: ReturnType<typeof result.current.permanentlyDeleteMap> | undefined;
+      let restored: ReturnType<typeof result.current.restoreFromTrash> | undefined;
+      let trashDeleted: ReturnType<typeof result.current.permanentlyDeleteFromTrash> | undefined;
+      let emptied: ReturnType<typeof result.current.emptyTrash> | undefined;
+      act(() => {
+        result.current.refreshTrash();
+        permanentlyDeleted = result.current.permanentlyDeleteMap("memory");
+        restored = result.current.restoreFromTrash("t-1");
+        trashDeleted = result.current.permanentlyDeleteFromTrash("t-1");
+        emptied = result.current.emptyTrash();
+      });
+      expect(permanentlyDeleted).toEqual({
+        ok: false,
+        notice: indexWriteFailedNotice("マップを削除"),
+      });
+      expect(restored).toEqual({
+        ok: false,
+        notice: trashRestoreWriteFailedNotice(),
+      });
+      expect(trashDeleted).toEqual({
+        ok: false,
+        notice: trashPermanentDeleteFailedNotice(),
+      });
+      expect(emptied).toEqual({
+        ok: false,
+        notice: trashEmptyFailedNotice(),
+      });
+
       const viewAfter = readyView(result.current.view);
       expect(viewAfter.currentMap.id).toBe("memory");
       expect(viewAfter.currentMap.name).toBe("無題のマップ");
+      expect(viewAfter.trashStatus).toBe("ok");
+      expect(viewAfter.trashEntries).toEqual([]);
     });
   });
 });
@@ -1670,6 +1865,526 @@ describe("useMapLibrary のライブラリバックアップ境界", () => {
       expect(readyView(result.current.view).currentMap.id).toBe("created-map-id");
       expect(readyView(result.current.view).currentMap.name).toBe("新規マップ");
       expect(storedIndex(entries()).currentMapId).toBe("created-map-id");
+    });
+  });
+
+  describe("ゴミ箱（削除・完全削除・復元・空にする・同期）", () => {
+    it("開いているマップを削除するとき、適格な編集スナップショットがあれば未保存編集をゴミ箱へ保存する", () => {
+      const { result, entries } = setup({ initial: twoMapsInitial() });
+      const edited = '{"version":3,"layoutMode":"auto","nodes":[]}';
+      readyView(result.current.view).storageSession.registerBackupSnapshot(() => ({
+        json: edited,
+        hydrated: true,
+        restoreOrigin: "restored",
+        hasSavedBodyThisMount: false,
+      }));
+
+      act(() => {
+        expect(result.current.deleteMap("map-1").ok).toBe(true);
+      });
+
+      expect(entries()[mapTrashBodyKey("map-1")]).toBe(edited);
+      expect(storedTrashIndex(entries()).items[0]?.hasBody).toBe(true);
+    });
+
+    it("開いているマップが未保存・未編集の空マップのときは hasBody: false でゴミ箱本体を書かない", () => {
+      const index: MapIndexV1 = {
+        version: 1,
+        currentMapId: "empty-map",
+        maps: [entry("empty-map", "空マップ"), entry("map-2", "マップ 2")],
+        legacyCleanupPending: false,
+      };
+      const { result, entries } = setup({
+        initial: {
+          [MAP_INDEX_STORAGE_KEY]: encodeMapIndex(index),
+          [mapBodyKey("map-2")]: EMPTY_V3,
+        },
+      });
+      readyView(result.current.view).storageSession.registerBackupSnapshot(() => ({
+        json: EMPTY_V3,
+        hydrated: true,
+        restoreOrigin: "empty",
+        hasSavedBodyThisMount: false,
+      }));
+
+      act(() => {
+        expect(result.current.deleteMap("empty-map").ok).toBe(true);
+      });
+
+      expect(entries()[mapTrashBodyKey("empty-map")]).toBeUndefined();
+      expect(storedTrashIndex(entries()).items[0]?.hasBody).toBe(false);
+    });
+
+    describe("permanentlyDeleteMap（フォールバック完全削除）", () => {
+      it("ゴミ箱が破損していてもゴミ箱キーに触れず非現在マップを完全削除し、flush を再試行する", () => {
+        const { result, operations, entries } = setup({
+          initial: {
+            ...threeMapsInitial(),
+            [MAP_TRASH_INDEX_KEY]: "{corrupt",
+          },
+        });
+        const flush = jest.fn(() => ({ status: "saved" as const }));
+        readyView(result.current.view).storageSession.registerFlush(flush);
+        const before = operations.length;
+
+        let deleted: ReturnType<typeof result.current.permanentlyDeleteMap> | undefined;
+        act(() => {
+          deleted = result.current.permanentlyDeleteMap("map-b");
+        });
+
+        expect(deleted).toEqual({
+          ok: true,
+          remounted: false,
+          notice: mapPermanentlyDeletedNotice("B"),
+          saveRetryNotice: null,
+        });
+        expect(flush).toHaveBeenCalledTimes(1);
+        expect(
+          operations.slice(before).map((op) => [op.type, op.key]),
+        ).toEqual([
+          ["setItem", MAP_INDEX_STORAGE_KEY],
+          ["removeItem", mapBodyKey("map-b")],
+        ]);
+        expect(entries()[MAP_TRASH_INDEX_KEY]).toBe("{corrupt");
+        expect(entries()[mapBodyKey("map-b")]).toBeUndefined();
+      });
+
+      it("開いているマップの完全削除で旧セッションを無効化し、次のマップと最後の1件の通知を返す", () => {
+        const { result } = setup({ initial: twoMapsInitial() });
+        const oldSession = readyView(result.current.view).storageSession;
+        let currentOk: ReturnType<typeof result.current.permanentlyDeleteMap> | undefined;
+        act(() => {
+          currentOk = result.current.permanentlyDeleteMap("map-1");
+        });
+        expect(currentOk).toEqual({
+          ok: true,
+          remounted: true,
+          notice: currentMapPermanentlyDeletedNotice("マップ 1", "マップ 2"),
+          saveRetryNotice: null,
+        });
+        expect(oldSession.writeBody("late")).toEqual({ status: "inactive" });
+        expect(readyView(result.current.view).currentMap.id).toBe("map-2");
+
+        const { result: single } = setup({
+          initial: singleMapInitial(),
+          ids: ["fresh-1"],
+        });
+        const singleOldSession = readyView(single.current.view).storageSession;
+        let last: ReturnType<typeof single.current.permanentlyDeleteMap> | undefined;
+        act(() => {
+          last = single.current.permanentlyDeleteMap("only");
+        });
+        expect(last).toEqual({
+          ok: true,
+          remounted: true,
+          notice: lastMapPermanentlyDeletedNotice("唯一"),
+          saveRetryNotice: null,
+        });
+        expect(singleOldSession.writeBody("late")).toEqual({ status: "inactive" });
+        expect(readyView(single.current.view).currentMap.id).toBe("fresh-1");
+      });
+
+      it("本体削除に失敗したら現在・非現在・最後の1件それぞれで warning 通知を返す", () => {
+        const { result: currentFail } = setup({
+          initial: twoMapsInitial(),
+          failRemoveItem: (key) => key === mapBodyKey("map-1"),
+        });
+        let first: ReturnType<typeof currentFail.current.permanentlyDeleteMap> | undefined;
+        act(() => {
+          first = currentFail.current.permanentlyDeleteMap("map-1");
+        });
+        expect(first).toEqual({
+          ok: true,
+          remounted: true,
+          notice: currentPermanentBodyRemovalFailedNotice("マップ 1", "マップ 2"),
+          saveRetryNotice: null,
+        });
+
+        const { result: two } = setup({
+          initial: twoMapsInitial(),
+          failRemoveItem: (key) => key === mapBodyKey("map-2"),
+        });
+        let other: ReturnType<typeof two.current.permanentlyDeleteMap> | undefined;
+        act(() => {
+          other = two.current.permanentlyDeleteMap("map-2");
+        });
+        expect(other).toEqual({
+          ok: true,
+          remounted: false,
+          notice: permanentBodyRemovalFailedNotice("マップ 2"),
+          saveRetryNotice: null,
+        });
+
+        const { result: single } = setup({
+          initial: singleMapInitial(),
+          ids: ["fresh-2"],
+          failRemoveItem: (key) => key === mapBodyKey("only"),
+        });
+        let last: ReturnType<typeof single.current.permanentlyDeleteMap> | undefined;
+        act(() => {
+          last = single.current.permanentlyDeleteMap("only");
+        });
+        expect(last).toEqual({
+          ok: true,
+          remounted: true,
+          notice: lastPermanentBodyRemovalFailedNotice("唯一"),
+          saveRetryNotice: null,
+        });
+      });
+    });
+
+    describe("restoreFromTrash（復元）", () => {
+      it("元の ID が未使用なら同 ID で復元し、現在のマップ・セッションを維持し、最後のゴミ箱項目ならゴミ箱インデックスを削除する", () => {
+        const item = trashEntry({
+          id: "old-map",
+          originalMapId: "old-map",
+          name: "復元対象",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-02-01T00:00:00.000Z",
+        });
+        const { result, entries } = setup({
+          initial: {
+            ...singleMapInitial(),
+            [MAP_TRASH_INDEX_KEY]: encodeMapTrashIndex({ version: 1, items: [item] }),
+            [mapTrashBodyKey("old-map")]: EMPTY_V3,
+          },
+        });
+        const sessionBefore = readyView(result.current.view).storageSession;
+
+        let restored: ReturnType<typeof result.current.restoreFromTrash> | undefined;
+        act(() => {
+          restored = result.current.restoreFromTrash("old-map");
+        });
+
+        expect(restored).toEqual({
+          ok: true,
+          remounted: false,
+          notice: trashRestoredNotice("復元対象"),
+          saveRetryNotice: null,
+        });
+        const view = readyView(result.current.view);
+        expect(view.currentMap.id).toBe("only");
+        expect(view.storageSession).toBe(sessionBefore);
+        expect(view.trashEntries).toEqual([]);
+        expect(entries()[mapBodyKey("old-map")]).toBe(EMPTY_V3);
+        expect(entries()[mapTrashBodyKey("old-map")]).toBeUndefined();
+        expect(entries()[MAP_TRASH_INDEX_KEY]).toBeUndefined();
+        expect(storedIndex(entries()).maps).toContainEqual({
+          id: "old-map",
+          name: "復元対象",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-02-01T00:00:00.000Z",
+        });
+      });
+
+      it("ゴミ箱側の後始末だけ失敗したら復元済みとして warning を返し、view.maps を更新する", () => {
+        const item = trashEntry({ id: "t-1", originalMapId: "t-1", name: "復旧" });
+        const { result, entries } = setup({
+          initial: {
+            ...singleMapInitial(),
+            [MAP_TRASH_INDEX_KEY]: encodeMapTrashIndex({ version: 1, items: [item] }),
+            [mapTrashBodyKey("t-1")]: EMPTY_V3,
+          },
+          failRemoveItem: (key) => key === mapTrashBodyKey("t-1"),
+        });
+
+        let restored: ReturnType<typeof result.current.restoreFromTrash> | undefined;
+        act(() => {
+          restored = result.current.restoreFromTrash("t-1");
+        });
+
+        expect(restored).toEqual({
+          ok: true,
+          remounted: false,
+          notice: trashRestoredCleanupFailedNotice("復旧"),
+          saveRetryNotice: null,
+        });
+        expect(storedIndex(entries()).maps.map((m) => m.id)).toContain("t-1");
+        expect(readyView(result.current.view).maps.map((m) => m.id)).toContain("t-1");
+      });
+
+      it("対象が見つからないときやゴミ箱破損時はエラーを返し、view を同期する", () => {
+        const { result, storage } = setup({ initial: singleMapInitial() });
+
+        let missing: ReturnType<typeof result.current.restoreFromTrash> | undefined;
+        act(() => {
+          missing = result.current.restoreFromTrash("non-existent");
+        });
+        expect(missing).toEqual({ ok: false, notice: trashEntryNotFoundNotice() });
+
+        storage.setItem(MAP_TRASH_INDEX_KEY, "{broken");
+        let corrupt: ReturnType<typeof result.current.restoreFromTrash> | undefined;
+        act(() => {
+          corrupt = result.current.restoreFromTrash("non-existent");
+        });
+        expect(corrupt).toEqual({ ok: false, notice: trashCorruptNotice() });
+        expect(readyView(result.current.view).trashStatus).toBe("corrupt");
+      });
+    });
+
+    describe("permanentlyDeleteFromTrash（ゴミ箱からの個別完全削除）", () => {
+      it("インデックス更新 → 本体削除の順で削除し、最後の1件ならゴミ箱インデックスを削除して view を同期する", () => {
+        const item = trashEntry({ id: "t-1", name: "完全削除対象" });
+        const { result, operations, entries } = setup({
+          initial: {
+            ...singleMapInitial(),
+            [MAP_TRASH_INDEX_KEY]: encodeMapTrashIndex({ version: 1, items: [item] }),
+            [mapTrashBodyKey("t-1")]: EMPTY_V3,
+          },
+        });
+        const before = operations.length;
+
+        let deleted: ReturnType<typeof result.current.permanentlyDeleteFromTrash> | undefined;
+        act(() => {
+          deleted = result.current.permanentlyDeleteFromTrash("t-1");
+        });
+
+        expect(deleted).toEqual({
+          ok: true,
+          remounted: false,
+          notice: trashEntryPermanentlyDeletedNotice("完全削除対象"),
+          saveRetryNotice: null,
+        });
+        expect(
+          operations.slice(before).map((op) => [op.type, op.key]),
+        ).toEqual([
+          ["removeItem", MAP_TRASH_INDEX_KEY],
+          ["removeItem", mapTrashBodyKey("t-1")],
+        ]);
+        expect(entries()[MAP_TRASH_INDEX_KEY]).toBeUndefined();
+        expect(entries()[mapTrashBodyKey("t-1")]).toBeUndefined();
+        expect(readyView(result.current.view).trashEntries).toEqual([]);
+      });
+
+      it("インデックス更新失敗・本体削除失敗時の warning・破損時の corrupt 同期を返す", () => {
+        const item1 = trashEntry({ id: "t-1", name: "対象1" });
+        const item2 = trashEntry({ id: "t-2", name: "対象2" });
+        const initialTrash = {
+          ...singleMapInitial(),
+          [MAP_TRASH_INDEX_KEY]: encodeMapTrashIndex({ version: 1, items: [item1, item2] }),
+          [mapTrashBodyKey("t-1")]: EMPTY_V3,
+          [mapTrashBodyKey("t-2")]: EMPTY_V3,
+        };
+
+        const failIndex = setup({
+          initial: initialTrash,
+          failSetItem: (key) => key === MAP_TRASH_INDEX_KEY,
+        });
+        let failed: ReturnType<typeof failIndex.result.current.permanentlyDeleteFromTrash> | undefined;
+        act(() => {
+          failed = failIndex.result.current.permanentlyDeleteFromTrash("t-1");
+        });
+        expect(failed).toEqual({ ok: false, notice: trashPermanentDeleteFailedNotice() });
+        expect(failIndex.entries()[mapTrashBodyKey("t-1")]).toBe(EMPTY_V3);
+        expect(readyView(failIndex.result.current.view).trashEntries.map((i) => i.id)).toEqual(["t-1", "t-2"]);
+
+        const corruptCase = setup({ initial: initialTrash });
+        corruptCase.storage.setItem(MAP_TRASH_INDEX_KEY, "{broken");
+        let corrupt: ReturnType<typeof corruptCase.result.current.permanentlyDeleteFromTrash> | undefined;
+        act(() => {
+          corrupt = corruptCase.result.current.permanentlyDeleteFromTrash("t-1");
+        });
+        expect(corrupt).toEqual({ ok: false, notice: trashCorruptNotice() });
+        expect(readyView(corruptCase.result.current.view).trashStatus).toBe("corrupt");
+
+        const failBody = setup({
+          initial: initialTrash,
+          failRemoveItem: (key) => key === mapTrashBodyKey("t-1"),
+        });
+        let warned: ReturnType<typeof failBody.result.current.permanentlyDeleteFromTrash> | undefined;
+        act(() => {
+          warned = failBody.result.current.permanentlyDeleteFromTrash("t-1");
+        });
+        expect(warned).toEqual({
+          ok: true,
+          remounted: false,
+          notice: trashEntryPermanentlyDeletedBodyWarningNotice("対象1"),
+          saveRetryNotice: null,
+        });
+        expect(readyView(failBody.result.current.view).trashEntries.map((i) => i.id)).toEqual(["t-2"]);
+      });
+    });
+
+    describe("emptyTrash（ゴミ箱を空にする）", () => {
+      it("通常時はすべての本体（孤立本体含む）とインデックスを削除する", () => {
+        const item1 = trashEntry({ id: "t-1", hasBody: true });
+        const item2 = trashEntry({ id: "t-2", hasBody: false });
+        const { result, entries } = setup({
+          initial: {
+            ...singleMapInitial(),
+            [MAP_TRASH_INDEX_KEY]: encodeMapTrashIndex({ version: 1, items: [item1, item2] }),
+            [mapTrashBodyKey("t-1")]: EMPTY_V3,
+            [mapTrashBodyKey("orphan-trash")]: EMPTY_V3,
+          },
+        });
+
+        let emptied: ReturnType<typeof result.current.emptyTrash> | undefined;
+        act(() => {
+          emptied = result.current.emptyTrash();
+        });
+
+        expect(emptied).toEqual({
+          ok: true,
+          remounted: false,
+          notice: trashEmptiedNotice(),
+          saveRetryNotice: null,
+        });
+        expect(entries()[MAP_TRASH_INDEX_KEY]).toBeUndefined();
+        expect(entries()[mapTrashBodyKey("t-1")]).toBeUndefined();
+        expect(entries()[mapTrashBodyKey("orphan-trash")]).toBeUndefined();
+        expect(readyView(result.current.view).trashEntries).toEqual([]);
+      });
+
+      it("一部本体の削除に失敗したら残った項目だけを書き戻し warning と view を同期する", () => {
+        const item1 = trashEntry({ id: "t-1", hasBody: true });
+        const item2 = trashEntry({ id: "t-2", hasBody: true });
+        const { result, entries } = setup({
+          initial: {
+            ...singleMapInitial(),
+            [MAP_TRASH_INDEX_KEY]: encodeMapTrashIndex({ version: 1, items: [item1, item2] }),
+            [mapTrashBodyKey("t-1")]: EMPTY_V3,
+            [mapTrashBodyKey("t-2")]: EMPTY_V3,
+          },
+          failRemoveItem: (key) => key === mapTrashBodyKey("t-2"),
+        });
+
+        let partial: ReturnType<typeof result.current.emptyTrash> | undefined;
+        act(() => {
+          partial = result.current.emptyTrash();
+        });
+        expect(partial).toEqual({ ok: false, notice: trashEmptyPartialWarningNotice() });
+        expect(storedTrashIndex(entries()).items.map((i) => i.id)).toEqual(["t-2"]);
+        expect(readyView(result.current.view).trashEntries.map((i) => i.id)).toEqual(["t-2"]);
+      });
+
+      it("破損時は全ゴミ箱本体キーを削除してからインデックスを初期化し、一部失敗ならインデックスを残す", () => {
+        const failClear = setup({
+          initial: {
+            ...singleMapInitial(),
+            [MAP_TRASH_INDEX_KEY]: "{corrupt",
+            [mapTrashBodyKey("t-1")]: EMPTY_V3,
+          },
+          failRemoveItem: (key) => key === mapTrashBodyKey("t-1"),
+        });
+
+        let clearFailed: ReturnType<typeof failClear.result.current.emptyTrash> | undefined;
+        act(() => {
+          clearFailed = failClear.result.current.emptyTrash();
+        });
+        expect(clearFailed).toEqual({ ok: false, notice: trashCorruptClearFailedNotice() });
+        expect(failClear.entries()[MAP_TRASH_INDEX_KEY]).toBe("{corrupt");
+        expect(readyView(failClear.result.current.view).trashStatus).toBe("corrupt");
+
+        const okClear = setup({
+          initial: {
+            ...singleMapInitial(),
+            [MAP_TRASH_INDEX_KEY]: "{corrupt",
+            [mapTrashBodyKey("t-1")]: EMPTY_V3,
+          },
+        });
+        let cleared: ReturnType<typeof okClear.result.current.emptyTrash> | undefined;
+        act(() => {
+          cleared = okClear.result.current.emptyTrash();
+        });
+        expect(cleared).toEqual({
+          ok: true,
+          remounted: false,
+          notice: trashCorruptClearedNotice(),
+          saveRetryNotice: null,
+        });
+        expect(okClear.entries()[MAP_TRASH_INDEX_KEY]).toBeUndefined();
+        expect(okClear.entries()[mapTrashBodyKey("t-1")]).toBeUndefined();
+        expect(readyView(okClear.result.current.view).trashStatus).toBe("ok");
+        expect(readyView(okClear.result.current.view).trashEntries).toEqual([]);
+      });
+
+      it("trashStatus が ok の状態から他タブ等でゴミ箱インデックスが破損した後に emptyTrash を呼ぶと、消去せず corrupt 通知と同期を返す", () => {
+        const { result, storage, entries } = setup({
+          initial: {
+            ...singleMapInitial(),
+            [mapTrashBodyKey("t-1")]: EMPTY_V3,
+          },
+        });
+        expect(readyView(result.current.view).trashStatus).toBe("ok");
+
+        storage.setItem(MAP_TRASH_INDEX_KEY, "{corrupt");
+
+        let emptied: ReturnType<typeof result.current.emptyTrash> | undefined;
+        act(() => {
+          emptied = result.current.emptyTrash();
+        });
+
+        expect(emptied).toEqual({
+          ok: false,
+          notice: trashCorruptNotice(),
+        });
+        expect(entries()[MAP_TRASH_INDEX_KEY]).toBe("{corrupt");
+        expect(entries()[mapTrashBodyKey("t-1")]).toBe(EMPTY_V3);
+        expect(readyView(result.current.view).trashStatus).toBe("corrupt");
+        expect(readyView(result.current.view).trashEntries).toEqual([]);
+      });
+    });
+
+    describe("refreshTrash と進行中ジャーナルガード", () => {
+      it("refreshTrash は他タブの更新・期限切れ清掃・破損検知で view.trashEntries と view.trashStatus を同期する", () => {
+        const { result, storage, operations } = setup({ initial: singleMapInitial() });
+        const valid = trashEntry({ id: "t-valid", expiresAt: "2026-11-10T00:00:00.000Z" });
+        const expired = trashEntry({ id: "t-expired", expiresAt: "2026-10-01T00:00:00.000Z" });
+        storage.setItem(
+          MAP_TRASH_INDEX_KEY,
+          encodeMapTrashIndex({ version: 1, items: [valid, expired] }),
+        );
+
+        act(() => {
+          result.current.refreshTrash();
+        });
+        expect(readyView(result.current.view).trashStatus).toBe("ok");
+        expect(readyView(result.current.view).trashEntries).toEqual([valid]);
+
+        storage.setItem(MAP_TRASH_INDEX_KEY, "{corrupt");
+        act(() => {
+          result.current.refreshTrash();
+        });
+        expect(readyView(result.current.view).trashStatus).toBe("corrupt");
+        expect(readyView(result.current.view).trashEntries).toEqual([]);
+
+        // 進行中ジャーナルがある場合は期限切れ清掃のための書き込みを行わない
+        storage.setItem(
+          MAP_TRASH_INDEX_KEY,
+          encodeMapTrashIndex({ version: 1, items: [valid, expired] }),
+        );
+        storage.setItem(BRANCH_MOVE_JOURNAL_KEY, '{"pending":true}');
+        const before = operations.length;
+        act(() => {
+          result.current.refreshTrash();
+        });
+        expect(operations.slice(before)).toEqual([]);
+        expect(readyView(result.current.view).trashStatus).toBe("ok");
+        expect(readyView(result.current.view).trashEntries).toEqual([expired, valid]);
+      });
+
+      it.each([
+        ["BRANCH_MOVE_JOURNAL_KEY", BRANCH_MOVE_JOURNAL_KEY],
+        ["LIBRARY_RESTORE_JOURNAL_KEY", LIBRARY_RESTORE_JOURNAL_KEY],
+      ])("進行中ジャーナル %s があるときはゴミ箱操作と完全削除を拒否する", (_label, journalKey) => {
+        const item = trashEntry({ id: "t-1" });
+        const { result, storage } = setup({
+          initial: {
+            ...twoMapsInitial(),
+            [MAP_TRASH_INDEX_KEY]: encodeMapTrashIndex({ version: 1, items: [item] }),
+            [mapTrashBodyKey("t-1")]: EMPTY_V3,
+          },
+        });
+        storage.setItem(journalKey, '{"pending":true}');
+
+        act(() => {
+          expect(result.current.deleteMap("map-2").ok).toBe(false);
+          expect(result.current.permanentlyDeleteMap("map-2").ok).toBe(false);
+          expect(result.current.restoreFromTrash("t-1").ok).toBe(false);
+          expect(result.current.permanentlyDeleteFromTrash("t-1").ok).toBe(false);
+          expect(result.current.emptyTrash().ok).toBe(false);
+        });
+      });
     });
   });
 });

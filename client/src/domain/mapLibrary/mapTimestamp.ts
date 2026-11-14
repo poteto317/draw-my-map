@@ -22,14 +22,24 @@ export function normalizeMapTimestamp(value: unknown): {
   return { value: UNKNOWN_MAP_TIMESTAMP, repaired: true };
 }
 
-// ローカル時刻の「更新: YYYY/MM/DD HH:mm」。toLocaleString は使わない。
-export function formatMapUpdatedAt(iso: string): string {
+// ローカル時刻の「<label>: YYYY/MM/DD HH:mm」。toLocaleString は使わない。
+function formatMapTimestampWithLabel(label: string, iso: string): string {
   const time = Date.parse(iso);
 
   if (!Number.isFinite(time) || iso === UNKNOWN_MAP_TIMESTAMP) {
-    return "更新: 不明";
+    return `${label}: 不明`;
   }
 
   const date = new Date(time);
-  return `更新: ${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return `${label}: ${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+// ローカル時刻の「更新: YYYY/MM/DD HH:mm」。toLocaleString は使わない。
+export function formatMapUpdatedAt(iso: string): string {
+  return formatMapTimestampWithLabel("更新", iso);
+}
+
+// ローカル時刻の「削除: YYYY/MM/DD HH:mm」。toLocaleString は使わない。
+export function formatMapDeletedAt(iso: string): string {
+  return formatMapTimestampWithLabel("削除", iso);
 }
