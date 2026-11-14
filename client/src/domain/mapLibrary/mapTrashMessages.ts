@@ -38,6 +38,12 @@ export function trashCorruptForMoveNotice(): OperationNotice {
   );
 }
 
+export function trashMoveRollbackFailedNotice(): OperationNotice {
+  return error(
+    "マップの削除に失敗し、ゴミ箱への移動の取り消しにも失敗しました。ページを再読み込みしてゴミ箱を確認してください。",
+  );
+}
+
 export const TRASH_CORRUPT_MESSAGE =
   "ゴミ箱の読み込みに失敗しました。ゴミ箱を空にして初期化してください。";
 

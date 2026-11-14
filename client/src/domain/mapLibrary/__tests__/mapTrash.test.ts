@@ -36,6 +36,7 @@ import {
   trashEntryPermanentlyDeletedBodyWarningNotice,
   trashEntryPermanentlyDeletedNotice,
   trashMoveFailedNotice,
+  trashMoveRollbackFailedNotice,
   trashPermanentDeleteFailedNotice,
   trashQuotaExceededNotice,
   trashRestoreBodyCorruptNotice,
@@ -263,6 +264,48 @@ describe("decodeMapTrashIndex / encodeMapTrashIndex", () => {
     });
   });
 
+  it("expiresAt が deletedAt + 30日 を超えるときは deletedAt + 30日 に直し repaired: true にする", () => {
+    const now = new Date("2026-11-15T00:00:00.000Z");
+    const futureDeleted = {
+      id: "a",
+      originalMapId: "orig-a",
+      name: "マップa",
+      createdAt: "2026-10-01T00:00:00.000Z",
+      updatedAt: "2026-10-10T00:00:00.000Z",
+      deletedAt: "2027-11-15T00:00:00.000Z",
+      expiresAt: "2027-12-15T00:00:00.000Z",
+      hasBody: true,
+    };
+    const farExpires = {
+      ...futureDeleted,
+      id: "b",
+      deletedAt: "2026-11-01T00:00:00.000Z",
+      expiresAt: "9999-12-31T00:00:00.000Z",
+    };
+
+    const result = decodeMapTrashIndex(
+      raw({ version: 1, items: [futureDeleted, farExpires] }),
+    );
+
+    expect(result).toEqual({
+      kind: "ok",
+      index: {
+        version: 1,
+        items: [
+          { ...futureDeleted, expiresAt: "2027-12-15T00:00:00.000Z" },
+          { ...farExpires, expiresAt: "2026-12-01T00:00:00.000Z" },
+        ],
+      },
+      repaired: true,
+    });
+    if (result.kind !== "ok") {
+      throw new Error("unreachable");
+    }
+    const [first, second] = result.index.items;
+    expect(formatTrashRemainingDays(first, now)).toBe("あと 30 日");
+    expect(formatTrashRemainingDays(second, now)).toBe("あと 16 日");
+  });
+
   it("未知キーは結果の MapTrashEntry に持ち込まない", () => {
     const valid = trashEntry({ id: "a" });
     const result = decodeMapTrashIndex(
@@ -464,6 +507,18 @@ describe("calculateTrashRemainingDays / formatTrashRemainingDays", () => {
       ),
     ).toBe("期限不明");
   });
+
+  it("未来の deletedAt（時計が戻った端末）でも残り日数は最大 30 日に抑える", () => {
+    const now = new Date("2026-11-15T00:00:00.000Z");
+    const entry = trashEntry({
+      id: "a",
+      deletedAt: "2027-11-15T00:00:00.000Z",
+      expiresAt: "2027-12-15T00:00:00.000Z",
+    });
+
+    expect(calculateTrashRemainingDays(entry, now)).toBe(TRASH_RETENTION_DAYS);
+    expect(formatTrashRemainingDays(entry, now)).toBe("あと 30 日");
+  });
 });
 
 describe("addTrashEntry / removeTrashEntry", () => {
@@ -490,6 +545,11 @@ describe("mapTrashMessages", () => {
     expect(trashQuotaExceededNotice().kind).toBe("error");
     expect(trashBodyReadFailedForMoveNotice().kind).toBe("error");
     expect(trashCorruptForMoveNotice().kind).toBe("error");
+    expect(trashMoveRollbackFailedNotice()).toEqual({
+      kind: "error",
+      message:
+        "マップの削除に失敗し、ゴミ箱への移動の取り消しにも失敗しました。ページを再読み込みしてゴミ箱を確認してください。",
+    });
     expect(trashCorruptNotice().kind).toBe("error");
     expect(trashCorruptNotice().message).toContain("ゴミ箱の読み込みに失敗しました");
   });

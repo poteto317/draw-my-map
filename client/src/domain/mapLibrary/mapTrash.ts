@@ -59,21 +59,34 @@ function compareMapTrashEntriesForDisplay(
   return a.id < b.id ? -1 : 1;
 }
 
+function parseValidTime(iso: string): number | null {
+  if (iso === UNKNOWN_MAP_TIMESTAMP) {
+    return null;
+  }
+  const time = Date.parse(iso);
+  return Number.isFinite(time) ? time : null;
+}
+
+// expiresAt が不正、または deletedAt + 保持期間を超える場合は、
+// deletedAt が有効なら deletedAt + 保持期間に直す。
 function resolveDecodedExpiresAt(
   expiresAt: { value: string; repaired: boolean },
   deletedAtValue: string,
-): string {
-  if (!expiresAt.repaired || deletedAtValue === UNKNOWN_MAP_TIMESTAMP) {
-    return expiresAt.value;
+): { value: string; repaired: boolean } {
+  const deletedTime = parseValidTime(deletedAtValue);
+  if (deletedTime === null) {
+    return expiresAt;
   }
-  const deletedTime = Date.parse(deletedAtValue);
-  if (!Number.isFinite(deletedTime)) {
-    return expiresAt.value;
+  const limitTime = deletedTime + TRASH_RETENTION_MS;
+  const expiresTime = parseValidTime(expiresAt.value);
+  if (!expiresAt.repaired && expiresTime !== null && expiresTime <= limitTime) {
+    return expiresAt;
   }
-  const candidate = new Date(deletedTime + TRASH_RETENTION_MS);
-  return Number.isNaN(candidate.getTime())
-    ? expiresAt.value
-    : candidate.toISOString();
+  const candidate = new Date(limitTime);
+  if (Number.isNaN(candidate.getTime())) {
+    return expiresAt;
+  }
+  return { value: candidate.toISOString(), repaired: true };
 }
 
 // 1項目を読み込む。使えない項目は null、補正した場合は repaired を立てる。
@@ -97,7 +110,10 @@ function decodeTrashEntry(
   const createdAt = normalizeMapTimestamp(value.createdAt);
   const updatedAt = normalizeMapTimestamp(value.updatedAt);
   const deletedAt = normalizeMapTimestamp(value.deletedAt);
-  const expiresAt = normalizeMapTimestamp(value.expiresAt);
+  const expiresAt = resolveDecodedExpiresAt(
+    normalizeMapTimestamp(value.expiresAt),
+    deletedAt.value,
+  );
 
   return {
     entry: {
@@ -107,7 +123,7 @@ function decodeTrashEntry(
       createdAt: createdAt.value,
       updatedAt: updatedAt.value,
       deletedAt: deletedAt.value,
-      expiresAt: resolveDecodedExpiresAt(expiresAt, deletedAt.value),
+      expiresAt: expiresAt.value,
       hasBody,
     },
     repaired:
@@ -185,16 +201,8 @@ export function createMapTrashEntry(params: {
   };
 }
 
-function parseValidExpiresTime(expiresAt: string): number | null {
-  if (expiresAt === UNKNOWN_MAP_TIMESTAMP) {
-    return null;
-  }
-  const expiresTime = Date.parse(expiresAt);
-  return Number.isFinite(expiresTime) ? expiresTime : null;
-}
-
 export function isTrashEntryExpired(entry: MapTrashEntry, now: Date): boolean {
-  const expiresTime = parseValidExpiresTime(entry.expiresAt);
+  const expiresTime = parseValidTime(entry.expiresAt);
   if (expiresTime === null) {
     return false;
   }
@@ -227,7 +235,7 @@ export function calculateTrashRemainingDays(
   entry: MapTrashEntry,
   now: Date,
 ): number | null {
-  const expiresTime = parseValidExpiresTime(entry.expiresAt);
+  const expiresTime = parseValidTime(entry.expiresAt);
   if (expiresTime === null) {
     return null;
   }
@@ -235,7 +243,7 @@ export function calculateTrashRemainingDays(
   if (diffMs <= 0) {
     return 0;
   }
-  return Math.ceil(diffMs / MS_PER_DAY);
+  return Math.min(Math.ceil(diffMs / MS_PER_DAY), TRASH_RETENTION_DAYS);
 }
 
 export function formatTrashRemainingDays(

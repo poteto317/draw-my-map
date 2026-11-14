@@ -64,11 +64,13 @@ export type MapTrashState =
 
 ### 3.3 保持期限・ソート・復元時のID解決・データ修復
 - **ソート順**: `deletedAt` 降順 → `updatedAt` 降順 → `id` 昇順（直近削除が先頭）。
-- **期限切れ判定**: `Date.parse(entry.expiresAt) <= now.getTime()` または日時が不正な場合は期限切れとみなす。
+- **期限切れ判定**: `expiresAt` が有効な日時のときだけ、`Date.parse(entry.expiresAt) <= now.getTime()` で期限切れとする。`UNKNOWN_MAP_TIMESTAMP` と不正な日時は期限不明として扱い、自動では削除しない（手動の完全削除や「ゴミ箱を空にする」で削除できる）。
+- **`expiresAt` の再計算**: 読み込み時、`expiresAt` が不正、または `deletedAt + 30日` を超える場合でも、`deletedAt` が有効なら `expiresAt = deletedAt + 30日` で再計算し、`repaired: true` とする。
 - **残り日数表示**:
+  - `expiresAt` が `UNKNOWN_MAP_TIMESTAMP` または不正な日時: `"期限不明"`
   - `diffMs = Date.parse(entry.expiresAt) - now.getTime()`
   - `diffMs <= 0`: `"期限切れ"`
-  - `diffMs > 0`: `Math.ceil(diffMs / 86_400_000)` 日 → `"あと N 日"`（30日〜1日）。
+  - `diffMs > 0`: `Math.min(Math.ceil(diffMs / 86_400_000), 30)` 日 → `"あと N 日"`（30日〜1日。時計が戻った端末で `deletedAt` が未来でも 30 日を上限とする）。
 - **破損時・欠損時の扱い（L-002）**:
   - `decodeMapTrashIndex(raw)` は `version !== 1`・JSON 構文エラー・`items` が配列でない場合は `{ kind: "corrupt" }` を返す。各行の不正データ・重複 `id` はスキップして `repaired: true` とする。
   - `MAP_TRASH_INDEX_KEY` が壊れていても、通常のマップ一覧や現在開いているマップを保護モードへ落とさない。

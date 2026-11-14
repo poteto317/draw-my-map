@@ -854,6 +854,7 @@ describe("runMapLibraryStartup", () => {
       const index = untitledIndex("map-x", false);
       const active = makeTrashEntry({
         id: "t-act",
+        deletedAt: "2026-10-15T00:00:00.000Z",
         expiresAt: "2026-11-14T00:00:00.000Z",
       });
       const { storage, operations } = createRecordingStorage({
