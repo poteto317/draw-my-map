@@ -26,7 +26,11 @@ import {
   trashEmptyFailedNotice,
   trashEntryNotFoundNotice,
   trashEntryPermanentlyDeletedNotice,
+  trashPermanentDeleteFailedNotice,
   trashQuotaExceededNotice,
+  trashRestoreBodyCorruptNotice,
+  trashRestoreBodyMissingNotice,
+  trashRestoreWriteFailedNotice,
   trashRestoredCleanupFailedNotice,
   trashRestoredNotice,
 } from "@/domain/mapLibrary/mapTrashMessages";
@@ -1140,7 +1144,7 @@ describe("useMapLibraryDialogState と MapLibraryDialog のフォーカスの戻
     expect(onHeaderFocusRequest).toHaveBeenLastCalledWith("list");
   });
 
-  it("ゴミ箱から個別完全削除を確定して対象が消えても alert が消えず、最後は一覧に戻るへ移す", async () => {
+  it("ゴミ箱から個別完全削除で対象不在なら一覧に戻るへ落ち、成功後も一覧に戻るへ移す", async () => {
     const user = userEvent.setup();
     const library = createFakeLibrary();
     library.permanentlyDeleteFromTrash
@@ -1155,7 +1159,8 @@ describe("useMapLibraryDialogState と MapLibraryDialog のフォーカスの戻
     await user.click(screen.getByRole("button", { name: "完全に削除: T1" }));
     await user.click(screen.getByRole("button", { name: "完全に削除" }));
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "復元: T2" })).toHaveFocus());
+    // 対象不在で行が描画されないときは隣の行へ移さず、「一覧に戻る」へ落ちる
+    await waitFor(() => expect(screen.getByRole("button", { name: "一覧に戻る" })).toHaveFocus());
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent(trashEntryNotFoundNotice().message),
     );
@@ -1378,8 +1383,43 @@ describe("useMapLibraryDialogState のゴミ箱遷移と完全削除フォール
 
     act(() => result.current.restoreTrash("t3"));
     expect(result.current.screen).toEqual({ kind: "trash" });
-    expect(result.current.focusTarget).toEqual({ kind: "trashRow", trashId: "t2", action: "restore" });
+    expect(result.current.focusTarget).toEqual({ kind: "trashRow", trashId: "t3", action: "restore" });
     expect(result.current.notices.alert).toBe(trashEntryNotFoundNotice().message);
+  });
+
+  it.each([
+    ["本体欠落", trashRestoreBodyMissingNotice()],
+    ["本体破損", trashRestoreBodyCorruptNotice()],
+    ["書き込み失敗", trashRestoreWriteFailedNotice()],
+  ])("restoreTrash が%sで失敗すると、隣の行へ移さず同じ行の「復元」に残す", (_label, notice) => {
+    const library = createFakeLibrary();
+    library.restoreFromTrash.mockReturnValueOnce(failedResult(notice));
+    const { result } = renderDialogState({ library, trashEntries: threeTrash });
+    act(() => result.current.openTrash());
+
+    act(() => result.current.restoreTrash("t1"));
+    expect(result.current.screen).toEqual({ kind: "trash" });
+    expect(result.current.focusTarget).toEqual({ kind: "trashRow", trashId: "t1", action: "restore" });
+    expect(result.current.notices.alert).toBe(notice.message);
+  });
+
+  it("confirmTrashPermanentDelete が失敗すると、隣の行へ移さずその行の「完全に削除」に残す", () => {
+    const library = createFakeLibrary();
+    library.permanentlyDeleteFromTrash.mockReturnValueOnce(
+      failedResult(trashPermanentDeleteFailedNotice()),
+    );
+    const { result } = renderDialogState({ library, trashEntries: threeTrash });
+    act(() => result.current.openTrash());
+    act(() => result.current.openTrashPermanentDelete("t2"));
+
+    act(() => result.current.confirmTrashPermanentDelete("t2"));
+    expect(result.current.screen).toEqual({ kind: "trash" });
+    expect(result.current.focusTarget).toEqual({
+      kind: "trashRow",
+      trashId: "t2",
+      action: "permanentDelete",
+    });
+    expect(result.current.notices.alert).toBe(trashPermanentDeleteFailedNotice().message);
   });
 
   it("confirmEmptyTrash は成功時に backToListButton、失敗時に emptyTrashButton へ戻す", () => {
