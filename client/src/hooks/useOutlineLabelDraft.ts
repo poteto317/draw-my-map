@@ -41,7 +41,6 @@ export function useOutlineLabelDraft(options: Options) {
         const current = latest.current;
         if (active.current && !isValid(active.current, current)) {
             // 外部の正本変更で入力を同期失効させ、後着blurによる書き戻しを防ぐ。
-            // eslint-disable-next-line react-hooks/set-state-in-effect
             clear();
             if (current.enabled && !current.duplicateIds)
                 current.publishNotice(STALE_DRAFT);

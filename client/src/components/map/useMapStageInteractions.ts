@@ -26,6 +26,17 @@ type UseMapStageInteractionsOptions = {
   shouldIgnorePointerDown?: () => boolean;
 };
 
+function bindPixiStage(
+  runtime: PixiRuntime,
+  bind: ReturnType<typeof createStageInteractions>["bind"],
+) {
+  // Pixi の stage は React の不変 props ではなく、命令的に設定する描画ホスト
+  const stage = runtime.app.stage;
+  stage.eventMode = "static";
+  stage.hitArea = runtime.app.screen;
+  return bind(stage);
+}
+
 export function useMapStageInteractions({
   runtime,
   nodes,
@@ -67,23 +78,25 @@ export function useMapStageInteractions({
     onReorderSibling,
   });
 
-  const interactionsRef = useRef<ReturnType<typeof createStageInteractions> | null>(null);
-  interactionsRef.current ??= createStageInteractions({
-    nodesRef,
-    visibleNodeIdsRef,
-    viewportRef,
-    onSelectNodeRef,
-    onMoveNodeRef,
-    onBeginNodeMoveRef,
-    onConnectNodesRef,
-    onConnectionTargetChangeRef,
-    onViewportChangeRef,
-    layoutModeRef,
-    onReorderSiblingRef,
-    onSiblingReorderPreviewChangeRef,
-    shouldIgnorePointerDownRef,
-  });
-  const interactions = interactionsRef.current;
+  // ジェスチャー本体は一度だけ作る。渡す refs は保持するだけで、.current の読み取りはイベント／effect 側。
+  // eslint-disable-next-line react-hooks/refs -- create 時は LatestValue を保持するだけ。.current はイベント／effect で読む
+  const [interactions] = useState(() =>
+    createStageInteractions({
+      nodesRef,
+      visibleNodeIdsRef,
+      viewportRef,
+      onSelectNodeRef,
+      onMoveNodeRef,
+      onBeginNodeMoveRef,
+      onConnectNodesRef,
+      onConnectionTargetChangeRef,
+      onViewportChangeRef,
+      layoutModeRef,
+      onReorderSiblingRef,
+      onSiblingReorderPreviewChangeRef,
+      shouldIgnorePointerDownRef,
+    }),
+  );
 
   useLayoutEffect(() => {
     if (interactions.activeNodeIds().some((nodeId) => !visibleNodeIdsRef.current.has(nodeId))) {
@@ -93,10 +106,7 @@ export function useMapStageInteractions({
 
   useEffect(() => {
     if (!runtime) return;
-
-    runtime.app.stage.eventMode = "static";
-    runtime.app.stage.hitArea = runtime.app.screen;
-    return interactions.bind(runtime.app.stage);
+    return bindPixiStage(runtime, interactions.bind);
   }, [runtime, interactions]);
 
   return {
