@@ -320,4 +320,48 @@ describe("削除マップのゴミ箱の結合テスト", () => {
     );
     expect(readMapIndex(window.localStorage)?.maps.map((m) => m.id)).toEqual(["a"]);
   });
+
+  it("X の復元が失敗するとフォーカスは X の「復元」に残り、続けて Enter を押しても Y を復元しない", async () => {
+    seedTwoMaps();
+    const now = Date.now();
+    const iso = (ms: number) => new Date(ms).toISOString();
+    const item = (id: string, name: string, deletedMs: number) => ({
+      id,
+      originalMapId: id,
+      name,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      deletedAt: iso(deletedMs),
+      expiresAt: iso(deletedMs + 30 * 86_400_000),
+      hasBody: true,
+    });
+    // X は本体が無いので復元に失敗する。Y は本体があり、復元できる
+    window.localStorage.setItem(MAP_TRASH_INDEX_KEY, JSON.stringify({
+      version: 1,
+      items: [item("tx", "X", now - 1000), item("ty", "Y", now - 2000)],
+    }));
+    window.localStorage.setItem(mapTrashBodyKey("ty"), v3JsonFromLabels(["Y1"]));
+    const user = userEvent.setup();
+    await renderPage();
+    await user.click(headerButton("マップ一覧"));
+    await user.click(dialog().getByRole("button", { name: "ゴミ箱（2）" }));
+
+    const restoreX = dialog().getByRole("button", { name: "復元: X" });
+    restoreX.focus();
+    await user.keyboard("{Enter}");
+    await waitFor(() =>
+      expect(dialog().getByRole("alert")).toHaveTextContent("ゴミ箱のマップ本体が見つからない"),
+    );
+    await waitFor(() =>
+      expect(document.activeElement).toBe(dialog().getByRole("button", { name: "復元: X" })),
+    );
+
+    await user.keyboard("{Enter}");
+    await waitFor(() =>
+      expect(dialog().getByRole("alert")).toHaveTextContent("ゴミ箱のマップ本体が見つからない"),
+    );
+    expect(readMapIndex(window.localStorage)?.maps.map((m) => m.name)).toEqual(["A", "B"]);
+    expect(dialog().getByRole("button", { name: "復元: Y" })).toBeInTheDocument();
+    expect(window.localStorage.getItem(mapTrashBodyKey("ty"))).not.toBeNull();
+  });
 });

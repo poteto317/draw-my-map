@@ -264,6 +264,27 @@ describe("decodeMapTrashIndex / encodeMapTrashIndex", () => {
     });
   });
 
+  it("expiresAt がちょうど deletedAt + 30日 のときは補正せず repaired: false のままにする", () => {
+    const exactLimit = {
+      id: "a",
+      originalMapId: "orig-a",
+      name: "マップa",
+      createdAt: "2026-10-01T00:00:00.000Z",
+      updatedAt: "2026-10-10T00:00:00.000Z",
+      deletedAt: "2027-11-15T00:00:00.000Z",
+      expiresAt: "2027-12-15T00:00:00.000Z",
+      hasBody: true,
+    };
+
+    const result = decodeMapTrashIndex(raw({ version: 1, items: [exactLimit] }));
+
+    expect(result).toEqual({
+      kind: "ok",
+      index: { version: 1, items: [exactLimit] },
+      repaired: false,
+    });
+  });
+
   it("expiresAt が deletedAt + 30日 を超えるときは deletedAt + 30日 に直し repaired: true にする", () => {
     const now = new Date("2026-11-15T00:00:00.000Z");
     const futureDeleted = {
@@ -273,7 +294,7 @@ describe("decodeMapTrashIndex / encodeMapTrashIndex", () => {
       createdAt: "2026-10-01T00:00:00.000Z",
       updatedAt: "2026-10-10T00:00:00.000Z",
       deletedAt: "2027-11-15T00:00:00.000Z",
-      expiresAt: "2027-12-15T00:00:00.000Z",
+      expiresAt: "2028-11-15T00:00:00.000Z",
       hasBody: true,
     };
     const farExpires = {

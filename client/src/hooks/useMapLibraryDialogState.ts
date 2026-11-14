@@ -310,10 +310,16 @@ export function useMapLibraryDialogState(options: {
     [transition],
   );
 
+  // 成功で行が消えたら隣の行へ、失敗で行が残るなら押した行の同じボタンへ戻す。
+  // 失敗でも行が消えていれば（対象不在など）、描画されない行の代わりに「一覧に戻る」へ落ちる
   const restoreTrash = useCallback(
     (trashId: string) => {
       const focusAfterRemoval = selectFocusAfterTrashRemoval(trashEntriesRef.current, trashId);
-      finishTrashTransition(libraryRef.current.restoreFromTrash(trashId), focusAfterRemoval);
+      const result = libraryRef.current.restoreFromTrash(trashId);
+      finishTrashTransition(
+        result,
+        result.ok ? focusAfterRemoval : { kind: "trashRow", trashId, action: "restore" },
+      );
     },
     [finishTrashTransition],
   );
@@ -321,9 +327,10 @@ export function useMapLibraryDialogState(options: {
   const confirmTrashPermanentDelete = useCallback(
     (trashId: string) => {
       const focusAfterRemoval = selectFocusAfterTrashRemoval(trashEntriesRef.current, trashId);
+      const result = libraryRef.current.permanentlyDeleteFromTrash(trashId);
       finishTrashTransition(
-        libraryRef.current.permanentlyDeleteFromTrash(trashId),
-        focusAfterRemoval,
+        result,
+        result.ok ? focusAfterRemoval : { kind: "trashRow", trashId, action: "permanentDelete" },
       );
     },
     [finishTrashTransition],
