@@ -1489,4 +1489,31 @@ describe("MapStage boundary", () => {
       expect(fireEvent.keyDown(window, { key: "Escape" })).toBe(true);
     });
   });
+
+  describe("Alt 矩形選択", () => {
+    it("Alt 背景ドラッグ確定で onSetSelectionFromMarquee に配列順 ids を渡し、clear しない", async () => {
+      const onSetSelectionFromMarquee = jest.fn();
+      const onClearSelection = jest.fn();
+      await renderReady(
+        <MapStage
+          {...defaultProps}
+          nodes={sampleNodes}
+          onSetSelectionFromMarquee={onSetSelectionFromMarquee}
+          onClearSelection={onClearSelection}
+        />,
+      );
+
+      act(() => {
+        mockStageHandlers.pointerdown?.(pointer(0, 0, { target: mockStage, altKey: true }));
+        mockStageHandlers.pointermove?.(pointer(280, 140, { altKey: true }));
+        mockStageHandlers.pointerup?.(pointer(280, 140, { altKey: true }));
+      });
+
+      expect(onSetSelectionFromMarquee).toHaveBeenCalledWith({
+        mode: "replace",
+        ids: [1, 2],
+      });
+      expect(onClearSelection).not.toHaveBeenCalled();
+    });
+  });
 });

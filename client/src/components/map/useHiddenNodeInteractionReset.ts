@@ -1,58 +1,65 @@
 "use client";
 
 import { useLayoutEffect, useRef } from "react";
+import {
+  planHiddenNodeInteractionReset,
+  sameHiddenInteractionSnapshot,
+  type HiddenInteractionSnapshot,
+} from "@/components/map/hiddenNodeInteractionReset";
 
 type UseHiddenNodeInteractionResetOptions = {
+  selectedNodeIds: readonly number[];
   selectedNodeId: number | null;
   editingNodeId: number | null;
   visibleNodeIds: ReadonlySet<number>;
-  onSelectNode: (id: number | null) => void;
+  pruneSelectionToVisible: (visibleNodeIds: ReadonlySet<number>) => void;
   cancelEditing: () => void;
   cancelActiveGesture: () => void;
 };
 
-type HiddenInteractionIds = {
-  selectedNodeId: number | null;
-  editingNodeId: number | null;
-};
-
 export function useHiddenNodeInteractionReset({
+  selectedNodeIds,
   selectedNodeId,
   editingNodeId,
   visibleNodeIds,
-  onSelectNode,
+  pruneSelectionToVisible,
   cancelEditing,
   cancelActiveGesture,
 }: UseHiddenNodeInteractionResetOptions): void {
-  const lastResetRef = useRef<HiddenInteractionIds | null>(null);
+  const lastResetRef = useRef<HiddenInteractionSnapshot | null>(null);
 
   useLayoutEffect(() => {
-    const hiddenIds = {
-      selectedNodeId: selectedNodeId !== null && !visibleNodeIds.has(selectedNodeId)
-        ? selectedNodeId
-        : null,
-      editingNodeId: editingNodeId !== null && !visibleNodeIds.has(editingNodeId)
-        ? editingNodeId
-        : null,
-    };
-    if (hiddenIds.selectedNodeId === null && hiddenIds.editingNodeId === null) {
+    const plan = planHiddenNodeInteractionReset({
+      selectedNodeIds,
+      selectedNodeId,
+      editingNodeId,
+      visibleNodeIds,
+    });
+
+    if (plan === null) {
       lastResetRef.current = null;
       return;
     }
-    if (
-      lastResetRef.current?.selectedNodeId === hiddenIds.selectedNodeId
-      && lastResetRef.current.editingNodeId === hiddenIds.editingNodeId
-    ) return;
 
-    lastResetRef.current = hiddenIds;
-    onSelectNode(null);
-    cancelEditing();
-    cancelActiveGesture();
+    if (sameHiddenInteractionSnapshot(lastResetRef.current, plan.snapshot)) return;
+
+    lastResetRef.current = plan.snapshot;
+
+    for (const action of plan.actions) {
+      if (action === "prune") {
+        pruneSelectionToVisible(visibleNodeIds);
+      } else if (action === "cancelGesture") {
+        cancelActiveGesture();
+      } else {
+        cancelEditing();
+      }
+    }
   }, [
+    selectedNodeIds,
     selectedNodeId,
     editingNodeId,
     visibleNodeIds,
-    onSelectNode,
+    pruneSelectionToVisible,
     cancelEditing,
     cancelActiveGesture,
   ]);

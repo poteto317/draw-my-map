@@ -9,6 +9,9 @@ type ShortcutOptions = {
   onDeleteNode: (nodeId: number) => void;
   onStartEditing: (nodeId: number, initialText: string) => void;
   enabled: boolean;
+  onClearSelection: () => void;
+  isSiblingReorderActive: () => boolean;
+  isContextMenuOpen: () => boolean;
 };
 
 function ShortcutHarness(options: ShortcutOptions) {
@@ -25,6 +28,9 @@ function createOptions(overrides: Partial<ShortcutOptions> = {}): ShortcutOption
     onDeleteNode: jest.fn(),
     onStartEditing: jest.fn(),
     enabled: true,
+    onClearSelection: jest.fn(),
+    isSiblingReorderActive: () => false,
+    isContextMenuOpen: () => false,
     ...overrides,
   };
 }
@@ -222,6 +228,95 @@ describe("useNodeKeyboardShortcuts", () => {
       expect(event.defaultPrevented).toBe(true);
     },
   );
+
+
+  it("非編集・有効・ガード false の Escape で全解除する", () => {
+    const onClearSelection = jest.fn();
+    const options = createOptions({ onClearSelection });
+    render(<ShortcutHarness {...options} />);
+
+    dispatchKey("Escape");
+
+    expect(onClearSelection).toHaveBeenCalledTimes(1);
+  });
+
+  it("編集中の Escape では全解除しない", () => {
+    const onClearSelection = jest.fn();
+    const options = createOptions({ isEditing: true, onClearSelection });
+    render(<ShortcutHarness {...options} />);
+
+    dispatchKey("Escape");
+
+    expect(onClearSelection).not.toHaveBeenCalled();
+  });
+
+  it("enabled が false の Escape では全解除しない", () => {
+    const onClearSelection = jest.fn();
+    const options = createOptions({ enabled: false, onClearSelection });
+    render(<ShortcutHarness {...options} />);
+
+    dispatchKey("Escape");
+
+    expect(onClearSelection).not.toHaveBeenCalled();
+  });
+
+  it("interactive 対象からの Escape では全解除しない", () => {
+    const onClearSelection = jest.fn();
+    const options = createOptions({ onClearSelection });
+    render(<ShortcutHarness {...options} />);
+    const event = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+
+    screen.getByRole("button", { name: "レイアウトモード" })
+      .dispatchEvent(event);
+
+    expect(onClearSelection).not.toHaveBeenCalled();
+  });
+
+  it("コンテキストメニューが開いている Escape では全解除しない", () => {
+    const onClearSelection = jest.fn();
+    const options = createOptions({
+      onClearSelection,
+      isContextMenuOpen: () => true,
+    });
+    render(<ShortcutHarness {...options} />);
+
+    dispatchKey("Escape");
+
+    expect(onClearSelection).not.toHaveBeenCalled();
+  });
+
+  it("並べ替え Escape を模擬し preventDefault 済みの同一 keydown では全解除しない", () => {
+    const onClearSelection = jest.fn();
+    const options = createOptions({
+      onClearSelection,
+      // 並べ替え Escape 処理後は isSiblingReorderActive が既に false になり得る
+      isSiblingReorderActive: () => false,
+    });
+    render(<ShortcutHarness {...options} />);
+    const event = new KeyboardEvent("keydown", { key: "Escape", cancelable: true });
+    event.preventDefault();
+
+    window.dispatchEvent(event);
+
+    expect(onClearSelection).not.toHaveBeenCalled();
+  });
+
+  it("isSiblingReorderActive が true の Escape では全解除しない", () => {
+    const onClearSelection = jest.fn();
+    const options = createOptions({
+      onClearSelection,
+      isSiblingReorderActive: () => true,
+    });
+    render(<ShortcutHarness {...options} />);
+
+    dispatchKey("Escape");
+
+    expect(onClearSelection).not.toHaveBeenCalled();
+  });
 
   it("Alt+Tab は従来どおり子を足す", () => {
     const options = createOptions();

@@ -117,4 +117,19 @@ describe("createCanvasPanGesture", () => {
 
     expect(onViewportChangeRef.current).not.toHaveBeenCalled();
   });
+
+  it("dragActivation を超えるまで isActivated は false、超えたら true", () => {
+    const gesture = createCanvasPanGesture({
+      startSample: sample(0, 0),
+      startViewport: { offsetX: 0, offsetY: 0, scale: 1 },
+      onViewportChangeRef: { current: jest.fn() },
+      dragThreshold: 4,
+    });
+
+    expect(gesture?.isActivated?.()).toBe(false);
+    gesture?.move(sample(3, 0));
+    expect(gesture?.isActivated?.()).toBe(false);
+    gesture?.move(sample(4, 0));
+    expect(gesture?.isActivated?.()).toBe(true);
+  });
 });

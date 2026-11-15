@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Viewport } from "@/components/map/mapViewport";
+import type { MarqueeRect, MarqueeSelectionMode } from "@/components/map/pixi/marqueeSelectGesture";
 import { createStageInteractions } from "@/components/map/pixi/stageInteractions";
 import type { LatestValue } from "@/components/map/pixi/pointerGesture";
 import type { PixiRuntime } from "@/components/map/pixi/pixiTypes";
@@ -18,6 +19,13 @@ type UseMapStageInteractionsOptions = {
   viewportRef: LatestValue<Viewport>;
   onViewportChange: (viewport: Viewport) => void;
   onSelectNode: (id: number | null) => void;
+  onToggleNodeSelection?: (id: number) => void;
+  onSelectNodeRange?: (targetId: number, visibleNodeIdsOrdered: readonly number[]) => void;
+  onSetSelectionFromMarquee?: (args: {
+    mode: MarqueeSelectionMode;
+    ids: readonly number[];
+  }) => void;
+  onClearSelection?: () => void;
   onMoveNode: (id: number, x: number, y: number) => void;
   onBeginNodeMove: () => MapHistoryGroupLease;
   onConnectNodes: (parentId: number, childId: number) => void;
@@ -44,6 +52,10 @@ export function useMapStageInteractions({
   viewportRef,
   onViewportChange,
   onSelectNode,
+  onToggleNodeSelection = () => {},
+  onSelectNodeRange = () => {},
+  onSetSelectionFromMarquee = () => {},
+  onClearSelection,
   onMoveNode,
   onBeginNodeMove,
   onConnectNodes,
@@ -52,8 +64,15 @@ export function useMapStageInteractions({
   shouldIgnorePointerDown = () => false,
 }: UseMapStageInteractionsOptions) {
   const shouldIgnorePointerDownRef = useLatestRef(shouldIgnorePointerDown);
+  const onToggleNodeSelectionRef = useLatestRef(onToggleNodeSelection);
+  const onSelectNodeRangeRef = useLatestRef(onSelectNodeRange);
+  const onSetSelectionFromMarqueeRef = useLatestRef(onSetSelectionFromMarquee);
+  const resolvedOnClearSelection = onClearSelection ?? (() => onSelectNode(null));
+  const onClearSelectionRef = useLatestRef(resolvedOnClearSelection);
   const [connectionTargetNodeId, setConnectionTargetNodeId] = useState<number | null>(null);
   const onConnectionTargetChangeRef = useRef(setConnectionTargetNodeId);
+  const [marqueeRect, setMarqueeRect] = useState<MarqueeRect | null>(null);
+  const onMarqueeRectChangeRef = useRef(setMarqueeRect);
   const [siblingReorderPreview, setSiblingReorderPreview] = useState<SiblingReorderPreview | null>(null);
   const onSiblingReorderPreviewChangeRef = useRef(setSiblingReorderPreview);
   const {
@@ -86,6 +105,11 @@ export function useMapStageInteractions({
       visibleNodeIdsRef,
       viewportRef,
       onSelectNodeRef,
+      onToggleNodeSelectionRef,
+      onSelectNodeRangeRef,
+      onClearSelectionRef,
+      onSetSelectionFromMarqueeRef,
+      onMarqueeRectChangeRef,
       onMoveNodeRef,
       onBeginNodeMoveRef,
       onConnectNodesRef,
@@ -111,6 +135,7 @@ export function useMapStageInteractions({
 
   return {
     connectionTargetNodeId,
+    marqueeRect,
     siblingReorderPreview,
     createNodePointerDownHandler: interactions.createNodePointerDownHandler,
     cancelActiveGesture: interactions.cancelActiveGesture,

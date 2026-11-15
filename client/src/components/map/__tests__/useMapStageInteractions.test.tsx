@@ -15,6 +15,9 @@ type PointerEvent = {
   composedPath: () => unknown[];
   target?: unknown;
   shiftKey?: boolean;
+  metaKey?: boolean;
+  ctrlKey?: boolean;
+  altKey?: boolean;
   button: number;
 };
 type Handler = (event: PointerEvent) => void;
@@ -51,7 +54,9 @@ type Runtime = ReturnType<typeof createRuntime>["runtime"];
 function pointer(
   globalX: number,
   globalY: number,
-  options: Pick<PointerEvent, "shiftKey" | "target"> & { path?: unknown[] } = {},
+  options: Pick<PointerEvent, "shiftKey" | "metaKey" | "ctrlKey" | "altKey" | "target"> & {
+    path?: unknown[];
+  } = {},
 ): PointerEvent {
   const { path = [], ...eventOptions } = options;
   return {
@@ -60,6 +65,10 @@ function pointer(
     pointerId: 1,
     pointerType: "mouse",
     button: 0,
+    shiftKey: false,
+    metaKey: false,
+    ctrlKey: false,
+    altKey: false,
     composedPath: () => path,
     ...eventOptions,
   };
@@ -429,6 +438,176 @@ describe("useMapStageInteractions", () => {
       drag();
       expect(onMoveNode).toHaveBeenCalledTimes(2);
       expect(onReorderSibling).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("複数選択コールバック配線（Task 3）", () => {
+    it("metaKey の pointerup で onToggleNodeSelection が届く", () => {
+      const originalPlatform = navigator.platform;
+      Object.defineProperty(navigator, "platform", { configurable: true, value: "MacIntel" });
+      try {
+        const { runtime, stage, handlers } = createRuntime();
+        const onToggleNodeSelection = jest.fn();
+        const viewportRef = { current: INITIAL_VIEWPORT };
+        const { result } = renderHook(() =>
+          useMapStageInteractions({
+            runtime: runtime as never,
+            nodes,
+            viewportRef,
+            onViewportChange: jest.fn(),
+            onSelectNode: jest.fn(),
+            onToggleNodeSelection,
+            onMoveNode: jest.fn(),
+            onBeginNodeMove: createLease,
+            onConnectNodes: jest.fn(),
+            layoutMode: "manual",
+            onReorderSibling: jest.fn(),
+          }),
+        );
+
+        act(() => {
+          result.current.createNodePointerDownHandler()(
+            2,
+            pointer(50, 50, { metaKey: true, path: [stage] }) as never,
+          );
+          handlers.pointerup?.(pointer(50, 50, { metaKey: true }));
+        });
+
+        expect(onToggleNodeSelection).toHaveBeenCalledWith(2);
+      } finally {
+        Object.defineProperty(navigator, "platform", { configurable: true, value: originalPlatform });
+      }
+    });
+
+    it("Shift 未 activated 終端で onSelectNodeRange が届く", () => {
+      const { runtime, stage, handlers } = createRuntime();
+      const onSelectNodeRange = jest.fn();
+      const viewportRef = { current: INITIAL_VIEWPORT };
+      const { result } = renderHook(() =>
+        useMapStageInteractions({
+          runtime: runtime as never,
+          nodes,
+          visibleNodeIds: new Set([1, 2]),
+          viewportRef,
+          onViewportChange: jest.fn(),
+          onSelectNode: jest.fn(),
+          onSelectNodeRange,
+          onMoveNode: jest.fn(),
+          onBeginNodeMove: createLease,
+          onConnectNodes: jest.fn(),
+          layoutMode: "manual",
+          onReorderSibling: jest.fn(),
+        }),
+      );
+
+      act(() => {
+        result.current.createNodePointerDownHandler()(
+          2,
+          pointer(50, 50, { shiftKey: true, path: [stage] }) as never,
+        );
+        handlers.pointerup?.(pointer(51, 50, { shiftKey: true }));
+      });
+
+      expect(onSelectNodeRange).toHaveBeenCalledWith(2, [1, 2]);
+    });
+
+    it("背景未 activated 終端で onClearSelection が届く", () => {
+      const { runtime, handlers } = createRuntime();
+      const onClearSelection = jest.fn();
+      const viewportRef = { current: INITIAL_VIEWPORT };
+      renderHook(() =>
+        useMapStageInteractions({
+          runtime: runtime as never,
+          nodes,
+          viewportRef,
+          onViewportChange: jest.fn(),
+          onSelectNode: jest.fn(),
+          onClearSelection,
+          onMoveNode: jest.fn(),
+          onBeginNodeMove: createLease,
+          onConnectNodes: jest.fn(),
+          layoutMode: "manual",
+          onReorderSibling: jest.fn(),
+        }),
+      );
+
+      act(() => {
+        handlers.pointerdown?.(pointer(0, 0, { target: runtime.app.stage }));
+        handlers.pointerup?.(pointer(0, 0));
+      });
+
+      expect(onClearSelection).toHaveBeenCalledTimes(1);
+    });
+
+    it("onClearSelection 省略時は背景未 activated 終端で onSelectNode(null) にフォールバックする", () => {
+      const { runtime, handlers } = createRuntime();
+      const onSelectNode = jest.fn();
+      const viewportRef = { current: INITIAL_VIEWPORT };
+      renderHook(() =>
+        useMapStageInteractions({
+          runtime: runtime as never,
+          nodes,
+          viewportRef,
+          onViewportChange: jest.fn(),
+          onSelectNode,
+          onMoveNode: jest.fn(),
+          onBeginNodeMove: createLease,
+          onConnectNodes: jest.fn(),
+          layoutMode: "manual",
+          onReorderSibling: jest.fn(),
+        }),
+      );
+
+      act(() => {
+        handlers.pointerdown?.(pointer(0, 0, { target: runtime.app.stage }));
+        handlers.pointerup?.(pointer(0, 0));
+      });
+
+      expect(onSelectNode).toHaveBeenCalledWith(null);
+    });
+
+    it("Alt 矩形ドラッグ中は marqueeRect を公開し、確定で setSelectionFromMarquee して null に戻す", () => {
+      const { runtime, handlers } = createRuntime();
+      const onSetSelectionFromMarquee = jest.fn();
+      const onClearSelection = jest.fn();
+      const viewportRef = { current: INITIAL_VIEWPORT };
+      const { result } = renderHook(() =>
+        useMapStageInteractions({
+          runtime: runtime as never,
+          nodes,
+          viewportRef,
+          onViewportChange: jest.fn(),
+          onSelectNode: jest.fn(),
+          onSetSelectionFromMarquee,
+          onClearSelection,
+          onMoveNode: jest.fn(),
+          onBeginNodeMove: createLease,
+          onConnectNodes: jest.fn(),
+          layoutMode: "manual",
+          onReorderSibling: jest.fn(),
+        }),
+      );
+
+      expect(result.current.marqueeRect).toBeNull();
+
+      act(() => {
+        handlers.pointerdown?.(pointer(0, 0, { target: runtime.app.stage, altKey: true }));
+        handlers.pointermove?.(pointer(250, 80, { altKey: true }));
+      });
+      expect(result.current.marqueeRect).toEqual({
+        x: 0, y: 0, width: 250, height: 80,
+      });
+
+      act(() => {
+        handlers.pointerup?.(pointer(250, 80, { altKey: true }));
+      });
+
+      expect(onSetSelectionFromMarquee).toHaveBeenCalledWith({
+        mode: "replace",
+        ids: [1, 2],
+      });
+      expect(result.current.marqueeRect).toBeNull();
+      expect(onClearSelection).not.toHaveBeenCalled();
     });
   });
 });

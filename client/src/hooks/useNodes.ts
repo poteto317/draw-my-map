@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import {
   createChildNode,
   createRootNode,
@@ -55,6 +55,16 @@ import type { Node } from "@/types/node";
 import type { NodeImportance } from "@/types/nodeImportance";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 import type { NodeMapState } from "@/types/nodeMapState";
+import {
+  addMarquee,
+  addRange,
+  clear as clearSelectionState,
+  pruneMissing,
+  replaceWithMarquee,
+  selectOnly,
+  toggle,
+  type NodeSelectionState,
+} from "@/domain/selection/nodeSelection";
 
 export type InsertForestResult =
   | { ok: true; rootId: number; count: number }
@@ -67,11 +77,17 @@ export type MoveBranchResult =
 type UseNodesReturn = {
   nodes: Node[];
   selectedNodeId: number | null;
+  selectedNodeIds: readonly number[];
   layoutMode: NodeLayoutMode;
   addNode: (x: number, y: number) => number;
   addChildNode: (parentId: number) => number | null;
   addSiblingNode: (nodeId: number) => number | null;
   selectNode: (id: number | null) => void;
+  toggleNodeSelection: (id: number) => void;
+  selectNodeRange: (targetId: number, visibleNodeIdsOrdered: readonly number[]) => void;
+  setSelectionFromMarquee: (args: { mode: "replace" | "add"; ids: readonly number[] }) => void;
+  clearSelection: () => void;
+  pruneSelectionToVisible: (visibleNodeIds: ReadonlySet<number>) => void;
   updateNodeLabel: (id: number, label: string) => void;
   updateNodeImportance: (id: number, importance: NodeImportance) => boolean;
   attachIllustration: (id: number, dataUrl: string) => boolean;
@@ -120,7 +136,7 @@ type UseNodesReturn = {
 };
 
 export function useNodes(): UseNodesReturn {
-  const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
+  const [selection, setSelection] = useState<NodeSelectionState>(() => clearSelectionState());
   const [documentRevision, setDocumentRevision] = useState(0);
   // 採番器はマウントの間ずっと同じものを使う（Undo で消えたノードの ID も以後は再利用しないため）
   const [nodeIdAllocator] = useState<NodeIdAllocator>(() => createNodeIdAllocator());
@@ -140,9 +156,17 @@ export function useNodes(): UseNodesReturn {
     beginMoveHistory,
   } = useNodeLayoutState();
 
+  const selectedNodeId = selection.primaryId;
+  const selectedNodeIds = useMemo(
+    () => nodes
+      .filter((node) => selection.selectedIds.has(node.id))
+      .map((node) => node.id),
+    [nodes, selection.selectedIds],
+  );
+
   // 復元したマップでは以前の選択と編集対象が無効になるため、選択を外して版を進める
   const markDocumentRestored = useCallback(() => {
-    setSelectedNodeId(null);
+    setSelection(clearSelectionState());
     setDocumentRevision((revision) => revision + 1);
   }, []);
 
@@ -192,7 +216,7 @@ export function useNodes(): UseNodesReturn {
     });
     if (!applied || createdId === null) return null;
 
-    setSelectedNodeId(createdId);
+    setSelection(selectOnly(createdId));
     return createdId;
   }, [nodeIdAllocator, applyTreeChange]);
 
@@ -205,8 +229,32 @@ export function useNodes(): UseNodesReturn {
   ), [addNodeFromAnchor]);
 
   const selectNode = useCallback((id: number | null) => {
-    setSelectedNodeId(id);
+    setSelection(id === null ? clearSelectionState() : selectOnly(id));
   }, []);
+
+  const toggleNodeSelection = useCallback((id: number) => {
+    const orderedNodeIds = getCurrentState().nodes.map((node) => node.id);
+    setSelection((prev) => toggle(prev, id, orderedNodeIds));
+  }, [getCurrentState]);
+
+  const selectNodeRange = useCallback((targetId: number, visibleNodeIdsOrdered: readonly number[]) => {
+    setSelection((prev) => addRange(prev, targetId, visibleNodeIdsOrdered));
+  }, []);
+
+  const setSelectionFromMarquee = useCallback((args: { mode: "replace" | "add"; ids: readonly number[] }) => {
+    setSelection((prev) => (
+      args.mode === "replace" ? replaceWithMarquee(args.ids) : addMarquee(prev, args.ids)
+    ));
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    setSelection(clearSelectionState());
+  }, []);
+
+  const pruneSelectionToVisible = useCallback((visibleNodeIds: ReadonlySet<number>) => {
+    const orderedNodeIds = getCurrentState().nodes.map((node) => node.id);
+    setSelection((prev) => pruneMissing(prev, visibleNodeIds, orderedNodeIds));
+  }, [getCurrentState]);
 
   const updateNodeLabel = useCallback((id: number, label: string) => {
     applyNonStructuralChange((currentNodes) => (
@@ -242,7 +290,7 @@ export function useNodes(): UseNodesReturn {
     ));
     if (!applied) return false;
 
-    setSelectedNodeId(childId);
+    setSelection(selectOnly(childId));
     return true;
   }, [applyTreeChange]);
 
@@ -269,7 +317,7 @@ export function useNodes(): UseNodesReturn {
     });
     if (!applied || insertedRootId === null) return null;
 
-    setSelectedNodeId(insertedRootId);
+    setSelection(selectOnly(insertedRootId));
     return insertedRootId;
   }, [nodeIdAllocator, applyTreeChange]);
 
@@ -350,7 +398,7 @@ export function useNodes(): UseNodesReturn {
       const { nodes, ...summary } = inserted;
       return { nodes, outcome: summary };
     });
-    if (settled.ok) setSelectedNodeId(settled.insertedId);
+    if (settled.ok) setSelection(selectOnly(settled.insertedId));
     return settled;
   }, [nodeIdAllocator, applyTreeChange]);
 
@@ -360,7 +408,7 @@ export function useNodes(): UseNodesReturn {
       if (!moved.ok) return { nodes: null, outcome: moved };
       return { nodes: moved.nodes, outcome: { ok: true, rootId: moved.rootId } };
     });
-    if (settled.ok) setSelectedNodeId(settled.rootId);
+    if (settled.ok) setSelection(selectOnly(settled.rootId));
     return settled;
   }, [applyTreeChange]);
 
@@ -374,9 +422,14 @@ export function useNodes(): UseNodesReturn {
       if (!deleted.ok) return { nodes: null, outcome: deleted };
       return { nodes: deleted.nodes, outcome: { ok: true, deletedId: deleted.deletedId } };
     });
-    if (settled.ok) setSelectedNodeId((prev) => prev === settled.deletedId ? null : prev);
+    if (settled.ok) {
+      const remaining = getCurrentState().nodes;
+      const remainingIds = new Set(remaining.map((node) => node.id));
+      const orderedNodeIds = remaining.map((node) => node.id);
+      setSelection((prev) => pruneMissing(prev, remainingIds, orderedNodeIds));
+    }
     return settled;
-  }, [applyTreeChange]);
+  }, [applyTreeChange, getCurrentState]);
 
   const deleteNode = useCallback((id: number) => {
     let subtreeIds = new Set<number>();
@@ -386,20 +439,26 @@ export function useNodes(): UseNodesReturn {
     });
     if (!applied) return;
 
-    const deletedIds = subtreeIds;
-    setSelectedNodeId((prev) => (
-      prev !== null && deletedIds.has(prev) ? null : prev
-    ));
-  }, [applyTreeChange]);
+    const remaining = getCurrentState().nodes;
+    const remainingIds = new Set(remaining.map((node) => node.id));
+    const orderedNodeIds = remaining.map((node) => node.id);
+    setSelection((prev) => pruneMissing(prev, remainingIds, orderedNodeIds));
+  }, [applyTreeChange, getCurrentState]);
 
   return {
     nodes,
     selectedNodeId,
+    selectedNodeIds,
     layoutMode,
     addNode,
     addChildNode,
     addSiblingNode,
     selectNode,
+    toggleNodeSelection,
+    selectNodeRange,
+    setSelectionFromMarquee,
+    clearSelection,
+    pruneSelectionToVisible,
     updateNodeLabel,
     updateNodeImportance,
     attachIllustration,

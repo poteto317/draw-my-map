@@ -24,7 +24,7 @@ describe("renderMapScene", () => {
 
     const scene = renderMapScene(harness.app as never, harness.constructors as never, {
       nodes,
-      selectedNodeId: null,
+      selectedNodeIds: [],
       editingNodeId: null,
       connectionTargetNodeId: null,
       siblingReorderSourceNodeId: null,
@@ -51,7 +51,7 @@ describe("renderMapScene", () => {
 
     renderMapScene(harness.app as never, harness.constructors as never, {
       nodes,
-      selectedNodeId: null,
+      selectedNodeIds: [],
       editingNodeId: null,
       connectionTargetNodeId: null,
       siblingReorderSourceNodeId: null,
@@ -71,7 +71,7 @@ describe("renderMapScene", () => {
 
     renderMapScene(harness.app as never, harness.constructors as never, {
       nodes: [],
-      selectedNodeId: null,
+      selectedNodeIds: [],
       editingNodeId: null,
       connectionTargetNodeId: null,
       siblingReorderSourceNodeId: null,
@@ -88,7 +88,7 @@ describe("renderMapScene", () => {
   it("visibleNodeIdsをノードとエッジの描画へ反映する", () => {
     const harness = createPixiTestHarness();
     renderMapScene(harness.app as never, harness.constructors as never, {
-      nodes, selectedNodeId: null, editingNodeId: null, connectionTargetNodeId: null,
+      nodes, selectedNodeIds: [], editingNodeId: null, connectionTargetNodeId: null,
       siblingReorderSourceNodeId: null, siblingReorderIndicator: null, onNodePointerDown: jest.fn(), viewport: INITIAL_VIEWPORT, visibleNodeIds: new Set([2]),
     });
 
@@ -104,7 +104,7 @@ describe("renderMapScene", () => {
 
     const scene = renderMapScene(harness.app as never, harness.constructors as never, {
       nodes: sceneNodes,
-      selectedNodeId: null,
+      selectedNodeIds: [],
       editingNodeId: null,
       connectionTargetNodeId: null,
       siblingReorderSourceNodeId: null,
@@ -138,7 +138,7 @@ describe("renderMapScene", () => {
 
     const scene = renderMapScene(harness.app as never, harness.constructors as never, {
       nodes,
-      selectedNodeId: null,
+      selectedNodeIds: [],
       editingNodeId: null,
       connectionTargetNodeId: null,
       siblingReorderSourceNodeId: 2,
@@ -164,7 +164,7 @@ describe("renderMapScene", () => {
 
     renderMapScene(harness.app as never, harness.constructors as never, {
       nodes,
-      selectedNodeId: null,
+      selectedNodeIds: [],
       editingNodeId: null,
       connectionTargetNodeId: null,
       siblingReorderSourceNodeId: 2,
@@ -176,5 +176,26 @@ describe("renderMapScene", () => {
     const world = harness.containers[0];
     expect(harness.Graphics).toHaveBeenCalledTimes(3);
     expect(world.addChild).toHaveBeenCalledTimes(3);
+  });
+
+  it("marqueeRect があるときラバーバンドをノードより後に重ねる", () => {
+    const harness = createPixiTestHarness();
+
+    renderMapScene(harness.app as never, harness.constructors as never, {
+      nodes,
+      selectedNodeIds: [],
+      editingNodeId: null,
+      connectionTargetNodeId: null,
+      siblingReorderSourceNodeId: null,
+      siblingReorderIndicator: null,
+      marqueeRect: { x: 10, y: 20, width: 100, height: 40 },
+      onNodePointerDown: jest.fn(),
+      viewport: INITIAL_VIEWPORT,
+    });
+
+    const world = harness.containers[0];
+    const band = harness.Graphics.mock.results.at(-1)!.value;
+    expect(band.rect).toHaveBeenCalledWith(10, 20, 100, 40);
+    expect(world.addChild.mock.calls.at(-1)?.[0]).toBe(band);
   });
 });

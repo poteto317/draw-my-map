@@ -26,6 +26,20 @@ jest.mock("@/services/persistence/libraryBackupFile", () => {
   return { ...actual, downloadLibraryBackup: (json: string, date: Date) => mockDownloadLibraryBackup(json, date) };
 });
 
+
+jest.mock("@/components/map/MapStage", () => {
+  const actual = jest.requireActual<typeof import("@/components/map/MapStage")>("@/components/map/MapStage");
+  const ActualMapStage = actual.MapStage;
+  return {
+    MapStage: (props: import("react").ComponentProps<typeof ActualMapStage>) => (
+      <>
+        <output data-testid="selected-node-id">{props.selectedNodeId ?? ""}</output>
+        <ActualMapStage {...props} />
+      </>
+    ),
+  };
+});
+
 function backupFile(json: string): File {
   const file = new File([json], "library.json", { type: "application/json" });
   Object.defineProperty(file, "text", { value: jest.fn().mockResolvedValue(json) });
@@ -91,6 +105,8 @@ it("復元の戻し失敗では保護モードへ再マウントしても nodes�
   ], "auto") }], { currentMapId: "a" });
   const user = userEvent.setup();
   await renderPage();
+  selectNode(0, 1);
+  expect(screen.getByTestId("selected-node-id")).toHaveTextContent("1");
   const root = editorRoot();
   await user.click(headerButton("マップ一覧"));
   await user.click(dialog().getByRole("button", { name: "全マップをバックアップ" }));
@@ -107,6 +123,7 @@ it("復元の戻し失敗では保護モードへ再マウントしても nodes�
   remove.mockRestore();
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(editorRoot()).not.toBe(root);
+  expect(screen.getByTestId("selected-node-id")).toHaveTextContent("");
   expect(headerButton("マップ一覧")).toBeDisabled();
   const rescued = exportedMap(mockDownloadMapJson);
   expect(rescued.nodes).toHaveLength(1);

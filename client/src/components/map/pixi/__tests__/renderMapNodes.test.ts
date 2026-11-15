@@ -11,7 +11,7 @@ const node: Node = createTestNode({
 });
 
 function render(overrides: Partial<{
-  selectedNodeId: number | null;
+  selectedNodeIds: readonly number[];
   editingNodeId: number | null;
   connectionTargetNodeId: number | null;
   onNodePointerDown: jest.Mock;
@@ -21,7 +21,7 @@ function render(overrides: Partial<{
   const onNodePointerDown = overrides.onNodePointerDown ?? jest.fn();
   renderMapNodes(harness.app.stage as never, harness.constructors as never, {
     nodes: [node],
-    selectedNodeId: overrides.selectedNodeId ?? null,
+    selectedNodeIds: overrides.selectedNodeIds ?? [],
     editingNodeId: overrides.editingNodeId ?? null,
     connectionTargetNodeId: overrides.connectionTargetNodeId ?? null,
     siblingReorderSourceNodeId: null,
@@ -51,8 +51,38 @@ describe("renderMapNodes", () => {
       .toEqual([rectangle, text]);
   });
 
+
+  it("複数 ID を選択スタイルにし、非選択は通常スタイルのままにする", () => {
+    const second = createTestNode({
+      id: 2, parentId: null, x: 200, y: 30, width: 100, height: 60, label: "二番目",
+    });
+    const third = createTestNode({
+      id: 3, parentId: null, x: 350, y: 30, width: 100, height: 60, label: "三番目",
+    });
+    const harness = createPixiTestHarness();
+    renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+      nodes: [node, second, third],
+      selectedNodeIds: [1, 3],
+      editingNodeId: null,
+      connectionTargetNodeId: null,
+      siblingReorderSourceNodeId: null,
+      onNodePointerDown: jest.fn(),
+      visibleKeys: new Set(["node:1", "node:2", "node:3"]),
+    });
+    const [firstShape, secondShape, thirdShape] = harness.Graphics.mock.results.map(
+      (result) => result.value as { fill: jest.Mock; stroke: jest.Mock },
+    );
+
+    expect(firstShape.fill).toHaveBeenCalledWith({ color: 0xeff6ff });
+    expect(firstShape.stroke).toHaveBeenCalledWith({ width: 3, color: 0x2563eb });
+    expect(secondShape.fill).toHaveBeenCalledWith({ color: 0xffffff });
+    expect(secondShape.stroke).toHaveBeenCalledWith({ width: 2, color: 0x3b82f6 });
+    expect(thirdShape.fill).toHaveBeenCalledWith({ color: 0xeff6ff });
+    expect(thirdShape.stroke).toHaveBeenCalledWith({ width: 3, color: 0x2563eb });
+  });
+
   it("uses selected styling and omits text while editing", () => {
-    const { Graphics, Text } = render({ selectedNodeId: 1, editingNodeId: 1 });
+    const { Graphics, Text } = render({ selectedNodeIds: [1], editingNodeId: 1 });
     const rectangle = Graphics.mock.results[0].value;
 
     expect(rectangle.fill).toHaveBeenCalledWith({ color: 0xeff6ff });
@@ -62,7 +92,7 @@ describe("renderMapNodes", () => {
 
   it("接続先候補を選択状態より優先して強調表示する", () => {
     const { Graphics } = render({
-      selectedNodeId: 1,
+      selectedNodeIds: [1],
       connectionTargetNodeId: 1,
     });
     const rectangle = Graphics.mock.results[0].value;
@@ -100,7 +130,7 @@ describe("renderMapNodes", () => {
   it("node keyのvisibility targetでPixi表示とinteractionを制御する", () => {
     const harness = createPixiTestHarness();
     const targets = renderMapNodes(harness.app.stage as never, harness.constructors as never, {
-      nodes: [node], selectedNodeId: null, editingNodeId: null, connectionTargetNodeId: null,
+      nodes: [node], selectedNodeIds: [], editingNodeId: null, connectionTargetNodeId: null,
       siblingReorderSourceNodeId: null, onNodePointerDown: jest.fn(), visibleKeys: new Set(["node:1"]),
     });
     const container = harness.stage.addChild.mock.calls[0][0] as {
@@ -132,7 +162,7 @@ describe("renderMapNodes", () => {
     function renderIllustrated(illustrationTextures?: ReadonlyMap<string, Texture>) {
       const harness = createPixiTestHarness();
       renderMapNodes(harness.app.stage as never, harness.constructors as never, {
-        nodes: [illustratedNode], selectedNodeId: null, editingNodeId: null, connectionTargetNodeId: null,
+        nodes: [illustratedNode], selectedNodeIds: [], editingNodeId: null, connectionTargetNodeId: null,
         siblingReorderSourceNodeId: null, onNodePointerDown: jest.fn(), illustrationTextures,
       });
       return harness;
@@ -171,7 +201,7 @@ describe("renderMapNodes", () => {
     function renderReorder(siblingReorderSourceNodeId: number | null) {
       const harness = createPixiTestHarness();
       renderMapNodes(harness.app.stage as never, harness.constructors as never, {
-        nodes: [firstNode, draggedNode], selectedNodeId: 2, editingNodeId: null,
+        nodes: [firstNode, draggedNode], selectedNodeIds: [2], editingNodeId: null,
         connectionTargetNodeId: null, siblingReorderSourceNodeId, onNodePointerDown: jest.fn(),
         illustrationTextures: new Map([[IMAGE, {} as Texture]]),
       });
