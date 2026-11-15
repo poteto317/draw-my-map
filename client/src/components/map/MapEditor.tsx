@@ -103,11 +103,17 @@ export function MapEditor({
   const {
     nodes,
     selectedNodeId,
+    selectedNodeIds,
     layoutMode,
     addNode,
     addChildNode,
     addSiblingNode,
     selectNode,
+    toggleNodeSelection,
+    selectNodeRange,
+    setSelectionFromMarquee,
+    clearSelection,
+    pruneSelectionToVisible,
     updateNodeLabel,
     updateNodeImportance,
     moveNode,
@@ -458,10 +464,16 @@ export function MapEditor({
               visibleNodeIds={displayState.visibleNodeIds}
               onViewportScaleChange={setViewportScale}
               selectedNodeId={selectedNodeId}
+              selectedNodeIds={selectedNodeIds}
               onDoubleClick={addNode}
               onAddChildNode={addChildNodeExpanding}
               onAddSiblingNode={addSiblingNode}
               onSelectNode={selectNode}
+              onToggleNodeSelection={toggleNodeSelection}
+              onSelectNodeRange={selectNodeRange}
+              onSetSelectionFromMarquee={setSelectionFromMarquee}
+              onClearSelection={clearSelection}
+              pruneSelectionToVisible={pruneSelectionToVisible}
               onUpdateLabel={updateNodeLabel}
               onMoveNode={moveNode}
               onBeginNodeMove={beginMoveHistory}

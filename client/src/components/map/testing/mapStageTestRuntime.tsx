@@ -10,6 +10,9 @@ export type MockPointerEvent = {
   composedPath: () => unknown[];
   target?: unknown;
   shiftKey?: boolean;
+  metaKey?: boolean;
+  ctrlKey?: boolean;
+  altKey?: boolean;
   button: number;
 };
 
@@ -96,7 +99,7 @@ export function createMockPixiModule() {
 export function pointer(
   globalX: number,
   globalY: number,
-  options: Pick<MockPointerEvent, "shiftKey" | "target">
+  options: Pick<MockPointerEvent, "shiftKey" | "metaKey" | "ctrlKey" | "altKey" | "target">
     & Partial<Pick<MockPointerEvent, "pointerId" | "pointerType">>
     & { path?: unknown[] } = {},
 ): MockPointerEvent {

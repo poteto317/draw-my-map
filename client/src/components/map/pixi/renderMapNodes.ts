@@ -9,7 +9,7 @@ import type { Container, FederatedPointerEvent, Graphics, Sprite, Text, Texture 
 
 export type RenderMapNodesOptions = {
   nodes: readonly Node[];
-  selectedNodeId: number | null;
+  selectedNodeIds: readonly number[];
   editingNodeId: number | null;
   connectionTargetNodeId: number | null;
   // 並べ替えのドラッグ中のノード。元の位置で半透明にする
@@ -80,11 +80,12 @@ export function renderMapNodes(
   options: RenderMapNodesOptions,
 ): Map<string, MapVisibilityTarget> {
   const visibilityTargets = new Map<string, MapVisibilityTarget>();
+  const selectedIds = new Set(options.selectedNodeIds);
   for (const node of options.nodes) {
     const visibilityKey = nodeVisibilityKey(node.id);
     const isVisible = options.visibleKeys?.has(visibilityKey) ?? true;
     const isEditing = node.id === options.editingNodeId;
-    const isSelected = node.id === options.selectedNodeId;
+    const isSelected = selectedIds.has(node.id);
     const isConnectionTarget = node.id === options.connectionTargetNodeId;
     // Container の alpha は表示のフェードが使うので、子要素の alpha で半透明にする
     const contentAlpha = node.id === options.siblingReorderSourceNodeId ? DRAGGED_NODE_ALPHA : 1;

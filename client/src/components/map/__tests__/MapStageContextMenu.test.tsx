@@ -448,13 +448,14 @@ describe("MapStage context menu double-click activation", () => {
 });
 
 describe("MapStage context menu follow-up press", () => {
-  async function activateMenuAt(base: number, onSelectNode: jest.Mock) {
+  async function activateMenuAt(base: number, onClearSelection: jest.Mock) {
     const nowSpy = jest.spyOn(Date, "now").mockReturnValue(base);
     const rendered = await renderReady(
       <MapStage
         {...defaultProps}
         nodes={sampleNodes}
-        onSelectNode={onSelectNode}
+        onSelectNode={jest.fn()}
+        onClearSelection={onClearSelection}
         onGenerateIllustration={jest.fn()}
       />,
     );
@@ -462,36 +463,41 @@ describe("MapStage context menu follow-up press", () => {
     mockStageBounds(container);
     fireEvent.contextMenu(container, { clientX: 100, clientY: 60 });
     fireEvent.click(rendered.getByRole("menuitem", { name: "イラストを生成" }));
-    onSelectNode.mockClear();
+    onClearSelection.mockClear();
     return { container, nowSpy };
   }
   const pressCanvas = () => act(() => {
     mockStageHandlers.pointerdown?.(pointer(700, 500, { target: mockStage }));
   });
+  const releaseCanvas = () => act(() => {
+    mockStageHandlers.pointerup?.(pointer(700, 500));
+  });
 
   it("メニュー項目の直後（500ms以内）のキャンバス押下は選択解除せず、mousedownの既定動作も抑止する", async () => {
     const base = 1_000_000;
-    const onSelectNode = jest.fn();
-    const { container, nowSpy } = await activateMenuAt(base, onSelectNode);
+    const onClearSelection = jest.fn();
+    const { container, nowSpy } = await activateMenuAt(base, onClearSelection);
 
     nowSpy.mockReturnValue(base + 499);
     pressCanvas();
+    releaseCanvas();
     const notPrevented = fireEvent.mouseDown(container, { clientX: 700, clientY: 500 });
 
-    expect(onSelectNode).not.toHaveBeenCalled();
+    expect(onClearSelection).not.toHaveBeenCalled();
     expect(notPrevented).toBe(false);
   });
 
   it("メニュー項目から500msを過ぎたキャンバス押下は選択解除し、mousedownの既定動作も抑止しない", async () => {
     const base = 1_000_000;
-    const onSelectNode = jest.fn();
-    const { container, nowSpy } = await activateMenuAt(base, onSelectNode);
+    const onClearSelection = jest.fn();
+    const { container, nowSpy } = await activateMenuAt(base, onClearSelection);
 
     nowSpy.mockReturnValue(base + 500);
     pressCanvas();
+    releaseCanvas();
     const notPrevented = fireEvent.mouseDown(container, { clientX: 700, clientY: 500 });
 
-    expect(onSelectNode).toHaveBeenCalledWith(null);
+    expect(onClearSelection).toHaveBeenCalledTimes(1);
     expect(notPrevented).toBe(true);
   });
 });

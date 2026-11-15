@@ -16,4 +16,6 @@ export type PointerGesture = {
   end: (sample: PointerSample) => void;
   cancel: () => void;
   activeNodeIds?: () => readonly number[];
+  /** dragActivation を一度でも超えたら true。背景解除などの判定に使う */
+  isActivated?: () => boolean;
 };

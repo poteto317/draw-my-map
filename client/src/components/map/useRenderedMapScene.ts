@@ -27,9 +27,10 @@ export function useRenderedMapScene({
 }: UseRenderedMapSceneOptions): RenderedMapScene | null {
   const {
     nodes,
-    selectedNodeId,
+    selectedNodeIds,
     editingNodeId,
     connectionTargetNodeId,
+    marqueeRect = null,
     siblingReorderSourceNodeId,
     siblingReorderIndicator,
     createNodePointerDownHandler,
@@ -46,9 +47,10 @@ export function useRenderedMapScene({
     const renderedViewport = viewportRef.current;
     const renderedScene = renderMapScene(runtime.app, runtime.constructors, {
       nodes,
-      selectedNodeId,
+      selectedNodeIds,
       editingNodeId,
       connectionTargetNodeId,
+      marqueeRect,
       siblingReorderSourceNodeId,
       siblingReorderIndicator,
       visibleNodeIds,
@@ -69,9 +71,10 @@ export function useRenderedMapScene({
   }, [
     runtime,
     nodes,
-    selectedNodeId,
+    selectedNodeIds,
     editingNodeId,
     connectionTargetNodeId,
+    marqueeRect,
     siblingReorderSourceNodeId,
     siblingReorderIndicator,
     createNodePointerDownHandler,

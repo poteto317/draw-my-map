@@ -3,9 +3,11 @@ import { applyViewportTransform } from "@/components/map/pixi/applyViewportTrans
 import { clearMapScene } from "@/components/map/pixi/clearMapScene";
 import type { MapVisibilityTarget } from "@/components/map/pixi/mapVisibilityAnimator";
 import { collectVisibleMapKeys } from "@/components/map/pixi/mapVisibilityKeys";
+import type { MarqueeRect } from "@/components/map/pixi/marqueeSelectGesture";
 import type { PixiConstructors } from "@/components/map/pixi/pixiTypes";
 import { renderMapEdges } from "@/components/map/pixi/renderMapEdges";
 import { renderMapNodes, type RenderMapNodesOptions } from "@/components/map/pixi/renderMapNodes";
+import { renderMarquee } from "@/components/map/pixi/renderMarquee";
 import { renderSiblingReorderIndicator } from "@/components/map/pixi/renderSiblingReorderIndicator";
 import type { SiblingReorderIndicator } from "@/components/map/siblingReorderDropSlot";
 import type { Application, Container } from "pixi.js";
@@ -14,6 +16,7 @@ export type RenderMapSceneOptions = Omit<RenderMapNodesOptions, "visibleKeys"> &
   viewport: Viewport;
   visibleNodeIds?: ReadonlySet<number>;
   siblingReorderIndicator: SiblingReorderIndicator | null;
+  marqueeRect?: MarqueeRect | null;
 };
 
 export type RenderedMapScene = {
@@ -36,6 +39,7 @@ export function renderMapScene(
   const nodeTargets = renderMapNodes(worldContainer, constructors, { ...options, visibleKeys });
   // ノードと接続線の上に重ねる。可視性のターゲットには入れない
   renderSiblingReorderIndicator(worldContainer, constructors, options.siblingReorderIndicator);
+  renderMarquee(worldContainer, constructors, options.marqueeRect ?? null);
   app.stage.addChild(worldContainer);
   return {
     worldContainer,

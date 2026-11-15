@@ -190,6 +190,175 @@ describe("useNodes", () => {
     expect(result.current.selectedNodeId).toBeNull();
   });
 
+  it("selectNode は単一集合にし、selectedNodeIds はノード配列順の readonly 配列で返す", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+    act(() => {
+      result.current.addNode(100, 100);
+      result.current.addNode(200, 100);
+      result.current.addNode(300, 100);
+    });
+
+    act(() => result.current.selectNode(2));
+
+    expect(result.current.selectedNodeId).toBe(2);
+    expect(result.current.selectedNodeIds).toEqual([2]);
+    const leaked = result.current.selectedNodeIds as number[];
+    leaked.push(999);
+    leaked[0] = -1;
+    act(() => {
+      result.current.selectNode(2);
+    });
+    expect(result.current.selectedNodeIds).toEqual([2]);
+    expect(result.current.selectedNodeIds).not.toBe(leaked);
+    expect(result.current.selectedNodeId).toBe(2);
+
+    act(() => {
+      result.current.toggleNodeSelection(3);
+      result.current.toggleNodeSelection(1);
+    });
+    expect(result.current.selectedNodeIds).toEqual([1, 2, 3]);
+    expect(result.current.selectedNodeId).toBe(1);
+  });
+
+  it("同一選択のまま nodes 参照が同じなら selectedNodeIds 参照も同じ", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result, rerender } = renderHook(() => useNodes());
+    act(() => {
+      result.current.addNode(100, 100);
+      result.current.addNode(200, 100);
+      result.current.selectNode(1);
+    });
+
+    const nodesRef = result.current.nodes;
+    const selectedNodeIdsRef = result.current.selectedNodeIds;
+    expect(selectedNodeIdsRef).toEqual([1]);
+
+    rerender();
+
+    expect(result.current.nodes).toBe(nodesRef);
+    expect(result.current.selectedNodeIds).toBe(selectedNodeIdsRef);
+  });
+
+  it("公開選択 API が揃い、範囲・矩形・解除・可視 prune が動く", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+    act(() => {
+      result.current.addNode(100, 100);
+      result.current.addNode(200, 100);
+      result.current.addNode(300, 100);
+      result.current.addNode(400, 100);
+    });
+
+    expect(typeof result.current.toggleNodeSelection).toBe("function");
+    expect(typeof result.current.selectNodeRange).toBe("function");
+    expect(typeof result.current.setSelectionFromMarquee).toBe("function");
+    expect(typeof result.current.clearSelection).toBe("function");
+    expect(typeof result.current.pruneSelectionToVisible).toBe("function");
+
+    act(() => result.current.selectNode(1));
+    act(() => result.current.selectNodeRange(3, [1, 2, 3, 4]));
+    expect(result.current.selectedNodeIds).toEqual([1, 2, 3]);
+    expect(result.current.selectedNodeId).toBe(3);
+
+    act(() => result.current.setSelectionFromMarquee({ mode: "replace", ids: [2, 4] }));
+    expect(result.current.selectedNodeIds).toEqual([2, 4]);
+    expect(result.current.selectedNodeId).toBe(4);
+
+    act(() => result.current.setSelectionFromMarquee({ mode: "add", ids: [1] }));
+    expect(result.current.selectedNodeIds).toEqual([1, 2, 4]);
+    expect(result.current.selectedNodeId).toBe(1);
+
+    act(() => result.current.pruneSelectionToVisible(new Set([1, 4])));
+    expect(result.current.selectedNodeIds).toEqual([1, 4]);
+    expect(result.current.selectedNodeId).toBe(1);
+
+    act(() => result.current.clearSelection());
+    expect(result.current.selectedNodeIds).toEqual([]);
+    expect(result.current.selectedNodeId).toBeNull();
+  });
+
+  it("削除は集合から消し、主選択だけ消えたら残りを付け替える", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+    act(() => {
+      result.current.addNode(100, 100);
+      result.current.addNode(200, 100);
+      result.current.addNode(300, 100);
+    });
+    act(() => result.current.setSelectionFromMarquee({ mode: "replace", ids: [1, 2, 3] }));
+    expect(result.current.selectedNodeId).toBe(3);
+
+    act(() => result.current.deleteNode(3));
+    expect(result.current.nodes.map((node) => node.id)).toEqual([1, 2]);
+    expect(result.current.selectedNodeIds).toEqual([1, 2]);
+    expect(result.current.selectedNodeId).toBe(1);
+
+    act(() => result.current.deleteNodeOnly(1, new Set([1, 2])));
+    expect(result.current.selectedNodeIds).toEqual([2]);
+    expect(result.current.selectedNodeId).toBe(2);
+  });
+
+  it("replaceMap は選択集合を全解除する", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+    act(() => {
+      result.current.addNode(100, 100);
+      result.current.addNode(200, 100);
+      result.current.toggleNodeSelection(1);
+      result.current.toggleNodeSelection(2);
+    });
+    expect(result.current.selectedNodeIds).toEqual([1, 2]);
+
+    act(() => result.current.replaceMap(importedMap()));
+
+    expect(result.current.selectedNodeIds).toEqual([]);
+    expect(result.current.selectedNodeId).toBeNull();
+  });
+
+  it("複数選択中でも selectedNodeId は primary のみを指す", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+    act(() => {
+      result.current.addNode(100, 100);
+      result.current.addNode(200, 100);
+      result.current.addNode(300, 100);
+      result.current.setSelectionFromMarquee({ mode: "replace", ids: [1, 3] });
+    });
+
+    expect(result.current.selectedNodeIds).toEqual([1, 3]);
+    expect(result.current.selectedNodeId).toBe(3);
+
+    act(() => result.current.deleteNode(result.current.selectedNodeId!));
+    expect(result.current.nodes.map((node) => node.id)).toEqual([1, 2]);
+    expect(result.current.selectedNodeIds).toEqual([1]);
+    expect(result.current.selectedNodeId).toBe(1);
+  });
+
+  it("pruneSelectionToVisible は非主選択のみ隠れても全解除せず主選択を残す", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+    act(() => {
+      result.current.addNode(100, 100);
+      result.current.addNode(200, 100);
+      result.current.addNode(300, 100);
+      result.current.setSelectionFromMarquee({ mode: "replace", ids: [1, 2, 3] });
+    });
+    expect(result.current.selectedNodeId).toBe(3);
+
+    act(() => result.current.pruneSelectionToVisible(new Set([3])));
+
+    expect(result.current.selectedNodeIds).toEqual([3]);
+    expect(result.current.selectedNodeId).toBe(3);
+  });
+
   it("updateNodeLabel は指定ノードだけを更新する", () => {
     let id = 0;
     jest.spyOn(Date, "now").mockImplementation(() => ++id);

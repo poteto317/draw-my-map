@@ -340,14 +340,16 @@ it("検索後も別の閉枝が残る場合は正本ではなく最新投影座�
   expect(screen.getByTestId("node-label-input")).toHaveStyle({ left: "350px", top: "270px" });
 });
 
-it("折りたたみで編集中の子が隠れたら未確定ラベルを破棄し既存の選択解除が働く", async () => {
+it("折りたたみで編集中の子が隠れたら未確定ラベルを破棄し、主選択の親は残す", async () => {
   await start();
   fireEvent.doubleClick(stage(), { clientX: 470, clientY: 90 });
   fireEvent.change(screen.getByTestId("node-label-input"), { target: { value: "未確定" } });
   select(1); toggle();
   expect(screen.queryByTestId("node-label-input")).not.toBeInTheDocument();
   expect(JSON.parse(exported()).nodes[2].label).toBe("C");
-  expect(screen.getByRole("button", { name: "枝を複製" })).toBeDisabled();
+  // 主選択 B は可視のままなので prune しても残る（Phase 17）
+  expect(screen.getByRole("button", { name: "枝を複製" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "枝を展開" })).toBeEnabled();
 });
 
 function renameA(label: string) {

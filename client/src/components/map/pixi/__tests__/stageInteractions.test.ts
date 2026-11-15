@@ -20,6 +20,9 @@ type PointerEvent = {
   composedPath: () => unknown[];
   target?: unknown;
   shiftKey?: boolean;
+  metaKey?: boolean;
+  ctrlKey?: boolean;
+  altKey?: boolean;
   button: number;
 };
 
@@ -37,6 +40,9 @@ let boundStageForPointer: FakeStage | null = null;
 type PointerOptions = {
   target?: unknown;
   shiftKey?: boolean;
+  metaKey?: boolean;
+  ctrlKey?: boolean;
+  altKey?: boolean;
   pointerId?: number;
   pointerType?: string;
   button?: number;
@@ -57,6 +63,9 @@ function pointer(
     pointerType: options.pointerType ?? "mouse",
     target: options.target,
     shiftKey: options.shiftKey ?? false,
+    metaKey: options.metaKey ?? false,
+    ctrlKey: options.ctrlKey ?? false,
+    altKey: options.altKey ?? false,
     button: options.button ?? 0,
     composedPath: () => eventPath,
   };
@@ -103,6 +112,11 @@ function createController(overrides: Partial<{
   nodes: readonly Node[];
   viewport: Viewport;
   onSelectNode: (id: number | null) => void;
+  onToggleNodeSelection: (id: number) => void;
+  onSelectNodeRange: (targetId: number, visibleOrdered: readonly number[]) => void;
+  onClearSelection: () => void;
+  onSetSelectionFromMarquee: (args: { mode: "replace" | "add"; ids: readonly number[] }) => void;
+  onMarqueeRectChange: (rect: { x: number; y: number; width: number; height: number } | null) => void;
   onMoveNode: (id: number, x: number, y: number) => void;
   onBeginNodeMove: () => MapHistoryGroupLease;
   onConnectNodes: (parentId: number, childId: number) => void;
@@ -113,12 +127,28 @@ function createController(overrides: Partial<{
   onReorderSibling: (nodeId: number, request: SiblingReorderRequest) => void;
   onSiblingReorderPreviewChange: (preview: SiblingReorderPreview | null) => void;
   shouldIgnorePointerDown: () => boolean;
+  isApplePlatform: () => boolean;
 }> = {}) {
   const nodesRef = { current: overrides.nodes ?? [node] };
   const viewportRef = {
     current: overrides.viewport ?? INITIAL_VIEWPORT,
   };
   const onSelectNodeRef = { current: overrides.onSelectNode ?? jest.fn() };
+  const onToggleNodeSelectionRef = {
+    current: overrides.onToggleNodeSelection ?? jest.fn(),
+  };
+  const onSelectNodeRangeRef = {
+    current: overrides.onSelectNodeRange ?? jest.fn(),
+  };
+  const onClearSelectionRef = {
+    current: overrides.onClearSelection ?? jest.fn(),
+  };
+  const onSetSelectionFromMarqueeRef = {
+    current: overrides.onSetSelectionFromMarquee ?? jest.fn(),
+  };
+  const onMarqueeRectChangeRef = {
+    current: overrides.onMarqueeRectChange ?? jest.fn(),
+  };
   const onMoveNodeRef = { current: overrides.onMoveNode ?? jest.fn() };
   const onBeginNodeMoveRef = {
     current: overrides.onBeginNodeMove
@@ -141,10 +171,18 @@ function createController(overrides: Partial<{
   const visibleNodeIdsRef = overrides.visibleNodeIds === undefined
     ? undefined
     : { current: overrides.visibleNodeIds };
+  const isApplePlatformRef = {
+    current: overrides.isApplePlatform ?? (() => true),
+  };
   const controller = createStageInteractions({
     nodesRef,
     viewportRef,
     onSelectNodeRef,
+    onToggleNodeSelectionRef,
+    onSelectNodeRangeRef,
+    onClearSelectionRef,
+    onSetSelectionFromMarqueeRef,
+    onMarqueeRectChangeRef,
     onMoveNodeRef,
     onBeginNodeMoveRef,
     onConnectNodesRef,
@@ -157,6 +195,7 @@ function createController(overrides: Partial<{
     shouldIgnorePointerDownRef: overrides.shouldIgnorePointerDown === undefined
       ? undefined
       : { current: overrides.shouldIgnorePointerDown },
+    isApplePlatformRef,
     dragThreshold: overrides.dragThreshold,
   });
 
@@ -165,6 +204,11 @@ function createController(overrides: Partial<{
     nodesRef,
     viewportRef,
     onSelectNodeRef,
+    onToggleNodeSelectionRef,
+    onSelectNodeRangeRef,
+    onClearSelectionRef,
+    onSetSelectionFromMarqueeRef,
+    onMarqueeRectChangeRef,
     onMoveNodeRef,
     onBeginNodeMoveRef,
     onConnectNodesRef,
@@ -197,18 +241,20 @@ describe("createStageInteractions", () => {
 
     expect(onSelectNodeRef.current).not.toHaveBeenCalled();
   });
-  it("clears selection only for a pointerdown targeted directly at the stage", () => {
+  it("背景 pointerdown では clear せず、未 activated の pointerup で clear する", () => {
     const { stage, handlers } = createStage();
-    const { controller, onSelectNodeRef } = createController();
+    const { controller, onClearSelectionRef, onSelectNodeRef } = createController();
     controller.bind(stage as never);
-    const latestOnSelectNode = jest.fn();
-    onSelectNodeRef.current = latestOnSelectNode;
+    const latestClear = jest.fn();
+    onClearSelectionRef.current = latestClear;
 
     handlers.pointerdown?.(pointer(0, 0, { target: {} }));
     handlers.pointerdown?.(pointer(0, 0, { target: stage }));
+    expect(latestClear).not.toHaveBeenCalled();
+    expect(onSelectNodeRef.current).not.toHaveBeenCalled();
 
-    expect(latestOnSelectNode).toHaveBeenCalledTimes(1);
-    expect(latestOnSelectNode).toHaveBeenCalledWith(null);
+    handlers.pointerup?.(pointer(0, 0));
+    expect(latestClear).toHaveBeenCalledTimes(1);
   });
 
   it.each([1, 2])("button %sでは空白選択解除やパンを開始しない", (button) => {
@@ -267,7 +313,7 @@ describe("createStageInteractions", () => {
 
   it("続きの押下でなければ、空白の選択解除とノードの選択を通常どおり行う", () => {
     const { stage, handlers } = createStage();
-    const { controller, onSelectNodeRef } = createController({
+    const { controller, onSelectNodeRef, onClearSelectionRef } = createController({
       shouldIgnorePointerDown: () => false,
     });
     controller.bind(stage as never);
@@ -276,8 +322,8 @@ describe("createStageInteractions", () => {
     handlers.pointerup?.(pointer(0, 0));
     nodePointerDown(controller, 1, pointer(50, 50) as never);
 
-    expect(onSelectNodeRef.current).toHaveBeenNthCalledWith(1, null);
-    expect(onSelectNodeRef.current).toHaveBeenNthCalledWith(2, 1);
+    expect(onClearSelectionRef.current).toHaveBeenCalledTimes(1);
+    expect(onSelectNodeRef.current).toHaveBeenCalledWith(1);
   });
 
   it("selects a node using the latest selection callback", () => {
@@ -516,13 +562,14 @@ describe("createStageInteractions", () => {
     handlers.pointermove?.(pointer(220, 60, { pointerId: 2 }));
     handlers.pointerup?.(pointer(220, 60, { pointerId: 2 }));
 
-    expect((onSelectNodeRef.current as jest.Mock).mock.calls).toEqual([[1]]);
+    expect(onSelectNodeRef.current).not.toHaveBeenCalled();
     expect(onConnectionTargetChangeRef.current).not.toHaveBeenCalled();
     expect(onConnectNodesRef.current).not.toHaveBeenCalled();
 
     handlers.pointermove?.(pointer(220, 60, { pointerId: 1 }));
     handlers.pointerup?.(pointer(220, 60, { pointerId: 1 }));
 
+    expect((onSelectNodeRef.current as jest.Mock).mock.calls).toEqual([[1]]);
     expect((onConnectionTargetChangeRef.current as jest.Mock).mock.calls).toEqual([[2], [null]]);
     expect(onConnectNodesRef.current).toHaveBeenCalledWith(1, 2);
   });
@@ -561,6 +608,7 @@ describe("createStageInteractions", () => {
     const {
       controller,
       onSelectNodeRef,
+      onClearSelectionRef,
       onConnectNodesRef,
       onConnectionTargetChangeRef,
     } = createController({ nodes: [node, targetNode] });
@@ -569,9 +617,10 @@ describe("createStageInteractions", () => {
     nodePointerDown(controller, 1, pointer(50, 50, { shiftKey: true, pointerId: 1 }) as never);
     handlers.pointermove?.(pointer(220, 60, { pointerId: 1 }));
     handlers.pointerdown?.(pointer(0, 0, { target: stage, pointerId: 1 }));
-    handlers.pointerup?.(pointer(220, 60, { pointerId: 1 }));
+    handlers.pointerup?.(pointer(0, 0, { pointerId: 1 }));
 
-    expect((onSelectNodeRef.current as jest.Mock).mock.calls).toEqual([[1], [null]]);
+    expect((onSelectNodeRef.current as jest.Mock).mock.calls).toEqual([[1]]);
+    expect(onClearSelectionRef.current).toHaveBeenCalledTimes(1);
     expect((onConnectionTargetChangeRef.current as jest.Mock).mock.calls).toEqual([[2], [null]]);
     expect(onConnectNodesRef.current).not.toHaveBeenCalled();
   });
@@ -635,6 +684,7 @@ describe("createStageInteractions", () => {
     controller.bind(stage as never);
 
     nodePointerDown(controller, 1, pointer(50, 50, { shiftKey: true, pointerId: 1 }) as never);
+    handlers.pointermove?.(pointer(220, 60, { pointerId: 1 }));
     handlers.pointerup?.(pointer(220, 60, { pointerId: 1 }));
     handlers.pointermove?.(pointer(60, 60, { pointerId: 2 }));
 
@@ -660,55 +710,54 @@ describe("createStageInteractions", () => {
     expect(onMoveNode).toHaveBeenCalledWith(1, 30, 50);
   });
 
-  it("preserves a gesture started synchronously from the blank selection callback", () => {
+  it("preserves a gesture started synchronously from the blank clear callback", () => {
     const { stage, handlers } = createStage();
     const onMoveNode = jest.fn();
-    const { controller, onSelectNodeRef } = createController({
+    const { controller, onClearSelectionRef } = createController({
       nodes: [node, targetNode],
       onMoveNode,
     });
-    onSelectNodeRef.current = jest.fn((id: number | null) => {
-      if (id === null) {
-        nodePointerDown(controller, 1, pointer(50, 50, { pointerId: 1 }) as never);
-      }
+    onClearSelectionRef.current = jest.fn(() => {
+      nodePointerDown(controller, 1, pointer(50, 50, { pointerId: 1 }) as never);
     });
     controller.bind(stage as never);
 
     nodePointerDown(controller, 1, pointer(50, 50, { shiftKey: true, pointerId: 1 }) as never);
+    handlers.pointermove?.(pointer(220, 60, { pointerId: 1 }));
     handlers.pointerdown?.(pointer(0, 0, { target: stage, pointerId: 1 }));
+    handlers.pointerup?.(pointer(0, 0, { pointerId: 1 }));
     handlers.pointermove?.(pointer(60, 60, { pointerId: 1 }));
 
     expect(onMoveNode).toHaveBeenCalledWith(1, 30, 50);
   });
 
-  it("空白選択callbackでbindingが解放されたらパンを開始しない", () => {
+  it("背景未activated終端のclearでbindingが解放されても残gestureを持たない", () => {
     const { stage, handlers } = createStage();
-    const { controller, onSelectNodeRef } = createController();
+    const { controller, onClearSelectionRef } = createController();
     const cleanup = controller.bind(stage as never);
-    onSelectNodeRef.current = jest.fn(() => { cleanup(); });
-    const stagePointerDown = handlers.pointerdown;
+    onClearSelectionRef.current = jest.fn(() => { cleanup(); });
 
-    stagePointerDown?.(pointer(0, 0, { target: stage }));
+    handlers.pointerdown?.(pointer(0, 0, { target: stage }));
+    handlers.pointerup?.(pointer(0, 0));
 
-    expect(onSelectNodeRef.current).toHaveBeenCalledWith(null);
+    expect(onClearSelectionRef.current).toHaveBeenCalledTimes(1);
     expect(controller.hasActiveGesture()).toBe(false);
   });
 
-  it("空白選択callbackから再入したpinchと並行してパンを開始しない", () => {
+  it("背景未activated終端のclearから再入したpinchと並行してパンを再開しない", () => {
     const { stage, handlers } = createStage();
-    const { controller, onSelectNodeRef, onViewportChangeRef } = createController();
+    const { controller, onClearSelectionRef, onViewportChangeRef } = createController();
     controller.bind(stage as never);
-    handlers.pointerdown?.(pointer(0, 0, {
-      pointerId: 1,
-      pointerType: "touch",
-      target: stage,
-    }));
-    controller.cancelActiveGesture();
 
     let startedPinch = false;
-    onSelectNodeRef.current = jest.fn((id: number | null) => {
-      if (id !== null || startedPinch) return;
+    onClearSelectionRef.current = jest.fn(() => {
+      if (startedPinch) return;
       startedPinch = true;
+      handlers.pointerdown?.(pointer(0, 0, {
+        pointerId: 1,
+        pointerType: "touch",
+        target: stage,
+      }));
       handlers.pointerdown?.(pointer(100, 0, {
         pointerId: 2,
         pointerType: "touch",
@@ -720,6 +769,7 @@ describe("createStageInteractions", () => {
       pointerType: "mouse",
       target: stage,
     }));
+    handlers.pointerup?.(pointer(50, 50, { pointerId: 3, pointerType: "mouse" }));
     handlers.pointermove?.(pointer(80, 80, {
       pointerId: 3,
       pointerType: "mouse",
@@ -752,7 +802,7 @@ describe("createStageInteractions", () => {
 
   it("空白ドラッグを画面差分のviewport変更へ変換する", () => {
     const { stage, handlers } = createStage();
-    const { controller, onSelectNodeRef, onViewportChangeRef } = createController({
+    const { controller, onClearSelectionRef, onViewportChangeRef } = createController({
       viewport: { offsetX: 40, offsetY: 20, scale: 2 },
     });
     controller.bind(stage as never);
@@ -760,7 +810,7 @@ describe("createStageInteractions", () => {
     handlers.pointerdown?.(pointer(100, 80, { target: stage }));
     handlers.pointermove?.(pointer(110, 90));
 
-    expect(onSelectNodeRef.current).toHaveBeenCalledWith(null);
+    expect(onClearSelectionRef.current).not.toHaveBeenCalled();
     expect(onViewportChangeRef.current).toHaveBeenCalledWith({
       offsetX: 50,
       offsetY: 30,
@@ -832,7 +882,7 @@ describe("createStageInteractions", () => {
     const onConnectionTargetChange = jest.fn((id: number | null) => {
       if (id === null) throw new Error("target cleanup failed");
     });
-    const { controller, onConnectionTargetChangeRef, onSelectNodeRef } = createController({
+    const { controller, onConnectionTargetChangeRef, onClearSelectionRef } = createController({
       nodes: [node, targetNode],
       onConnectionTargetChange,
     });
@@ -849,23 +899,24 @@ describe("createStageInteractions", () => {
     expect(stage.off).toHaveBeenCalledTimes(5);
     expect(handlers).toEqual({});
 
-    const reboundOnSelectNode = jest.fn();
+    const reboundClear = jest.fn();
     onConnectionTargetChangeRef.current = jest.fn();
-    onSelectNodeRef.current = reboundOnSelectNode;
+    onClearSelectionRef.current = reboundClear;
     controller.bind(second.stage as never);
     second.handlers.pointerdown?.(pointer(0, 0, {
       pointerId: 2,
       pointerType: "touch",
       target: second.stage,
     }));
+    second.handlers.pointerup?.(pointer(0, 0, { pointerId: 2, pointerType: "touch" }));
 
-    expect(reboundOnSelectNode).toHaveBeenCalledWith(null);
+    expect(reboundClear).toHaveBeenCalledTimes(1);
   });
 
   it("continues cleanup and resets touch state when a listener removal throws", () => {
     const first = createStage();
     const second = createStage();
-    const { controller, onSelectNodeRef } = createController();
+    const { controller, onClearSelectionRef } = createController();
     const cleanup = controller.bind(first.stage as never);
     first.handlers.pointerdown?.(pointer(0, 0, {
       pointerId: 1,
@@ -881,16 +932,17 @@ describe("createStageInteractions", () => {
     expect(cleanup).toThrow("listener cleanup failed");
     expect(first.stage.off).toHaveBeenCalledTimes(5);
 
-    const reboundOnSelectNode = jest.fn();
-    onSelectNodeRef.current = reboundOnSelectNode;
+    const reboundClear = jest.fn();
+    onClearSelectionRef.current = reboundClear;
     controller.bind(second.stage as never);
     second.handlers.pointerdown?.(pointer(0, 0, {
       pointerId: 2,
       pointerType: "touch",
       target: second.stage,
     }));
+    second.handlers.pointerup?.(pointer(0, 0, { pointerId: 2, pointerType: "touch" }));
 
-    expect(reboundOnSelectNode).toHaveBeenCalledWith(null);
+    expect(reboundClear).toHaveBeenCalledTimes(1);
   });
 
   it("does not carry a gesture started from cleanup into the next binding", () => {
@@ -946,6 +998,10 @@ describe("createStageInteractions", () => {
       pointerType: "touch",
       path: [first.stage],
     }) as never);
+    first.handlers.pointermove?.(pointer(60, 50, {
+      pointerId: 1,
+      pointerType: "touch",
+    }));
 
     cleanupFirst();
     second.handlers.pointerdown?.(pointer(100, 0, {
@@ -1177,9 +1233,14 @@ describe("createStageInteractions", () => {
       pointerType: "touch",
       path: [stage],
     }) as never);
+    handlers.pointermove?.(pointer(110, 100, {
+      pointerId: 1,
+      pointerType: "touch",
+    }));
 
     controller.cancelActiveGesture();
-    handlers.pointermove?.(pointer(300, 100, {
+    // 活性化で p1 が 110 に動いているので、開始距離 90 → 終了 180 で scale 2
+    handlers.pointermove?.(pointer(290, 100, {
       pointerId: 2,
       pointerType: "touch",
     }));
@@ -1214,6 +1275,10 @@ describe("createStageInteractions", () => {
       pointerType: "touch",
       path: [stage],
     }) as never);
+    handlers.pointermove?.(pointer(60, 50, {
+      pointerId: 1,
+      pointerType: "touch",
+    }));
 
     nodePointerDown(controller, 1, pointer(50, 50, {
       pointerId: 3,
@@ -1228,7 +1293,8 @@ describe("createStageInteractions", () => {
     expect((onSelectNodeRef.current as jest.Mock).mock.calls).toEqual([[1]]);
     expect(onMoveNodeRef.current).not.toHaveBeenCalled();
 
-    handlers.pointermove?.(pointer(250, 50, {
+    // 活性化で p1 が 60 に動いているので、開始距離 90 → 終了 180 で scale 2
+    handlers.pointermove?.(pointer(240, 50, {
       pointerId: 2,
       pointerType: "touch",
     }));
@@ -1279,6 +1345,10 @@ describe("createStageInteractions", () => {
       pointerType: "touch",
       path: [stage],
     }) as never);
+    handlers.pointermove?.(pointer(60, 50, {
+      pointerId: 1,
+      pointerType: "touch",
+    }));
 
     expect(() => handlers.pointerdown?.(pointer(200, 100, {
       pointerId: 2,
@@ -1314,6 +1384,10 @@ describe("createStageInteractions", () => {
       pointerType: "touch",
       path: [stage],
     }) as never);
+    handlers.pointermove?.(pointer(60, 50, {
+      pointerId: 1,
+      pointerType: "touch",
+    }));
 
     handlers.pointerdown?.(pointer(200, 100, {
       pointerId: 2,
@@ -1590,6 +1664,29 @@ describe("createStageInteractions", () => {
       expect(controller.isSiblingReorderActive()).toBe(false);
     });
 
+    it("トグル修飾キーから並べ替えへ遷移した途中もisSiblingReorderActiveがtrueになり、cancelActiveGestureで取消できる", () => {
+      const { stage, handlers } = createStage();
+      const { controller, onReorderSiblingRef, onToggleNodeSelectionRef } = createController({
+        nodes: stackedRoots,
+        layoutMode: "auto",
+        isApplePlatform: () => true,
+      });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 1, pointer(50, 30, { metaKey: true }) as never);
+      expect(controller.isSiblingReorderActive()).toBe(false);
+
+      handlers.pointermove?.(pointer(50, 140, { metaKey: true }));
+      expect(controller.isSiblingReorderActive()).toBe(true);
+
+      controller.cancelActiveGesture();
+      handlers.pointerup?.(pointer(50, 140, { metaKey: true }));
+
+      expect(controller.isSiblingReorderActive()).toBe(false);
+      expect(onReorderSiblingRef.current).not.toHaveBeenCalled();
+      expect(onToggleNodeSelectionRef.current).not.toHaveBeenCalled();
+    });
+
     it("cancelActiveGestureの後はisSiblingReorderActiveがfalseになる", () => {
       const { stage, handlers } = createStage();
       const { controller, onReorderSiblingRef } = createController({ nodes: stackedRoots, layoutMode: "auto" });
@@ -1782,6 +1879,7 @@ describe("createStageInteractions", () => {
       created: ReturnType<typeof createController>,
       stage: FakeStage,
       onCancel: () => void,
+      handlers: Partial<Record<StageEvent, Handler>>,
     ) {
       created.onConnectionTargetChangeRef.current = jest.fn((id: number | null) => {
         if (id === null) onCancel();
@@ -1792,6 +1890,8 @@ describe("createStageInteractions", () => {
         pointerId: 1,
         path: [stage],
       }) as never);
+      // Shift はしきい値超で接続本体が始まる
+      handlers.pointermove?.(pointer(60, 50, { pointerId: 1 }));
       nodePointerDown(created.controller, 2, pointer(220, 60, {
         pointerId: 2,
         path: [stage],
@@ -1799,20 +1899,20 @@ describe("createStageInteractions", () => {
     }
 
     it("進行中のgestureのcancel中にノードが消えると、開始も選択もしない", () => {
-      const { stage } = createStage();
+      const { stage, handlers } = createStage();
       const created = createController({ nodes: [node, targetNode] });
       created.controller.bind(stage as never);
 
       startConnectionThenPressTarget(created, stage, () => {
         created.nodesRef.current = [node];
-      });
+      }, handlers);
 
       expect((created.onSelectNodeRef.current as jest.Mock).mock.calls).toEqual([[1]]);
       expect(created.controller.hasActiveGesture()).toBe(false);
     });
 
     it("進行中のgestureのcancel中にノードが隠れると、開始も選択もしない", () => {
-      const { stage } = createStage();
+      const { stage, handlers } = createStage();
       const created = createController({
         nodes: [node, targetNode],
         visibleNodeIds: new Set([1, 2]),
@@ -1821,21 +1921,277 @@ describe("createStageInteractions", () => {
 
       startConnectionThenPressTarget(created, stage, () => {
         created.visibleNodeIdsRef!.current = new Set([1]);
-      });
+      }, handlers);
 
       expect((created.onSelectNodeRef.current as jest.Mock).mock.calls).toEqual([[1]]);
       expect(created.controller.hasActiveGesture()).toBe(false);
     });
 
     it("進行中のgestureのcancel中にbindingが解放されると、開始も選択もしない", () => {
-      const { stage } = createStage();
+      const { stage, handlers } = createStage();
       const created = createController({ nodes: [node, targetNode] });
       const cleanup = created.controller.bind(stage as never);
 
-      startConnectionThenPressTarget(created, stage, cleanup);
+      startConnectionThenPressTarget(created, stage, cleanup, handlers);
 
       expect((created.onSelectNodeRef.current as jest.Mock).mock.calls).toEqual([[1]]);
       expect(created.controller.hasActiveGesture()).toBe(false);
+    });
+  });
+
+  describe("複数選択ポインタ分岐（Task 3）", () => {
+    const nodeA = createTestNode({ id: 1, x: 20, y: 40, width: 100, height: 60, label: "A" });
+    const nodeB = createTestNode({ id: 2, x: 200, y: 40, width: 100, height: 60, label: "B" });
+    const nodeC = createTestNode({ id: 3, x: 380, y: 40, width: 100, height: 60, label: "C" });
+
+    it("プレーンクリックは pointerdown で単一選択する", () => {
+      const { stage } = createStage();
+      const { controller, onSelectNodeRef, onToggleNodeSelectionRef } = createController({
+        nodes: [nodeA, nodeB],
+      });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 2, pointer(50, 50) as never);
+
+      expect(onSelectNodeRef.current).toHaveBeenCalledWith(2);
+      expect(onToggleNodeSelectionRef.current).not.toHaveBeenCalled();
+    });
+
+    it("Apple では metaKey の pointerup（未 activated）でトグルする", () => {
+      const { stage, handlers } = createStage();
+      const { controller, onToggleNodeSelectionRef, onSelectNodeRef } = createController({
+        nodes: [nodeA, nodeB],
+        isApplePlatform: () => true,
+      });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 2, pointer(50, 50, { metaKey: true }) as never);
+      expect(onToggleNodeSelectionRef.current).not.toHaveBeenCalled();
+      expect(onSelectNodeRef.current).not.toHaveBeenCalled();
+
+      handlers.pointerup?.(pointer(50, 50, { metaKey: true }));
+      expect(onToggleNodeSelectionRef.current).toHaveBeenCalledWith(2);
+    });
+
+    it("非 Apple では ctrlKey の pointerup（未 activated）でトグルする", () => {
+      const { stage, handlers } = createStage();
+      const { controller, onToggleNodeSelectionRef } = createController({
+        nodes: [nodeA, nodeB],
+        isApplePlatform: () => false,
+      });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 2, pointer(50, 50, { ctrlKey: true }) as never);
+      handlers.pointerup?.(pointer(50, 50, { ctrlKey: true }));
+
+      expect(onToggleNodeSelectionRef.current).toHaveBeenCalledWith(2);
+    });
+
+    it("Apple で ctrlKey のみではトグルしない（L-149）", () => {
+      const { stage, handlers } = createStage();
+      const { controller, onToggleNodeSelectionRef, onSelectNodeRef } = createController({
+        nodes: [nodeA, nodeB],
+        isApplePlatform: () => true,
+      });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 2, pointer(50, 50, { ctrlKey: true }) as never);
+      handlers.pointerup?.(pointer(50, 50, { ctrlKey: true }));
+
+      expect(onToggleNodeSelectionRef.current).not.toHaveBeenCalled();
+      expect(onSelectNodeRef.current).toHaveBeenCalledWith(2);
+    });
+
+    it("Shift+pointerdown では選択を変えない", () => {
+      const { stage } = createStage();
+      const { controller, onSelectNodeRef, onSelectNodeRangeRef } = createController({
+        nodes: [nodeA, nodeB, nodeC],
+      });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 3, pointer(50, 50, { shiftKey: true }) as never);
+
+      expect(onSelectNodeRef.current).not.toHaveBeenCalled();
+      expect(onSelectNodeRangeRef.current).not.toHaveBeenCalled();
+    });
+
+    it("Shift+クリック（未 activated）は範囲選択する", () => {
+      const { stage, handlers } = createStage();
+      const { controller, onSelectNodeRangeRef, onSelectNodeRef, onConnectNodesRef } = createController({
+        nodes: [nodeA, nodeB, nodeC],
+        visibleNodeIds: new Set([1, 2, 3]),
+      });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 3, pointer(50, 50, { shiftKey: true }) as never);
+      handlers.pointerup?.(pointer(51, 50, { shiftKey: true }));
+
+      expect(onSelectNodeRangeRef.current).toHaveBeenCalledWith(3, [1, 2, 3]);
+      expect(onSelectNodeRef.current).not.toHaveBeenCalled();
+      expect(onConnectNodesRef.current).not.toHaveBeenCalled();
+    });
+
+    it("Shift+ドラッグ（activated）は単一置換して接続を開始する", () => {
+      const { stage, handlers } = createStage();
+      const {
+        controller,
+        onSelectNodeRef,
+        onSelectNodeRangeRef,
+        onConnectionTargetChangeRef,
+        onConnectNodesRef,
+      } = createController({ nodes: [nodeA, nodeB] });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 1, pointer(50, 50, { shiftKey: true }) as never);
+      handlers.pointermove?.(pointer(60, 50, { shiftKey: true }));
+      expect(onSelectNodeRef.current).toHaveBeenCalledWith(1);
+      expect(onSelectNodeRangeRef.current).not.toHaveBeenCalled();
+
+      handlers.pointermove?.(pointer(220, 60, { shiftKey: true }));
+      handlers.pointerup?.(pointer(220, 60, { shiftKey: true }));
+
+      expect(onConnectionTargetChangeRef.current).toHaveBeenCalledWith(2);
+      expect(onConnectNodesRef.current).toHaveBeenCalledWith(1, 2);
+    });
+
+    it.each(["pointerup", "pointerupoutside", "pointercancel"] as const)(
+      "背景未 activated の %s は修飾キー問わず clear する",
+      (eventName) => {
+        const { stage, handlers } = createStage();
+        const { controller, onClearSelectionRef } = createController();
+        controller.bind(stage as never);
+
+        handlers.pointerdown?.(pointer(0, 0, { target: stage, metaKey: true, shiftKey: true }));
+        handlers[eventName]?.(pointer(1, 0, { metaKey: true, shiftKey: true }));
+
+        expect(onClearSelectionRef.current).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it.each(["pointerup", "pointerupoutside", "pointercancel"] as const)(
+      "背景 activated（パン）後の %s では clear しない",
+      (eventName) => {
+        const { stage, handlers } = createStage();
+        const { controller, onClearSelectionRef, onViewportChangeRef } = createController();
+        controller.bind(stage as never);
+
+        handlers.pointerdown?.(pointer(0, 0, { target: stage }));
+        handlers.pointermove?.(pointer(10, 0));
+        expect(onViewportChangeRef.current).toHaveBeenCalled();
+        handlers[eventName]?.(pointer(10, 0));
+
+        expect(onClearSelectionRef.current).not.toHaveBeenCalled();
+      },
+    );
+
+    it("Alt 開始の背景 pointerdown では clear せずパンしない", () => {
+      const { stage, handlers } = createStage();
+      const { controller, onClearSelectionRef, onViewportChangeRef } = createController();
+      controller.bind(stage as never);
+
+      handlers.pointerdown?.(pointer(0, 0, { target: stage, altKey: true }));
+      expect(onClearSelectionRef.current).not.toHaveBeenCalled();
+
+      handlers.pointermove?.(pointer(10, 0, { altKey: true }));
+      expect(onViewportChangeRef.current).not.toHaveBeenCalled();
+
+      handlers.pointerup?.(pointer(10, 0, { altKey: true }));
+      // activated 済みなので clear しない
+      expect(onClearSelectionRef.current).not.toHaveBeenCalled();
+    });
+
+    it("Alt 未 activated 終端では clear する", () => {
+      const { stage, handlers } = createStage();
+      const { controller, onClearSelectionRef } = createController();
+      controller.bind(stage as never);
+
+      handlers.pointerdown?.(pointer(0, 0, { target: stage, altKey: true }));
+      handlers.pointerup?.(pointer(1, 0, { altKey: true }));
+
+      expect(onClearSelectionRef.current).toHaveBeenCalledTimes(1);
+    });
+
+    it("Alt ドラッグ確定は交差ノードを配列順で replace し、clearSelection しない", () => {
+      const { stage, handlers } = createStage();
+      const {
+        controller,
+        onClearSelectionRef,
+        onSetSelectionFromMarqueeRef,
+        onMarqueeRectChangeRef,
+        onViewportChangeRef,
+      } = createController({
+        nodes: [node, targetNode],
+        visibleNodeIds: new Set([1, 2]),
+      });
+      controller.bind(stage as never);
+
+      handlers.pointerdown?.(pointer(0, 0, { target: stage, altKey: true }));
+      handlers.pointermove?.(pointer(250, 80, { altKey: true }));
+      expect(onViewportChangeRef.current).not.toHaveBeenCalled();
+      expect(onMarqueeRectChangeRef.current).toHaveBeenCalled();
+      handlers.pointerup?.(pointer(250, 80, { altKey: true }));
+
+      expect(onSetSelectionFromMarqueeRef.current).toHaveBeenCalledWith({
+        mode: "replace",
+        ids: [1, 2],
+      });
+      expect(onMarqueeRectChangeRef.current).toHaveBeenLastCalledWith(null);
+      expect(onClearSelectionRef.current).not.toHaveBeenCalled();
+    });
+
+    it("Alt+Cmd（Apple）確定は add モード", () => {
+      const { stage, handlers } = createStage();
+      const { controller, onSetSelectionFromMarqueeRef } = createController({
+        nodes: [node, targetNode],
+        isApplePlatform: () => true,
+      });
+      controller.bind(stage as never);
+
+      handlers.pointerdown?.(pointer(0, 0, { target: stage, altKey: true, metaKey: true }));
+      handlers.pointermove?.(pointer(250, 80, { altKey: true, metaKey: true }));
+      handlers.pointerup?.(pointer(250, 80, { altKey: true, metaKey: true }));
+
+      expect(onSetSelectionFromMarqueeRef.current).toHaveBeenCalledWith({
+        mode: "add",
+        ids: [1, 2],
+      });
+    });
+
+    it("Alt+Ctrl（非 Apple）確定は add モード", () => {
+      const { stage, handlers } = createStage();
+      const { controller, onSetSelectionFromMarqueeRef } = createController({
+        nodes: [node, targetNode],
+        isApplePlatform: () => false,
+      });
+      controller.bind(stage as never);
+
+      handlers.pointerdown?.(pointer(0, 0, { target: stage, altKey: true, ctrlKey: true }));
+      handlers.pointermove?.(pointer(250, 80, { altKey: true, ctrlKey: true }));
+      handlers.pointerup?.(pointer(250, 80, { altKey: true, ctrlKey: true }));
+
+      expect(onSetSelectionFromMarqueeRef.current).toHaveBeenCalledWith({
+        mode: "add",
+        ids: [1, 2],
+      });
+    });
+
+    it("Alt なし背景ドラッグはパンのまま", () => {
+      const { stage, handlers } = createStage();
+      const {
+        controller,
+        onViewportChangeRef,
+        onSetSelectionFromMarqueeRef,
+        onMarqueeRectChangeRef,
+      } = createController();
+      controller.bind(stage as never);
+
+      handlers.pointerdown?.(pointer(0, 0, { target: stage }));
+      handlers.pointermove?.(pointer(10, 0));
+      handlers.pointerup?.(pointer(10, 0));
+
+      expect(onViewportChangeRef.current).toHaveBeenCalled();
+      expect(onSetSelectionFromMarqueeRef.current).not.toHaveBeenCalled();
+      expect(onMarqueeRectChangeRef.current).not.toHaveBeenCalled();
     });
   });
 });

@@ -23,6 +23,7 @@ export function createCanvasPanGesture({
   if (!hasFinitePointerCoordinates(startSample)) return null;
   const dragActivation = createDragActivation(startSample.screen, dragThreshold);
   let active = true;
+  let activated = false;
   const finish = () => { active = false; };
 
   return {
@@ -30,11 +31,13 @@ export function createCanvasPanGesture({
       if (!active || !hasFinitePointerCoordinates(sample)) return;
       const movement = dragActivation.update(sample.screen);
       if (!movement) return;
+      activated = true;
       const viewport = panViewport(startViewport, movement.x, movement.y);
       if ((movement.x !== 0 || movement.y !== 0) && viewport === startViewport) return;
       onViewportChangeRef.current(viewport);
     },
     end: finish,
     cancel: finish,
+    isActivated: () => activated,
   };
 }

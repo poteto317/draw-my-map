@@ -32,7 +32,7 @@ function createOptions(
 } {
   return {
     nodes,
-    selectedNodeId: null,
+    selectedNodeIds: [],
     editingNodeId: null,
     connectionTargetNodeId: null,
     siblingReorderSourceNodeId: null,
@@ -74,12 +74,14 @@ describe("useRenderedMapScene", () => {
       runtime.constructors,
       {
         nodes: options.nodes,
-        selectedNodeId: options.selectedNodeId,
+        selectedNodeIds: options.selectedNodeIds,
         editingNodeId: options.editingNodeId,
         connectionTargetNodeId: options.connectionTargetNodeId,
+        marqueeRect: null,
         siblingReorderSourceNodeId: options.siblingReorderSourceNodeId,
         siblingReorderIndicator: options.siblingReorderIndicator,
         visibleNodeIds: options.visibleNodeIds,
+        illustrationTextures: undefined,
         onNodePointerDown,
         viewport: INITIAL_VIEWPORT,
       },

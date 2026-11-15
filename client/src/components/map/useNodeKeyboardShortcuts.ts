@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { isInteractiveTarget } from "@/components/map/interactiveTarget";
+import { useLatestRef } from "@/hooks/useLatestRef";
 
 type NodeKeyboardShortcutOptions = {
   selectedNodeId: number | null;
@@ -11,6 +12,9 @@ type NodeKeyboardShortcutOptions = {
   onDeleteNode: (nodeId: number) => void;
   onStartEditing: (nodeId: number, initialText: string) => void;
   enabled: boolean;
+  onClearSelection: () => void;
+  isSiblingReorderActive: () => boolean;
+  isContextMenuOpen: () => boolean;
 };
 
 export function useNodeKeyboardShortcuts({
@@ -21,6 +25,9 @@ export function useNodeKeyboardShortcuts({
   onDeleteNode,
   onStartEditing,
   enabled,
+  onClearSelection,
+  isSiblingReorderActive,
+  isContextMenuOpen,
 }: NodeKeyboardShortcutOptions): void {
   // enabled の切り替えで window の登録をやり直さないよう、ref から読む
   const enabledRef = useRef(enabled);
@@ -28,10 +35,31 @@ export function useNodeKeyboardShortcuts({
     enabledRef.current = enabled;
   }, [enabled]);
 
+  // Escape 用のガード／解除は描画ごとに差し替わっても登録し直さない
+  const escapeOptionsRef = useLatestRef({
+    onClearSelection,
+    isSiblingReorderActive,
+    isContextMenuOpen,
+  });
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!enabledRef.current) return;
-      if (isEditing || selectedNodeId === null || isInteractiveTarget(event.target)) return;
+      if (isEditing || isInteractiveTarget(event.target)) return;
+
+      if (event.key === "Escape") {
+        const escape = escapeOptionsRef.current;
+        // 並べ替え Escape が同一 keydown で preventDefault 済みなら選択は触らない
+        if (event.defaultPrevented) return;
+        // メニュー閉じ後も選択を残す
+        if (escape.isContextMenuOpen()) return;
+        // 防御的。同一イベントでは defaultPrevented が主
+        if (escape.isSiblingReorderActive()) return;
+        escape.onClearSelection();
+        return;
+      }
+
+      if (selectedNodeId === null) return;
 
       let createdId: number | null = null;
       if (event.key === "Tab") {
@@ -51,5 +79,13 @@ export function useNodeKeyboardShortcuts({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedNodeId, isEditing, onAddChildNode, onAddSiblingNode, onDeleteNode, onStartEditing]);
+  }, [
+    selectedNodeId,
+    isEditing,
+    onAddChildNode,
+    onAddSiblingNode,
+    onDeleteNode,
+    onStartEditing,
+    escapeOptionsRef,
+  ]);
 }

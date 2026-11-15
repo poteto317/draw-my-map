@@ -1,6 +1,10 @@
 import type { Viewport } from "@/components/map/mapViewport";
 import { createCanvasPanGesture } from "@/components/map/pixi/canvasPanGesture";
-import { createNodeConnectionGesture } from "@/components/map/pixi/nodeConnectionGesture";
+import {
+  createMarqueeSelectGesture,
+  type MarqueeRect,
+  type MarqueeSelectionMode,
+} from "@/components/map/pixi/marqueeSelectGesture";
 import { createNodeMoveGesture } from "@/components/map/pixi/nodeMoveGesture";
 import type { LatestValue, PointerGesture, PointerSample } from "@/components/map/pixi/pointerGesture";
 import { createPointerGestureSession } from "@/components/map/pixi/pointerGestureSession";
@@ -8,22 +12,35 @@ import {
   hasFinitePointerCoordinates,
   toPointerSample,
 } from "@/components/map/pixi/pointerSample";
+import { createShiftNodePendingGesture } from "@/components/map/pixi/shiftNodePendingGesture";
 import { createSiblingReorderGesture } from "@/components/map/pixi/siblingReorderGesture";
+import { createToggleNodePendingGesture } from "@/components/map/pixi/toggleNodePendingGesture";
 import { createTouchGestureCoordinator } from "@/components/map/pixi/touchGestureCoordinator";
+import { wrapBackgroundGesture } from "@/components/map/pixi/wrapBackgroundGesture";
 import type { SiblingReorderPreview } from "@/components/map/siblingReorderDropSlot";
 import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
 import type { SiblingReorderRequest } from "@/domain/nodes/nodeSiblingOrder";
+import { isApplePlatform as detectApplePlatform } from "@/domain/platform/isApplePlatform";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 import type { Container, FederatedPointerEvent } from "pixi.js";
 
 export type { LatestValue } from "@/components/map/pixi/pointerGesture";
+export type { MarqueeRect, MarqueeSelectionMode };
 
 type StageInteractionOptions = {
   nodesRef: LatestValue<readonly Node[]>;
   visibleNodeIdsRef?: LatestValue<ReadonlySet<number>>;
   viewportRef: LatestValue<Viewport>;
   onSelectNodeRef: LatestValue<(id: number | null) => void>;
+  onToggleNodeSelectionRef?: LatestValue<(id: number) => void>;
+  onSelectNodeRangeRef?: LatestValue<(targetId: number, visibleOrdered: readonly number[]) => void>;
+  onClearSelectionRef?: LatestValue<() => void>;
+  onSetSelectionFromMarqueeRef?: LatestValue<(args: {
+    mode: MarqueeSelectionMode;
+    ids: readonly number[];
+  }) => void>;
+  onMarqueeRectChangeRef?: LatestValue<(rect: MarqueeRect | null) => void>;
   onMoveNodeRef: LatestValue<(id: number, x: number, y: number) => void>;
   onBeginNodeMoveRef: LatestValue<() => MapHistoryGroupLease>;
   onConnectNodesRef: LatestValue<(parentId: number, childId: number) => void>;
@@ -33,6 +50,7 @@ type StageInteractionOptions = {
   onReorderSiblingRef: LatestValue<(nodeId: number, request: SiblingReorderRequest) => void>;
   onSiblingReorderPreviewChangeRef: LatestValue<(preview: SiblingReorderPreview | null) => void>;
   shouldIgnorePointerDownRef?: LatestValue<() => boolean>;
+  isApplePlatformRef?: LatestValue<() => boolean>;
   dragThreshold?: number;
 };
 
@@ -42,11 +60,33 @@ type StageBinding = {
   stage: InteractiveStage;
 };
 
+type ModifierKeys = {
+  shiftKey: boolean;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  altKey: boolean;
+};
+
+const noopMarqueeRectChange: LatestValue<(rect: MarqueeRect | null) => void> = {
+  current: () => {},
+};
+const noopSetSelectionFromMarquee: LatestValue<(args: {
+  mode: MarqueeSelectionMode;
+  ids: readonly number[];
+}) => void> = {
+  current: () => {},
+};
+
 export function createStageInteractions({
   nodesRef,
   visibleNodeIdsRef,
   viewportRef,
   onSelectNodeRef,
+  onToggleNodeSelectionRef,
+  onSelectNodeRangeRef,
+  onClearSelectionRef,
+  onSetSelectionFromMarqueeRef = noopSetSelectionFromMarquee,
+  onMarqueeRectChangeRef = noopMarqueeRectChange,
   onMoveNodeRef,
   onBeginNodeMoveRef,
   onConnectNodesRef,
@@ -56,6 +96,7 @@ export function createStageInteractions({
   onReorderSiblingRef,
   onSiblingReorderPreviewChangeRef,
   shouldIgnorePointerDownRef,
+  isApplePlatformRef,
   dragThreshold = 4,
 }: StageInteractionOptions) {
   let activeBinding: StageBinding | null = null;
@@ -66,8 +107,22 @@ export function createStageInteractions({
       return new Set(nodesRef.current.map((node) => node.id));
     },
   };
-  // 最後に作った並べ替えのジェスチャー。進行中かどうかを pointerGestures の現在の lease と比べて判定する
-  let siblingReorderGesture: PointerGesture | null = null;
+  // Escape / isSiblingReorderActive 用。lease に載っているジェスチャー
+  // （プレーンなら並べ替え本体、トグル経由なら外側 pending wrapper）
+  let siblingReorderLeaseGesture: PointerGesture | null = null;
+
+  const markSiblingReorderActive = (leaseGesture: PointerGesture | null) => {
+    siblingReorderLeaseGesture = leaseGesture;
+  };
+
+  const isApple = () => (isApplePlatformRef?.current ?? detectApplePlatform)();
+
+  const isToggleModifier = (modifiers: ModifierKeys) =>
+    isApple() ? modifiers.metaKey : modifiers.ctrlKey;
+
+  const clearSelection = () => {
+    onClearSelectionRef?.current();
+  };
 
   const touchGestures = createTouchGestureCoordinator({
     viewportRef,
@@ -89,29 +144,27 @@ export function createStageInteractions({
 
   const isSiblingReorderActive = () => {
     const lease = pointerGestures.current();
-    return lease !== null && lease.gesture === siblingReorderGesture;
+    return lease !== null
+      && siblingReorderLeaseGesture !== null
+      && lease.gesture === siblingReorderLeaseGesture;
   };
 
   const isNodeInteractive = (nodeId: number) =>
     nodesRef.current.some((node) => node.id === nodeId)
     && (visibleNodeIdsRef === undefined || visibleNodeIdsRef.current.has(nodeId));
 
-  const createNodeGesture = (
+  const createPlainNodeGesture = (
     nodeId: number,
     sample: PointerSample,
-    shiftKey: boolean,
+    options?: {
+      dragThreshold?: number;
+      /** 並べ替え時の Escape 判定対象。省略時は並べ替え本体、トグル経由は現在の lease */
+      siblingReorderLease?: "self" | "currentLease";
+    },
   ): PointerGesture | null => {
-    if (shiftKey) {
-      return createNodeConnectionGesture({
-        sourceNodeId: nodeId,
-        nodesRef,
-        visibleNodeIdsRef,
-        onConnectNodesRef,
-        onConnectionTargetChangeRef,
-      });
-    }
+    const threshold = options?.dragThreshold ?? dragThreshold;
     if (layoutModeRef.current === "auto") {
-      siblingReorderGesture = createSiblingReorderGesture({
+      const reorder = createSiblingReorderGesture({
         nodeId,
         startSample: sample,
         nodesRef,
@@ -119,9 +172,17 @@ export function createStageInteractions({
         layoutModeRef,
         onReorderSiblingRef,
         onSiblingReorderPreviewChangeRef,
-        dragThreshold,
+        dragThreshold: threshold,
       });
-      return siblingReorderGesture;
+      if (reorder === null) {
+        markSiblingReorderActive(null);
+      } else if (options?.siblingReorderLease === "currentLease") {
+        // トグル pending の外側が lease に載るため、現在の lease.gesture を判定基準にする
+        markSiblingReorderActive(pointerGestures.current()?.gesture ?? null);
+      } else {
+        markSiblingReorderActive(reorder);
+      }
+      return reorder;
     }
     return createNodeMoveGesture({
       nodeId,
@@ -129,8 +190,41 @@ export function createStageInteractions({
       nodesRef,
       onMoveNodeRef,
       onBeginNodeMoveRef,
-      dragThreshold,
+      dragThreshold: threshold,
     });
+  };
+
+  const createNodeGesture = (
+    nodeId: number,
+    sample: PointerSample,
+    modifiers: ModifierKeys,
+  ): PointerGesture | null => {
+    if (modifiers.shiftKey) {
+      return createShiftNodePendingGesture({
+        nodeId,
+        startSample: sample,
+        nodesRef,
+        visibleNodeIdsRef,
+        onSelectNodeRef,
+        onSelectNodeRangeRef,
+        onConnectNodesRef,
+        onConnectionTargetChangeRef,
+        dragThreshold,
+      });
+    }
+    if (isToggleModifier(modifiers)) {
+      return createToggleNodePendingGesture({
+        nodeId,
+        startSample: sample,
+        onToggleNodeSelectionRef,
+        createActivatedDragGesture: () => createPlainNodeGesture(nodeId, sample, {
+          dragThreshold: 0,
+          siblingReorderLease: "currentLease",
+        }),
+        dragThreshold,
+      });
+    }
+    return createPlainNodeGesture(nodeId, sample);
   };
 
   const handleNodePointerDown = (
@@ -159,16 +253,26 @@ export function createStageInteractions({
       return;
     }
 
-    const gesture = createNodeGesture(nodeId, sample, event.shiftKey);
+    const modifiers: ModifierKeys = {
+      shiftKey: event.shiftKey,
+      metaKey: event.metaKey,
+      ctrlKey: event.ctrlKey,
+      altKey: event.altKey,
+    };
+    const gesture = createNodeGesture(nodeId, sample, modifiers);
     if (!gesture) return;
 
     const nextGesture = pointerGestures.start(sample.pointerId, gesture);
     if (!nextGesture) return;
-    try {
-      onSelectNodeRef.current(nodeId);
-    } catch (error) {
-      pointerGestures.clear(nextGesture);
-      throw error;
+
+    // プレーン（非 Shift・非トグル）のみ pointerdown で単一選択。Shift/トグルは遅延。
+    if (!modifiers.shiftKey && !isToggleModifier(modifiers)) {
+      try {
+        onSelectNodeRef.current(nodeId);
+      } catch (error) {
+        pointerGestures.clear(nextGesture);
+        throw error;
+      }
     }
   };
 
@@ -205,27 +309,42 @@ export function createStageInteractions({
 
       const gestureAtEntry = pointerGestures.current();
       if (gestureAtEntry !== null && event.pointerId !== gestureAtEntry.pointerId) return;
-      try {
-        onSelectNodeRef.current(null);
-      } finally {
-        if (
-          gestureAtEntry !== null
-          && pointerGestures.current() === gestureAtEntry
-          && activeBinding === binding
-          && event.pointerId === gestureAtEntry.pointerId
-        ) {
-          pointerGestures.cancel();
-        }
+      // 背景 pointerdown では clear しない（未 activated 終端で clear）
+      if (
+        gestureAtEntry !== null
+        && pointerGestures.current() === gestureAtEntry
+        && activeBinding === binding
+        && event.pointerId === gestureAtEntry.pointerId
+      ) {
+        pointerGestures.cancel();
       }
       if (activeBinding !== binding || hasActiveGesture()) return;
 
-      const gesture = createCanvasPanGesture({
-        startSample: sample,
-        startViewport: viewportRef.current,
-        onViewportChangeRef,
-        dragThreshold,
-      });
-      if (gesture) pointerGestures.start(sample.pointerId, gesture);
+      const modifiers: ModifierKeys = {
+        shiftKey: event.shiftKey,
+        metaKey: event.metaKey,
+        ctrlKey: event.ctrlKey,
+        altKey: event.altKey,
+      };
+      const innerGesture = modifiers.altKey
+        ? createMarqueeSelectGesture({
+          startSample: sample,
+          nodesRef,
+          visibleNodeIdsRef,
+          onMarqueeRectChangeRef,
+          onSetSelectionFromMarqueeRef,
+          mode: isToggleModifier(modifiers) ? "add" : "replace",
+          dragThreshold,
+        })
+        : createCanvasPanGesture({
+          startSample: sample,
+          startViewport: viewportRef.current,
+          onViewportChangeRef,
+          dragThreshold,
+        });
+      if (!innerGesture) return;
+      const gesture = wrapBackgroundGesture(innerGesture, clearSelection);
+      pointerGestures.start(sample.pointerId, gesture);
     };
     const handlePointerUp = (event: FederatedPointerEvent) => {
       if (activeBinding !== binding) return;

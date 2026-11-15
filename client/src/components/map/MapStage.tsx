@@ -46,6 +46,8 @@ import type { OperationNotice } from "@/types/operationNotice";
 import type { NodeFocusRequest } from "@/types/nodeFocusRequest";
 import type { NodeLabelEditRequest } from "@/types/nodeLabelEditRequest";
 
+const EMPTY_SELECTED_NODE_IDS: readonly number[] = [];
+
 type MapStageProps = {
   nodes: readonly Node[];
   focusRequest: NodeFocusRequest | null;
@@ -55,10 +57,16 @@ type MapStageProps = {
   // 成功したUndo／Redoとマップ置換で増える。復元前の編集・ジェスチャー・メニューを閉じる
   documentRevision: number;
   selectedNodeId: number | null;
+  selectedNodeIds?: readonly number[];
   onDoubleClick: (x: number, y: number) => void;
   onAddChildNode: (parentId: number) => number | null;
   onAddSiblingNode: (nodeId: number) => number | null;
   onSelectNode: (id: number | null) => void;
+  onToggleNodeSelection?: (id: number) => void;
+  onSelectNodeRange?: (targetId: number, visibleNodeIdsOrdered: readonly number[]) => void;
+  onSetSelectionFromMarquee?: (args: { mode: "replace" | "add"; ids: readonly number[] }) => void;
+  onClearSelection?: () => void;
+  pruneSelectionToVisible?: (visibleNodeIds: ReadonlySet<number>) => void;
   onUpdateLabel: (id: number, label: string) => void;
   onMoveNode: (id: number, x: number, y: number) => void;
   // ドラッグの最初の有効な移動の直前に呼び、終了までの移動を1操作にまとめる
@@ -94,10 +102,16 @@ export function MapStage({
   resetRevision = 0,
   documentRevision,
   selectedNodeId,
+  selectedNodeIds,
   onDoubleClick,
   onAddChildNode,
   onAddSiblingNode,
   onSelectNode,
+  onToggleNodeSelection,
+  onSelectNodeRange,
+  onSetSelectionFromMarquee,
+  onClearSelection,
+  pruneSelectionToVisible,
   onUpdateLabel,
   onMoveNode,
   onBeginNodeMove,
@@ -152,8 +166,10 @@ export function MapStage({
     viewport,
     shortcutsEnabled,
   });
+  const resolvedOnClearSelection = onClearSelection ?? (() => onSelectNode(null));
   const {
     connectionTargetNodeId,
+    marqueeRect,
     siblingReorderPreview,
     createNodePointerDownHandler,
     cancelActiveGesture,
@@ -166,6 +182,10 @@ export function MapStage({
     viewportRef,
     onViewportChange: setViewport,
     onSelectNode,
+    onToggleNodeSelection,
+    onSelectNodeRange,
+    onSetSelectionFromMarquee,
+    onClearSelection: resolvedOnClearSelection,
     onMoveNode,
     onBeginNodeMove,
     onConnectNodes,
@@ -174,13 +194,20 @@ export function MapStage({
     shouldIgnorePointerDown: isOverlayFollowUpClick,
   });
 
+  const resolvedSelectedNodeIds = useMemo(() => {
+    if (selectedNodeIds !== undefined) return selectedNodeIds;
+    if (selectedNodeId !== null) return [selectedNodeId];
+    return EMPTY_SELECTED_NODE_IDS;
+  }, [selectedNodeId, selectedNodeIds]);
+
   const scene = useRenderedMapScene({
     runtime,
     options: {
       nodes,
-      selectedNodeId,
+      selectedNodeIds: resolvedSelectedNodeIds,
       editingNodeId: editing.editingNodeId,
       connectionTargetNodeId,
+      marqueeRect,
       siblingReorderSourceNodeId: siblingReorderPreview?.nodeId ?? null,
       siblingReorderIndicator: siblingReorderPreview?.indicator ?? null,
       createNodePointerDownHandler,
@@ -222,11 +249,17 @@ export function MapStage({
     cancelActiveGesture,
   });
 
+  const resolvedPruneSelectionToVisible = pruneSelectionToVisible
+    ?? ((visible: ReadonlySet<number>) => {
+      if (selectedNodeId !== null && !visible.has(selectedNodeId)) onSelectNode(null);
+    });
+
   useHiddenNodeInteractionReset({
+    selectedNodeIds: resolvedSelectedNodeIds,
     selectedNodeId,
     editingNodeId: editing.editingNodeId,
     visibleNodeIds: effectiveVisibleNodeIds,
-    onSelectNode,
+    pruneSelectionToVisible: resolvedPruneSelectionToVisible,
     cancelEditing,
     cancelActiveGesture,
   });
@@ -277,6 +310,9 @@ export function MapStage({
     onDeleteNode,
     onStartEditing: editing.startEditing,
     enabled: shortcutsEnabled,
+    onClearSelection: resolvedOnClearSelection,
+    isSiblingReorderActive,
+    isContextMenuOpen: () => contextMenu.menu !== null,
   });
 
   useSiblingReorderShortcut({
