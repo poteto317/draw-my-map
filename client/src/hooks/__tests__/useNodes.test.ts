@@ -281,7 +281,30 @@ describe("useNodes", () => {
     expect(result.current.selectedNodeId).toBeNull();
   });
 
-  it("削除は集合から消し、主選択だけ消えたら残りを付け替える", () => {
+  it("selectNodeRange は範囲外の既存選択を置換せず加算する", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+    act(() => {
+      result.current.addNode(100, 100);
+      result.current.addNode(200, 100);
+      result.current.addNode(300, 100);
+      result.current.addNode(400, 100);
+      result.current.addNode(500, 100);
+    });
+
+    act(() => result.current.selectNode(1));
+    act(() => result.current.toggleNodeSelection(5));
+    expect(result.current.selectedNodeIds).toEqual([1, 5]);
+    expect(result.current.selectedNodeId).toBe(5);
+
+    // アンカーは 5。範囲 3〜5 を加算しても範囲外の 1 は残る（置換なら [3,4,5] になる）
+    act(() => result.current.selectNodeRange(3, [1, 2, 3, 4, 5]));
+    expect(result.current.selectedNodeIds).toEqual([1, 3, 4, 5]);
+    expect(result.current.selectedNodeId).toBe(3);
+  });
+
+    it("削除は集合から消し、主選択だけ消えたら残りを付け替える", () => {
     let id = 0;
     jest.spyOn(Date, "now").mockImplementation(() => ++id);
     const { result } = renderHook(() => useNodes());

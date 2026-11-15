@@ -84,6 +84,7 @@ type UseNodesReturn = {
   addSiblingNode: (nodeId: number) => number | null;
   selectNode: (id: number | null) => void;
   toggleNodeSelection: (id: number) => void;
+  /** Shift範囲選択: アンカー〜target を現在の集合へ加算する（置換ではない。domain の `addRange`）。 */
   selectNodeRange: (targetId: number, visibleNodeIdsOrdered: readonly number[]) => void;
   setSelectionFromMarquee: (args: { mode: "replace" | "add"; ids: readonly number[] }) => void;
   clearSelection: () => void;
@@ -237,6 +238,7 @@ export function useNodes(): UseNodesReturn {
     setSelection((prev) => toggle(prev, id, orderedNodeIds));
   }, [getCurrentState]);
 
+  // 加算（置換ではない）。公開名は設計の selectNodeRange に合わせる
   const selectNodeRange = useCallback((targetId: number, visibleNodeIdsOrdered: readonly number[]) => {
     setSelection((prev) => addRange(prev, targetId, visibleNodeIdsOrdered));
   }, []);
