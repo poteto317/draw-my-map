@@ -63,6 +63,7 @@ type MapStageProps = {
   onAddSiblingNode: (nodeId: number) => number | null;
   onSelectNode: (id: number | null) => void;
   onToggleNodeSelection?: (id: number) => void;
+  /** Shift範囲: 現在の選択へ加算（置換ではない）。`useNodes.selectNodeRange` と同じ契約。 */
   onSelectNodeRange?: (targetId: number, visibleNodeIdsOrdered: readonly number[]) => void;
   onSetSelectionFromMarquee?: (args: { mode: "replace" | "add"; ids: readonly number[] }) => void;
   onClearSelection?: () => void;
