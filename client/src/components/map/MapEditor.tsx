@@ -318,11 +318,12 @@ export function MapEditor({
   });
   const nodeSplitButtonRef = useRef<HTMLButtonElement>(null);
   // 確定でボタンが無効になったときは、常に押せる「JSON書き出し」へ送る
+  const splitFocusFallbacks = useMemo(() => [exportButtonRef], [exportButtonRef]);
   useHeaderFocusReturn({
     focusRequest: nodeSplit.focusRequest,
     consumeFocusRequest: nodeSplit.consumeFocusRequest,
     buttonRef: nodeSplitButtonRef,
-    fallbackRef: exportButtonRef,
+    fallbackRefs: splitFocusFallbacks,
   });
   const nodeMerge = useNodeMergeDialog({
     mapId,
@@ -335,12 +336,14 @@ export function MapEditor({
     publishNotice: publishTreeEditNotice,
   });
   const nodeMergeButtonRef = useRef<HTMLButtonElement>(null);
-  // 成功すると選択が 1 件になり、ボタンが無効になるので、常に押せる「JSON書き出し」へ送る
+  // 成功すると選択が 1 件（残したノード）になり、ボタンが無効になる。「JSON書き出し」へ送ると、続けて押した Enter で
+  // ダウンロードが始まってしまうので、押しても無害な「ノードを分割」へ送る（無効なら「JSON書き出し」）
+  const mergeFocusFallbacks = useMemo(() => [nodeSplitButtonRef, exportButtonRef], [exportButtonRef]);
   useHeaderFocusReturn({
     focusRequest: nodeMerge.focusRequest,
     consumeFocusRequest: nodeMerge.consumeFocusRequest,
     buttonRef: nodeMergeButtonRef,
-    fallbackRef: exportButtonRef,
+    fallbackRefs: mergeFocusFallbacks,
   });
   const { moveSelected: moveSelectedSibling } = siblingReorder;
   const moveSelectedSiblingUp = useCallback(() => moveSelectedSibling("up"), [moveSelectedSibling]);

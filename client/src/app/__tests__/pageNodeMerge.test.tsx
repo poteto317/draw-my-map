@@ -155,7 +155,7 @@ describe("ノードの統合", () => {
     expect(idsOf()).toEqual(MERGED_IDS);
   });
 
-  it("確定後は選択が残したノードだけになり、ボタンが無効になるので、フォーカスは常に押せる「JSON書き出し」へ移る", async () => {
+  it("確定後は選択が残したノードだけになり、ボタンが無効になるので、フォーカスは押しても無害な「ノードを分割」へ移る", async () => {
     seed();
     await renderPage();
     selectAppleAndApple();
@@ -164,8 +164,27 @@ describe("ノードの統合", () => {
     fireEvent.click(dialog().getByRole("button", { name: "統合する" }), { detail: 1 });
 
     expect(headerButton("ノードを統合")).toBeDisabled();
-    expect(screen.getByRole("button", { name: "JSON書き出し" })).toHaveFocus();
+    expect(headerButton("ノードを分割")).toBeEnabled();
+    expect(headerButton("ノードを分割")).toHaveFocus();
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("統合の確定のあとに Enter を素早く 2 回押しても、JSON の書き出し（ダウンロード）は始まらない", async () => {
+    seed();
+    await renderPage();
+    selectAppleAndApple();
+    openDialog();
+
+    // 1 回目の Enter で確定する（Enter はボタンの click になる）
+    fireEvent.keyDown(dialog().getByRole("button", { name: "統合する" }), { key: "Enter" });
+    fireEvent.click(dialog().getByRole("button", { name: "統合する" }), { detail: 0 });
+    // 2 回目の Enter は、フォーカスの移った先のボタンに届く
+    const focused = document.activeElement as HTMLElement;
+    fireEvent.keyDown(focused, { key: "Enter" });
+    fireEvent.click(focused, { detail: 0 });
+
+    expect(screen.getByRole("button", { name: "JSON書き出し" })).not.toBe(focused);
+    expect(mockDownloadMapJson).not.toHaveBeenCalled();
   });
 
   it("区切り文字を替えると、プレビューの連結後のラベルが変わり、「その他」を空にすると区切りなしで連結する", async () => {
