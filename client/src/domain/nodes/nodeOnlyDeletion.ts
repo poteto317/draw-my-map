@@ -1,3 +1,5 @@
+import { keepFirstRootPosition } from "@/domain/nodes/nodeFirstRootPosition";
+import { hasInvalidNodeGeometry } from "@/domain/nodes/nodeGeometryValidation";
 import { indexNodeForest } from "@/domain/nodes/nodeLayoutForest";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
@@ -34,11 +36,7 @@ export function deleteNodeOnly(
   if (!target) return { ok: false, reason: "node-missing" };
   if (!visibleNodeIds.has(nodeId)) return { ok: false, reason: "node-hidden" };
   // 配置不能と構造不正を分類するため、geometryだけを森の検証より先に調べる。
-  if (nodes.some((node) => (
-    !Number.isFinite(node.x) || !Number.isFinite(node.y) ||
-    !Number.isFinite(node.width) || !Number.isFinite(node.height) ||
-    node.width <= 0 || node.height <= 0
-  ))) return { ok: false, reason: "placement-failed" };
+  if (hasInvalidNodeGeometry(nodes)) return { ok: false, reason: "placement-failed" };
   if (!indexNodeForest(nodes)) return { ok: false, reason: "invalid-structure" };
 
   const children = nodes.filter((node) => node.parentId === nodeId)
@@ -50,12 +48,5 @@ export function deleteNodeOnly(
       for (const child of children) next.push(child);
     } else if (node.parentId !== nodeId) next.push(node);
   }
-  if (mode === "auto") {
-    const previousRoot = nodes.find((node) => node.parentId === null);
-    const nextRootIndex = next.findIndex((node) => node.parentId === null);
-    if (previousRoot && nextRootIndex !== -1 && next[nextRootIndex].id !== previousRoot.id) {
-      next[nextRootIndex] = { ...next[nextRootIndex], x: previousRoot.x, y: previousRoot.y };
-    }
-  }
-  return { ok: true, nodes: next, deletedId: nodeId };
+  return { ok: true, nodes: mode === "auto" ? keepFirstRootPosition(nodes, next) : next, deletedId: nodeId };
 }
