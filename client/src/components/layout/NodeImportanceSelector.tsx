@@ -3,6 +3,10 @@ import type { NodeImportance } from "@/types/nodeImportance";
 type NodeImportanceSelectorProps = {
   importance: NodeImportance | null;
   disabled: boolean;
+  // 一括編集の対象件数。2件以上で件数を表示する
+  selectionCount: number;
+  // 対象の重要度が揃っていないとき true
+  mixed: boolean;
   onChange: (importance: NodeImportance) => void;
 };
 
@@ -23,15 +27,22 @@ const idleButtonClassName =
 export function NodeImportanceSelector({
   importance,
   disabled,
+  selectionCount,
+  mixed,
   onChange,
 }: NodeImportanceSelectorProps) {
+  const isMultiple = selectionCount >= 2;
+  const countText = isMultiple
+    ? `${selectionCount}件選択中${mixed ? "・混在" : ""}`
+    : "";
+
   return (
     <div className="flex shrink-0 items-center gap-2">
       <span className="text-sm text-zinc-600 dark:text-zinc-400">重要度</span>
       <div
         className="flex overflow-hidden rounded-md"
         role="group"
-        aria-label="重要度"
+        aria-label={isMultiple ? `重要度（${selectionCount}件選択中）` : "重要度"}
       >
         {importanceOptions.map(({ importance: optionImportance, label }) => {
           const selected = importance === optionImportance;
@@ -51,6 +62,10 @@ export function NodeImportanceSelector({
           );
         })}
       </div>
+      {/* 件数の変化を読み上げるため、ライブリージョンは常に描画して中身だけを替える */}
+      <span className="text-xs text-zinc-600 dark:text-zinc-400" aria-live="polite">
+        {countText}
+      </span>
     </div>
   );
 }
