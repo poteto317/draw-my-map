@@ -108,6 +108,7 @@ describe("NodeImportanceSelector", () => {
     );
 
     expect(screen.getByText("2件選択中・混在")).toBeVisible();
+    expect(screen.getByRole("group", { name: "重要度（2件選択中・混在）" })).toBeInTheDocument();
     ["重要度 高", "重要度 中", "重要度 低"].forEach((name) => {
       const button = screen.getByRole("button", { name });
       expect(button).toHaveAttribute("aria-pressed", "false");

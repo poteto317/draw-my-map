@@ -32,6 +32,7 @@ export function NodeImportanceSelector({
   onChange,
 }: NodeImportanceSelectorProps) {
   const isMultiple = selectionCount >= 2;
+  // 画面の件数表示とグループ名で同じ文言を使い、混在をスクリーンリーダーにも伝える
   const countText = isMultiple
     ? `${selectionCount}件選択中${mixed ? "・混在" : ""}`
     : "";
@@ -42,7 +43,7 @@ export function NodeImportanceSelector({
       <div
         className="flex overflow-hidden rounded-md"
         role="group"
-        aria-label={isMultiple ? `重要度（${selectionCount}件選択中）` : "重要度"}
+        aria-label={isMultiple ? `重要度（${countText}）` : "重要度"}
       >
         {importanceOptions.map(({ importance: optionImportance, label }) => {
           const selected = importance === optionImportance;
