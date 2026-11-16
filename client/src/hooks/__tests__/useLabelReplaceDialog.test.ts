@@ -295,6 +295,28 @@ describe("useLabelReplaceDialog", () => {
     expect(view.result.current.canSubmit).toBe(false);
   });
 
+  it("閉じても遅延が追いつかないまま開き直して入力しても、前回の検索語の一致行を出さない", () => {
+    const view = setup();
+    act(() => { view.result.current.open(); });
+    type(view, "banana", "OLD");
+    act(() => { view.result.current.close(); });
+
+    // 閉じた時点で遅延した値は空へ落ち着いており、その後は遅れたまま
+    mockDeferred.frozen = true;
+    act(() => { view.result.current.open(); });
+    act(() => { view.result.current.setQuery("a"); });
+
+    expect(view.result.current.previewRows).toEqual([]);
+    expect(view.result.current.replaceCount).toBe(0);
+    expect(view.result.current.canSubmit).toBe(false);
+
+    // 遅延が追いつけば、新しい検索語 "a" の結果になる
+    mockDeferred.frozen = false;
+    view.rerender({});
+    expect(view.result.current.previewRows.map((row) => row.nodeId)).toEqual([1, 2, 3]);
+    expect(view.result.current.statusText).not.toBe("検索語を入力してください。");
+  });
+
   it("updateNodeLabels が失敗した後にもう一度確定すると、成功して通知は 1 回だけになる", () => {
     const view = setup();
     view.updateNodeLabels.mockReturnValueOnce(false);

@@ -54,12 +54,13 @@ export function openLabelReplaceDialog(
 }
 
 export function closeLabelReplaceDialog(state: LabelReplaceDialogState): LabelReplaceDialogState {
-  return { ...state, screen: "closed", focusRequest: "header" };
+  // 入力は持ち越さない。残すと useDeferredValue の遅れた値に前回の検索語が残り、開き直した直後の入力で無関係なプレビューが出る
+  return { ...state, screen: "closed", query: "", replacement: "", focusRequest: "header" };
 }
 
 // マップの切り替えなど外から閉じるときは、ヘッダーのボタンへフォーカスを求めない（L-762）
 export function dismissLabelReplaceDialog(state: LabelReplaceDialogState): LabelReplaceDialogState {
-  return { ...state, screen: "closed", focusRequest: null };
+  return { ...state, screen: "closed", query: "", replacement: "", focusRequest: null };
 }
 
 export function setLabelReplaceQuery(state: LabelReplaceDialogState, query: string): LabelReplaceDialogState {

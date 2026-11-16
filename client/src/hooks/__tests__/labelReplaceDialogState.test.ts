@@ -81,6 +81,18 @@ describe("labelReplaceDialogState", () => {
     expect(consumeLabelReplaceFocusRequest(consumeLabelReplaceFocusRequest(closed)).focusRequest).toBeNull();
   });
 
+  it("閉じると検索語と置換語を空にする", () => {
+    const dirty = setLabelReplaceReplacement(setLabelReplaceQuery(opened([1]), "x"), "y");
+
+    expect(closeLabelReplaceDialog(dirty)).toMatchObject({ query: "", replacement: "" });
+  });
+
+  it("外から閉じる（dismiss）と検索語と置換語を空にする", () => {
+    const dirty = setLabelReplaceReplacement(setLabelReplaceQuery(opened([1]), "x"), "y");
+
+    expect(dismissLabelReplaceDialog(dirty)).toMatchObject({ query: "", replacement: "", focusRequest: null });
+  });
+
   it("外から閉じる（dismiss）と閉じた状態になり、フォーカスは求めない", () => {
     const dismissed = dismissLabelReplaceDialog(opened([1]));
 
