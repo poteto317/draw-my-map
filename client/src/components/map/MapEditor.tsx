@@ -12,9 +12,16 @@ import { BranchMoveControl } from "@/components/layout/BranchMoveControl";
 import { BranchMoveDialog } from "@/components/layout/BranchMoveDialog";
 import { LabelReplaceControl } from "@/components/layout/LabelReplaceControl";
 import { LabelReplaceDialog } from "@/components/layout/LabelReplaceDialog";
+import { NodeMergeControl } from "@/components/layout/NodeMergeControl";
+import { NodeMergeDialog } from "@/components/layout/NodeMergeDialog";
+import { NodeSplitControl } from "@/components/layout/NodeSplitControl";
+import { NodeSplitDialog } from "@/components/layout/NodeSplitDialog";
 import type { BranchMoveMapTarget } from "@/hooks/branchMoveDialogState";
 import { useBranchMoveDialog } from "@/hooks/useBranchMoveDialog";
+import { useHeaderFocusReturn } from "@/hooks/useHeaderFocusReturn";
 import { useLabelReplaceDialog } from "@/hooks/useLabelReplaceDialog";
+import { useNodeMergeDialog } from "@/hooks/useNodeMergeDialog";
+import { useNodeSplitDialog } from "@/hooks/useNodeSplitDialog";
 import type { MapLibraryOperationResult } from "@/hooks/useMapLibrary";
 import { useNodes } from "@/hooks/useNodes";
 import { AppHeader } from "@/components/layout/AppHeader";
@@ -131,6 +138,8 @@ export function MapEditor({
     insertParentNode,
     moveBranch,
     updateNodeLabels,
+    splitNode,
+    mergeNodes,
     deleteNode,
     deleteNodeOnly,
     setLayoutMode,
@@ -298,6 +307,41 @@ export function MapEditor({
     (button?.disabled ? exportButtonRef.current : button)?.focus();
     consumeLabelReplaceFocusRequest();
   }, [labelReplaceFocusRequest, consumeLabelReplaceFocusRequest, exportButtonRef]);
+  const nodeSplit = useNodeSplitDialog({
+    mapId,
+    nodes,
+    selectedNodeId,
+    visibleNodeIds: displayState.visibleNodeIds,
+    documentRevision,
+    splitNode,
+    publishNotice: publishTreeEditNotice,
+  });
+  const nodeSplitButtonRef = useRef<HTMLButtonElement>(null);
+  // 確定でボタンが無効になったときは、常に押せる「JSON書き出し」へ送る
+  useHeaderFocusReturn({
+    focusRequest: nodeSplit.focusRequest,
+    consumeFocusRequest: nodeSplit.consumeFocusRequest,
+    buttonRef: nodeSplitButtonRef,
+    fallbackRef: exportButtonRef,
+  });
+  const nodeMerge = useNodeMergeDialog({
+    mapId,
+    nodes,
+    selectedNodeId,
+    selectedNodeIds,
+    visibleNodeIds: displayState.visibleNodeIds,
+    documentRevision,
+    mergeNodes,
+    publishNotice: publishTreeEditNotice,
+  });
+  const nodeMergeButtonRef = useRef<HTMLButtonElement>(null);
+  // 成功すると選択が 1 件になり、ボタンが無効になるので、常に押せる「JSON書き出し」へ送る
+  useHeaderFocusReturn({
+    focusRequest: nodeMerge.focusRequest,
+    consumeFocusRequest: nodeMerge.consumeFocusRequest,
+    buttonRef: nodeMergeButtonRef,
+    fallbackRef: exportButtonRef,
+  });
   const { moveSelected: moveSelectedSibling } = siblingReorder;
   const moveSelectedSiblingUp = useCallback(() => moveSelectedSibling("up"), [moveSelectedSibling]);
   const moveSelectedSiblingDown = useCallback(() => moveSelectedSibling("down"), [moveSelectedSibling]);
@@ -312,6 +356,8 @@ export function MapEditor({
     && outlineImport.screen === "closed"
     && branchMove.screen === "closed"
     && labelReplace.screen === "closed"
+    && nodeSplit.screen === "closed"
+    && nodeMerge.screen === "closed"
     && !persistence.isConfirmOpen;
   useMapHistoryShortcuts({ undo, redo, enabled: editorShortcutsEnabled });
   const outlineModel = useMemo(() => buildOutlineRows(nodes), [nodes]);
@@ -433,6 +479,20 @@ export function MapEditor({
                     disabled={nodes.length === 0}
                     onOpen={labelReplace.open}
                     buttonRef={labelReplaceButtonRef}
+                  />
+                  <NodeSplitControl
+                    expanded={nodeSplit.screen !== "closed"}
+                    disabled={!nodeSplit.canOpen}
+                    disabledReason={nodeSplit.disabledReason}
+                    onOpen={nodeSplit.open}
+                    buttonRef={nodeSplitButtonRef}
+                  />
+                  <NodeMergeControl
+                    expanded={nodeMerge.screen !== "closed"}
+                    disabled={!nodeMerge.canOpen}
+                    disabledReason={nodeMerge.disabledReason}
+                    onOpen={nodeMerge.open}
+                    buttonRef={nodeMergeButtonRef}
                   />
                   <NodeSiblingOrderControl
                     canMoveUp={siblingReorder.canMoveUp}
@@ -587,6 +647,45 @@ export function MapEditor({
           onScopeSelectedOnlyChange={labelReplace.setScopeSelectedOnly}
           onCancel={labelReplace.close}
           onSubmit={labelReplace.submit}
+          onMouseClick={() => {
+            dialogMouseClickedAtRef.current = Date.now();
+          }}
+        />
+      )}
+      {nodeSplit.screen === "open" && (
+        <NodeSplitDialog
+          targetLabel={nodeSplit.targetLabel}
+          separatorPreset={nodeSplit.separatorPreset}
+          customSeparator={nodeSplit.customSeparator}
+          fragments={nodeSplit.fragments}
+          statusText={nodeSplit.statusText}
+          error={nodeSplit.error}
+          canSubmit={nodeSplit.canSubmit}
+          focusRequest={nodeSplit.focusRequest}
+          onFocusRequestApplied={nodeSplit.consumeFocusRequest}
+          onSeparatorPresetChange={nodeSplit.setSeparatorPreset}
+          onCustomSeparatorChange={nodeSplit.setCustomSeparator}
+          onCancel={nodeSplit.close}
+          onSubmit={nodeSplit.submit}
+          onMouseClick={() => {
+            dialogMouseClickedAtRef.current = Date.now();
+          }}
+        />
+      )}
+      {nodeMerge.screen === "open" && (
+        <NodeMergeDialog
+          preview={nodeMerge.preview}
+          separatorPreset={nodeMerge.separatorPreset}
+          customSeparator={nodeMerge.customSeparator}
+          statusText={nodeMerge.statusText}
+          error={nodeMerge.error}
+          canSubmit={nodeMerge.canSubmit}
+          focusRequest={nodeMerge.focusRequest}
+          onFocusRequestApplied={nodeMerge.consumeFocusRequest}
+          onSeparatorPresetChange={nodeMerge.setSeparatorPreset}
+          onCustomSeparatorChange={nodeMerge.setCustomSeparator}
+          onCancel={nodeMerge.close}
+          onSubmit={nodeMerge.submit}
           onMouseClick={() => {
             dialogMouseClickedAtRef.current = Date.now();
           }}
