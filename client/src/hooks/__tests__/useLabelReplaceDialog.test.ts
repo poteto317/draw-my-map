@@ -269,6 +269,23 @@ describe("useLabelReplaceDialog", () => {
     expect(view.result.current.screen).toBe("open");
   });
 
+  it("置換語だけが遅れている間も確定できない", () => {
+    const view = setup();
+    act(() => { view.result.current.open(); });
+    type(view, "apple", "Orange");
+
+    // 検索語は追いついたまま、置換語だけ遅延した値が古いまま残る
+    mockDeferred.frozen = true;
+    act(() => { view.result.current.setReplacement("Lemon"); });
+
+    expect(view.result.current.canSubmit).toBe(false);
+    act(() => { view.result.current.submit(); });
+
+    expect(view.updateNodeLabels).not.toHaveBeenCalled();
+    expect(view.publishNotice).not.toHaveBeenCalled();
+    expect(view.result.current.screen).toBe("open");
+  });
+
   it("検索語が空のときは確定しても何もしない", () => {
     const view = setup();
     act(() => { view.result.current.open(); });
