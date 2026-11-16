@@ -421,6 +421,25 @@ describe("useNodes の mergeNodes", () => {
       expect(result.current.nodes).toBe(before.nodes);
     });
 
+    it("確認の後に吸収側へイラストが付いて失われる件数が増えたときも plan-changed（イラストが警告なしに失われない）", () => {
+      const illustration = createJpegDataUrl(100, 100);
+      const { result } = renderNodes(mergeMap());
+      // 主選択 3 だけがイラストを持つ状態でプレビューを作る（失われる件数は 0）
+      act(() => { result.current.attachIllustration(3, illustration); });
+      const shown = planNodeMerge(result.current.nodes, [2, 3], 3, " ", ALL);
+      expect(shown).toMatchObject({ ok: true, discardedIllustrationCount: 0 });
+      act(() => { result.current.attachIllustration(2, illustration); });
+      const before = result.current;
+
+      let outcome!: MergeNodesResult;
+      act(() => { outcome = result.current.mergeNodes([2, 3], 3, " ", ALL, shown); });
+
+      expect(outcome).toEqual({ ok: false, reason: "plan-changed" });
+      expect(result.current.nodes).toBe(before.nodes);
+      expect(result.current.canUndo).toBe(before.canUndo);
+      expect(result.current.documentRevision).toBe(before.documentRevision);
+    });
+
     it("区切り文字だけが確認の時点と違うときも plan-changed（ラベルが違う）", () => {
       const { result } = renderNodes(mergeMap());
       const shown = planNodeMerge(result.current.nodes, [2, 3], 3, "・", ALL);

@@ -253,6 +253,33 @@ describe("isSameNodeMergePlan", () => {
     expect(isSameNodeMergePlan(base, okPlan(withIllustration, [2, 3, 4], 3))).toBe(false);
   });
 
+  describe("プレビューで見せた内容（失われるイラストの件数・重要度・イラストの扱い・付け替える子の件数）が違えば偽", () => {
+    const illustration = createJpegDataUrl(100, 100);
+    // 主選択 3 だけがイラストを持つ計画（引き継ぎ元は主選択。失われる件数は 0）
+    const primaryOnly = family.map((item) => (item.id === 3 ? { ...item, illustration, height: ILLUSTRATED_NODE_HEIGHT } : item));
+    const primaryOnlyPlan = okPlan(primaryOnly, [2, 3, 4], 3);
+
+    it("吸収側にもイラストが付いて、失われる件数だけが違う計画は偽（引き継ぎ元は同じ主選択）", () => {
+      const absorbedHasIllustration = primaryOnly.map((item) => (item.id === 2 ? { ...item, illustration } : item));
+      const other = okPlan(absorbedHasIllustration, [2, 3, 4], 3);
+
+      expect(other).toMatchObject({ illustrationFrom: "primary", illustrationSourceId: null, discardedIllustrationCount: 1 });
+      expect(isSameNodeMergePlan(primaryOnlyPlan, other)).toBe(false);
+    });
+
+    it("重要度が違う計画は偽", () => {
+      expect(isSameNodeMergePlan(base, { ...base, importance: "low" })).toBe(false);
+    });
+
+    it("イラストの扱い（illustrationFrom）が違う計画は偽", () => {
+      expect(isSameNodeMergePlan(primaryOnlyPlan, { ...primaryOnlyPlan, illustrationFrom: "none" })).toBe(false);
+    });
+
+    it("付け替える子の件数が違う計画は偽", () => {
+      expect(isSameNodeMergePlan(base, { ...base, movedChildCount: base.movedChildCount + 1 })).toBe(false);
+    });
+  });
+
   it("吸収されるノードの順が違えば偽", () => {
     const reordered: NodeMergePlan = { ...base, absorbedIds: [4, 2] };
 
