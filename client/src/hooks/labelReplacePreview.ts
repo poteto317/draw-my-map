@@ -1,5 +1,5 @@
 import type { LabelReplaceRow } from "@/domain/search/nodeLabelReplace";
-import { STALE_LABEL_REPLACE_MESSAGE } from "@/hooks/labelReplaceDialogState";
+import { STALE_DIALOG_MESSAGE } from "@/hooks/dialogPreviewText";
 
 export const LABEL_REPLACE_PREVIEW_LIMIT = 200;
 
@@ -24,13 +24,6 @@ export function selectLabelReplacePreviewRows(
   return { shown, hiddenReplaceCount };
 }
 
-// プレビューに出すラベル。空文字や空白だけのラベルは空欄に見えるので、代わりの表示にする
-export function formatLabelReplacePreviewLabel(label: string): string {
-  if (label === "") return "（空）";
-  if (label.trim() === "") return "（空白のみ）";
-  return label;
-}
-
 export type LabelReplaceStatusInput = {
   stale: boolean;
   query: string;
@@ -47,7 +40,7 @@ export function describeLabelReplaceStatus({
   replaceCount,
   emptiedCount,
 }: LabelReplaceStatusInput): string {
-  if (stale) return STALE_LABEL_REPLACE_MESSAGE;
+  if (stale) return STALE_DIALOG_MESSAGE;
   if (query === "") return "検索語を入力してください。";
   if (matchedRowCount === 0) return "一致するノードがありません。";
   if (replaceCount === 0) return "置換できるノードがありません。";
