@@ -6,17 +6,33 @@ type HarnessProps = {
   focusRequest: string | null;
   buttonDisabled?: boolean;
   hasButton?: boolean;
+  fallbackDisabled?: boolean;
+  secondFallback?: boolean;
   onConsume: () => void;
 };
 
-function Harness({ focusRequest, buttonDisabled = false, hasButton = true, onConsume }: HarnessProps) {
+function Harness({
+  focusRequest,
+  buttonDisabled = false,
+  hasButton = true,
+  fallbackDisabled = false,
+  secondFallback = false,
+  onConsume,
+}: HarnessProps) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const fallbackRef = useRef<HTMLButtonElement>(null);
-  useHeaderFocusReturn({ focusRequest, consumeFocusRequest: onConsume, buttonRef, fallbackRef });
+  const secondFallbackRef = useRef<HTMLButtonElement>(null);
+  useHeaderFocusReturn({
+    focusRequest,
+    consumeFocusRequest: onConsume,
+    buttonRef,
+    fallbackRefs: secondFallback ? [fallbackRef, secondFallbackRef] : [fallbackRef],
+  });
   return (
     <>
       {hasButton && <button ref={buttonRef} disabled={buttonDisabled}>対象のボタン</button>}
-      <button ref={fallbackRef}>戻り先のボタン</button>
+      <button ref={fallbackRef} disabled={fallbackDisabled}>戻り先のボタン</button>
+      {secondFallback && <button ref={secondFallbackRef}>2 番目の戻り先のボタン</button>}
     </>
   );
 }
@@ -44,6 +60,30 @@ describe("useHeaderFocusReturn", () => {
     render(<Harness focusRequest="header" hasButton={false} onConsume={jest.fn()} />);
 
     expect(screen.getByRole("button", { name: "戻り先のボタン" })).toHaveFocus();
+  });
+
+  it("ボタンも先頭の戻り先も無効なら、次の戻り先のボタンへフォーカスする", () => {
+    const onConsume = jest.fn();
+
+    render(<Harness focusRequest="header" buttonDisabled fallbackDisabled secondFallback onConsume={onConsume} />);
+
+    expect(screen.getByRole("button", { name: "2 番目の戻り先のボタン" })).toHaveFocus();
+    expect(onConsume).toHaveBeenCalledTimes(1);
+  });
+
+  it("ボタンが無効で先頭の戻り先が有効なら、2 番目へは送らない", () => {
+    render(<Harness focusRequest="header" buttonDisabled secondFallback onConsume={jest.fn()} />);
+
+    expect(screen.getByRole("button", { name: "戻り先のボタン" })).toHaveFocus();
+  });
+
+  it("すべて無効ならフォーカスを動かさず、要求は消費する", () => {
+    const onConsume = jest.fn();
+
+    render(<Harness focusRequest="header" buttonDisabled fallbackDisabled onConsume={onConsume} />);
+
+    expect(document.body).toHaveFocus();
+    expect(onConsume).toHaveBeenCalledTimes(1);
   });
 
   it.each([null, "separator"])("要求が %s のときは、フォーカスを動かさず、要求も消費しない", (focusRequest) => {
