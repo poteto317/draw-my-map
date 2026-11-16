@@ -3,6 +3,7 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { EditorViewModeControl, type EditorViewMode } from "@/components/layout/EditorViewModeControl";
 import { OutlineEditor } from "@/components/outline/OutlineEditor";
+import { summarizeSelectionImportance } from "@/domain/nodes/selectionImportanceSummary";
 import { buildOutlineRows } from "@/domain/outline/outlineRows";
 import { useOutlineEditorActions } from "@/hooks/useOutlineEditorActions";
 import { useOutlineCanvasReturn } from "@/hooks/useOutlineCanvasReturn";
@@ -115,7 +116,7 @@ export function MapEditor({
     clearSelection,
     pruneSelectionToVisible,
     updateNodeLabel,
-    updateNodeImportance,
+    updateNodesImportance,
     moveNode,
     connectNodes,
     duplicateSubtree,
@@ -150,6 +151,12 @@ export function MapEditor({
     resetScale: INITIAL_VIEWPORT.scale,
   });
   const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? null;
+  // 一括編集の対象。アウトラインは単一選択のため、キャンバスで残った複数選択を見えないまま変えない
+  const importanceTargetIds = useMemo<readonly number[]>(() => {
+    if (viewMode === "map") return selectedNodeIds;
+    return selectedNodeId === null ? [] : [selectedNodeId];
+  }, [viewMode, selectedNodeIds, selectedNodeId]);
+  const importanceSummary = summarizeSelectionImportance(nodes, importanceTargetIds);
   const branchCollapse = useBranchCollapse({ nodes, documentRevision });
   const { expandNodes } = branchCollapse;
   const expandNodesRef = useRef(expandNodes);
@@ -356,10 +363,12 @@ export function MapEditor({
           )}
           importanceControls={(
             <NodeImportanceSelector
-              importance={selectedNode?.importance ?? null}
-              disabled={selectedNode === null}
+              importance={importanceSummary.kind === "uniform" ? importanceSummary.importance : null}
+              disabled={importanceSummary.kind === "none"}
+              selectionCount={importanceSummary.kind === "none" ? 0 : importanceSummary.count}
+              mixed={importanceSummary.kind === "mixed"}
               onChange={(importance) => {
-                if (selectedNode !== null) updateNodeImportance(selectedNode.id, importance);
+                updateNodesImportance(importanceTargetIds, importance);
               }}
             />
           )}
