@@ -120,6 +120,25 @@ describe("LabelReplaceDialog", () => {
     }
   });
 
+  it("置換前後の連続する空白・前後の空白を畳まず、折り返しも保つ", () => {
+    renderDialog({ previewRows: [row(1, "a  b ", "a b")] });
+
+    for (const text of ["a  b ", "a b"]) {
+      // 既定の正規化は連続する空白を畳むので、そのまま比べる
+      const span = screen.getByText(text, { normalizer: (value) => value });
+      expect(span).toHaveClass("whitespace-pre-wrap");
+      expect(span).toHaveClass("break-words");
+      expect(span).toHaveClass("[overflow-wrap:anywhere]");
+    }
+  });
+
+  it("置換後が空白だけの行は空欄に見えないよう（空白のみ）と出す", () => {
+    renderDialog({ previewRows: [row(1, "a  b", "  ")] });
+
+    const items = within(screen.getByRole("list", { name: "置換のプレビュー" })).getAllByRole("listitem");
+    expect(items[0]).toHaveTextContent("（空白のみ）");
+  });
+
   it("上限を超えた replace 行があれば件数と注記を出す", () => {
     renderDialog({ hiddenReplaceCount: 5, previewLimit: 200 });
 
