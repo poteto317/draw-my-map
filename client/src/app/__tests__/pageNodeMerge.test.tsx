@@ -174,6 +174,8 @@ describe("ノードの統合", () => {
     selectAppleAndApple();
     openDialog();
     expect(dialog().getByText("統合後のラベル").nextElementSibling).toHaveTextContent("りんご リンゴ");
+    // 最後に選んだ「リンゴ」が残るノード（主選択）
+    expect(dialog().getByText("残すノード").nextElementSibling).toHaveTextContent("リンゴ");
 
     fireEvent.change(dialog().getByLabelText("区切り文字"), { target: { value: "middle-dot" } });
     expect(dialog().getByText("統合後のラベル").nextElementSibling).toHaveTextContent("りんご・リンゴ");

@@ -55,6 +55,7 @@ describe("buildNodeMergePreview", () => {
     ];
 
     expect(buildNodeMergePreview(nodes, okPlan(nodes, [2, 3], 3))).toEqual({
+      survivorLabel: "リンゴ",
       label: "りんご リンゴ",
       importanceLabel: "高",
       illustrationText: "イラストなし",

@@ -8,6 +8,7 @@ type Props = ComponentProps<typeof NodeMergeDialog>;
 
 function preview(overrides: Partial<NodeMergePreview> = {}): NodeMergePreview {
   return {
+    survivorLabel: "リンゴ",
     label: "りんご リンゴ",
     importanceLabel: "高",
     illustrationText: "イラストなし",
@@ -45,7 +46,7 @@ describe("NodeMergeDialog", () => {
 
     const dialog = screen.getByRole("dialog", { name: "ノードを統合" });
     expect(dialog).toHaveAttribute("aria-modal", "true");
-    expect(dialog).toHaveAccessibleDescription(/主選択のノードへ 1 つにまとめます/);
+    expect(dialog).toHaveAccessibleDescription(/残すノード（最後に選んだノード＝主選択）へ 1 つにまとめます/);
     expect(within(dialog).getByLabelText("区切り文字")).toHaveValue("space");
     expect(dialog).toHaveClass("max-h-full", "overflow-y-auto");
   });
@@ -88,6 +89,17 @@ describe("NodeMergeDialog", () => {
       expect(screen.getByText("重要度").nextElementSibling).toHaveTextContent("高");
       expect(screen.getByText("イラスト").nextElementSibling).toHaveTextContent("主選択のイラストを残す");
       expect(screen.getByText("付け替える子").nextElementSibling).toHaveTextContent("2件");
+    });
+
+    it("残すノードのラベルを出し、空のラベルは「（空）」、空白だけなら「（空白のみ）」にする", () => {
+      const { rerender, props } = renderDialog({ preview: preview({ survivorLabel: "リンゴ" }) });
+      expect(screen.getByText("残すノード").nextElementSibling).toHaveTextContent("リンゴ");
+
+      rerender(<NodeMergeDialog {...props} preview={preview({ survivorLabel: "" })} />);
+      expect(screen.getByText("残すノード").nextElementSibling).toHaveTextContent("（空）");
+
+      rerender(<NodeMergeDialog {...props} preview={preview({ survivorLabel: "  " })} />);
+      expect(screen.getByText("残すノード").nextElementSibling).toHaveTextContent("（空白のみ）");
     });
 
     it("統合後のラベルは前後の空白を畳まず、折り返して全文を出す。空白だけが違う結果を見分けられる（L-821）", () => {
@@ -149,6 +161,7 @@ describe("NodeMergeDialog", () => {
 
       expect(screen.queryByRole("list")).toBeNull();
       expect(screen.queryByText("統合後のラベル")).toBeNull();
+      expect(screen.queryByText("残すノード")).toBeNull();
       expect(screen.getByText("2 つ以上のノードを選択してください。")).toBeInTheDocument();
     });
   });

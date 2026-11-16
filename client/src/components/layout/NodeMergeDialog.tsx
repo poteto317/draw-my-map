@@ -77,7 +77,7 @@ export function NodeMergeDialog({
       >
         <h2 id={headingId} className="text-lg font-semibold">ノードを統合</h2>
         <p id={descriptionId} className="text-sm">
-          選択中の同じ親の兄弟ノードを、主選択のノードへ 1 つにまとめます。ほかのノードは消え、その子は主選択のノードの子の末尾へ付け替えられます。
+          選択中の同じ親の兄弟ノードを、残すノード（最後に選んだノード＝主選択）へ 1 つにまとめます。ほかのノードは消え、その子は残すノードの子の末尾へ付け替えられます。
         </p>
         <NodeSeparatorField
           preset={separatorPreset}
@@ -94,6 +94,10 @@ export function NodeMergeDialog({
         {preview !== null && (
           <>
             <dl className="flex flex-col gap-1 text-sm">
+              <div className="flex gap-2">
+                <dt className="font-medium">残すノード</dt>
+                <dd className={labelClassName}>{formatPreviewLabel(preview.survivorLabel)}</dd>
+              </div>
               <div className="flex flex-col gap-0.5">
                 <dt className="font-medium">統合後のラベル</dt>
                 <dd className={labelClassName}>{formatPreviewLabel(preview.label)}</dd>
