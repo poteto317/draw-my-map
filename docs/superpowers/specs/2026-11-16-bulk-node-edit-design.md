@@ -87,7 +87,7 @@ export function summarizeSelectionImportance(
 - 新しい props `selectionCount: number` と `mixed: boolean` を追加する。どちらも既定値なしの必須 props とする（渡し忘れを型で検出するため。L-060）。
 - `importance` が非 `null` のとき、そのボタンを `aria-pressed="true"` にする（現状どおり）。混在時は `importance={null}` を渡し、どれも押下表示にしない。
 - ボタン群の右に `aria-live="polite"` の `span` を**常に描画**する。`selectionCount >= 2` のとき中身を `N件選択中` とし、`mixed` が `true` なら `N件選択中・混在` とする。`selectionCount < 2` のときは中身を空にする。
-- ボタン群の `aria-label` は、2 件以上選択中なら `重要度（N件選択中）` とする。1 件以下では従来どおり `重要度`。
+- ボタン群の `aria-label` は、2 件以上選択中なら `重要度（N件選択中）` とし、重要度が混在するときは `重要度（N件選択中・混在）` とする（混在はどのボタンも押下表示にならず、フォーカス時に伝わらないため）。1 件以下では従来どおり `重要度`。
 
 ### 5.2 `MapEditor`
 

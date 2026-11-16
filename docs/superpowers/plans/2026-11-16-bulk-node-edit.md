@@ -20,7 +20,7 @@
 - 対象の属性は重要度のみ。色・タグ・イラストの一括編集、右クリックメニューやアウトラインからの一括編集、子孫への波及は実装しない。
 - 一括変更は 1 操作として履歴に記録する。全件がすでに同値なら履歴を増やさない（`areMapStatesEqual` が保証）。
 - 保存形式（V3）は変えない。
-- 表示文言: `N件選択中`、混在時 `N件選択中・混在`（中黒「・」）。ボタン群の `aria-label` は 2 件以上で `重要度（N件選択中）`（全角括弧）、1 件以下で `重要度`。
+- 表示文言: `N件選択中`、混在時 `N件選択中・混在`（中黒「・」）。ボタン群の `aria-label` は 2 件以上で `重要度（N件選択中）`、混在時は `重要度（N件選択中・混在）`（全角括弧）、1 件以下で `重要度`。
 - 新しい props `selectionCount: number` と `mixed: boolean` は既定値なしの必須 props（L-060）。
 - テストの fixture: 選択していないノードを必ず 1 件入れて不変を確かめる。一括変更前の重要度は目標と異なる値で、ノードごとにも異なる値（例: 高と中）にする。テスト用ノードの既定値（すべて `medium`）のまま使わない（L-168, L-170, L-616）。
 - 気をつける知見: L-001（成否を返す）、L-002（空を全件と扱わない）、L-453（1 回の更新関数でまとめる）、L-061（無効化の入口を一貫させる）、L-060、L-153 / L-154（ライブリージョンを常に描画・`aria-label` を件数に追従）、L-168 / L-170 / L-616（fixture）。
@@ -350,7 +350,7 @@ Expected: PASS
 **Interfaces:**
 - Produces: `NodeImportanceSelectorProps = { importance: NodeImportance | null; disabled: boolean; selectionCount: number; mixed: boolean; onChange: (importance: NodeImportance) => void }`
   - `aria-live="polite"` の `span`（`data-testid` は付けない。テストは `getByText` / コンテナ照会で行う）を常に描画し、`selectionCount >= 2` のとき `N件選択中`（`mixed` なら `N件選択中・混在`）、それ以外は空。
-  - `role="group"` の `aria-label` は `selectionCount >= 2` で `重要度（N件選択中）`、それ以外は `重要度`。
+  - `role="group"` の `aria-label` は `selectionCount >= 2` で `重要度（N件選択中）`（混在時は `重要度（N件選択中・混在）`、件数文言は countText と共通）、それ以外は `重要度`。
 
 - [x] **Step 1: 既存テストに新 props を足し、失敗するテストを追記する**
 
@@ -484,7 +484,7 @@ export function NodeImportanceSelector({
       <div
         className="flex overflow-hidden rounded-md"
         role="group"
-        aria-label={isMultiple ? `重要度（${selectionCount}件選択中）` : "重要度"}
+        aria-label={isMultiple ? `重要度（${countText}）` : "重要度"}
       >
         {importanceOptions.map(({ importance: optionImportance, label }) => {
           const selected = importance === optionImportance;
@@ -634,7 +634,7 @@ describe("選択ノードの重要度の一括編集", () => {
     await user.click(screen.getByRole("button", { name: "テスト用トグル2" }));
 
     expect(screen.getByText("2件選択中・混在")).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "重要度（2件選択中）" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "重要度（2件選択中・混在）" })).toBeInTheDocument();
     ["重要度 高", "重要度 中", "重要度 低"].forEach((name) => {
       expect(screen.getByRole("button", { name })).toHaveAttribute("aria-pressed", "false");
     });
@@ -742,13 +742,13 @@ Expected: PASS、型エラー・lint エラーなし
 
 - 62 行付近の Phase 17 の行: 機能名に「選択ノードの一括編集（重要度）」を加え、「一括編集は候補010で未実装」を「ヘッダーの重要度ボタンで選択中の全ノードの重要度を一括変更（1 操作で Undo / Redo。アウトライン表示中は主選択のみ）」に変える。
 - 250 行付近（3.3 節の主選択の一覧）: 「重要度」を主選択だけの一覧から外し、「複数選択中でも一括編集はしません（候補010）」を「ヘッダーの『重要度』だけは選択集合全体に作用します（下記『重要度の一括編集』）」に変える。
-- 3.3 節の末尾に「重要度の一括編集（候補010）」の小項目を追加し、次を書く: 対象（キャンバスは選択集合、アウトライン表示中は主選択 1 件）、押下表示（全件同じ値ならそのボタン、混在なら押下なし）、件数表示（2 件以上で `N件選択中`、混在時 `N件選択中・混在`、`aria-live="polite"`、グループ名 `重要度（N件選択中）`）、履歴（1 操作、全件同値なら積まない）、解像度フィルターで隠れたノードは既存どおり選択から外れること、保存形式は不変。
+- 3.3 節の末尾に「重要度の一括編集（候補010）」の小項目を追加し、次を書く: 対象（キャンバスは選択集合、アウトライン表示中は主選択 1 件）、押下表示（全件同じ値ならそのボタン、混在なら押下なし）、件数表示（2 件以上で `N件選択中`、混在時 `N件選択中・混在`、`aria-live="polite"`、グループ名 `重要度（N件選択中）`、混在時 `重要度（N件選択中・混在）`）、履歴（1 操作、全件同値なら積まない）、解像度フィルターで隠れたノードは既存どおり選択から外れること、保存形式は不変。
 - 重要度タグの編集を説明している節（`grep -n "重要度" docs/specifications/features.md` で探す）に、複数選択時は一括変更になることを 1 文で追記し、3.3 節を参照させる。
 - 846 行付近: 「（3.3 節。一括編集は候補010）」を「（3.3 節。重要度だけは選択集合全体へ一括で作用する）」に変える。
 - 758 行付近（履歴の表の「重要度の変更」の行）: 一括変更も 1 操作であり、全件がすでに同値なら履歴を積まないことを追記する。
 - 912 行付近（「ヘッダーの重要度・折りたたみ…は主選択に連動」）: 重要度を主選択連動の列挙から外し、選択集合に作用することを書く。
 - 923 行付近（重要度セレクターの説明「選択中ノードの重要度を変更する」）: 「選択中の全ノード（アウトライン表示中は主選択）の重要度を変更する」に変える。
-- 949 行付近（`NodeImportanceSelector.tsx` の `aria-label="重要度"` の説明）: 2 件以上で `重要度（N件選択中）` になること、常に描画する `aria-live="polite"` の件数表示があることを追記する。
+- 949 行付近（`NodeImportanceSelector.tsx` の `aria-label="重要度"` の説明）: 2 件以上で `重要度（N件選択中）`（混在時 `重要度（N件選択中・混在）`）になること、常に描画する `aria-live="polite"` の件数表示があることを追記する。
 - 行番号はずれている可能性がある。`grep -n "重要度" docs/specifications/features.md` で全箇所を確かめ、主選択だけ・一括編集なしと読める記述が残っていないことを確認する。
 
 - [x] **Step 2: `browser-test-cases.md` に AC 節を追加する**

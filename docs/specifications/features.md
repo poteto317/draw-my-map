@@ -265,7 +265,7 @@ Pixi.js による高速な 2D キャンバス描画と、React 19 による宣�
 
 - **対象**: ヘッダーの「重要度」ボタンは、キャンバス表示中は選択集合（`selectedNodeIds`）全体、アウトライン表示中は主選択 1 件だけを対象に、重要度を一括変更します（`useNodes.updateNodesImportance`）。空の選択、または全 ID が不在なら何もしません。
 - **押下表示**: 対象の重要度が全件同じならそのボタンを押下表示（`aria-pressed`）にし、混在なら `高` / `中` / `低` のどれも押下表示にしません。
-- **件数表示**: 2 件以上選択中は `N件選択中`、重要度が混在するときは `N件選択中・混在` を表示します。件数表示は常に描画する `aria-live="polite"` の `span` で、グループ名は 2 件以上で `重要度（N件選択中）`、それ以外は `重要度` です。
+- **件数表示**: 2 件以上選択中は `N件選択中`、重要度が混在するときは `N件選択中・混在` を表示します。件数表示は常に描画する `aria-live="polite"` の `span` で、グループ名は 2 件以上で `重要度（N件選択中）`、重要度が混在するときは `重要度（N件選択中・混在）`、1 件以下は `重要度` です。
 - **履歴**: 一括変更は全件まとめて 1 操作の Undo / Redo です。全件がすでに同じ重要度なら履歴を積みません。
 - **解像度フィルターとの関係**: 重要度を下げて解像度フィルターで隠れたノードは、既存の `pruneSelectionToVisible` で選択から外れます（5.5 節）。
 - **保存形式**: 保存形式 V3 は変わりません。
@@ -956,7 +956,7 @@ sequenceDiagram
 #### 各 UI コンポーネントのアクセシビリティ（ARIA 属性）と表示仕様
 - **ボタングループ・セレクター群**:
   - `LayoutModeSelector.tsx`: コンテナに `role="group"` と `aria-label="レイアウトモード"` を付与し、各ボタン（`手動配置` / `自動配置`）に選択状態を示す `aria-pressed={layoutMode === mode}` を設定します。
-  - `NodeImportanceSelector.tsx`: コンテナに `role="group"` と `aria-label="重要度"` を付与し、各ボタンに `aria-label="重要度 高"` / `"重要度 中"` / `"重要度 低"` および `aria-pressed={selected}`、ノード未選択時の `disabled` 属性を設定します。選択が 2 件以上のときは group の `aria-label` を `重要度（N件選択中）` にします。ボタン群の右に、常に描画する `aria-live="polite"` の件数表示（2 件以上で `N件選択中`、重要度が混在するとき `N件選択中・混在`）を置き、件数の変化を読み上げます。
+  - `NodeImportanceSelector.tsx`: コンテナに `role="group"` と `aria-label="重要度"` を付与し、各ボタンに `aria-label="重要度 高"` / `"重要度 中"` / `"重要度 低"` および `aria-pressed={selected}`、ノード未選択時の `disabled` 属性を設定します。選択が 2 件以上のときは group の `aria-label` を `重要度（N件選択中）`、重要度が混在するときは `重要度（N件選択中・混在）` にします（件数表示と同じ文言を 1 か所で導出）。ボタン群の右に、常に描画する `aria-live="polite"` の件数表示（2 件以上で `N件選択中`、重要度が混在するとき `N件選択中・混在`）を置き、件数の変化を読み上げます。
   - `NodeCollapseControl.tsx`: ボタンに展開状態を示す `aria-expanded`（閉じた親では `false`、開いた親では `true`。操作できない未選択時と子を持たないノードでは属性を出さない）を設定し、ラベルを `枝を折りたたむ` / `枝を展開` で切り替えます。ノード未選択時と、子を持たないノード（`useBranchCollapse` の `canToggle` が `false`）では `disabled` 属性を設定します。ボタンの `aria-describedby` で、件数 `折りたたみで非表示: N件` と補足文2つ（`useId` で作る ID を付けた要素）を参照し、フォーカス時に件数と補足も読み上げられるようにします。
   - `ResolutionFilterSelector.tsx`: コンテナに `role="group"` と `aria-label="表示"` を付与し、各ボタンに `aria-label="表示 自動"` / `"表示 高のみ"` / `"表示 中以上"` / `"表示 すべて"` および `aria-pressed={selected}` を設定します。`mode === "auto"` のときのみ右隣に `現在: ${levelLabels[level]}` を表示します。
 - **右サイドパネル (`IllustrationPanel.tsx`, `IllustrationImage.tsx`)**:
