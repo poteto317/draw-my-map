@@ -156,7 +156,7 @@ export function mergeNodes(
 - 並びは**配列順**（`ids` の順序には依存しない）。
 - 結果:
   - ラベル: 配列順にラベルを集め、空文字を除いて `joiner` で連結する（主選択のラベルも同じ規則で、配列上の位置に入る）。
-  - 重要度: 選択中で最も高い。重要度の序列は `domain/nodes/nodeResolution.ts` の `IMPORTANCE_RANK`（`high` 2、`medium` 1、`low` 0。現在は未 export）が既に持つ。表を二重に作らないため、序列を `domain/nodes/nodeImportance.ts` へ移して export し、`nodeResolution.ts` と新しい `maxNodeImportance(values: readonly NodeImportance[]): NodeImportance`（同ファイル）の両方が同じ表を使う。挙動は変えず、テストで固定する。
+  - 重要度: 選択中で最も高い。重要度の序列は、`domain/nodes/nodeResolution.ts` の `importanceRank`（`high` 2、`medium` 1、`low` 0。未 export）が既に持つ。表を二重に作らないため、序列を `domain/nodes/nodeImportance.ts` へ移して `IMPORTANCE_RANK`（`Readonly<Record<NodeImportance, number>>`、export）とし、`nodeResolution.ts` と新しい `maxNodeImportance(values: readonly NodeImportance[]): NodeImportance`（同ファイル）の両方が同じ表を使う。挙動は変えず、テストで固定する。
   - イラスト: 主選択が持っていればそれ（`illustrationFrom: "primary"`、高さも主選択のまま）。無ければ、吸収されるノードのうち配列順で最初に持つもの（`"absorbed"`）。引き継いだときだけ、`replaceNodeIllustration`（`attachIllustration` の実体）と同じ規則で、残すノードの高さを `ILLUSTRATED_NODE_HEIGHT` にする。持つものが無ければ `"none"` で、`illustration` のキーを持たない。
   - 位置・大きさ・`id`・`parentId` は主選択のまま（上のイラスト引き継ぎの高さと、次の自動配置の座標の例外を除く）。
   - `mode === "auto"` で、統合前の先頭のルート（配列順で最初の `parentId === null`）が吸収されて、統合後の先頭のルートが別のノードになるときは、新しい先頭のルートへ旧先頭の座標（x, y）を写す（`deleteNodeOnly` と同じ規則）。
@@ -210,33 +210,40 @@ type MergeNodesResult = { ok: true; survivorId: number; absorbedCount: number } 
 
 `useNodeSplitDialog` / `useNodeMergeDialog` の入力は、`nodes`、`selectedNodeId`、`selectedNodeIds`（統合）、`visibleNodeIds`、`documentRevision`、`mapId`、`splitNode` / `mergeNodes`、`publishNotice` とする（`useLabelReplaceDialog` の入力に倣う）。
 
-分割と統合は、対象（分割: `nodeId`、統合: `ids` と `primaryId`）以外が同じ形なので、状態遷移の純関数は `hooks/nodeSplitMergeDialogState.ts` の 1 ファイルにまとめ、対象を `{ kind: "split"; nodeId } | { kind: "merge"; ids; primaryId }` で持つ。フックは `hooks/useNodeSplitDialog.ts` / `hooks/useNodeMergeDialog.ts`、表示は `components/layout/NodeSplitDialog.tsx` / `NodeMergeDialog.tsx`、ヘッダーのボタンは `NodeSplitControl.tsx` / `NodeMergeControl.tsx`。区切り文字の入力は `components/layout/NodeSeparatorField.tsx`（プルダウン + 「その他」の入力 + 可視のラベル）に置いて共有する。stale の文言は、既存の `STALE_LABEL_REPLACE_MESSAGE` を共有の置き場所へ移して一括置換と新規の両方から使う（文言と挙動は変えない）。ヘッダーのボタンへフォーカスを戻す処理は、`MapEditor` に同形の `useLayoutEffect` が既に 2 つある（枝の移動・一括置換）ため、新しい 2 つのダイアログは共通のフック `useHeaderFocusReturn` を使う（既存の 2 つの書き換えは今回の範囲外）。
+分割と統合は、対象（分割: `nodeId`、統合: `ids` と `primaryId`）以外が同じ形なので、状態遷移の純関数は `hooks/nodeSplitMergeDialogState.ts` の 1 ファイルにまとめ、対象を `{ kind: "split"; nodeId } | { kind: "merge"; ids; primaryId }` で持つ。フックは `hooks/useNodeSplitDialog.ts` / `hooks/useNodeMergeDialog.ts`（開閉・マップ切り替えで閉じる処理・stale の判定と誤りの置き換え・区切り文字・フォーカスの要求は、共通のフック `hooks/useNodeSplitMergeDialogState.ts` が持ち、2 つのフックは対象の固定・計画・プレビュー・確定だけを持つ。プレビューの純関数は `hooks/nodeSplitPreview.ts`（分割の状態文言）と `hooks/nodeMergePreview.ts`（統合の状態文言とプレビューの組み立て））、表示は `components/layout/NodeSplitDialog.tsx` / `NodeMergeDialog.tsx`、ヘッダーのボタンは `NodeSplitControl.tsx` / `NodeMergeControl.tsx`。区切り文字の入力は `components/layout/NodeSeparatorField.tsx`（プルダウン + 「その他」の入力 + 可視のラベル）に置いて共有する。stale の文言とプレビューのラベルの整形は、既存の `STALE_LABEL_REPLACE_MESSAGE` と `formatLabelReplacePreviewLabel` を、共有の `hooks/dialogPreviewText.ts` の `STALE_DIALOG_MESSAGE` と `formatPreviewLabel` へ移して、一括置換と新規の両方から使う（文言と挙動は変えない）。ヘッダーのボタンへフォーカスを戻す処理は、`MapEditor` に同形の `useLayoutEffect` が既に 2 つある（枝の移動・一括置換）ため、新しい 2 つのダイアログは共通のフック `useHeaderFocusReturn` を使う（既存の 2 つの書き換えは今回の範囲外）。
 
 ### 5.1 状態
 
 ```typescript
-type NodeSplitDialogState = {
+// hooks/nodeSplitMergeDialogState.ts（分割と統合で共通）
+type NodeSplitMergeTarget =
+  | { kind: "split"; nodeId: number }                         // 開いた時点の主選択
+  | { kind: "merge"; ids: readonly number[]; primaryId: number | null };  // 開いた時点の selectedNodeIds と主選択
+
+type NodeSplitMergeError = { sequence: number; message: string | null };
+type NodeSplitMergeFocusRequest = "separator" | "header" | null;
+
+type NodeSplitMergeDialogState = {
   screen: "closed" | "open";
-  nodeId: number | null;             // 開いた時点の主選択
+  mapId: string;
+  openedRevision: number;
+  target: NodeSplitMergeTarget | null;
   separatorPreset: string;           // プリセットの id、または "custom"
   customSeparator: string;
-  openedRevision: number;
-  mapId: string;
-  error: NodeSplitDialogError;       // { sequence; message | null }
-  focusRequest: "separator" | "header" | null;
+  focusRequest: NodeSplitMergeFocusRequest;
+  error: NodeSplitMergeError;
 };
-// 統合は nodeId の代わりに ids（開いた時点の selectedNodeIds）と primaryId
 ```
 
-- 開く: 開いた時点の主選択（分割）または選択集合・主選択（統合）を記録する。区切り文字は既定値にする（毎回の既定に戻す。前回の入力は保持しない）。`documentRevision` を `openedRevision` に記録する。
-- `documentRevision` が `openedRevision` と違えば stale。確定できず、「マップが更新されました。閉じてから開き直してください。」を出す（`LabelReplace` と同じ）。`mapId` の変化でも閉じる（フォーカスは奪わない）。
+- 開く: 開いた時点の主選択（分割）または選択集合・主選択（統合）を `target` に記録する（`useNodeSplitMergeDialogState` の `open`）。区切り文字は既定値にする（毎回の既定に戻す。前回の入力は保持しない）。`documentRevision` を `openedRevision` に記録する。
+- `documentRevision` が `openedRevision` と違えば stale。確定できず、「マップが更新されました。閉じてから開き直してください。」（`STALE_DIALOG_MESSAGE`）を出す（`LabelReplace` と同じ）。`mapId` の変化でも閉じる（フォーカスは奪わない）。
 
 ### 5.2 プレビューと確定
 
 - プレビューは**最新の `nodes`** から `planNodeSplit` / `planNodeMerge` を `useMemo` で求める。区切り文字の入力は即時に反映する（計算は軽いので遅延させない）。
 - 分割のプレビュー: 対象のラベル、区切り文字、分割後の断片の一覧（番号付き。1 件目は「元のノードに残る」、2 件目以降は「新しい兄弟として追加」と注記）、件数の表示「N件に分割します（M件を追加）」。断片は折り返して全文を表示する。
 - 統合のプレビュー: 残すノード（主選択）のラベル（キャンバスは主選択を他と区別して表示しないため、ダイアログで示す。空は「（空）」、空白だけは「（空白のみ）」）、統合後のラベル、重要度、イラストの扱い（「主選択のイラストを残す」「『○○』のイラストを引き継ぐ」「イラストなし」）、付け替える子の件数、統合されて消えるノードのラベルの一覧（最大 200 行。超過は「ほかにK件（一覧は先頭の200件まで表示します。確定はすべてが対象です）」を表示。確定の対象には含める）、失われるイラストの件数（1 件以上のとき「N件のイラストは統合で失われます」を警告として表示。0 件のときは出さない）、件数の表示「N件を1件に統合します」。
-- プレビューの表示（L-821、L-409。一括置換の最終形に倣う）: 断片・連結後のラベル・消えるノードのラベルは、`whitespace-pre-wrap break-words [overflow-wrap:anywhere]` で描き、前後の空白を畳まない。空文字は「（空）」、空白だけは「（空白のみ）」と表示する（`formatLabelReplacePreviewLabel` を共通の置き場所へ移して使う）。一覧は `max-h-60 shrink-0 overflow-y-auto`、ダイアログ全体も `overflow-y-auto` にして、画面が低くても一覧が潰れず確定ボタンに届くようにする。プレビューの計算は軽いので `useDeferredValue` で遅らせない（遅らせると、入力直後の古いプレビューを確定できる隙間と `pending` の管理が要るため）。
+- プレビューの表示（L-821、L-409。一括置換の最終形に倣う）: 断片・連結後のラベル・消えるノードのラベルは、`whitespace-pre-wrap break-words [overflow-wrap:anywhere]` で描き、前後の空白を畳まない。空文字は「（空）」、空白だけは「（空白のみ）」と表示する（`formatLabelReplacePreviewLabel` を `hooks/dialogPreviewText.ts` の `formatPreviewLabel` へ移して使う）。一覧は `max-h-60 shrink-0 overflow-y-auto`、ダイアログ全体も `overflow-y-auto` にして、画面が低くても一覧が潰れず確定ボタンに届くようにする。プレビューの計算は軽いので `useDeferredValue` で遅らせない（遅らせると、入力直後の古いプレビューを確定できる隙間と `pending` の管理が要るため）。
 - 無効の理由は画面の文言で示す（`aria-live="polite"` の領域に常に描画し、中身だけ替える）: 失敗の `reason` に対応する §3.4 の文言（stale なら §5.1 の文言）。確定ボタンは、プランが成功し、stale でないときだけ有効。
 - 確定: `splitNode` / `mergeNodes` を 1 回、現在のプレビューの計画を `expected` として渡して呼ぶ（フックが最新の状態から再計画し、`expected` と違えば何も変えず `plan-changed` を返す）。失敗したらダイアログを閉じず、§3.4 の文言を `role="alert"` で表示する。成功したら閉じ、`publishTreeEditNotice` へ「ノードを N 件に分割しました。」（N = `insertedIds.length + 1`）、「N 件のノードを 1 件に統合しました。」（N = `absorbedCount + 1`）を `status` で出し、ヘッダーのボタンへフォーカスを戻す。
 - `submit` は先頭で `latest.current` の `screen` と `canSubmit` を再判定し、確定を押した同じ処理で閉じる（2 回目は呼ばない。L-653、L-101）。
