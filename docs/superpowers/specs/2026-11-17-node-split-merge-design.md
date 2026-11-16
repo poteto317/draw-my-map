@@ -131,7 +131,7 @@ export type NodeMergePlan =
       movedChildCount: number }
   | { ok: false; reason: NodeMergeFailureReason };
 
-// 確定時の再計画とプレビューの計画が同じか（survivorId・absorbedIds の順・label・illustrationSourceId で比べる）。
+// 確定時の再計画とプレビューの計画が同じか（survivorId・absorbedIds の順・label・importance・illustrationFrom・illustrationSourceId・discardedIllustrationCount・movedChildCount で比べる。プレビューで見せた内容に合わせる）。
 // どちらかが失敗の計画なら偽
 export function isSameNodeMergePlan(a: NodeMergePlan, b: NodeMergePlan): boolean;
 
