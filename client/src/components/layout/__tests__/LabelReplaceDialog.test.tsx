@@ -108,6 +108,18 @@ describe("LabelReplaceDialog", () => {
     expect(items[1]).toHaveTextContent("置換後のラベルが空になるため置換しません。");
   });
 
+  it("長いラベルの行は切り詰めず、折り返して全文を出す", () => {
+    const longBefore = `${"長いラベル".repeat(20)}旧語`;
+    const longAfter = `${"長いラベル".repeat(20)}新語`;
+    renderDialog({ previewRows: [row(1, longBefore, longAfter)] });
+
+    for (const text of [longBefore, longAfter]) {
+      const span = screen.getByText(text);
+      expect(span).not.toHaveClass("truncate");
+      expect(span).toHaveClass("break-words");
+    }
+  });
+
   it("上限を超えた replace 行があれば件数と注記を出す", () => {
     renderDialog({ hiddenReplaceCount: 5, previewLimit: 200 });
 

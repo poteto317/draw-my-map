@@ -145,10 +145,10 @@ export function LabelReplaceDialog({
           <ul aria-label="置換のプレビュー" className="flex max-h-60 flex-col gap-1 overflow-y-auto text-sm">
             {previewRows.map((row) => (
               <li key={row.nodeId} className="flex flex-col gap-0.5 rounded bg-zinc-50 p-2 dark:bg-zinc-900">
-                <span className="flex min-w-0 items-center gap-2">
-                  <span className="truncate">{row.before}</span>
-                  <span aria-hidden="true">→</span>
-                  <span className="truncate">{row.after === "" ? "（空）" : row.after}</span>
+                <span className="flex min-w-0 items-start gap-2">
+                  <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">{row.before}</span>
+                  <span aria-hidden="true" className="shrink-0">→</span>
+                  <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">{row.after === "" ? "（空）" : row.after}</span>
                 </span>
                 {row.status === "emptied" && (
                   <span className="text-amber-700 dark:text-amber-300">置換後のラベルが空になるため置換しません。</span>
