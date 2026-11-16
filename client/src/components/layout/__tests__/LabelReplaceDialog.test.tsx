@@ -132,6 +132,16 @@ describe("LabelReplaceDialog", () => {
     }
   });
 
+  it("プレビューの一覧は画面が低くても潰れず（shrink-0）、高さを超えれば一覧の内側でスクロールする", () => {
+    renderDialog({ previewRows: [row(1, "Apple", "Orange")] });
+
+    const list = screen.getByRole("list", { name: "置換のプレビュー" });
+    // overflow を持つ flex 子要素は min-height が 0 になり、ダイアログ全体より先に潰れる
+    expect(list).toHaveClass("shrink-0");
+    expect(list).toHaveClass("max-h-60");
+    expect(list).toHaveClass("overflow-y-auto");
+  });
+
   it("置換後が空白だけの行は空欄に見えないよう（空白のみ）と出す", () => {
     renderDialog({ previewRows: [row(1, "a  b", "  ")] });
 
