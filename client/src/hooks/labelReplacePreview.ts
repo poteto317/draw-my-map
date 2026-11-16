@@ -24,6 +24,13 @@ export function selectLabelReplacePreviewRows(
   return { shown, hiddenReplaceCount };
 }
 
+// プレビューに出すラベル。空文字や空白だけのラベルは空欄に見えるので、代わりの表示にする
+export function formatLabelReplacePreviewLabel(label: string): string {
+  if (label === "") return "（空）";
+  if (label.trim() === "") return "（空白のみ）";
+  return label;
+}
+
 export type LabelReplaceStatusInput = {
   stale: boolean;
   query: string;

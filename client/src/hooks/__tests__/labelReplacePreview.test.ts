@@ -1,6 +1,7 @@
 import { STALE_LABEL_REPLACE_MESSAGE } from "@/hooks/labelReplaceDialogState";
 import {
   describeLabelReplaceStatus,
+  formatLabelReplacePreviewLabel,
   LABEL_REPLACE_PREVIEW_LIMIT,
   selectLabelReplacePreviewRows,
 } from "@/hooks/labelReplacePreview";
@@ -61,5 +62,15 @@ describe("describeLabelReplaceStatus", () => {
   it("置換する件数を返し、空になる行があれば対象外の件数を添える", () => {
     expect(describeLabelReplaceStatus({ stale: false, query: "a", matchedRowCount: 3, replaceCount: 3, emptiedCount: 0 })).toBe("3件を置換します。");
     expect(describeLabelReplaceStatus({ stale: false, query: "a", matchedRowCount: 3, replaceCount: 2, emptiedCount: 1 })).toBe("2件を置換します。1件は置換後に空になるため対象外です。");
+  });
+});
+
+describe("formatLabelReplacePreviewLabel", () => {
+  it("空文字は（空）、空白だけは（空白のみ）にし、それ以外は入力どおり返す", () => {
+    expect(formatLabelReplacePreviewLabel("")).toBe("（空）");
+    expect(formatLabelReplacePreviewLabel("  ")).toBe("（空白のみ）");
+    expect(formatLabelReplacePreviewLabel(" \u3000\t")).toBe("（空白のみ）");
+    expect(formatLabelReplacePreviewLabel(" a ")).toBe(" a ");
+    expect(formatLabelReplacePreviewLabel("a  b")).toBe("a  b");
   });
 });

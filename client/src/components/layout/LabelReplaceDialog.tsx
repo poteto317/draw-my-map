@@ -8,6 +8,7 @@ import { useDialogFocusTrap } from "@/components/layout/useDialogFocusTrap";
 import { useReannouncedNotice } from "@/components/layout/useReannouncedNotice";
 import type { LabelReplaceRow } from "@/domain/search/nodeLabelReplace";
 import type { LabelReplaceError, LabelReplaceFocusRequest } from "@/hooks/labelReplaceDialogState";
+import { formatLabelReplacePreviewLabel } from "@/hooks/labelReplacePreview";
 
 type LabelReplaceDialogProps = {
   query: string;
@@ -146,9 +147,9 @@ export function LabelReplaceDialog({
             {previewRows.map((row) => (
               <li key={row.nodeId} className="flex flex-col gap-0.5 rounded bg-zinc-50 p-2 dark:bg-zinc-900">
                 <span className="flex min-w-0 items-start gap-2">
-                  <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">{row.before}</span>
+                  <span className="min-w-0 flex-1 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{formatLabelReplacePreviewLabel(row.before)}</span>
                   <span aria-hidden="true" className="shrink-0">→</span>
-                  <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">{row.after === "" ? "（空）" : row.after}</span>
+                  <span className="min-w-0 flex-1 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{formatLabelReplacePreviewLabel(row.after)}</span>
                 </span>
                 {row.status === "emptied" && (
                   <span className="text-amber-700 dark:text-amber-300">置換後のラベルが空になるため置換しません。</span>
