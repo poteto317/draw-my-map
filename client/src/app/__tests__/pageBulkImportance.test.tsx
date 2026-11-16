@@ -96,7 +96,7 @@ describe("選択ノードの重要度の一括編集", () => {
     await user.click(screen.getByRole("button", { name: "テスト用トグル2" }));
 
     expect(screen.getByText("2件選択中・混在")).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "重要度（2件選択中）" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "重要度（2件選択中・混在）" })).toBeInTheDocument();
     ["重要度 高", "重要度 中", "重要度 低"].forEach((name) => {
       expect(screen.getByRole("button", { name })).toHaveAttribute("aria-pressed", "false");
     });
@@ -137,6 +137,6 @@ describe("選択ノードの重要度の一括編集", () => {
 
     expect(importances()).toEqual(["high", "low", "medium"]);
     expect(screen.getByText("2件選択中・混在")).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "重要度（2件選択中）" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "重要度（2件選択中・混在）" })).toBeInTheDocument();
   });
 });
