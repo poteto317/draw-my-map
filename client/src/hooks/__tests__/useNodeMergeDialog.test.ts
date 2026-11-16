@@ -62,6 +62,7 @@ describe("useNodeMergeDialog", () => {
       focusRequest: "separator",
     });
     expect(view.result.current.preview).toEqual({
+      survivorLabel: "リンゴ",
       label: "りんご リンゴ",
       importanceLabel: "高",
       illustrationText: "主選択のイラストを残す",

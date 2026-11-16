@@ -14,6 +14,8 @@ const IMPORTANCE_LABELS: Record<NodeImportance, string> = {
 };
 
 export type NodeMergePreview = {
+  // 残すノード（主選択）のラベル（整形前。表示側で formatPreviewLabel を通す）
+  survivorLabel: string;
   // 統合後のラベル（整形前。表示側で formatPreviewLabel を通す）
   label: string;
   importanceLabel: string;
@@ -46,6 +48,7 @@ export function buildNodeMergePreview(nodes: readonly Node[], plan: NodeMergePla
   const labelById = new Map(nodes.map((node) => [node.id, node.label]));
   const absorbedLabels = plan.absorbedIds.map((id) => labelById.get(id) ?? "");
   return {
+    survivorLabel: labelById.get(plan.survivorId) ?? "",
     label: plan.label,
     importanceLabel: IMPORTANCE_LABELS[plan.importance],
     illustrationText: describeIllustration(plan, labelById),
