@@ -10,6 +10,7 @@ import {
   v3Json,
 } from "@/app/testing/pageTestHelpers";
 import {
+  mockContainers,
   mockNodePointerHandlers,
   mockStageHandlers,
   pointer,
@@ -98,6 +99,36 @@ function labelsOf(): string[] {
 }
 
 describe("一括置換", () => {
+  it("折りたたみ・表示レベルで隠れたノードも置換し、置換しても表示状態を変えない", async () => {
+    seedMapLibrary(window.localStorage, [{
+      id: "a",
+      name: "A",
+      json: v3Json([
+        { id: 1, label: "apple 祖先", importance: "low" },
+        { id: 2, parentId: 1, label: "apple 親", importance: "low" },
+        { id: 3, parentId: 2, label: "apple 孫", importance: "high" },
+        { id: 4, label: "apple 高", importance: "high" },
+        { id: 5, label: "apple 低", importance: "low" },
+      ]),
+    }], { currentMapId: "a" });
+    await renderPage();
+    selectNode(1, 5);
+    fireEvent.click(headerButton("枝を折りたたむ"));
+    fireEvent.click(screen.getByRole("button", { name: "表示 高のみ" }));
+    const visibleBefore = mockContainers.slice(-5).map((node) => node.eventMode === "static");
+    expect(visibleBefore).toEqual([true, true, false, true, false]);
+    openDialog();
+    typeInto("検索語", "apple");
+    typeInto("置換語", "pear");
+    expect(dialog().getByText("5件を置換します。")).toBeInTheDocument();
+    fireEvent.click(dialog().getByRole("button", { name: "5件を置換" }));
+
+    expect(labelsOf()).toEqual(["pear 祖先", "pear 親", "pear 孫", "pear 高", "pear 低"]);
+    expect(screen.getByRole("button", { name: "表示 高のみ" })).toHaveAttribute("aria-pressed", "true");
+    expect(headerButton("枝を展開")).toBeInTheDocument();
+    expect(mockContainers.slice(-5).map((node) => node.eventMode === "static")).toEqual(visibleBefore);
+  });
+
   it("全ノードを対象に、検索語・置換語を入れて確定すると一致したラベルがまとまって変わる", async () => {
     seed();
     await renderPage();
