@@ -143,7 +143,7 @@ export function LabelReplaceDialog({
         {/* ライブリージョンは常に描画し、中身だけを替える */}
         <p aria-live="polite" className="text-sm font-medium">{statusText}</p>
         {previewRows.length > 0 && (
-          <ul aria-label="置換のプレビュー" className="flex max-h-60 flex-col gap-1 overflow-y-auto text-sm">
+          <ul aria-label="置換のプレビュー" className="flex max-h-60 shrink-0 flex-col gap-1 overflow-y-auto text-sm">
             {previewRows.map((row) => (
               <li key={row.nodeId} className="flex flex-col gap-0.5 rounded bg-zinc-50 p-2 dark:bg-zinc-900">
                 <span className="flex min-w-0 items-start gap-2">
