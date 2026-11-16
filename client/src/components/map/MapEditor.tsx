@@ -10,8 +10,11 @@ import { useOutlineCanvasReturn } from "@/hooks/useOutlineCanvasReturn";
 import { useRevisionScopedNodeRequest } from "@/hooks/useRevisionScopedNodeRequest";
 import { BranchMoveControl } from "@/components/layout/BranchMoveControl";
 import { BranchMoveDialog } from "@/components/layout/BranchMoveDialog";
+import { LabelReplaceControl } from "@/components/layout/LabelReplaceControl";
+import { LabelReplaceDialog } from "@/components/layout/LabelReplaceDialog";
 import type { BranchMoveMapTarget } from "@/hooks/branchMoveDialogState";
 import { useBranchMoveDialog } from "@/hooks/useBranchMoveDialog";
+import { useLabelReplaceDialog } from "@/hooks/useLabelReplaceDialog";
 import type { MapLibraryOperationResult } from "@/hooks/useMapLibrary";
 import { useNodes } from "@/hooks/useNodes";
 import { AppHeader } from "@/components/layout/AppHeader";
@@ -127,6 +130,7 @@ export function MapEditor({
     changeNodeIndent,
     insertParentNode,
     moveBranch,
+    updateNodeLabels,
     deleteNode,
     deleteNodeOnly,
     setLayoutMode,
@@ -277,6 +281,23 @@ export function MapEditor({
     (button?.disabled ? exportButtonRef.current : button)?.focus();
     consumeBranchMoveFocusRequest();
   }, [branchMoveFocusRequest, consumeBranchMoveFocusRequest, exportButtonRef]);
+  const labelReplace = useLabelReplaceDialog({
+    mapId,
+    nodes,
+    selectedNodeIds,
+    documentRevision,
+    updateNodeLabels,
+    publishNotice: publishTreeEditNotice,
+  });
+  const labelReplaceButtonRef = useRef<HTMLButtonElement>(null);
+  const { focusRequest: labelReplaceFocusRequest, consumeFocusRequest: consumeLabelReplaceFocusRequest } = labelReplace;
+  useLayoutEffect(() => {
+    if (labelReplaceFocusRequest !== "header") return;
+    // ノードが無くなるとボタンは無効になるので、常に押せる「JSON書き出し」へ送る
+    const button = labelReplaceButtonRef.current;
+    (button?.disabled ? exportButtonRef.current : button)?.focus();
+    consumeLabelReplaceFocusRequest();
+  }, [labelReplaceFocusRequest, consumeLabelReplaceFocusRequest, exportButtonRef]);
   const { moveSelected: moveSelectedSibling } = siblingReorder;
   const moveSelectedSiblingUp = useCallback(() => moveSelectedSibling("up"), [moveSelectedSibling]);
   const moveSelectedSiblingDown = useCallback(() => moveSelectedSibling("down"), [moveSelectedSibling]);
@@ -290,6 +311,7 @@ export function MapEditor({
   const editorShortcutsEnabled = shortcutsEnabled
     && outlineImport.screen === "closed"
     && branchMove.screen === "closed"
+    && labelReplace.screen === "closed"
     && !persistence.isConfirmOpen;
   useMapHistoryShortcuts({ undo, redo, enabled: editorShortcutsEnabled });
   const outlineModel = useMemo(() => buildOutlineRows(nodes), [nodes]);
@@ -405,6 +427,12 @@ export function MapEditor({
                     disabled={selectedNode === null}
                     onOpen={branchMove.open}
                     buttonRef={branchMoveButtonRef}
+                  />
+                  <LabelReplaceControl
+                    expanded={labelReplace.screen !== "closed"}
+                    disabled={nodes.length === 0}
+                    onOpen={labelReplace.open}
+                    buttonRef={labelReplaceButtonRef}
                   />
                   <NodeSiblingOrderControl
                     canMoveUp={siblingReorder.canMoveUp}
@@ -534,6 +562,31 @@ export function MapEditor({
           onParentTargetChange={branchMove.setParentTarget}
           onCancel={branchMove.close}
           onSubmit={branchMove.submit}
+          onMouseClick={() => {
+            dialogMouseClickedAtRef.current = Date.now();
+          }}
+        />
+      )}
+      {labelReplace.screen === "open" && (
+        <LabelReplaceDialog
+          query={labelReplace.query}
+          replacement={labelReplace.replacement}
+          scopeSelectedOnly={labelReplace.scopeSelectedOnly}
+          scopeCount={labelReplace.scopeCount}
+          previewRows={labelReplace.previewRows}
+          hiddenReplaceCount={labelReplace.hiddenReplaceCount}
+          previewLimit={labelReplace.previewLimit}
+          statusText={labelReplace.statusText}
+          submitLabel={labelReplace.submitLabel}
+          error={labelReplace.error}
+          canSubmit={labelReplace.canSubmit}
+          focusRequest={labelReplace.focusRequest}
+          onFocusRequestApplied={labelReplace.consumeFocusRequest}
+          onQueryChange={labelReplace.setQuery}
+          onReplacementChange={labelReplace.setReplacement}
+          onScopeSelectedOnlyChange={labelReplace.setScopeSelectedOnly}
+          onCancel={labelReplace.close}
+          onSubmit={labelReplace.submit}
           onMouseClick={() => {
             dialogMouseClickedAtRef.current = Date.now();
           }}
