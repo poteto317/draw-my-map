@@ -43,7 +43,7 @@ import {
 import { deleteNodeOnly as computeNodeOnlyDeletion, type DeleteNodeOnlyResult } from "@/domain/nodes/nodeOnlyDeletion";
 import { applyTreeChangeWithOutcome } from "@/hooks/treeChangeOutcome";
 import { insertParentNode as computeParentInsertion, type InsertParentNodeResult } from "@/domain/nodes/nodeParentInsertion";
-import { replaceNodeImportance } from "@/domain/nodes/nodeImportanceUpdate";
+import { replaceNodeImportance, replaceNodesImportance } from "@/domain/nodes/nodeImportanceUpdate";
 import { clearNodeIllustration, replaceNodeIllustration } from "@/domain/nodes/nodeIllustrationUpdate";
 import {
   moveNodeBranch,
@@ -91,6 +91,7 @@ type UseNodesReturn = {
   pruneSelectionToVisible: (visibleNodeIds: ReadonlySet<number>) => void;
   updateNodeLabel: (id: number, label: string) => void;
   updateNodeImportance: (id: number, importance: NodeImportance) => boolean;
+  updateNodesImportance: (ids: readonly number[], importance: NodeImportance) => boolean;
   attachIllustration: (id: number, dataUrl: string) => boolean;
   removeIllustration: (id: number) => boolean;
   moveNode: (id: number, x: number, y: number) => void;
@@ -269,6 +270,13 @@ export function useNodes(): UseNodesReturn {
   const updateNodeImportance = useCallback((id: number, importance: NodeImportance) => (
     applyNonStructuralChange((currentNodes) => (
       replaceNodeImportance(currentNodes, id, importance)
+    ))
+  ), [applyNonStructuralChange]);
+
+  // 選択集合の重要度を1回の更新関数でまとめて変え、1操作として履歴に記録する
+  const updateNodesImportance = useCallback((ids: readonly number[], importance: NodeImportance) => (
+    applyNonStructuralChange((currentNodes) => (
+      replaceNodesImportance(currentNodes, ids, importance)
     ))
   ), [applyNonStructuralChange]);
 
@@ -463,6 +471,7 @@ export function useNodes(): UseNodesReturn {
     pruneSelectionToVisible,
     updateNodeLabel,
     updateNodeImportance,
+    updateNodesImportance,
     attachIllustration,
     removeIllustration,
     moveNode,
