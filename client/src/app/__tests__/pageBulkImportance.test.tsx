@@ -121,7 +121,7 @@ describe("選択ノードの重要度の一括編集", () => {
     expect(screen.getByRole("button", { name: "重要度 高" })).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("2件選択したままアウトラインへ切り替えると、重要度の変更は主選択だけに作用する", async () => {
+  it("2件選択したままアウトラインへ切り替えると、重要度の変更は主選択だけに作用し、マップへ戻ると複数選択の一括編集が再び有効になる", async () => {
     const user = userEvent.setup();
     await setupThreeNodes(user);
 
@@ -130,10 +130,13 @@ describe("選択ノードの重要度の一括編集", () => {
     await user.click(screen.getByRole("button", { name: "テスト用トグル2" }));
     await user.click(screen.getByRole("button", { name: "アウトライン" }));
 
+    expect(screen.queryByText(/件選択中/)).toBeNull();
     expect(screen.getByRole("group", { name: "重要度" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "重要度 低" }));
     await user.click(screen.getByRole("button", { name: "マップ" }));
 
     expect(importances()).toEqual(["high", "low", "medium"]);
+    expect(screen.getByText("2件選択中・混在")).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "重要度（2件選択中）" })).toBeInTheDocument();
   });
 });
