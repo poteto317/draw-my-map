@@ -2,6 +2,8 @@
 
 > **状態:** サブエージェントレビュー 2 周通過・自動承認済み。
 >
+> **注記（実装後）:** このプランは作成時のスナップショットで、実装中に次の名前が変わった。現在の名前は、設計書と実コードが正である。`importanceRank` → `IMPORTANCE_RANK`（`nodeImportance.ts`）、`nodeSeparatorDialogState.ts` / `useNodeSeparatorDialogState.ts` → `nodeSplitMergeDialogState.ts` / `useNodeSplitMergeDialogState.ts`、`nodeSeparatorPreview.ts` → `nodeSplitPreview.ts` / `nodeMergePreview.ts`、`useHeaderFocusReturn` の `fallbackRef` → `fallbackRefs`（配列）。
+>
 > **For agentic workers:** このリポジトリでは AGENTS.md の規定により、superpowers:subagent-driven-development で実装する（インライン実行は使わない）。Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** ヘッダーの「ノードを分割」で、主選択の 1 ノードのラベルを区切り文字で分け（最初の断片は元のノードに残り、残りは元のノードの直後の兄弟になる）、「ノードを統合」で、選択中の同じ親の兄弟を主選択へ 1 つにまとめられるようにする。どちらもダイアログで区切り文字を選び、結果をプレビューで確認してから確定し、確定全体を 1 操作で Undo / Redo できる。
