@@ -44,6 +44,20 @@ import { deleteNodeOnly as computeNodeOnlyDeletion, type DeleteNodeOnlyResult } 
 import { applyTreeChangeWithOutcome } from "@/hooks/treeChangeOutcome";
 import { insertParentNode as computeParentInsertion, type InsertParentNodeResult } from "@/domain/nodes/nodeParentInsertion";
 import { replaceNodeImportance, replaceNodesImportance } from "@/domain/nodes/nodeImportanceUpdate";
+import {
+  isSameNodeMergePlan,
+  mergeNodes as computeNodeMerge,
+  planNodeMerge,
+  type MergeNodesResult,
+  type NodeMergePlan,
+} from "@/domain/nodes/nodeMerge";
+import {
+  isSameNodeSplitPlan,
+  planNodeSplit,
+  splitNode as computeNodeSplit,
+  type NodeSplitPlan,
+  type SplitNodeResult,
+} from "@/domain/nodes/nodeSplit";
 import { replaceNodeLabels } from "@/domain/nodes/nodeLabelUpdate";
 import { clearNodeIllustration, replaceNodeIllustration } from "@/domain/nodes/nodeIllustrationUpdate";
 import {
@@ -125,6 +139,23 @@ type UseNodesReturn = {
     nodeId: number,
     visibleNodeIds: ReadonlySet<number>,
   ) => InsertParentNodeResult;
+  // 最新の状態から計画を作り直し、expected（確認の時点の計画）と違えば何も変えず plan-changed を返す。
+  // 成功時は applyTreeChange を1回だけ呼び、選択と documentRevision は変えない。新しい ID は計画が通った後に採番する
+  splitNode: (
+    nodeId: number,
+    separator: string,
+    visibleNodeIds: ReadonlySet<number>,
+    expected: NodeSplitPlan,
+  ) => SplitNodeResult;
+  // 最新の状態から計画を作り直し、expected と違えば何も変えず plan-changed を返す。
+  // 成功時は applyTreeChange を1回だけ呼び、残したノードだけを選択する。documentRevision は変えない
+  mergeNodes: (
+    ids: readonly number[],
+    primaryId: number | null,
+    joiner: string,
+    visibleNodeIds: ReadonlySet<number>,
+    expected: NodeMergePlan,
+  ) => MergeNodesResult;
   moveBranch: (rootId: number, parentId: number | null) => MoveBranchResult;
   deleteNode: (id: number) => void;
   deleteNodeOnly: (nodeId: number, visibleNodeIds: ReadonlySet<number>) => DeleteNodeOnlyResult;
@@ -419,6 +450,51 @@ export function useNodes(): UseNodesReturn {
     return settled;
   }, [nodeIdAllocator, applyTreeChange]);
 
+  // 計画は描画時の配列ではなく、確定時点の最新の配列から作り直す。新しい ID は計画が通った後にまとめて 1 回採番し、
+  // 自動配置の失敗などで確定しなかった ID は欠番のままにする（allocator を巻き戻さない）。
+  // 分割は編集中の折りたたみや通知を保つため、選択と documentRevision を変えない
+  const splitNode = useCallback((
+    nodeId: number,
+    separator: string,
+    visibleNodeIds: ReadonlySet<number>,
+    expected: NodeSplitPlan,
+  ): SplitNodeResult => (
+    applyTreeChangeWithOutcome<SplitNodeResult>(applyTreeChange, (currentNodes) => {
+      const fresh = planNodeSplit(currentNodes, nodeId, separator, visibleNodeIds);
+      if (!fresh.ok) return { nodes: null, outcome: fresh };
+      if (!isSameNodeSplitPlan(fresh, expected)) return { nodes: null, outcome: { ok: false, reason: "plan-changed" } };
+
+      const newNodeIds = nodeIdAllocator.nextAvailableIds(currentNodes, fresh.fragments.length - 1);
+      const split = computeNodeSplit(currentNodes, nodeId, separator, newNodeIds, visibleNodeIds);
+      if (!split.ok) return { nodes: null, outcome: split };
+      return { nodes: split.nodes, outcome: { ok: true, insertedIds: split.insertedIds } };
+    })
+  ), [nodeIdAllocator, applyTreeChange]);
+
+  // 統合は成功したら、残したノードだけを選択する。選択に残った吸収されるノードの ID は、ここで置き換わる
+  const mergeNodes = useCallback((
+    ids: readonly number[],
+    primaryId: number | null,
+    joiner: string,
+    visibleNodeIds: ReadonlySet<number>,
+    expected: NodeMergePlan,
+  ): MergeNodesResult => {
+    const settled = applyTreeChangeWithOutcome<MergeNodesResult>(applyTreeChange, (currentNodes, mode) => {
+      const fresh = planNodeMerge(currentNodes, ids, primaryId, joiner, visibleNodeIds);
+      if (!fresh.ok) return { nodes: null, outcome: fresh };
+      if (!isSameNodeMergePlan(fresh, expected)) return { nodes: null, outcome: { ok: false, reason: "plan-changed" } };
+
+      const merged = computeNodeMerge(currentNodes, ids, primaryId, joiner, visibleNodeIds, mode);
+      if (!merged.ok) return { nodes: null, outcome: merged };
+      return {
+        nodes: merged.nodes,
+        outcome: { ok: true, survivorId: merged.survivorId, absorbedCount: merged.absorbedIds.length },
+      };
+    });
+    if (settled.ok) setSelection(selectOnly(settled.survivorId));
+    return settled;
+  }, [applyTreeChange]);
+
   const moveBranch = useCallback((rootId: number, parentId: number | null): MoveBranchResult => {
     const settled = applyTreeChangeWithOutcome<MoveBranchResult>(applyTreeChange, (currentNodes, mode) => {
       const moved = moveNodeBranch(currentNodes, rootId, parentId, mode);
@@ -491,6 +567,8 @@ export function useNodes(): UseNodesReturn {
     reorderSibling,
     changeNodeIndent,
     insertParentNode,
+    splitNode,
+    mergeNodes,
     moveBranch,
     deleteNode,
     deleteNodeOnly,
