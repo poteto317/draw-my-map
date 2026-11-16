@@ -1,3 +1,5 @@
+import { STALE_DIALOG_MESSAGE } from "@/hooks/dialogPreviewText";
+
 export type LabelReplaceError = { sequence: number; message: string | null };
 export type LabelReplaceFocusRequest = "query" | "header" | null;
 
@@ -13,8 +15,6 @@ export type LabelReplaceDialogState = {
   focusRequest: LabelReplaceFocusRequest;
   error: LabelReplaceError;
 };
-
-export const STALE_LABEL_REPLACE_MESSAGE = "マップが更新されました。閉じてから開き直してください。";
 
 function nextError(previous: LabelReplaceError, message: string | null): LabelReplaceError {
   return { sequence: previous.sequence + 1, message };
@@ -101,7 +101,7 @@ export function resolveLabelReplaceTargetIds(
 
 // 開いた後に文書が変わったときに表示する誤り。状態には残さない
 export function staleLabelReplaceError(error: LabelReplaceError): LabelReplaceError {
-  return nextError(error, STALE_LABEL_REPLACE_MESSAGE);
+  return nextError(error, STALE_DIALOG_MESSAGE);
 }
 
 // 別のマップへ切り替わった後に古い状態が残っていても、開いていないものとして扱う（外から閉じた扱い。フォーカスは奪わない）

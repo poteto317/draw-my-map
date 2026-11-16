@@ -1,5 +1,5 @@
+import { STALE_DIALOG_MESSAGE } from "@/hooks/dialogPreviewText";
 import {
-  STALE_LABEL_REPLACE_MESSAGE,
   closeLabelReplaceDialog,
   consumeLabelReplaceFocusRequest,
   createLabelReplaceDialogState,
@@ -110,8 +110,7 @@ describe("labelReplaceDialogState", () => {
   it("stale のエラーは固定の文言で、sequence を進める", () => {
     const error = staleLabelReplaceError({ sequence: 2, message: null });
 
-    expect(error).toEqual({ sequence: 3, message: STALE_LABEL_REPLACE_MESSAGE });
-    expect(STALE_LABEL_REPLACE_MESSAGE).toBe("マップが更新されました。閉じてから開き直してください。");
+    expect(error).toEqual({ sequence: 3, message: STALE_DIALOG_MESSAGE });
   });
 
   it("範囲が「選択のみ」なら開いた時点の選択集合、そうでなければ全ノード（null）を対象にする", () => {
