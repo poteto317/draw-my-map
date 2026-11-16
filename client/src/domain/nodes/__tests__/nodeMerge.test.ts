@@ -267,6 +267,22 @@ describe("isSameNodeMergePlan", () => {
       expect(isSameNodeMergePlan(primaryOnlyPlan, other)).toBe(false);
     });
 
+    it("吸収側のイラストの持ち主だけが違う計画は偽（ほかの項目はすべて同じで、別のイラストで確定させない）", () => {
+      const illustrationA = createJpegDataUrl(100, 100);
+      const illustrationB = createJpegDataUrl(120, 120);
+      const onlyNode2 = family.map((item) => (item.id === 2 ? { ...item, illustration: illustrationA, height: ILLUSTRATED_NODE_HEIGHT } : item));
+      const onlyNode4 = family.map((item) => (item.id === 4 ? { ...item, illustration: illustrationB, height: ILLUSTRATED_NODE_HEIGHT } : item));
+      const fromNode2 = okPlan(onlyNode2, [2, 3, 4], 3);
+      const fromNode4 = okPlan(onlyNode4, [2, 3, 4], 3);
+
+      expect(fromNode2).toMatchObject({ illustrationFrom: "absorbed", illustrationSourceId: 2, discardedIllustrationCount: 0 });
+      expect(fromNode4).toMatchObject({ illustrationFrom: "absorbed", illustrationSourceId: 4, discardedIllustrationCount: 0 });
+      // 引き継ぎ元とイラスト本体以外は、プレビューで見せる項目がすべて同じ
+      expect({ ...fromNode2, illustrationSourceId: null, illustration: undefined })
+        .toEqual({ ...fromNode4, illustrationSourceId: null, illustration: undefined });
+      expect(isSameNodeMergePlan(fromNode2, fromNode4)).toBe(false);
+    });
+
     it("重要度が違う計画は偽", () => {
       expect(isSameNodeMergePlan(base, { ...base, importance: "low" })).toBe(false);
     });
