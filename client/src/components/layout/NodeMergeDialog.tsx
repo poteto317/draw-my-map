@@ -8,7 +8,7 @@ import { useDialogFocusTrap } from "@/components/layout/useDialogFocusTrap";
 import { useReannouncedNotice } from "@/components/layout/useReannouncedNotice";
 import { formatPreviewLabel } from "@/hooks/dialogPreviewText";
 import type { NodeSplitMergeError, NodeSplitMergeFocusRequest } from "@/hooks/nodeSplitMergeDialogState";
-import type { NodeMergePreview } from "@/hooks/nodeMergePreview";
+import { NODE_MERGE_PREVIEW_LIMIT, type NodeMergePreview } from "@/hooks/nodeMergePreview";
 
 type NodeMergeDialogProps = {
   // 統合できないとき（計画の失敗）は null
@@ -29,6 +29,8 @@ type NodeMergeDialogProps = {
 
 // 前後の空白を畳まず、長いラベルも折り返して全文を見せる（L-821）
 const labelClassName = "min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]";
+// 1 つで長くなりうる値（残すノード・統合後のラベル・イラスト）は、高さに上限を付けて確定ボタンから遠ざけない
+const boundedLabelClassName = `${labelClassName} max-h-40 overflow-y-auto`;
 
 export function NodeMergeDialog({
   preview,
@@ -95,23 +97,23 @@ export function NodeMergeDialog({
           <>
             <dl className="flex flex-col gap-1 text-sm">
               <div className="flex gap-2">
-                <dt className="font-medium">残すノード</dt>
-                <dd className={labelClassName}>{formatPreviewLabel(preview.survivorLabel)}</dd>
+                <dt className="shrink-0 font-medium">残すノード</dt>
+                <dd className={boundedLabelClassName}>{formatPreviewLabel(preview.survivorLabel)}</dd>
               </div>
               <div className="flex flex-col gap-0.5">
-                <dt className="font-medium">統合後のラベル</dt>
-                <dd className={labelClassName}>{formatPreviewLabel(preview.label)}</dd>
+                <dt className="shrink-0 font-medium">統合後のラベル</dt>
+                <dd className={boundedLabelClassName}>{formatPreviewLabel(preview.label)}</dd>
               </div>
               <div className="flex gap-2">
-                <dt className="font-medium">重要度</dt>
+                <dt className="shrink-0 font-medium">重要度</dt>
                 <dd>{preview.importanceLabel}</dd>
               </div>
               <div className="flex gap-2">
-                <dt className="font-medium">イラスト</dt>
-                <dd className={labelClassName}>{preview.illustrationText}</dd>
+                <dt className="shrink-0 font-medium">イラスト</dt>
+                <dd className={boundedLabelClassName}>{preview.illustrationText}</dd>
               </div>
               <div className="flex gap-2">
-                <dt className="font-medium">付け替える子</dt>
+                <dt className="shrink-0 font-medium">付け替える子</dt>
                 <dd>{`${preview.movedChildCount}件`}</dd>
               </div>
             </dl>
@@ -129,7 +131,7 @@ export function NodeMergeDialog({
               ))}
             </ul>
             {preview.hiddenAbsorbedCount > 0 && (
-              <p className="text-sm">{`ほかに ${preview.hiddenAbsorbedCount} 件`}</p>
+              <p className="text-sm">{`ほかに${preview.hiddenAbsorbedCount}件（一覧は先頭の${NODE_MERGE_PREVIEW_LIMIT}件まで表示します。確定はすべてが対象です）`}</p>
             )}
           </>
         )}

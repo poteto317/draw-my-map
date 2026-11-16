@@ -57,6 +57,14 @@ describe("NodeSplitDialog", () => {
     expect(screen.getByText("（空）")).toBeInTheDocument();
   });
 
+  it("分割するノードのラベルは高さに上限があり（max-h-40）、折り返しと空白の表示を保つ。見出しは縮まない（shrink-0）", () => {
+    renderDialog({ targetLabel: "長い".repeat(500) });
+
+    const label = screen.getByText("長い".repeat(500));
+    expect(label).toHaveClass("max-h-40", "overflow-y-auto", "whitespace-pre-wrap", "break-words");
+    expect(screen.getByText("分割するノード:")).toHaveClass("shrink-0");
+  });
+
   it("プルダウンの選択と「その他」の入力を通知する", async () => {
     const user = userEvent.setup();
     const { props, rerender } = renderDialog();
@@ -86,9 +94,20 @@ describe("NodeSplitDialog", () => {
       expect(list.tagName).toBe("OL");
       const items = within(list).getAllByRole("listitem");
       expect(items).toHaveLength(3);
-      expect(items[0]).toHaveTextContent("りんご元のノードに残る");
-      expect(items[1]).toHaveTextContent("みかん新しい兄弟として追加");
-      expect(items[2]).toHaveTextContent("ぶどう新しい兄弟として追加");
+      // 見える文字は「りんご」と「元のノードに残る」。間に、読み上げ用の区切りの「、」（sr-only）が入る
+      expect(items[0]).toHaveTextContent("りんご、元のノードに残る");
+      expect(items[1]).toHaveTextContent("みかん、新しい兄弟として追加");
+      expect(items[2]).toHaveTextContent("ぶどう、新しい兄弟として追加");
+    });
+
+    it("断片の本文と注記の間に、スクリーンリーダー用の区切り（sr-only の「、」）を挟む", () => {
+      renderDialog({ fragments: ["りんご", "みかん"] });
+
+      for (const item of within(screen.getByRole("list", { name: "分割後の断片" })).getAllByRole("listitem")) {
+        const separator = item.children[1];
+        expect(separator).toHaveClass("sr-only");
+        expect(separator.textContent).toBe("、");
+      }
     });
 
     it("分割できないとき（断片が無い）は一覧を出さない", () => {
