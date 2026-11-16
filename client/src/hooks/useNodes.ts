@@ -44,6 +44,7 @@ import { deleteNodeOnly as computeNodeOnlyDeletion, type DeleteNodeOnlyResult } 
 import { applyTreeChangeWithOutcome } from "@/hooks/treeChangeOutcome";
 import { insertParentNode as computeParentInsertion, type InsertParentNodeResult } from "@/domain/nodes/nodeParentInsertion";
 import { replaceNodeImportance, replaceNodesImportance } from "@/domain/nodes/nodeImportanceUpdate";
+import { replaceNodeLabels } from "@/domain/nodes/nodeLabelUpdate";
 import { clearNodeIllustration, replaceNodeIllustration } from "@/domain/nodes/nodeIllustrationUpdate";
 import {
   moveNodeBranch,
@@ -90,6 +91,7 @@ type UseNodesReturn = {
   clearSelection: () => void;
   pruneSelectionToVisible: (visibleNodeIds: ReadonlySet<number>) => void;
   updateNodeLabel: (id: number, label: string) => void;
+  updateNodeLabels: (replacements: ReadonlyMap<number, string>) => boolean;
   updateNodeImportance: (id: number, importance: NodeImportance) => boolean;
   updateNodesImportance: (ids: readonly number[], importance: NodeImportance) => boolean;
   attachIllustration: (id: number, dataUrl: string) => boolean;
@@ -266,6 +268,11 @@ export function useNodes(): UseNodesReturn {
       ))
     ));
   }, [applyNonStructuralChange]);
+
+  // 複数ノードのラベルを1回の更新関数でまとめて変え、1操作として履歴に記録する
+  const updateNodeLabels = useCallback((replacements: ReadonlyMap<number, string>) => (
+    applyNonStructuralChange((currentNodes) => replaceNodeLabels(currentNodes, replacements))
+  ), [applyNonStructuralChange]);
 
   const updateNodeImportance = useCallback((id: number, importance: NodeImportance) => (
     applyNonStructuralChange((currentNodes) => (
@@ -470,6 +477,7 @@ export function useNodes(): UseNodesReturn {
     clearSelection,
     pruneSelectionToVisible,
     updateNodeLabel,
+    updateNodeLabels,
     updateNodeImportance,
     updateNodesImportance,
     attachIllustration,
