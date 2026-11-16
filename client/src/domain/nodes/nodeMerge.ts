@@ -127,13 +127,18 @@ export function planNodeMerge(
   };
 }
 
-// 確定時の再計画とプレビューの計画が同じか（残すノード・吸収されるノードの順・ラベル・イラストの引き継ぎ元で比べる）。
-// 失敗した計画は同じとみなさない
+// 確定時の再計画とプレビューの計画が同じか。プレビューで見せた内容（残すノード・吸収されるノードの順・ラベル・重要度・
+// イラストの扱いと引き継ぎ元・失われるイラストの件数・付け替える子の件数）で比べる（L-036）。
+// 引き継ぐイラスト本体は illustrationFrom と引き継ぎ元で決まるので比べない。失敗した計画は同じとみなさない
 export function isSameNodeMergePlan(a: NodeMergePlan, b: NodeMergePlan): boolean {
   if (!a.ok || !b.ok) return false;
   return a.survivorId === b.survivorId
     && a.label === b.label
+    && a.importance === b.importance
+    && a.illustrationFrom === b.illustrationFrom
     && a.illustrationSourceId === b.illustrationSourceId
+    && a.discardedIllustrationCount === b.discardedIllustrationCount
+    && a.movedChildCount === b.movedChildCount
     && a.absorbedIds.length === b.absorbedIds.length
     && a.absorbedIds.every((id, index) => id === b.absorbedIds[index]);
 }
