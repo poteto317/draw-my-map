@@ -114,6 +114,8 @@ export function splitNode(
     const created = createSiblingNode(basis, nodeId, newNodeIds[index - 1]);
     // 上の検査を通った入力では null にならず到達しない。型の絞り込みのために残す
     if (created === null) return { ok: false, reason: "placement-failed" };
+    // Node に属性を足したときは、新しい断片へ元のノードから写すか、createSiblingNode の既定値にするかをここで決める
+    // （重要度だけを元のノードから写している）
     const fragmentNode: Node = { ...created, label: fragments[index], importance: source.importance };
     basis.push(fragmentNode);
     inserted.push(fragmentNode);

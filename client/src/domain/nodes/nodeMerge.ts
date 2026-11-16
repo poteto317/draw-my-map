@@ -144,7 +144,9 @@ export function isSameNodeMergePlan(a: NodeMergePlan, b: NodeMergePlan): boolean
 }
 
 // 残すノードの属性を計画どおりに更新する。位置と大きさは変えない（イラストを引き継ぐときだけ、
-// attachIllustration と同じ規則で高さをイラスト付きの高さにする）
+// attachIllustration と同じ規則で高さをイラスト付きの高さにする）。
+// Node に属性を足したときは、ここで残すノードの値を残すか、吸収されるノードの値を引き継ぐかを決める
+// （何もしないと、吸収されるノードの値は警告なしに捨てられる）。計画・プレビュー・isSameNodeMergePlan も合わせて見直す
 function applyPlanToSurvivor(survivor: Node, plan: Extract<NodeMergePlan, { ok: true }>): Node {
   const updated: Node = { ...survivor, label: plan.label, importance: plan.importance };
   if (plan.illustrationFrom !== "absorbed" || plan.illustration === undefined) return updated;
