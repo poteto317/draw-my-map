@@ -102,6 +102,25 @@ describe("NodeMergeDialog", () => {
       expect(screen.getByText("残すノード").nextElementSibling).toHaveTextContent("（空白のみ）");
     });
 
+    it("プレビューの見出し（dt）は、ラベルが長くても縮んで折れない（shrink-0）", () => {
+      renderDialog({ preview: preview({ survivorLabel: "長い".repeat(40), label: "長い".repeat(80), illustrationText: "『" + "長い".repeat(40) + "』のイラストを引き継ぐ" }) });
+
+      const terms = ["残すノード", "統合後のラベル", "重要度", "イラスト", "付け替える子"].map((name) => screen.getByText(name));
+      for (const term of terms) {
+        expect(term.tagName).toBe("DT");
+        expect(term).toHaveClass("shrink-0");
+      }
+    });
+
+    it("残すノード・統合後のラベル・イラストは高さに上限があり（max-h-40）、超えれば内側でスクロールする", () => {
+      renderDialog({ preview: preview({ label: "長い".repeat(500) }) });
+
+      for (const name of ["残すノード", "統合後のラベル", "イラスト"]) {
+        const value = screen.getByText(name).nextElementSibling!;
+        expect(value).toHaveClass("max-h-40", "overflow-y-auto", "whitespace-pre-wrap", "break-words");
+      }
+    });
+
     it("統合後のラベルは前後の空白を畳まず、折り返して全文を出す。空白だけが違う結果を見分けられる（L-821）", () => {
       const { rerender, props } = renderDialog({ preview: preview({ label: "A  B" }) });
       const label = screen.getByText("統合後のラベル").nextElementSibling!;
@@ -153,7 +172,9 @@ describe("NodeMergeDialog", () => {
 
       rerender(<NodeMergeDialog {...props} preview={preview({ absorbedLabels: labels, hiddenAbsorbedCount: 50 })} />);
       expect(within(screen.getByRole("list", { name: "統合されて消えるノード" })).getAllByRole("listitem")).toHaveLength(200);
-      expect(screen.getByText("ほかに 50 件")).toBeInTheDocument();
+      expect(
+        screen.getByText("ほかに50件（一覧は先頭の200件まで表示します。確定はすべてが対象です）"),
+      ).toBeInTheDocument();
     });
 
     it("統合できないとき（プレビューが null）は、プレビューを一切出さない", () => {

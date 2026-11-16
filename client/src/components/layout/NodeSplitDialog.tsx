@@ -79,9 +79,9 @@ export function NodeSplitDialog({
         <p id={descriptionId} className="text-sm">
           選択中のノードのラベルを区切り文字で分けます。最初の断片は元のノードに残り、残りは元のノードの直後の兄弟ノードとして追加されます。
         </p>
-        <p className="text-sm">
-          分割するノード:{" "}
-          <span className={labelClassName}>{formatPreviewLabel(targetLabel)}</span>
+        <p className="flex gap-2 text-sm">
+          <span className="shrink-0">分割するノード:</span>
+          <span className={`${labelClassName} max-h-40 overflow-y-auto`}>{formatPreviewLabel(targetLabel)}</span>
         </p>
         <NodeSeparatorField
           preset={separatorPreset}
@@ -100,6 +100,8 @@ export function NodeSplitDialog({
             {fragments.map((fragment, index) => (
               <li key={index} className="rounded bg-zinc-50 p-2 dark:bg-zinc-900">
                 <span className={labelClassName}>{formatPreviewLabel(fragment)}</span>
+                {/* 読み上げで、断片の本文と注記がつながらないための区切り（見える文字は変えない） */}
+                <span className="sr-only">、</span>
                 <span className="ml-2 text-zinc-600 dark:text-zinc-400">
                   {index === 0 ? "元のノードに残る" : "新しい兄弟として追加"}
                 </span>
