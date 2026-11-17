@@ -149,6 +149,8 @@ export function MapEditor({
     previewNodeNote,
     addNodeLink,
     removeNodeLink,
+    addNodeTag,
+    removeNodeTag,
     beginMoveHistory,
     documentRevision,
     canUndo,
@@ -605,6 +607,8 @@ export function MapEditor({
               documentRevision={documentRevision}
               onPreviewNote={previewNodeNote}
               onBeginNoteEdit={beginMoveHistory}
+              onAddTag={addNodeTag}
+              onRemoveTag={removeNodeTag}
               onAddLink={addNodeLink}
               onRemoveLink={removeNodeLink}
               generation={generation}
