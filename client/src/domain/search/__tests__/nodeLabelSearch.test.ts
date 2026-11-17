@@ -41,7 +41,7 @@ describe("nodeLabelSearch", () => {
     const index = createNodeSearchIndex([createTestNode({ label: "ＡＢＣ１" })]);
 
     expect(searchNodeLabels(index, " abc1　")).toEqual({
-      matches: [{ nodeId: 1, label: "ＡＢＣ１", parentLabel: null }],
+      matches: [{ nodeId: 1, label: "ＡＢＣ１", parentLabel: null, matchedBy: "label" }],
       total: 1,
     });
     expect(searchNodeLabels(index, " 　")).toEqual({ matches: [], total: 0 });
@@ -74,9 +74,9 @@ describe("nodeLabelSearch", () => {
 
     expect(result).toEqual({
       matches: [
-        { nodeId: 2, label: "Child", parentLabel: "新しいノード" },
-        { nodeId: 3, label: "orphan child", parentLabel: null },
-        { nodeId: 4, label: "root child", parentLabel: null },
+        { nodeId: 2, label: "Child", parentLabel: "新しいノード", matchedBy: "label" },
+        { nodeId: 3, label: "orphan child", parentLabel: null, matchedBy: "label" },
+        { nodeId: 4, label: "root child", parentLabel: null, matchedBy: "label" },
       ],
       total: 3,
     });
@@ -151,6 +151,97 @@ describe("nodeLabelSearch", () => {
 
   it("索引エントリの公開された形を保つ", () => {
     const entry: NodeSearchIndexEntry = createNodeSearchIndex([createTestNode({ label: "A" })])[0];
-    expect(entry).toEqual({ nodeId: 1, label: "A", parentLabel: null, normalizedLabel: "a" });
+    expect(entry).toEqual({ nodeId: 1, label: "A", parentLabel: null, normalizedLabel: "a", normalizedLinks: [] });
+  });
+});
+
+describe("URL の検索", () => {
+  // パス「パス」とクエリ「日本語」をパーセントエンコードした URL（保存される形）
+  const JAPANESE = "https://example.com/%E3%83%91%E3%82%B9?q=%E6%97%A5%E6%9C%AC%E8%AA%9E";
+
+  it("ラベルに無くても URL に含まれれば、matchedBy: link で返す", () => {
+    const index = createNodeSearchIndex([createTestNode({ id: 1, label: "資料", links: ["https://example.com/report"] })]);
+
+    expect(searchNodeLabels(index, "report")).toEqual({
+      matches: [{ nodeId: 1, label: "資料", parentLabel: null, matchedBy: "link" }],
+      total: 1,
+    });
+  });
+
+  it("ラベルと URL の両方に一致すれば、ラベル一致として扱う", () => {
+    const index = createNodeSearchIndex([createTestNode({ id: 1, label: "example", links: ["https://example.com/"] })]);
+
+    expect(searchNodeLabels(index, "example").matches[0].matchedBy).toBe("label");
+  });
+
+  it("URL もラベルと同じ正規化（NFKC と小文字化）で照合する", () => {
+    const index = createNodeSearchIndex([createTestNode({ id: 1, label: "資料", links: ["https://example.com/Report"] })]);
+
+    expect(searchNodeLabels(index, "ＲＥＰＯＲＴ").total).toBe(1);
+  });
+
+  it.each(["パス", "日本語", "%E3%83%91"])("パーセントエンコードを戻した形でも、エンコードのままでも一致する（%s）", (query) => {
+    const index = createNodeSearchIndex([createTestNode({ id: 1, label: "資料", links: [JAPANESE] })]);
+
+    expect(searchNodeLabels(index, query).matches).toEqual([{ nodeId: 1, label: "資料", parentLabel: null, matchedBy: "link" }]);
+  });
+
+  it("不正なパーセントエンコードの URL は、例外にせず、エンコードのままで一致する", () => {
+    const index = createNodeSearchIndex([createTestNode({ id: 1, label: "資料", links: ["https://example.com/%E3%81"] })]);
+
+    expect(searchNodeLabels(index, "%e3%81").total).toBe(1);
+  });
+
+  it("URL の区切りをまたいで一致しない", () => {
+    const index = createNodeSearchIndex([
+      createTestNode({ id: 1, label: "資料", links: ["https://a.example/x", "https://b.example/y"] }),
+    ]);
+
+    expect(searchNodeLabels(index, "xhttps")).toEqual({ matches: [], total: 0 });
+    expect(searchNodeLabels(index, "x https")).toEqual({ matches: [], total: 0 });
+  });
+
+  it("件数（total）にはラベル一致と URL 一致の両方を数え、並びは配列順", () => {
+    const index = createNodeSearchIndex([
+      createTestNode({ id: 1, label: "対象外" }),
+      createTestNode({ id: 2, label: "URLだけ", links: ["https://example.com/target"] }),
+      createTestNode({ id: 3, label: "target のラベル" }),
+    ]);
+
+    expect(searchNodeLabels(index, "target")).toEqual({
+      matches: [
+        { nodeId: 2, label: "URLだけ", parentLabel: null, matchedBy: "link" },
+        { nodeId: 3, label: "target のラベル", parentLabel: null, matchedBy: "label" },
+      ],
+      total: 2,
+    });
+  });
+
+  it("索引の normalizedLinks は、URL ごとにエンコードのままと戻した形を並べ、同じ文字列は 1 つにする", () => {
+    const [withLinks, withoutLinks] = createNodeSearchIndex([
+      createTestNode({ id: 1, links: ["https://example.com/Report", JAPANESE] }),
+      createTestNode({ id: 2 }),
+    ]);
+
+    expect(withLinks.normalizedLinks).toEqual([
+      "https://example.com/report",
+      "https://example.com/%e3%83%91%e3%82%b9?q=%e6%97%a5%e6%9c%ac%e8%aa%9e",
+      "https://example.com/パス?q=日本語",
+    ]);
+    expect(withoutLinks.normalizedLinks).toEqual([]);
+  });
+
+  it("links の配列が同じなら、索引を作り直しても decodeURI を繰り返さない", () => {
+    const decodeSpy = jest.spyOn(globalThis, "decodeURI");
+    const links = ["https://example.com/cache-test"];
+
+    createNodeSearchIndex([createTestNode({ id: 1, label: "a", links })]);
+    createNodeSearchIndex([createTestNode({ id: 1, label: "移動後", x: 500, links })]);
+    expect(decodeSpy).toHaveBeenCalledTimes(1);
+
+    // 内容が同じでも別の配列なら、作り直す
+    createNodeSearchIndex([createTestNode({ id: 1, label: "a", links: [...links] })]);
+    expect(decodeSpy).toHaveBeenCalledTimes(2);
+    decodeSpy.mockRestore();
   });
 });

@@ -28,8 +28,8 @@ describe("useNodeLabelSearch", () => {
     expect(result.current.hasQuery).toBe(true);
     expect(result.current.total).toBe(2);
     expect(result.current.matches).toEqual([
-      { nodeId: 1, label: "Alpha", parentLabel: null, hidden: false },
-      { nodeId: 2, label: "Alphabet", parentLabel: null, hidden: true },
+      { nodeId: 1, label: "Alpha", parentLabel: null, matchedBy: "label", hidden: false },
+      { nodeId: 2, label: "Alphabet", parentLabel: null, matchedBy: "label", hidden: true },
     ]);
   });
 
@@ -50,7 +50,7 @@ describe("useNodeLabelSearch", () => {
 
     expect(result.current.query).toBe("target");
     expect(result.current.matches).toEqual([
-      { nodeId: 2, label: "target new", parentLabel: null, hidden: true },
+      { nodeId: 2, label: "target new", parentLabel: null, matchedBy: "label", hidden: true },
     ]);
   });
 
@@ -91,8 +91,8 @@ describe("useNodeLabelSearch", () => {
 
     expect(result.current.query).toBe("target");
     expect(result.current.matches).toEqual([
-      { nodeId: 2, label: "target visible", parentLabel: null, hidden: false },
-      { nodeId: 3, label: "target hidden", parentLabel: null, hidden: true },
+      { nodeId: 2, label: "target visible", parentLabel: null, matchedBy: "label", hidden: false },
+      { nodeId: 3, label: "target hidden", parentLabel: null, matchedBy: "label", hidden: true },
     ]);
   });
 
@@ -107,6 +107,24 @@ describe("useNodeLabelSearch", () => {
     expect(result.current.hasQuery).toBe(false);
     expect(result.current.matches).toEqual([]);
     expect(result.current.total).toBe(0);
+  });
+
+  it("URL だけに一致したノードは matchedBy: link で、表示状態を付けて返す", () => {
+    const nodes = [
+      createTestNode({ id: 1, label: "資料", links: ["https://example.com/report"] }),
+      createTestNode({ id: 2, label: "report のラベル" }),
+    ];
+    const { result } = renderHook(() =>
+      useNodeLabelSearch({ nodes, visibleNodeIds: new Set([2]) }),
+    );
+
+    act(() => result.current.setQuery("report"));
+
+    expect(result.current.total).toBe(2);
+    expect(result.current.matches).toEqual([
+      { nodeId: 1, label: "資料", parentLabel: null, matchedBy: "link", hidden: true },
+      { nodeId: 2, label: "report のラベル", parentLabel: null, matchedBy: "label", hidden: false },
+    ]);
   });
 
   it("nodesの参照が同じなら検索語の変更で索引を作り直さない", () => {

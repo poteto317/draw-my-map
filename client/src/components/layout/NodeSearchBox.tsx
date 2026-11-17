@@ -14,9 +14,14 @@ type NodeSearchBoxProps = {
   onSelectResult: (nodeId: number) => void;
 };
 
+// 候補のアクセシブルネーム。「ラベル（親: X、非表示、URL 一致）」の形で、該当するものだけを並べる
 function optionName(match: NodeSearchListItem): string {
-  const relation = match.parentLabel === null ? "ルート" : `親: ${match.parentLabel}`;
-  return `${match.label}（${relation}${match.hidden ? "、非表示" : ""}）`;
+  const details = [
+    match.parentLabel === null ? "ルート" : `親: ${match.parentLabel}`,
+    ...(match.hidden ? ["非表示"] : []),
+    ...(match.matchedBy === "link" ? ["URL 一致"] : []),
+  ];
+  return `${match.label}（${details.join("、")}）`;
 }
 
 export function NodeSearchBox({
@@ -157,6 +162,7 @@ export function NodeSearchBox({
                   <span className="block text-xs text-zinc-600 dark:text-zinc-400">
                     {match.parentLabel === null ? "ルート" : `親: ${match.parentLabel}`}
                     {match.hidden && " · 非表示"}
+                    {match.matchedBy === "link" && " · URL 一致"}
                   </span>
                 </button>
               );

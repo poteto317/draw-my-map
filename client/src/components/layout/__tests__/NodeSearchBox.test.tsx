@@ -5,11 +5,11 @@ import { NodeSearchBox } from "@/components/layout/NodeSearchBox";
 import type { NodeSearchListItem } from "@/types/nodeSearch";
 
 const matches: readonly NodeSearchListItem[] = [
-  { nodeId: 10, label: "親あり", parentLabel: "親ノード", hidden: false },
-  { nodeId: 20, label: "非表示の子", parentLabel: "親ノード", hidden: true },
-  { nodeId: 30, label: "ルート", parentLabel: null, hidden: false },
-  { nodeId: 40, label: "非表示ルート", parentLabel: null, hidden: true },
-  { nodeId: 50, label: "とても長いラベル", parentLabel: "別の親", hidden: false },
+  { nodeId: 10, label: "親あり", parentLabel: "親ノード", matchedBy: "label", hidden: false },
+  { nodeId: 20, label: "非表示の子", parentLabel: "親ノード", matchedBy: "label", hidden: true },
+  { nodeId: 30, label: "ルート", parentLabel: null, matchedBy: "label", hidden: false },
+  { nodeId: 40, label: "非表示ルート", parentLabel: null, matchedBy: "label", hidden: true },
+  { nodeId: 50, label: "とても長いラベル", parentLabel: "別の親", matchedBy: "label", hidden: false },
 ];
 
 type HarnessProps = {
@@ -95,6 +95,21 @@ describe("NodeSearchBox", () => {
     expect(screen.getByRole("option", { name: "ルート（ルート）" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "非表示ルート（ルート、非表示）" })).toBeInTheDocument();
     expect(screen.getByText("とても長いラベル")).toHaveAttribute("title", "とても長いラベル");
+  });
+
+  it("URL だけで一致した候補は、補助行とアクセシブルネームに「URL 一致」を付ける", () => {
+    const linkMatches: readonly NodeSearchListItem[] = [
+      { nodeId: 60, label: "資料", parentLabel: "親ノード", matchedBy: "link", hidden: false },
+      { nodeId: 70, label: "隠れた資料", parentLabel: null, matchedBy: "link", hidden: true },
+      { nodeId: 80, label: "ラベル一致", parentLabel: null, matchedBy: "label", hidden: false },
+    ];
+    render(<Harness initialQuery="資料" resultMatches={linkMatches} />);
+
+    const linkOnly = screen.getByRole("option", { name: "資料（親: 親ノード、URL 一致）" });
+    expect(within(linkOnly).getByText(/親: 親ノード.*URL 一致/)).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "隠れた資料（ルート、非表示、URL 一致）" })).toBeInTheDocument();
+    const labelOnly = screen.getByRole("option", { name: "ラベル一致（ルート）" });
+    expect(labelOnly).not.toHaveTextContent("URL 一致");
   });
 
   it.each([
@@ -206,6 +221,7 @@ describe("NodeSearchBox", () => {
       nodeId: 100 + index,
       label: `追加候補${index}`,
       parentLabel: null,
+      matchedBy: "label" as const,
       hidden: false,
     }));
     scrollIntoView.mockClear();
