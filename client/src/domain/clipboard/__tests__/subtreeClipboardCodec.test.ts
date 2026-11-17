@@ -84,6 +84,21 @@ describe("encodeSubtreeClipboard / decodeSubtreeClipboard", () => {
     expect("note" in decoded.value.nodes.find((item) => item.id === 3)!).toBe(false);
   });
 
+  it("URL もコピーに含めて往復する（URL の無いノードは項目を持たない）", () => {
+    const withLinks: Node[] = [
+      node(1, null),
+      node(2, 1, { links: ["https://example.com/a", "https://example.org/b"] }),
+      node(3, 2),
+    ];
+
+    const decoded = encodeAndDecode(withLinks, 2);
+
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) return;
+    expect(decoded.value.nodes.find((item) => item.id === 2)?.links).toEqual(["https://example.com/a", "https://example.org/b"]);
+    expect("links" in decoded.value.nodes.find((item) => item.id === 3)!).toBe(false);
+  });
+
   it("専用の形式で書き出し、元の配列にない項目を持ち込まない", () => {
     const source = [{ ...node(1, null), extra: "x" } as Node];
 
@@ -140,6 +155,13 @@ describe("decodeSubtreeClipboard", () => {
 
     expect(decoded).toEqual({ ok: true, value: { rootId: 1, nodes: [valid] } });
     expect(decoded.ok && "extra" in decoded.value.nodes[0]).toBe(false);
+  });
+
+  it("貼り付けでも URL を検証し、http/https 以外を含む枝は受け付けない", () => {
+    expect(decodeSubtreeClipboard(clipboardText([{ ...valid, links: ["javascript:alert(1)"] }])))
+      .toEqual({ ok: false, reason: "invalid" });
+    expect(decodeSubtreeClipboard(clipboardText([{ ...valid, links: ["https://Example.com"] }])))
+      .toEqual({ ok: true, value: { rootId: 1, nodes: [{ ...valid, links: ["https://example.com/"] }] } });
   });
 
   it("画像の高さ補正は既存のV3と一致する", () => {

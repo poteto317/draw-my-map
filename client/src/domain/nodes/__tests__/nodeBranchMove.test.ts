@@ -129,6 +129,18 @@ describe("transferNodeBranch", () => {
     expect(result.target.nodes.map(({ id, parentId }) => [id, parentId])).toEqual([[100, null], [101, null], [102, 101]]);
   });
 
+  it("別マップへ移した枝の URL も写る", () => {
+    const links = ["https://example.com/a"];
+    const source = { layoutMode: "manual" as const, nodes: [node(1, null, 0, 0), node(2, 1, 300, 0, { links })] };
+    const target = { layoutMode: "manual" as const, nodes: [node(1, null, 10, 10)] };
+
+    const result = transferNodeBranch(source, target, 1, allocateIds);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.target.nodes.find((item) => item.label === "ノード2")?.links).toEqual(links);
+  });
+
   it("衝突IDを再採番して全属性を保ち、移動先layoutを使う", () => {
     const source = { layoutMode: "manual" as const, nodes: [node(1, null, 0, 0), node(2, 1, 300, 0, { illustration: "img" })] };
     const target = { layoutMode: "auto" as const, nodes: [node(1, null, 10, 10)] };
