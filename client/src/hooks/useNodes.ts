@@ -65,6 +65,11 @@ import {
   removeNodeLink as computeNodeLinkRemoval,
   type AddNodeLinkOutcome,
 } from "@/domain/nodes/nodeLink";
+import {
+  addNodeTag as computeNodeTagAddition,
+  removeNodeTag as computeNodeTagRemoval,
+  type AddNodeTagOutcome,
+} from "@/domain/nodes/nodeTag";
 import { clearNodeIllustration, replaceNodeIllustration } from "@/domain/nodes/nodeIllustrationUpdate";
 import {
   moveNodeBranch,
@@ -124,6 +129,11 @@ type UseNodesReturn = {
   addNodeLink: (id: number, input: string) => AddNodeLinkOutcome;
   // URL の削除。保存されている値と完全に一致する URL だけを消し、1操作として確定する。受理したかを返す
   removeNodeLink: (id: number, url: string) => boolean;
+  // タグの追加（右パネルの「タグ」節）。最新の状態から判定し、成功なら1操作として確定する。
+  // 失敗は理由を返し、何も変えない。documentRevision は変えない
+  addNodeTag: (id: number, input: string) => AddNodeTagOutcome;
+  // タグの削除。保存されている名前と完全に一致するタグだけを消し、1操作として確定する。受理したかを返す
+  removeNodeTag: (id: number, tag: string) => boolean;
   moveNode: (id: number, x: number, y: number) => void;
   connectNodes: (parentId: number, childId: number) => boolean;
   // 成功時は複製根のIDを返して選択する。対象不在・配置不能・自動配置失敗ではnullを返し何も変えない
@@ -357,6 +367,18 @@ export function useNodes(): UseNodesReturn {
 
   const removeNodeLink = useCallback((id: number, url: string) => (
     applyNonStructuralChange((currentNodes) => computeNodeLinkRemoval(currentNodes, id, url))
+  ), [applyNonStructuralChange]);
+
+  // 判定と確定は同じ最新の状態で行う（addNodeLink と同じ。L-453）
+  const addNodeTag = useCallback((id: number, input: string): AddNodeTagOutcome => {
+    const result = computeNodeTagAddition(getCurrentState().nodes, id, input);
+    if (!result.ok) return { ok: false, reason: result.reason };
+    applyNonStructuralChange(() => result.nodes);
+    return { ok: true };
+  }, [getCurrentState, applyNonStructuralChange]);
+
+  const removeNodeTag = useCallback((id: number, tag: string) => (
+    applyNonStructuralChange((currentNodes) => computeNodeTagRemoval(currentNodes, id, tag))
   ), [applyNonStructuralChange]);
 
   const moveNode = useCallback((id: number, x: number, y: number) => {
@@ -594,6 +616,8 @@ export function useNodes(): UseNodesReturn {
     previewNodeNote,
     addNodeLink,
     removeNodeLink,
+    addNodeTag,
+    removeNodeTag,
     moveNode,
     connectNodes,
     duplicateSubtree,
