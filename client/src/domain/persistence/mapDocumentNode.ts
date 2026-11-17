@@ -3,6 +3,7 @@ import type { Node } from "@/types/node";
 import { getIllustratedNodeMinHeight } from "@/domain/nodes/nodeIllustration";
 import { normalizeMapDocumentNodeImportance } from "@/domain/persistence/mapDocumentNodeImportance";
 import { normalizeMapDocumentNodeIllustration } from "@/domain/persistence/mapDocumentNodeIllustration";
+import { normalizeMapDocumentNodeNote } from "@/domain/persistence/mapDocumentNodeNote";
 import { projectMapDocumentNode } from "@/domain/persistence/mapDocumentNodeProjection";
 import { isRecord } from "@/domain/shared/unknownRecord";
 
@@ -67,6 +68,11 @@ export function normalizeMapDocumentNode(
     return illustrationResult;
   }
   const illustration = illustrationResult.value;
+  const noteResult = normalizeMapDocumentNodeNote(node.note, index, version);
+  if (!noteResult.ok) {
+    return noteResult;
+  }
+  const note = noteResult.value;
   return {
     ok: true,
     value: projectMapDocumentNode({
@@ -79,6 +85,7 @@ export function normalizeMapDocumentNode(
       label,
       importance: importanceResult.value,
       ...(illustration === undefined ? {} : { illustration }),
+      ...(note === undefined ? {} : { note }),
     }),
   };
 }

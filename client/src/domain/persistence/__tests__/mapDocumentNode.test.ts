@@ -78,3 +78,32 @@ describe("normalizeMapDocumentNode", () => {
     });
   });
 });
+
+describe("normalizeMapDocumentNode の note", () => {
+  it("V3 の note を読み込む", () => {
+    expect(normalizeMapDocumentNode({ ...validNode, note: "詳しい説明" }, 0, 3)).toEqual({
+      ok: true,
+      value: { ...validNode, note: "詳しい説明" },
+    });
+  });
+
+  it("V3 の空白だけの note は、項目ごと持たない", () => {
+    const result = normalizeMapDocumentNode({ ...validNode, note: "  \n" }, 0, 3);
+
+    expect(result.ok && "note" in result.value).toBe(false);
+  });
+
+  it("V2 の note は無視する", () => {
+    const result = normalizeMapDocumentNode({ ...validNode, note: "詳しい説明" }, 0, 2);
+
+    expect(result).toEqual({ ok: true, value: validNode });
+    expect(result.ok && "note" in result.value).toBe(false);
+  });
+
+  it("V3 の上限超過の note は、位置付きのエラーで拒否する", () => {
+    expect(normalizeMapDocumentNode({ ...validNode, note: "a".repeat(10001) }, 4, 3)).toEqual({
+      ok: false,
+      error: "node[4].noteは10000文字以内の文字列である必要があります。",
+    });
+  });
+});

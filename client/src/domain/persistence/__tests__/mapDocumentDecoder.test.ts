@@ -213,3 +213,25 @@ describe("version 3 のイラスト", () => {
     expect(parseMapDocumentJsonWithVersion(json(4, baseNode))).toEqual({ ok: false, error: "未対応のマップ形式です。" });
   });
 });
+
+describe("version 3 の詳細メモ", () => {
+  it("version 3 の note を読み込む", () => {
+    const parsed = parseMapDocumentJsonWithVersion(json(3, { ...baseNode, note: "メモ" }));
+
+    expect(parsed.ok && parsed.value.document.nodes[0].note).toBe("メモ");
+  });
+
+  it.each([1, 2])("version %i の note は無視する", (version) => {
+    const node = version === 1 ? { ...baseNode, note: "メモ", importance: undefined } : { ...baseNode, note: "メモ" };
+    const parsed = parseMapDocumentJsonWithVersion(json(version, node));
+
+    expect(parsed.ok && "note" in parsed.value.document.nodes[0]).toBe(false);
+  });
+
+  it("version 3 で上限超過の note は、読み込みを失敗にする", () => {
+    expect(parseMapDocumentJsonWithVersion(json(3, { ...baseNode, note: "a".repeat(10001) }))).toEqual({
+      ok: false,
+      error: "node[0].noteは10000文字以内の文字列である必要があります。",
+    });
+  });
+});

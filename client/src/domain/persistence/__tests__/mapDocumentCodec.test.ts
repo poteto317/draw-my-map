@@ -35,4 +35,16 @@ describe("MapDocument Codec", () => {
       value: document,
     });
   });
+
+  it("V3 の詳細メモ（改行・前後の空白・絵文字を含む）を往復し、メモの無いノードは項目を持たない", () => {
+    const withNote = createTestNode({ ...node(1, null, "high"), note: "  1行目\n\n2行目 😀\n" });
+    const withoutNote = node(2, 1, "low");
+    const document = createMapDocument([withNote, withoutNote], "manual");
+
+    const parsed = parseMapDocumentJson(serializeMapDocument(document));
+
+    expect(parsed).toEqual({ ok: true, value: document });
+    expect(parsed.ok && parsed.value.nodes[0].note).toBe("  1行目\n\n2行目 😀\n");
+    expect(parsed.ok && "note" in parsed.value.nodes[1]).toBe(false);
+  });
 });
