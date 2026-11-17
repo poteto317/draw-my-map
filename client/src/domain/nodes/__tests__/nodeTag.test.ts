@@ -25,6 +25,14 @@ const COMPOSED_PAIRS: ReadonlyArray<readonly [string, string, string]> = [
   ["Å と A+U+FE0E+U+030A", "\u00c5", "A\ufe0e\u030a"],
 ];
 
+// 3 文字（U+200D・U+FE0E・U+FE0F）を除くと、前後や中の空白が残る（または増える）組
+const SPACE_PAIRS: ReadonlyArray<readonly [string, string, string]> = [
+  ["AI と、末尾に空白と U+200D を足したもの", "AI", "AI \u200d"],
+  ["AI と、先頭に U+200D と空白を足したもの", "AI", "\u200d AI"],
+  ["機械 学習 と、間に U+200D を挟んで空白が 2 つ並ぶもの", "機械 学習", "機械 \u200d 学習"],
+  ["機械 学習 と、間に U+FE0F を挟んで空白が 2 つ並ぶもの", "機械 学習", "機械 \ufe0f 学習"],
+];
+
 // タグ名を count 件（tag0 …）
 function tagsOf(count: number): string[] {
   return Array.from({ length: count }, (_, index) => `tag${index}`);
@@ -98,6 +106,8 @@ describe("normalizeNodeTagName", () => {
     ["U+FE0F だけ", "\ufe0f"],
     ["U+FE0E だけ", "\ufe0e"],
     ["U+200D と U+FE0F だけ", "\u200d\ufe0f"],
+    ["U+200D の間に空白（見た目が空白だけ）", "\u200d \u200d"],
+    ["空白に挟まれた U+FE0F と U+FE0E（見た目が空白だけ）", " \ufe0f\ufe0e "],
   ])("許可した見えない書式文字だけの名前（%s）は、見た目が空なので invalid で拒否する", (_name, input) => {
     expect(normalizeNodeTagName(input)).toEqual({ ok: false, reason: "invalid" });
   });
@@ -194,7 +204,18 @@ describe("nodeTagKey", () => {
     expect(nodeTagKey(nodeTagKey(name))).toBe(nodeTagKey(name));
   });
 
-  it("空白の有無は区別する（空白は名前の検査でまとめる）", () => {
+  it.each(SPACE_PAIRS)("3 文字を除いて残る空白は、まとめて前後を削る（%s）。冪等", (_name, a, b) => {
+    expect(nodeTagKey(b)).toBe(nodeTagKey(a));
+    expect(nodeTagKey(nodeTagKey(b))).toBe(nodeTagKey(b));
+  });
+
+  it("鍵の空白は半角スペース 1 個にまとめ、前後を削る（見た目が空白だけなら空）", () => {
+    expect(nodeTagKey("\u200d \u200d")).toBe("");
+    expect(nodeTagKey(" \ufe0f\ufe0e ")).toBe("");
+    expect(nodeTagKey("a\u200d\t\u3000\ufe0fb")).toBe("a b");
+  });
+
+  it("空白の有無は区別する（空白は半角スペース 1 個にまとめるだけで、なくしはしない）", () => {
     expect(nodeTagKey("機械学習")).not.toBe(nodeTagKey("機械 学習"));
   });
 });
@@ -219,6 +240,10 @@ describe("areNodeTagsEqual", () => {
 describe("uniqueNodeTags", () => {
   it("nodeTagKey が同じものは最初に出てきたものを残して除き、順と表記を保つ", () => {
     expect(uniqueNodeTags(["Python", "設計", "python", "ＰＹＴＨＯＮ", "レビュー", "設計"])).toEqual(["Python", "設計", "レビュー"]);
+  });
+
+  it.each(SPACE_PAIRS)("uniqueNodeTags は、3 文字を除いて空白が残る組（%s）も同じタグとみなす", (_name, a, b) => {
+    expect(uniqueNodeTags([a, b])).toEqual([a]);
   });
 
   it("U+200D・U+FE0F・U+FE0E を挟んだだけの違いは同じタグとみなし、最初の表記を残す", () => {
@@ -294,6 +319,12 @@ describe("addNodeTag", () => {
 
     expect(addNodeTag(withComposed, 1, split)).toEqual({ ok: false, reason: "duplicate" });
     expect(addNodeTag(withSplit, 1, composed)).toEqual({ ok: false, reason: "duplicate" });
+  });
+
+  it.each(SPACE_PAIRS)("3 文字を除いて空白が残る組（%s）は、後から足すと duplicate", (_name, a, b) => {
+    const withA = [createTestNode({ id: 1, tags: [a] })];
+
+    expect(addNodeTag(withA, 1, b)).toEqual({ ok: false, reason: "duplicate" });
   });
 
   it("絵文字（ZWJ・異体字セレクタを含む）は追加でき、名前は入力どおりに保存する", () => {

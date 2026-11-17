@@ -367,6 +367,16 @@ describe("planNodeMerge", () => {
       expect(okPlan(nodes, [2, 3], 2)).toMatchObject({ tags: ["AI"], tagSourceCount: 2, tagDuplicateCount: 2 });
     });
 
+    it("3 文字を除いて空白が残る組も同じタグとみなして除く", () => {
+      const nodes = [
+        node(1, null, "親"),
+        node(2, 1, "a", { tags: ["AI", "機械 学習"] }),
+        node(3, 1, "b", { tags: ["AI \u200d", "機械 \u200d 学習"] }),
+      ];
+
+      expect(okPlan(nodes, [2, 3], 2)).toMatchObject({ tags: ["AI", "機械 学習"], tagSourceCount: 2, tagDuplicateCount: 2 });
+    });
+
     it("合成済みの文字と、U+200D で合成が途切れた並びも同じタグとみなして除く", () => {
       const nodes = [
         node(1, null, "親"),
