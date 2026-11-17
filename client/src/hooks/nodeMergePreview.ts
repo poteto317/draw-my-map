@@ -30,6 +30,9 @@ export type NodeMergePreview = {
   noteText: string | null;
   // URL の連結の説明（「N 件」、重複があれば「N 件（重複 M 件を除く）」。URL の本文は出さない）。URL が無ければ null
   linkText: string | null;
+  // タグの連結の説明（「N 件」、同じタグとみなして除くものがあれば「N 件（重複 M 件を除く）」。タグ名は出さない）。
+  // タグが無ければ null
+  tagText: string | null;
 };
 
 // 統合ダイアログの状態文言。stale を最優先し、失敗の計画はその reason の文言にする
@@ -58,6 +61,12 @@ function describeLinks(plan: Extract<NodeMergePlan, { ok: true }>): string | nul
   return `${plan.links.length} 件${duplicate}`;
 }
 
+function describeTags(plan: Extract<NodeMergePlan, { ok: true }>): string | null {
+  if (plan.tags === undefined) return null;
+  const duplicate = plan.tagDuplicateCount > 0 ? `（重複 ${plan.tagDuplicateCount} 件を除く）` : "";
+  return `${plan.tags.length} 件${duplicate}`;
+}
+
 // 統合の計画をプレビューの表示用にまとめる。失敗の計画（見せるものが無い）は null
 export function buildNodeMergePreview(nodes: readonly Node[], plan: NodeMergePlan): NodeMergePreview | null {
   if (!plan.ok) return null;
@@ -74,5 +83,6 @@ export function buildNodeMergePreview(nodes: readonly Node[], plan: NodeMergePla
     hiddenAbsorbedCount: Math.max(0, absorbedLabels.length - NODE_MERGE_PREVIEW_LIMIT),
     noteText: describeNote(plan),
     linkText: describeLinks(plan),
+    tagText: describeTags(plan),
   };
 }

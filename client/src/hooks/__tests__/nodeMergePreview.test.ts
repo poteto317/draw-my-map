@@ -65,6 +65,7 @@ describe("buildNodeMergePreview", () => {
       hiddenAbsorbedCount: 0,
       noteText: null,
       linkText: null,
+      tagText: null,
     });
   });
 
@@ -187,5 +188,32 @@ describe("buildNodeMergePreview", () => {
 
     expect(buildNodeMergePreview([], plan)).toBeNull();
     expect(describeNodeMergeStatus(false, plan)).toBe("URLをまとめると件数の上限（10 件）を超えるため、統合できません。");
+  });
+
+  describe("タグの連結", () => {
+    it("タグを持つノードが 1 つ以上あれば、同じタグとみなすものを除いた件数と除いた件数を示す（タグ名は出さない）", () => {
+      const nodes = [node(1, "a", { tags: ["Python", "資料"] }), node(2, "b"), node(3, "c", { tags: ["python", "重要"] })];
+
+      expect(buildNodeMergePreview(nodes, okPlan(nodes, [1, 2, 3], 1))?.tagText).toBe("3 件（重複 1 件を除く）");
+    });
+
+    it("重複が無ければ括弧を出さない", () => {
+      const nodes = [node(1, "a", { tags: ["Python"] }), node(2, "b", { tags: ["重要"] })];
+
+      expect(buildNodeMergePreview(nodes, okPlan(nodes, [1, 2], 1))?.tagText).toBe("2 件");
+    });
+
+    it("タグが 1 つも無ければ null（行を出さない）", () => {
+      const nodes = [node(1, "a"), node(2, "b")];
+
+      expect(buildNodeMergePreview(nodes, okPlan(nodes, [1, 2], 1))?.tagText).toBeNull();
+    });
+  });
+
+  it("tags-too-many の計画はプレビューを作らず、状態文言は失敗の文言", () => {
+    const plan: NodeMergePlan = { ok: false, reason: "tags-too-many" };
+
+    expect(buildNodeMergePreview([], plan)).toBeNull();
+    expect(describeNodeMergeStatus(false, plan)).toBe("タグをまとめると件数の上限（10 件）を超えるため、統合できません。");
   });
 });

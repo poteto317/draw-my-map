@@ -72,6 +72,7 @@ describe("useNodeMergeDialog", () => {
       hiddenAbsorbedCount: 0,
       noteText: null,
       linkText: null,
+      tagText: null,
     });
   });
 
