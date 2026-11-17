@@ -32,11 +32,11 @@ export type Node = {
   // 配列順に重複を除いて連結し、複製・貼り付け・別マップへの移動では写し、親の挿入では新しい親に持たせない
   links?: readonly string[];
   // タグ（domain/nodes/nodeTag.ts の normalizeNodeTagName で正規化した名前。最大 NODE_TAGS_MAX_COUNT 件、各
-  // NODE_TAG_MAX_LENGTH 文字。nodeTagKey（NFKC＋U+200D・U+FE0E・U+FE0F の除去＋小文字化）が同じものは持たない。表記は最初に入力したもの）。
+  // NODE_TAG_MAX_LENGTH 文字。nodeTagKey（U+200D・U+FE0E・U+FE0F の除去 → NFKC → 小文字化）が同じものは持たない。表記は最初に入力したもの）。
   // 読み取り専用の配列で、書き換えずに作り直す。無いノードでは、項目ごと持たない（空配列も持たない）。
   // 更新は domain/nodes/nodeTag.ts の addNodeTag・removeNodeTag。分割では元のノードにだけ残し、統合では選択中のタグを
   // 配列順に同じタグとみなすものを除いて連結し、複製・貼り付け・別マップへの移動では写し、親の挿入では新しい親に持たせない。
   // 今は検索（domain/search/nodeLabelSearch.ts）・キャンバスの描画（components/map/pixi/renderMapNodes.ts）・アウトライン書き出し・画像書き出しに
-  // 使っていない。使うときは、それらと nodeTagKey の規則をそろえる（NFKC と小文字化はノード検索の normalizeNodeSearchText と同じ。nodeTagKey はさらに U+200D・U+FE0E・U+FE0F を除く）
+  // 使っていない。使うときは、それらと nodeTagKey の規則をそろえる（NFKC と小文字化はノード検索の normalizeNodeSearchText と同じ。nodeTagKey はさらに、NFKC の前に U+200D・U+FE0E・U+FE0F を除く）
   tags?: readonly string[];
 };
