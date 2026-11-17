@@ -261,3 +261,29 @@ describe("version 3 の URL", () => {
     });
   });
 });
+
+describe("version 3 のタグ", () => {
+  it("version 3 の tags を正規化して読み込み、同じタグとみなす要素は後のものを捨てる", () => {
+    const parsed = parseMapDocumentJsonWithVersion(json(3, {
+      ...baseNode,
+      tags: ["  Python ", "PYTHON", "重要"],
+    }));
+
+    expect(parsed.ok && parsed.value.document.nodes[0].tags).toEqual(["Python", "重要"]);
+  });
+
+  it.each([1, 2])("version %i の tags は無視する", (version) => {
+    const tags = ["a\u0000b"];
+    const node = version === 1 ? { ...baseNode, tags, importance: undefined } : { ...baseNode, tags };
+    const parsed = parseMapDocumentJsonWithVersion(json(version, node));
+
+    expect(parsed.ok && "tags" in parsed.value.document.nodes[0]).toBe(false);
+  });
+
+  it("version 3 で制御文字を含む tags は、読み込みを失敗にする", () => {
+    expect(parseMapDocumentJsonWithVersion(json(3, { ...baseNode, tags: ["a\u0000b"] }))).toEqual({
+      ok: false,
+      error: "node[0].tagsは、30文字以内のタグ名の配列（最大10件）である必要があります。",
+    });
+  });
+});

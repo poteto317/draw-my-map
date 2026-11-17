@@ -13,5 +13,6 @@ export function projectMapDocumentNode(node: Node): Node {
     ...(node.illustration === undefined ? {} : { illustration: node.illustration }),
     ...(node.note === undefined ? {} : { note: node.note }),
     ...(node.links === undefined ? {} : { links: node.links }),
+    ...(node.tags === undefined ? {} : { tags: node.tags }),
   };
 }

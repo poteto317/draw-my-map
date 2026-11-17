@@ -60,4 +60,17 @@ describe("MapDocument Codec", () => {
     expect(parsed.ok && parsed.value.nodes[0].links).toEqual(links);
     expect(parsed.ok && "links" in parsed.value.nodes[1]).toBe(false);
   });
+
+  it("V3 のタグ（最初の表記・絵文字を含む）を往復し、タグの無いノードは項目を持たない", () => {
+    const tags = ["Python", "機械 学習", "👨‍👩‍👧"];
+    const withTags = createTestNode({ ...node(1, null, "high"), tags });
+    const withoutTags = node(2, 1, "low");
+    const document = createMapDocument([withTags, withoutTags], "manual");
+
+    const parsed = parseMapDocumentJson(serializeMapDocument(document));
+
+    expect(parsed).toEqual({ ok: true, value: document });
+    expect(parsed.ok && parsed.value.nodes[0].tags).toEqual(tags);
+    expect(parsed.ok && "tags" in parsed.value.nodes[1]).toBe(false);
+  });
 });
