@@ -69,6 +69,21 @@ describe("encodeSubtreeClipboard / decodeSubtreeClipboard", () => {
     });
   });
 
+  it("詳細メモもコピーに含めて往復する（メモの無いノードは項目を持たない）", () => {
+    const withNotes: Node[] = [
+      node(1, null),
+      node(2, 1, { note: "親のメモ\n2行目" }),
+      node(3, 2),
+    ];
+
+    const decoded = encodeAndDecode(withNotes, 2);
+
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) return;
+    expect(decoded.value.nodes.find((item) => item.id === 2)?.note).toBe("親のメモ\n2行目");
+    expect("note" in decoded.value.nodes.find((item) => item.id === 3)!).toBe(false);
+  });
+
   it("専用の形式で書き出し、元の配列にない項目を持ち込まない", () => {
     const source = [{ ...node(1, null), extra: "x" } as Node];
 
