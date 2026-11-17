@@ -167,6 +167,7 @@ describe("mapHistory", () => {
       ["label", { label: "z" }],
       ["importance", { importance: "high" as const }],
       ["illustration", { illustration: "data:x" }],
+      ["links", { links: ["https://example.com/"] }],
     ])("%sの違いを検出する", (_name, override) => {
       expect(areMapStatesEqual(make({}), make(override))).toBe(false);
     });
@@ -184,6 +185,30 @@ describe("mapHistory", () => {
 
     it("同内容なら参照が違っても等しい", () => {
       expect(areMapStatesEqual(make({}), make({}))).toBe(true);
+    });
+
+    describe("配列の値（links）", () => {
+      const A = "https://example.com/a";
+      const B = "https://example.org/b";
+      const withLinks = (links: readonly string[]): NodeMapState => ({
+        layoutMode: "manual",
+        nodes: [createTestNode({ id: 1, links })],
+      });
+
+      it("内容が同じなら別の配列でも等しく、確定しても履歴を積まない（L-135）", () => {
+        expect(areMapStatesEqual(withLinks([A, B]), withLinks([A, B]))).toBe(true);
+
+        const committed = commitMapHistory(createMapHistory(withLinks([A])), withLinks([A]));
+        expect(committed.past).toHaveLength(0);
+      });
+
+      it.each<[string, readonly string[], readonly string[]]>([
+        ["要素が違う", [A], [B]],
+        ["順が違う", [A, B], [B, A]],
+        ["長さが違う", [A], [A, B]],
+      ])("%s なら等しくない", (_name, left, right) => {
+        expect(areMapStatesEqual(withLinks(left), withLinks(right))).toBe(false);
+      });
     });
   });
 });
