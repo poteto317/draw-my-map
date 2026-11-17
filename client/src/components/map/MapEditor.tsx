@@ -147,6 +147,8 @@ export function MapEditor({
     attachIllustration,
     removeIllustration,
     previewNodeNote,
+    addNodeLink,
+    removeNodeLink,
     beginMoveHistory,
     documentRevision,
     canUndo,
@@ -603,6 +605,8 @@ export function MapEditor({
               documentRevision={documentRevision}
               onPreviewNote={previewNodeNote}
               onBeginNoteEdit={beginMoveHistory}
+              onAddLink={addNodeLink}
+              onRemoveLink={removeNodeLink}
               generation={generation}
               onGenerate={generateIllustration}
               onAttach={(nodeId, dataUrl) => {

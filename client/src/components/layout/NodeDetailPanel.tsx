@@ -1,29 +1,35 @@
 import { IllustrationPanel } from "@/components/layout/IllustrationPanel";
+import { NodeLinksSection } from "@/components/layout/NodeLinksSection";
 import { NodeNoteEditor } from "@/components/layout/NodeNoteEditor";
 import { NodeNoteSection } from "@/components/layout/NodeNoteSection";
 import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
+import type { AddNodeLinkOutcome } from "@/domain/nodes/nodeLink";
 import type { IllustrationGenerationState } from "@/types/illustrationGeneration";
 import type { Node } from "@/types/node";
 
 type NodeDetailPanelProps = {
-  selectedNode: Pick<Node, "id" | "label" | "note" | "illustration"> | null;
+  selectedNode: Pick<Node, "id" | "label" | "note" | "links" | "illustration"> | null;
   selectionCount: number;
   documentRevision: number;
   onPreviewNote: (id: number, note: string) => boolean;
   onBeginNoteEdit: () => MapHistoryGroupLease;
+  onAddLink: (id: number, input: string) => AddNodeLinkOutcome;
+  onRemoveLink: (id: number, url: string) => boolean;
   generation: IllustrationGenerationState;
   onGenerate: (nodeId: number) => void;
   onAttach: (nodeId: number, dataUrl: string) => void;
   onRemove: (nodeId: number) => void;
 };
 
-// 右のパネル。上に詳細メモ、下にイラストを縦に積み、内容が高さを超えたら縦にスクロールする
+// 右のパネル。上から詳細メモ、リンク、イラストを縦に積み、内容が高さを超えたら縦にスクロールする
 export function NodeDetailPanel({
   selectedNode,
   selectionCount,
   documentRevision,
   onPreviewNote,
   onBeginNoteEdit,
+  onAddLink,
+  onRemoveLink,
   generation,
   onGenerate,
   onAttach,
@@ -45,6 +51,15 @@ export function NodeDetailPanel({
           onBeginNoteEdit={onBeginNoteEdit}
         />
       )}
+      {/* key はノードの ID だけ（兄弟の NodeNoteEditor と重ならないよう接頭辞を付ける）。documentRevision では作り直さず、
+          節の中で下書きとエラーだけを消す（作り直すとリンク・削除ボタンのフォーカスが body へ落ちる。L-155・L-588） */}
+      <NodeLinksSection
+        key={selectedNode === null ? "links:none" : `links:${selectedNode.id}`}
+        node={selectedNode}
+        documentRevision={documentRevision}
+        onAddLink={onAddLink}
+        onRemoveLink={onRemoveLink}
+      />
       <IllustrationPanel
         selectedNode={selectedNode}
         generation={generation}
