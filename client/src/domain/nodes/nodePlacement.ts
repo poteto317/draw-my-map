@@ -49,7 +49,7 @@ export function createSiblingNode(
   return createNode(id, source.parentId, source.x, y);
 }
 
-// target の親・座標・重要度を写し、大きさ・ラベルは新しいノードの既定値にする。illustration・note（詳細メモ）は持たない。
+// target の親・座標・重要度を写し、大きさ・ラベルは新しいノードの既定値にする。illustration・note（詳細メモ）・links（URL）は持たない。
 // 自動配置で先頭のルートの座標を引き継ぐ役目も、座標を写すことで果たす
 export function createParentNode(target: Node, id: number): Node {
   return { ...createNode(id, target.parentId, target.x, target.y), importance: target.importance };

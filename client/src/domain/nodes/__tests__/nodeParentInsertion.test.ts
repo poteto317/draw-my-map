@@ -383,3 +383,14 @@ describe("親の挿入と詳細メモ", () => {
     expect(result.nodes.find((node) => node.id === 2)?.note).toBe("対象のメモ");
   });
 });
+
+describe("親の挿入と URL", () => {
+  it("新しい親は URL を持たず、対象のノードの URL は変わらない", () => {
+    const nodes = [n(1, null, 0, 0), n(2, 1, 220, 0, { links: ["https://example.com/a"] })];
+
+    const result = succeed(nodes, 2, undefined, "manual");
+
+    expect("links" in result.nodes.find((node) => node.id === 50)!).toBe(false);
+    expect(result.nodes.find((node) => node.id === 2)?.links).toEqual(["https://example.com/a"]);
+  });
+});

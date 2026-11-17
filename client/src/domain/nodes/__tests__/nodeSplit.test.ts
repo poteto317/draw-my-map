@@ -217,6 +217,15 @@ describe("splitNode", () => {
     for (const id of [101, 102]) expect("note" in nodes.find((item) => item.id === id)!).toBe(false);
   });
 
+  it("URL は元のノード（最初の断片）にだけ残し、新しい断片には付けない", () => {
+    const withLinks = rootNodes.map((item) => (item.id === 2 ? { ...item, links: ["https://example.com/a"] } : item));
+
+    const { nodes } = success(withLinks, 2, [101, 102]);
+
+    expect(nodes.find((item) => item.id === 2)?.links).toEqual(["https://example.com/a"]);
+    for (const id of [101, 102]) expect("links" in nodes.find((item) => item.id === id)!).toBe(false);
+  });
+
   it("表示されていない（隠れた）兄弟も含めた全体の配列を基準に座標を決める（L-460）", () => {
     // 最も下の兄弟 3（下端 360）と、2 の子 5 を、表示されていないことにする
     const visible = new Set([1, 2]);
