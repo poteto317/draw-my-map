@@ -239,4 +239,55 @@ describe("renderMapNodes", () => {
       }
     });
   });
+
+  describe("リンクありの印", () => {
+    const linkedNode = createTestNode({
+      id: 2, parentId: null, x: 200, y: 30, width: 120, height: 60, label: "資料", links: ["https://example.com/"],
+    });
+
+    function renderWithLinks(siblingReorderSourceNodeId: number | null = null) {
+      const harness = createPixiTestHarness();
+      renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+        nodes: [node, linkedNode], selectedNodeIds: [], editingNodeId: null, connectionTargetNodeId: null,
+        siblingReorderSourceNodeId, onNodePointerDown: jest.fn(), visibleKeys: new Set(["node:1", "node:2"]),
+      });
+      const containers = harness.stage.addChild.mock.calls.map(
+        ([container]: [unknown]) => container as { addChild: jest.Mock },
+      );
+      const childrenOf = (index: number) => containers[index].addChild.mock.calls.map(
+        ([child]: [unknown]) => child as { alpha?: number },
+      );
+      return { ...harness, childrenOf };
+    }
+
+    it("URL を持つノードにだけ、右上の角を中心に半径 6 の青い円（白い縁）を最前面に描く", () => {
+      const { Graphics, Text, childrenOf } = renderWithLinks();
+
+      // 枠 2 つと印 1 つ
+      expect(Graphics).toHaveBeenCalledTimes(3);
+      expect(childrenOf(0)).toEqual([Graphics.mock.results[0].value, Text.mock.results[0].value]);
+      const marker = Graphics.mock.results[2].value;
+      expect(childrenOf(1)).toEqual([Graphics.mock.results[1].value, Text.mock.results[1].value, marker]);
+      expect(marker.circle).toHaveBeenCalledWith(320, 30, 6);
+      expect(marker.fill).toHaveBeenCalledWith({ color: 0x3b82f6 });
+      expect(marker.stroke).toHaveBeenCalledWith({ width: 2, color: 0xffffff });
+    });
+
+    it("並べ替えのドラッグ中のノードでは、印も同じく半透明にする", () => {
+      const { childrenOf } = renderWithLinks(2);
+
+      expect(childrenOf(1).map((child) => child.alpha)).toEqual([0.5, 0.5, 0.5]);
+    });
+
+    it("ラベルの編集中も印は描く（クリックはノードの Container が受ける）", () => {
+      const harness = createPixiTestHarness();
+      renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+        nodes: [linkedNode], selectedNodeIds: [2], editingNodeId: 2, connectionTargetNodeId: null,
+        siblingReorderSourceNodeId: null, onNodePointerDown: jest.fn(), visibleKeys: new Set(["node:2"]),
+      });
+
+      expect(harness.Graphics).toHaveBeenCalledTimes(2);
+      expect(harness.Graphics.mock.results[1].value.circle).toHaveBeenCalledWith(320, 30, 6);
+    });
+  });
 });

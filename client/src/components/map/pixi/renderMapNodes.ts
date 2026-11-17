@@ -21,6 +21,13 @@ export type RenderMapNodesOptions = {
 };
 
 const DRAGGED_NODE_ALPHA = 0.5;
+const NODE_BORDER_COLOR = 0x3b82f6;
+
+// 「リンクあり」の印。ノードの右上の角に重ねる小さな円（枠の通常色 `NODE_BORDER_COLOR` と同じ青、白い縁）。キャンバス表示専用で、画像書き出しには出さない
+const LINK_MARKER_RADIUS = 6;
+const LINK_MARKER_COLOR = NODE_BORDER_COLOR;
+const LINK_MARKER_BORDER_WIDTH = 2;
+const LINK_MARKER_BORDER_COLOR = 0xffffff;
 
 function createNodeShape(
   constructors: PixiConstructors,
@@ -33,7 +40,7 @@ function createNodeShape(
     .fill({ color: isConnectionTarget ? 0xecfdf5 : isSelected ? 0xeff6ff : 0xffffff })
     .stroke({
       width: isConnectionTarget || isSelected ? 3 : 2,
-      color: isConnectionTarget ? 0x10b981 : isSelected ? 0x2563eb : 0x3b82f6,
+      color: isConnectionTarget ? 0x10b981 : isSelected ? 0x2563eb : NODE_BORDER_COLOR,
     });
   return graphics;
 }
@@ -55,6 +62,17 @@ function createNodeIllustrationSprite(
   sprite.width = rect.size;
   sprite.height = rect.size;
   return sprite;
+}
+
+// URL を 1 件以上持つノードだけに印を作る。中心は右上の角（x + width, y）なので、ラベル（折り返し幅 width - 16）にも
+// イラスト（中央）にも重ならない。選択・接続先の色には影響されない。eventMode は親の Container のまま（表示専用）
+function createNodeLinkMarker(constructors: PixiConstructors, node: Node): Graphics | null {
+  if (node.links === undefined || node.links.length === 0) return null;
+  const marker = new constructors.Graphics();
+  marker.circle(node.x + node.width, node.y, LINK_MARKER_RADIUS)
+    .fill({ color: LINK_MARKER_COLOR })
+    .stroke({ width: LINK_MARKER_BORDER_WIDTH, color: LINK_MARKER_BORDER_COLOR });
+  return marker;
 }
 
 function createNodeLabelText(constructors: PixiConstructors, node: Node): Text {
@@ -112,6 +130,12 @@ export function renderMapNodes(
       const text = createNodeLabelText(constructors, node);
       text.alpha = contentAlpha;
       container.addChild(text);
+    }
+
+    const marker = createNodeLinkMarker(constructors, node);
+    if (marker !== null) {
+      marker.alpha = contentAlpha;
+      container.addChild(marker);
     }
 
     stage.addChild(container);

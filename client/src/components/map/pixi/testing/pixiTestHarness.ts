@@ -20,6 +20,7 @@ export function createPixiTestHarness() {
   };
   const Graphics = jest.fn().mockImplementation(() => ({
     rect: jest.fn().mockReturnThis(),
+    circle: jest.fn().mockReturnThis(),
     fill: jest.fn().mockReturnThis(),
     stroke: jest.fn().mockReturnThis(),
     moveTo: jest.fn().mockReturnThis(),
