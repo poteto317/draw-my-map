@@ -5,7 +5,9 @@ import type { NodeImportance } from "@/types/nodeImportance";
 // 属性を値のまま写している次の場所も見直す: 枝の複製・コピー＆ペースト（domain/nodes/nodeSubtreeInsertion.ts の `...source`）、
 // 保存形式の書き出しと検証（domain/persistence/mapDocumentNodeProjection.ts・mapDocumentNode.ts。
 // コピー＆ペーストのクリップボードの形式も mapDocumentNode.ts を使う）、マップの競合判定（domain/mapLibrary/mapConflict.ts の
-// areNodesEqual。項目を並べて比べている）、親の挿入（domain/nodes/nodePlacement.ts の createParentNode）、各エクスポート
+// areNodesEqual。項目を並べて比べている）、編集履歴の同値判定（domain/history/mapHistory.ts の areNodesEqual。配列の値は
+// 要素ごとに比べる）、親の挿入（domain/nodes/nodePlacement.ts の createParentNode）、検索（domain/search/nodeLabelSearch.ts）、
+// キャンバスの描画（components/map/pixi/renderMapNodes.ts）、各エクスポート
 export type Node = {
   id: number;
   parentId: number | null;
@@ -21,4 +23,9 @@ export type Node = {
   // 無いノード・空白だけのメモでは、項目ごと持たない。更新は domain/nodes/nodeNote.ts の replaceNodeNote。
   // 分割では元のノードにだけ残し、統合では選択中のメモを連結し、親の挿入では新しい親に持たせない
   note?: string;
+  // 添付した URL（正規化した http/https の URL.href。最大 domain/nodes/nodeLink.ts の NODE_LINKS_MAX_COUNT 件、重複なし）。
+  // 読み取り専用の配列で、書き換えずに作り直す。無いノードでは、項目ごと持たない（空配列も持たない）。
+  // 更新は domain/nodes/nodeLink.ts の addNodeLink・removeNodeLink。分割では元のノードにだけ残し、統合では選択中の URL を
+  // 配列順に重複を除いて連結し、複製・貼り付け・別マップへの移動では写し、親の挿入では新しい親に持たせない
+  links?: readonly string[];
 };
