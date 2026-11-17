@@ -1,3 +1,4 @@
+import { NODE_NOTE_MAX_LENGTH, formatNodeNoteLength } from "@/domain/nodes/nodeNote";
 import type { NodeMergeFailureReason } from "@/domain/nodes/nodeMerge";
 import type { OperationNotice } from "@/types/operationNotice";
 
@@ -18,6 +19,8 @@ export function formatNodeMergeFailureNotice(reason: NodeMergeFailureReason): Op
       return { kind: "error", message: "統合の内容が変わりました。もう一度確認してください。" };
     case "placement-failed":
       return { kind: "error", message: "ノードを統合できませんでした。" };
+    case "note-too-long":
+      return { kind: "error", message: `メモをまとめると文字数の上限（${formatNodeNoteLength(NODE_NOTE_MAX_LENGTH)} 文字）を超えるため、統合できません。` };
     default: {
       const unreachable: never = reason;
       return unreachable;

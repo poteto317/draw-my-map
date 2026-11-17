@@ -70,6 +70,7 @@ describe("useNodeMergeDialog", () => {
       discardedIllustrationCount: 0,
       absorbedLabels: ["りんご"],
       hiddenAbsorbedCount: 0,
+      noteText: null,
     });
   });
 

@@ -465,5 +465,37 @@ describe("useNodes の mergeNodes", () => {
       expect(result.current.selectedNodeId).toBe(4);
       expect(result.current.canUndo).toBe(before.canUndo);
     });
+
+    it("連結したメモが上限を超えるときは note-too-long で、何も変えない", () => {
+      const long: NodeMapState = {
+        layoutMode: "manual",
+        nodes: mergeMap().nodes.map((item) => {
+          if (item.id === 2) return { ...item, note: "a".repeat(6000) };
+          if (item.id === 3) return { ...item, note: "b".repeat(4000) };
+          return item;
+        }),
+      };
+      const { result } = renderNodes(long);
+      const before = result.current;
+
+      const outcome = merge(() => result.current, [2, 3], 3);
+
+      expect(outcome).toEqual({ ok: false, reason: "note-too-long" });
+      expect(result.current.nodes).toBe(before.nodes);
+      expect(result.current.canUndo).toBe(false);
+    });
+
+    it("確認の後にメモが変わったら plan-changed（連結後のメモが警告なしに変わらない）", () => {
+      const { result } = renderNodes(mergeMap());
+      const shown = planNodeMerge(result.current.nodes, [2, 3], 3, " ", ALL);
+      act(() => { result.current.previewNodeNote(2, "確認の後に書いたメモ"); });
+      const before = result.current;
+
+      let outcome!: MergeNodesResult;
+      act(() => { outcome = result.current.mergeNodes([2, 3], 3, " ", ALL, shown); });
+
+      expect(outcome).toEqual({ ok: false, reason: "plan-changed" });
+      expect(result.current.nodes).toBe(before.nodes);
+    });
   });
 });

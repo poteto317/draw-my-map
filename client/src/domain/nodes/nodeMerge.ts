@@ -3,6 +3,7 @@ import { keepFirstRootPosition } from "@/domain/nodes/nodeFirstRootPosition";
 import { hasInvalidNodeGeometry } from "@/domain/nodes/nodeGeometryValidation";
 import { maxNodeImportance } from "@/domain/nodes/nodeImportance";
 import { indexNodeForest } from "@/domain/nodes/nodeLayoutForest";
+import { NODE_NOTE_MERGE_JOINER, isNodeNoteWithinLimit, withNodeNote } from "@/domain/nodes/nodeNote";
 import type { Node } from "@/types/node";
 import type { NodeImportance } from "@/types/nodeImportance";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
@@ -15,6 +16,8 @@ export type NodeMergeFailureReason =
   | "different-parents"
   | "invalid-structure"
   | "placement-failed"
+  // 選択中のメモを連結すると上限（NODE_NOTE_MAX_LENGTH）を超える。黙って切り詰めない
+  | "note-too-long"
   // 確定時の再計画が、プレビューで見せた計画と違う（useNodes.mergeNodes が返す）
   | "plan-changed";
 
@@ -34,6 +37,11 @@ export type NodeMergePlan =
     discardedIllustrationCount: number;
     // 吸収されるノードの直下の子で、残すノードへ付け替えるものの件数
     movedChildCount: number;
+    // 選択中のノードのメモを配列順に空行（NODE_NOTE_MERGE_JOINER）で連結したもの。メモの無いノードは飛ばし、
+    // 1 つも無ければ undefined
+    note: string | undefined;
+    // メモを持つノードの件数（プレビューで見せる）
+    noteSourceCount: number;
   }
   | { ok: false; reason: NodeMergeFailureReason };
 
@@ -113,6 +121,10 @@ export function planNodeMerge(
   const { survivor, selected, absorbed } = selection;
   const absorbedIdSet = new Set(absorbed.map((node) => node.id));
   const illustrationCount = selected.filter((node) => node.illustration !== undefined).length;
+  const notes = selected.flatMap((node) => (node.note === undefined ? [] : [node.note]));
+  const note = notes.length === 0 ? undefined : notes.join(NODE_NOTE_MERGE_JOINER);
+  // 検査の順の最後（different-parents の後）
+  if (note !== undefined && !isNodeNoteWithinLimit(note)) return failed("note-too-long");
 
   return {
     ok: true,
@@ -124,11 +136,13 @@ export function planNodeMerge(
     ...chooseMergeIllustration(survivor, absorbed),
     discardedIllustrationCount: Math.max(0, illustrationCount - 1),
     movedChildCount: nodes.filter((node) => node.parentId !== null && absorbedIdSet.has(node.parentId)).length,
+    note,
+    noteSourceCount: notes.length,
   };
 }
 
 // 確定時の再計画とプレビューの計画が同じか。プレビューで見せた内容（残すノード・吸収されるノードの順・ラベル・重要度・
-// イラストの扱いと引き継ぎ元・失われるイラストの件数・付け替える子の件数）で比べる（L-036）。
+// イラストの扱いと引き継ぎ元・失われるイラストの件数・付け替える子の件数・連結したメモとその件数）で比べる（L-036）。
 // 引き継ぐイラスト本体は illustrationFrom と引き継ぎ元で決まるので比べない。失敗した計画は同じとみなさない
 export function isSameNodeMergePlan(a: NodeMergePlan, b: NodeMergePlan): boolean {
   if (!a.ok || !b.ok) return false;
@@ -139,16 +153,19 @@ export function isSameNodeMergePlan(a: NodeMergePlan, b: NodeMergePlan): boolean
     && a.illustrationSourceId === b.illustrationSourceId
     && a.discardedIllustrationCount === b.discardedIllustrationCount
     && a.movedChildCount === b.movedChildCount
+    && a.note === b.note
+    && a.noteSourceCount === b.noteSourceCount
     && a.absorbedIds.length === b.absorbedIds.length
     && a.absorbedIds.every((id, index) => id === b.absorbedIds[index]);
 }
 
 // 残すノードの属性を計画どおりに更新する。位置と大きさは変えない（イラストを引き継ぐときだけ、
-// attachIllustration と同じ規則で高さをイラスト付きの高さにする）。
+// attachIllustration と同じ規則で高さをイラスト付きの高さにする）。メモは計画の連結結果で置き換え
+// （残すノードのメモも連結に含まれるので失われない）、連結結果が無ければ note のキーを持たせない。
 // Node に属性を足したときは、ここで残すノードの値を残すか、吸収されるノードの値を引き継ぐかを決める
 // （何もしないと、吸収されるノードの値は警告なしに捨てられる）。計画・プレビュー・isSameNodeMergePlan も合わせて見直す
 function applyPlanToSurvivor(survivor: Node, plan: Extract<NodeMergePlan, { ok: true }>): Node {
-  const updated: Node = { ...survivor, label: plan.label, importance: plan.importance };
+  const updated = withNodeNote({ ...survivor, label: plan.label, importance: plan.importance }, plan.note);
   if (plan.illustrationFrom !== "absorbed" || plan.illustration === undefined) return updated;
   return { ...updated, illustration: plan.illustration, height: ILLUSTRATED_NODE_HEIGHT };
 }

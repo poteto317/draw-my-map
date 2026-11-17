@@ -11,6 +11,7 @@ describe("formatNodeMergeFailureNotice", () => {
     ["different-parents", "同じ親の兄弟のノードだけを統合できます。"],
     ["plan-changed", "統合の内容が変わりました。もう一度確認してください。"],
     ["placement-failed", "ノードを統合できませんでした。"],
+    ["note-too-long", "メモをまとめると文字数の上限（10,000 文字）を超えるため、統合できません。"],
   ];
 
   it.each(cases)("%s はエラーの通知「%s」にする", (reason, message) => {
