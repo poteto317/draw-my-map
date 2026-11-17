@@ -372,3 +372,14 @@ describe("insertParentNode auto placement", () => {
     expect([root.x, root.y]).toEqual([30, 40]);
   });
 });
+
+describe("親の挿入と詳細メモ", () => {
+  it("新しい親はメモを持たず、対象のノードのメモは変わらない", () => {
+    const nodes = [n(1, null, 0, 0), n(2, 1, 220, 0, { note: "対象のメモ" })];
+
+    const result = succeed(nodes, 2, undefined, "manual");
+
+    expect("note" in result.nodes.find((node) => node.id === 50)!).toBe(false);
+    expect(result.nodes.find((node) => node.id === 2)?.note).toBe("対象のメモ");
+  });
+});
