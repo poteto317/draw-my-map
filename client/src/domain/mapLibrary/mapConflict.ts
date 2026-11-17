@@ -56,7 +56,8 @@ function areNodesEqual(a: Node, b: Node): boolean {
     a.height === b.height &&
     a.label === b.label &&
     a.importance === b.importance &&
-    (a.illustration ?? "") === (b.illustration ?? "")
+    (a.illustration ?? "") === (b.illustration ?? "") &&
+    (a.note ?? "") === (b.note ?? "")
   );
 }
 

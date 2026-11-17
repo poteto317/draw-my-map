@@ -299,6 +299,29 @@ describe("mapConflict", () => {
       };
       expect(isDocumentContentEqual(docA, docB)).toBe(true);
     });
+
+    it("メモだけが違う 2 文書は別物と判定する（別タブで変えたメモの競合を見逃さない）", () => {
+      const withNote: MapDocumentV3 = {
+        ...baseDoc,
+        nodes: [baseDoc.nodes[0], { ...baseDoc.nodes[1], note: "別タブで書いたメモ" }],
+      };
+      const otherNote: MapDocumentV3 = {
+        ...baseDoc,
+        nodes: [baseDoc.nodes[0], { ...baseDoc.nodes[1], note: "このタブで書いたメモ" }],
+      };
+
+      expect(isDocumentContentEqual(baseDoc, withNote)).toBe(false);
+      expect(isDocumentContentEqual(withNote, otherNote)).toBe(false);
+    });
+
+    it("note が未定義とオプショナル未定義は等価", () => {
+      const explicitUndefined: MapDocumentV3 = {
+        ...baseDoc,
+        nodes: [{ ...baseDoc.nodes[0], note: undefined }, baseDoc.nodes[1]],
+      };
+
+      expect(isDocumentContentEqual(baseDoc, explicitUndefined)).toBe(true);
+    });
   });
 
   describe("createConflictCopyName", () => {
