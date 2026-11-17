@@ -168,6 +168,7 @@ describe("mapHistory", () => {
       ["importance", { importance: "high" as const }],
       ["illustration", { illustration: "data:x" }],
       ["links", { links: ["https://example.com/"] }],
+      ["tags", { tags: ["重要"] }],
     ])("%sの違いを検出する", (_name, override) => {
       expect(areMapStatesEqual(make({}), make(override))).toBe(false);
     });
@@ -208,6 +209,28 @@ describe("mapHistory", () => {
         ["長さが違う", [A], [A, B]],
       ])("%s なら等しくない", (_name, left, right) => {
         expect(areMapStatesEqual(withLinks(left), withLinks(right))).toBe(false);
+      });
+    });
+
+    describe("配列の値（tags）", () => {
+      const withTags = (tags: readonly string[]): NodeMapState => ({
+        layoutMode: "manual",
+        nodes: [createTestNode({ id: 1, tags })],
+      });
+
+      it("内容が同じなら別の配列でも等しく、確定しても履歴を積まない（L-135）", () => {
+        expect(areMapStatesEqual(withTags(["Python", "重要"]), withTags(["Python", "重要"]))).toBe(true);
+
+        const committed = commitMapHistory(createMapHistory(withTags(["重要"])), withTags(["重要"]));
+        expect(committed.past).toHaveLength(0);
+      });
+
+      it.each<[string, readonly string[], readonly string[]]>([
+        ["表記が違う", ["Python"], ["python"]],
+        ["順が違う", ["Python", "重要"], ["重要", "Python"]],
+        ["長さが違う", ["Python"], ["Python", "重要"]],
+      ])("%s なら等しくない", (_name, left, right) => {
+        expect(areMapStatesEqual(withTags(left), withTags(right))).toBe(false);
       });
     });
   });

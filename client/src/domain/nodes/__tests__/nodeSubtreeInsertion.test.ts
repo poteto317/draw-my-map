@@ -51,6 +51,22 @@ describe("insertNodeSubtree", () => {
     expect("links" in findNode(result!.nodes, 11)!).toBe(false);
     expect(findNode(result!.nodes, 1)?.links).toEqual(["https://example.org/existing"]);
   });
+
+  it.each(["paste", "duplicate"] as const)("%s ではタグも写し、タグの無いノードには付けない", (kind) => {
+    const tags = ["Python", "重要"];
+    const current = [createTestNode({ id: 1, label: "既存", tags: ["既存のタグ"] })];
+    const sources = [
+      createTestNode({ id: 1, label: "根", tags }),
+      createTestNode({ id: 2, parentId: 1, x: 200, label: "子" }),
+    ];
+
+    const result = insertNodeSubtree(current, sources, 1, null, "manual", idsFrom([10, 11]), kind);
+
+    expect(result).not.toBeNull();
+    expect(findNode(result!.nodes, 10)?.tags).toEqual(tags);
+    expect("tags" in findNode(result!.nodes, 11)!).toBe(false);
+    expect(findNode(result!.nodes, 1)?.tags).toEqual(["既存のタグ"]);
+  });
   it("貼り付けではcurrentとIDが全件衝突しても全IDを再発行し根をnullにして子孫を対応付ける", () => {
     const current = deepFreeze([
       createTestNode({ id: 1, y: 0, height: 60, label: "既存1" }),

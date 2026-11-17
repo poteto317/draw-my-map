@@ -394,3 +394,14 @@ describe("親の挿入と URL", () => {
     expect(result.nodes.find((node) => node.id === 2)?.links).toEqual(["https://example.com/a"]);
   });
 });
+
+describe("親の挿入とタグ", () => {
+  it("新しい親はタグを持たず、対象のノードのタグは変わらない", () => {
+    const nodes = [n(1, null, 0, 0), n(2, 1, 220, 0, { tags: ["重要"] })];
+
+    const result = succeed(nodes, 2, undefined, "manual");
+
+    expect("tags" in result.nodes.find((node) => node.id === 50)!).toBe(false);
+    expect(result.nodes.find((node) => node.id === 2)?.tags).toEqual(["重要"]);
+  });
+});

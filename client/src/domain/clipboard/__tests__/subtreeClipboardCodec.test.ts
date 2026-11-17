@@ -99,6 +99,21 @@ describe("encodeSubtreeClipboard / decodeSubtreeClipboard", () => {
     expect("links" in decoded.value.nodes.find((item) => item.id === 3)!).toBe(false);
   });
 
+  it("タグもコピーに含めて往復する（タグの無いノードは項目を持たない）", () => {
+    const withTags: Node[] = [
+      node(1, null),
+      node(2, 1, { tags: ["Python", "重要"] }),
+      node(3, 2),
+    ];
+
+    const decoded = encodeAndDecode(withTags, 2);
+
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) return;
+    expect(decoded.value.nodes.find((item) => item.id === 2)?.tags).toEqual(["Python", "重要"]);
+    expect("tags" in decoded.value.nodes.find((item) => item.id === 3)!).toBe(false);
+  });
+
   it("専用の形式で書き出し、元の配列にない項目を持ち込まない", () => {
     const source = [{ ...node(1, null), extra: "x" } as Node];
 
@@ -162,6 +177,13 @@ describe("decodeSubtreeClipboard", () => {
       .toEqual({ ok: false, reason: "invalid" });
     expect(decodeSubtreeClipboard(clipboardText([{ ...valid, links: ["https://Example.com"] }])))
       .toEqual({ ok: true, value: { rootId: 1, nodes: [{ ...valid, links: ["https://example.com/"] }] } });
+  });
+
+  it("貼り付けでもタグを検証し、使えない文字を含む枝は受け付けない。同じタグとみなす要素は後のものを捨てる", () => {
+    expect(decodeSubtreeClipboard(clipboardText([{ ...valid, tags: ["a\u0000b"] }])))
+      .toEqual({ ok: false, reason: "invalid" });
+    expect(decodeSubtreeClipboard(clipboardText([{ ...valid, tags: [" Python ", "python"] }])))
+      .toEqual({ ok: true, value: { rootId: 1, nodes: [{ ...valid, tags: ["Python"] }] } });
   });
 
   it("画像の高さ補正は既存のV3と一致する", () => {
