@@ -25,6 +25,7 @@ export type ExportedNode = {
   height: number;
   illustration?: string;
   note?: string;
+  links?: readonly string[];
 };
 export type ExportedMap = { version: number; layoutMode: string; nodes: ExportedNode[] };
 
