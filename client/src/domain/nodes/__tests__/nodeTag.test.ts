@@ -25,6 +25,15 @@ const COMPOSED_PAIRS: ReadonlyArray<readonly [string, string, string]> = [
   ["Å と A+U+FE0E+U+030A", "\u00c5", "A\ufe0e\u030a"],
 ];
 
+// 大文字小文字だけが違う同じタグだが、toLowerCase の結果が NFKC の正規形とは限らないため、最後にもう一度 NFKC をかけないと鍵が違う組
+const LOWERCASE_NFKC_PAIRS: ReadonlyArray<readonly [string, string, string]> = [
+  ["ΐ と Ϊ + 結合アキュート", "\u0390", "\u03aa\u0301"],
+  ["ΰ と Ϋ + 結合アキュート", "\u03b0", "\u03ab\u0301"],
+  ["ẗ と T + 結合ダイエレシス", "\u1e97", "T\u0308"],
+  ["ᾶ と Α + 結合ギリシャ語の曲アクセント", "\u1fb6", "\u0391\u0342"],
+  ["İ + 結合濁点 と i + 結合濁点 + 結合ドット", "\u0130\u3099", "i\u3099\u0307"],
+];
+
 // 3 文字（U+200D・U+FE0E・U+FE0F）を除くと、前後や中の空白が残る（または増える）組
 const SPACE_PAIRS: ReadonlyArray<readonly [string, string, string]> = [
   ["AI と、末尾に空白と U+200D を足したもの", "AI", "AI \u200d"],
@@ -191,7 +200,19 @@ describe("nodeTagKey", () => {
     expect(nodeTagKey(split)).toBe(nodeTagKey(composed));
   });
 
+  it.each(LOWERCASE_NFKC_PAIRS)("toLowerCase の後に NFKC が崩れる組（%s）は同じ鍵にする", (_name, a, b) => {
+    expect(nodeTagKey(a)).toBe(nodeTagKey(b));
+  });
+
   it.each([
+    "\u0390",
+    "\u03aa\u0301",
+    "\u03ab\u0301",
+    "\u1e97",
+    "T\u0308",
+    "\u0391\u0342",
+    "\u0130\u3099",
+    "i\u3099\u0307",
     "AI",
     "A\u200dI",
     "\u2764\ufe0f",
@@ -244,6 +265,11 @@ describe("uniqueNodeTags", () => {
 
   it.each(SPACE_PAIRS)("uniqueNodeTags は、3 文字を除いて空白が残る組（%s）も同じタグとみなす", (_name, a, b) => {
     expect(uniqueNodeTags([a, b])).toEqual([a]);
+  });
+
+  it.each(LOWERCASE_NFKC_PAIRS)("uniqueNodeTags は、toLowerCase の後に NFKC が崩れる組（%s）も同じタグとみなす", (_name, a, b) => {
+    expect(uniqueNodeTags([a, b])).toEqual([a]);
+    expect(uniqueNodeTags([b, a])).toEqual([b]);
   });
 
   it("U+200D・U+FE0F・U+FE0E を挟んだだけの違いは同じタグとみなし、最初の表記を残す", () => {
@@ -325,6 +351,11 @@ describe("addNodeTag", () => {
     const withA = [createTestNode({ id: 1, tags: [a] })];
 
     expect(addNodeTag(withA, 1, b)).toEqual({ ok: false, reason: "duplicate" });
+  });
+
+  it.each(LOWERCASE_NFKC_PAIRS)("toLowerCase の後に NFKC が崩れる組（%s）は、どちらを先に入れても duplicate", (_name, a, b) => {
+    expect(addNodeTag([createTestNode({ id: 1, tags: [a] })], 1, b)).toEqual({ ok: false, reason: "duplicate" });
+    expect(addNodeTag([createTestNode({ id: 1, tags: [b] })], 1, a)).toEqual({ ok: false, reason: "duplicate" });
   });
 
   it("絵文字（ZWJ・異体字セレクタを含む）は追加でき、名前は入力どおりに保存する", () => {

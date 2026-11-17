@@ -76,7 +76,7 @@ export function normalizeNodeTagName(input: string): NodeTagNameResult {
 // ZWJ U+200D・異体字セレクタ U+FE0E・U+FE0F。名前には残すが、同じタグかどうかの比較では無視する
 const IGNORED_IN_TAG_KEY = /[\u200d\ufe0e\ufe0f]/gu;
 
-// 同じタグとみなすための鍵（U+200D・U+FE0E・U+FE0F を除く → NFKC → 空白のまとめと trim → 小文字化）。NFKC と小文字化はノード検索
+// 同じタグとみなすための鍵（U+200D・U+FE0E・U+FE0F を除く → NFKC → 空白のまとめと trim → 小文字化 → NFKC）。NFKC と小文字化はノード検索
 // （domain/search/nodeLabelSearch.ts の normalizeNodeSearchText）と同じ規則だが、domain/search が domain/nodes に
 // 依存しているため、ここに同じ規則を持つ。U+200D・U+FE0E・U+FE0F は絵文字のために名前へ許可しているが、見た目に
 // 現れず NFKC でも消えないので、鍵から除かないと見た目が同じタグ（AI と A + U+200D + I など）が別のタグになる。
@@ -85,9 +85,12 @@ const IGNORED_IN_TAG_KEY = /[\u200d\ufe0e\ufe0f]/gu;
 // 空白のまとめと trim は normalizeNodeTagName と同じ規則（WHITESPACE_RUN）。名前の検査では 3 文字を除く前にまとめるので、
 // 除いた後に前後や連続の空白が残る（AI と "AI " + U+200D など）。鍵でも同じ規則をもう一度かけて、見た目が同じタグを
 // 同じ鍵にし、見た目が空白だけの名前は鍵を空にする（NFKC が空白にするものがあるので、NFKC の後にかける）。
+// 最後にもう一度 NFKC をかけるのは、toLowerCase の結果が NFKC の正規形とは限らないため（Ϊ + 結合アキュートの小文字化は
+// 合成済みの ΐ にならないなど）。かけないと nodeTagKey(nodeTagKey(x)) !== nodeTagKey(x) になり、大文字小文字だけが違う
+// 同じタグが別の鍵になる。
 // 除くので、絵文字の ❤ と ❤️ も同じタグになる（保存する名前は変えず、最初の表記を残す）
 export function nodeTagKey(name: string): string {
-  return name.replace(IGNORED_IN_TAG_KEY, "").normalize("NFKC").replace(WHITESPACE_RUN, " ").trim().toLowerCase();
+  return name.replace(IGNORED_IN_TAG_KEY, "").normalize("NFKC").replace(WHITESPACE_RUN, " ").trim().toLowerCase().normalize("NFKC");
 }
 
 // 同じタグとみなすもの（nodeTagKey が同じ）は、最初に出てきたものを残して除く（順と表記は最初のもの。元の並びは変えない）。

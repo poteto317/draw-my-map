@@ -37,6 +37,11 @@ describe("normalizeMapDocumentNodeTags", () => {
     expect(normalizeMapDocumentNodeTags(["機械 学習", "機械 \u200d 学習"], 0, 3)).toEqual({ ok: true, value: ["機械 学習"] });
   });
 
+  it("大文字小文字だけが違う同じタグ（ΐ と Ϊ + 結合アキュート、ẗ と T + 結合ダイエレシス）は 1 件にする", () => {
+    expect(normalizeMapDocumentNodeTags(["\u0390", "\u03aa\u0301"], 0, 3)).toEqual({ ok: true, value: ["\u0390"] });
+    expect(normalizeMapDocumentNodeTags(["T\u0308", "\u1e97"], 0, 3)).toEqual({ ok: true, value: ["T\u0308"] });
+  });
+
   it("合成済みの文字と、U+200D で合成が途切れた並び（é・ガ・가・Å）は同じタグとみなし、後のものを捨てる", () => {
     expect(normalizeMapDocumentNodeTags(["\u00e9", "e\u200d\u0301"], 0, 3)).toEqual({ ok: true, value: ["\u00e9"] });
     expect(normalizeMapDocumentNodeTags(["\u30ac", "\uff76\u200d\uff9e", "\u30ab\u200d\u3099"], 0, 3)).toEqual({ ok: true, value: ["\u30ac"] });

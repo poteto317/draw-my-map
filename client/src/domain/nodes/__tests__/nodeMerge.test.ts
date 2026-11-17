@@ -367,6 +367,16 @@ describe("planNodeMerge", () => {
       expect(okPlan(nodes, [2, 3], 2)).toMatchObject({ tags: ["AI"], tagSourceCount: 2, tagDuplicateCount: 2 });
     });
 
+    it("大文字小文字だけが違う同じタグ（toLowerCase の後に NFKC が崩れる組）も同じタグとみなして除く", () => {
+      const nodes = [
+        node(1, null, "親"),
+        node(2, 1, "a", { tags: ["\u0390", "\u1e97"] }),
+        node(3, 1, "b", { tags: ["\u03aa\u0301", "T\u0308"] }),
+      ];
+
+      expect(okPlan(nodes, [2, 3], 2)).toMatchObject({ tags: ["\u0390", "\u1e97"], tagSourceCount: 2, tagDuplicateCount: 2 });
+    });
+
     it("3 文字を除いて空白が残る組も同じタグとみなして除く", () => {
       const nodes = [
         node(1, null, "親"),
