@@ -60,6 +60,11 @@ import {
 } from "@/domain/nodes/nodeSplit";
 import { replaceNodeLabels } from "@/domain/nodes/nodeLabelUpdate";
 import { replaceNodeNote } from "@/domain/nodes/nodeNote";
+import {
+  addNodeLink as computeNodeLinkAddition,
+  removeNodeLink as computeNodeLinkRemoval,
+  type AddNodeLinkOutcome,
+} from "@/domain/nodes/nodeLink";
 import { clearNodeIllustration, replaceNodeIllustration } from "@/domain/nodes/nodeIllustrationUpdate";
 import {
   moveNodeBranch,
@@ -114,6 +119,11 @@ type UseNodesReturn = {
   // 詳細メモの唯一の更新経路。履歴グループ中は履歴に積まず、グループ外では1操作として確定する。
   // 戻り値は更新を受理したか（無変更・対象不在・上限超過は false）。documentRevision は変えない
   previewNodeNote: (id: number, note: string) => boolean;
+  // URL の追加（右パネルの「リンク」節）。最新の状態から判定し、成功なら1操作として確定する。
+  // 失敗は理由を返し、何も変えない。documentRevision は変えない
+  addNodeLink: (id: number, input: string) => AddNodeLinkOutcome;
+  // URL の削除。保存されている値と完全に一致する URL だけを消し、1操作として確定する。受理したかを返す
+  removeNodeLink: (id: number, url: string) => boolean;
   moveNode: (id: number, x: number, y: number) => void;
   connectNodes: (parentId: number, childId: number) => boolean;
   // 成功時は複製根のIDを返して選択する。対象不在・配置不能・自動配置失敗ではnullを返し何も変えない
@@ -335,6 +345,19 @@ export function useNodes(): UseNodesReturn {
   const previewNodeNote = useCallback((id: number, note: string) => (
     applyNonStructuralPreview((currentNodes) => replaceNodeNote(currentNodes, id, note))
   ), [applyNonStructuralPreview]);
+
+  // 判定と確定は同じ最新の状態（getCurrentState と applyNonStructuralChange は同じ ref を読む）で行う。
+  // 同じイベントの中で続けて呼んでも、直前の追加を反映した状態から判定する（L-453）
+  const addNodeLink = useCallback((id: number, input: string): AddNodeLinkOutcome => {
+    const result = computeNodeLinkAddition(getCurrentState().nodes, id, input);
+    if (!result.ok) return { ok: false, reason: result.reason };
+    applyNonStructuralChange(() => result.nodes);
+    return { ok: true };
+  }, [getCurrentState, applyNonStructuralChange]);
+
+  const removeNodeLink = useCallback((id: number, url: string) => (
+    applyNonStructuralChange((currentNodes) => computeNodeLinkRemoval(currentNodes, id, url))
+  ), [applyNonStructuralChange]);
 
   const moveNode = useCallback((id: number, x: number, y: number) => {
     applyManualMove((currentNodes) => (
@@ -569,6 +592,8 @@ export function useNodes(): UseNodesReturn {
     attachIllustration,
     removeIllustration,
     previewNodeNote,
+    addNodeLink,
+    removeNodeLink,
     moveNode,
     connectNodes,
     duplicateSubtree,
