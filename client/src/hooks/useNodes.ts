@@ -59,6 +59,7 @@ import {
   type SplitNodeResult,
 } from "@/domain/nodes/nodeSplit";
 import { replaceNodeLabels } from "@/domain/nodes/nodeLabelUpdate";
+import { replaceNodeNote } from "@/domain/nodes/nodeNote";
 import { clearNodeIllustration, replaceNodeIllustration } from "@/domain/nodes/nodeIllustrationUpdate";
 import {
   moveNodeBranch,
@@ -110,6 +111,9 @@ type UseNodesReturn = {
   updateNodesImportance: (ids: readonly number[], importance: NodeImportance) => boolean;
   attachIllustration: (id: number, dataUrl: string) => boolean;
   removeIllustration: (id: number) => boolean;
+  // 詳細メモの唯一の更新経路。履歴グループ中は履歴に積まず、グループ外では1操作として確定する。
+  // 戻り値は更新を受理したか（無変更・対象不在・上限超過は false）。documentRevision は変えない
+  previewNodeNote: (id: number, note: string) => boolean;
   moveNode: (id: number, x: number, y: number) => void;
   connectNodes: (parentId: number, childId: number) => boolean;
   // 成功時は複製根のIDを返して選択する。対象不在・配置不能・自動配置失敗ではnullを返し何も変えない
@@ -167,6 +171,7 @@ type UseNodesReturn = {
   canRedo: boolean;
   undo: () => boolean;
   redo: () => boolean;
+  // 履歴グループを始める。名前は移動由来だが、機構はグループ一般（詳細メモの途中反映もこのグループを使う）
   beginMoveHistory: () => MapHistoryGroupLease;
 };
 
@@ -180,6 +185,7 @@ export function useNodes(): UseNodesReturn {
     layoutMode,
     getCurrentState,
     applyNonStructuralChange,
+    applyNonStructuralPreview,
     applyManualMove,
     applyTreeChange,
     setLayoutMode,
@@ -325,6 +331,10 @@ export function useNodes(): UseNodesReturn {
   const removeIllustration = useCallback((id: number) => (
     applyTreeChange((currentNodes) => clearNodeIllustration(currentNodes, id))
   ), [applyTreeChange]);
+
+  const previewNodeNote = useCallback((id: number, note: string) => (
+    applyNonStructuralPreview((currentNodes) => replaceNodeNote(currentNodes, id, note))
+  ), [applyNonStructuralPreview]);
 
   const moveNode = useCallback((id: number, x: number, y: number) => {
     applyManualMove((currentNodes) => (
@@ -558,6 +568,7 @@ export function useNodes(): UseNodesReturn {
     updateNodesImportance,
     attachIllustration,
     removeIllustration,
+    previewNodeNote,
     moveNode,
     connectNodes,
     duplicateSubtree,
