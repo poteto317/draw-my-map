@@ -34,7 +34,7 @@ const WHITESPACE_RUN = /\s+/g;
 // 行内注釈の制御 U+FFF9〜U+FFFB は、Default_Ignorable_Code_Point に含まれない（書式文字 Cf）が、同じく見えないので足す
 const INVISIBLE_FORMAT = /[\p{Default_Ignorable_Code_Point}\u{FFF9}-\u{FFFB}]/u;
 
-// 絵文字に要るので許可する見えない書式文字: ゼロ幅結合子 U+200D（連結）、異体字セレクタ U+FE0E・U+FE0F（表示の切り替え）
+// 絵文字に要るので許可する見えない書式文字（同じタグかどうかの比較では nodeTagKey が除く）: ゼロ幅結合子 U+200D（連結）、異体字セレクタ U+FE0E・U+FE0F（表示の切り替え）
 function isAllowedInvisibleCodePoint(codePoint: number): boolean {
   return codePoint === 0x200d || codePoint === 0xfe0e || codePoint === 0xfe0f;
 }
@@ -60,21 +60,29 @@ function hasForbiddenCharacter(value: string): boolean {
 
 // タグ名の入力を、保存する名前にする。検証と保存と表示は同じ値を使う（L-018）。
 // 検査の順: 前後の空白を削る → 空 → 入力の長さの先行判定（L-443）→ 連続する空白を半角スペース 1 個にまとめる →
-// 使えない文字（invalid）→ まとめた後の長さ（too-long）。大文字小文字・全角半角は変えない（最初の表記を残す）
+// 使えない文字（invalid）→ 許可した見えない書式文字だけで見た目が空（nodeTagKey が空。invalid）→
+// まとめた後の長さ（too-long）。大文字小文字・全角半角は変えない（最初の表記を残す）
 export function normalizeNodeTagName(input: string): NodeTagNameResult {
   const trimmed = input.trim();
   if (trimmed === "") return { ok: false, reason: "empty" };
   if (trimmed.length > NODE_TAG_INPUT_MAX_LENGTH) return { ok: false, reason: "too-long" };
   const collapsed = trimmed.replace(WHITESPACE_RUN, " ");
   if (hasForbiddenCharacter(collapsed)) return { ok: false, reason: "invalid" };
+  if (nodeTagKey(collapsed) === "") return { ok: false, reason: "invalid" };
   if (collapsed.length > NODE_TAG_MAX_LENGTH) return { ok: false, reason: "too-long" };
   return { ok: true, name: collapsed };
 }
 
-// 同じタグとみなすための鍵（NFKC＋小文字化）。ノード検索（domain/search/nodeLabelSearch.ts の
-// normalizeNodeSearchText）と同じ規則だが、domain/search が domain/nodes に依存しているため、ここに同じ規則を持つ
+// ZWJ U+200D・異体字セレクタ U+FE0E・U+FE0F。名前には残すが、同じタグかどうかの比較では無視する
+const IGNORED_IN_TAG_KEY = /[\u200d\ufe0e\ufe0f]/gu;
+
+// 同じタグとみなすための鍵（NFKC → U+200D・U+FE0E・U+FE0F を除く → 小文字化）。NFKC と小文字化はノード検索
+// （domain/search/nodeLabelSearch.ts の normalizeNodeSearchText）と同じ規則だが、domain/search が domain/nodes に
+// 依存しているため、ここに同じ規則を持つ。U+200D・U+FE0E・U+FE0F は絵文字のために名前へ許可しているが、見た目に
+// 現れず NFKC でも消えないので、鍵から除かないと見た目が同じタグ（AI と A + U+200D + I など）が別のタグになる。
+// 除くので、絵文字の ❤ と ❤️ も同じタグになる（保存する名前は変えず、最初の表記を残す）
 export function nodeTagKey(name: string): string {
-  return name.normalize("NFKC").toLowerCase();
+  return name.normalize("NFKC").replace(IGNORED_IN_TAG_KEY, "").toLowerCase();
 }
 
 // 同じタグとみなすもの（nodeTagKey が同じ）は、最初に出てきたものを残して除く（順と表記は最初のもの。元の並びは変えない）。
