@@ -412,8 +412,8 @@ describe("Home", () => {
     it("ノード未選択のときは案内を表示し、生成ボタンを無効にする", () => {
       render(<Home />);
 
-      expect(screen.getByRole("complementary", { name: "イラスト" })).toBeInTheDocument();
-      expect(screen.getByText("ノードを選択してください")).toBeVisible();
+      expect(screen.getByRole("complementary", { name: "ノードの詳細" })).toBeInTheDocument();
+      expect(within(screen.getByRole("region", { name: "イラスト" })).getByText("ノードを選択してください")).toBeVisible();
       expect(screen.getByRole("button", { name: "イラストを生成" })).toBeDisabled();
     });
 
@@ -423,7 +423,7 @@ describe("Home", () => {
       await user.click(screen.getByRole("button", { name: "テスト用ノード追加" }));
       await user.click(screen.getByRole("button", { name: "テスト用ノード選択" }));
 
-      expect(screen.getByText(FALLBACK_NODE_LABEL)).toBeVisible();
+      expect(within(screen.getByRole("region", { name: "イラスト" })).getByText(FALLBACK_NODE_LABEL)).toBeVisible();
       expect(screen.getByRole("button", { name: "イラストを生成" })).toBeEnabled();
     });
 
@@ -559,7 +559,7 @@ describe("Home", () => {
       await user.click(screen.getByRole("button", { name: "テスト用ノード選択" }));
       act(() => mockMapStageProps!.onSelectNode(null));
 
-      expect(screen.getByText("ノードを選択してください")).toBeVisible();
+      expect(within(screen.getByRole("region", { name: "イラスト" })).getByText("ノードを選択してください")).toBeVisible();
       expect(screen.getByRole("button", { name: "イラストを生成" })).toBeDisabled();
     });
 
@@ -568,7 +568,7 @@ describe("Home", () => {
 
       const main = screen.getByRole("main");
       expect(main).toContainElement(screen.getByTestId("map-stage"));
-      const panel = screen.getByRole("complementary", { name: "イラスト" });
+      const panel = screen.getByRole("complementary", { name: "ノードの詳細" });
       expect(main).toContainElement(panel);
     });
   });

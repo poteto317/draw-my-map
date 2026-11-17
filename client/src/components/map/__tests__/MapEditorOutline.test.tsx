@@ -227,7 +227,7 @@ it("dialogとdisabledはoutline操作を止め、共通選択をイラストパ�
   const { rerender, storage } = await renderOutlineEditor(); await switchTo("アウトライン");
   await userEvent.click(screen.getByRole("button", { name: "階層2・子B" }));
   expect(screen.getByRole("button", { name: "階層2・子B" })).toHaveAttribute("aria-pressed", "true");
-  expect(within(screen.getByRole("complementary", { name: "イラスト" })).getByText("子B")).toBeInTheDocument();
+  expect(within(screen.getByRole("region", { name: "イラスト" })).getByText("子B")).toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: "箇条書きから追加" }));
   expect(document.querySelector("[data-map-id]")).toHaveAttribute("inert");
   expect(screen.getByRole("button", { name: "階層2・子B" })).toBeDisabled();

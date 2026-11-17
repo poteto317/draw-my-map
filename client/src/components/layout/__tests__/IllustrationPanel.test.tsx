@@ -4,10 +4,12 @@ import { FALLBACK_NODE_LABEL } from "@/config/nodeLabel";
 import { IllustrationPanel } from "@/components/layout/IllustrationPanel";
 
 describe("IllustrationPanel", () => {
-  it("補足領域として名前付きで表示し、見出しを持つ", () => {
+  it("名前付きの領域（section）として表示し、見出しを持つ（外側の補足領域はノードの詳細のパネルが持つ）", () => {
     render(<IllustrationPanel selectedNode={null} generation={{ status: "idle" }} onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={jest.fn()} />);
 
-    expect(screen.getByRole("complementary", { name: "イラスト" })).toBeInTheDocument();
+    const region = screen.getByRole("region", { name: "イラスト" });
+    expect(region.tagName).toBe("SECTION");
+    expect(screen.queryByRole("complementary")).toBeNull();
     expect(screen.getByRole("heading", { name: "イラスト" })).toBeInTheDocument();
   });
 
@@ -72,10 +74,12 @@ describe("IllustrationPanel", () => {
     expect(screen.getByText(label)).toHaveAttribute("title", label);
   });
 
-  it("固定幅で、縮まない", () => {
+  it("幅・縁・背景は親（NodeDetailPanel）が持ち、自身は持たない", () => {
     render(<IllustrationPanel selectedNode={null} generation={{ status: "idle" }} onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={jest.fn()} />);
 
-    expect(screen.getByRole("complementary", { name: "イラスト" })).toHaveClass("w-60", "shrink-0");
+    const region = screen.getByRole("region", { name: "イラスト" });
+    expect(region).not.toHaveClass("w-60");
+    expect(region).not.toHaveClass("border-l");
   });
 
   it("生成中は、ボタンを無効にして『生成中…』と表示する", () => {

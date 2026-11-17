@@ -24,6 +24,7 @@ export type ExportedNode = {
   width: number;
   height: number;
   illustration?: string;
+  note?: string;
 };
 export type ExportedMap = { version: number; layoutMode: string; nodes: ExportedNode[] };
 

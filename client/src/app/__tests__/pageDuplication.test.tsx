@@ -363,7 +363,7 @@ describe("ページの枝の複製の境界", () => {
     expect(undoButton()).toBeDisabled();
     expect(duplicateButton()).toBeEnabled();
     expect(screen.queryByText("ノードを選択してください")).not.toBeInTheDocument();
-    expect(screen.getByTitle("唯一")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "イラスト" })).getByTitle("唯一")).toBeInTheDocument();
   });
 
   it("成功通知の後の失敗した複製要求で、通知を失敗へ置き換える", async () => {

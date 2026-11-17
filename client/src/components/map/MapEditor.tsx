@@ -48,7 +48,7 @@ import { OutlineImportControl } from "@/components/layout/OutlineImportControl";
 import { OutlineImportDialog } from "@/components/layout/OutlineImportDialog";
 import { resolveOutlineParentCandidate } from "@/components/layout/outlineParentCandidate";
 import { NodeSearchBox } from "@/components/layout/NodeSearchBox";
-import { IllustrationPanel } from "@/components/layout/IllustrationPanel";
+import { NodeDetailPanel } from "@/components/layout/NodeDetailPanel";
 import { MapStage } from "@/components/map/MapStage";
 import { INITIAL_VIEWPORT } from "@/components/map/mapViewport";
 import { useIllustrationGeneration } from "@/hooks/useIllustrationGeneration";
@@ -146,6 +146,7 @@ export function MapEditor({
     replaceMap,
     attachIllustration,
     removeIllustration,
+    previewNodeNote,
     beginMoveHistory,
     documentRevision,
     canUndo,
@@ -595,8 +596,13 @@ export function MapEditor({
             />
           )}
           sidePanel={(
-            <IllustrationPanel
+            <NodeDetailPanel
               selectedNode={selectedNode}
+              // アウトライン表示では主選択だけ（キャンバスで残った複数選択の件数を見せない）
+              selectionCount={importanceTargetIds.length}
+              documentRevision={documentRevision}
+              onPreviewNote={previewNodeNote}
+              onBeginNoteEdit={beginMoveHistory}
               generation={generation}
               onGenerate={generateIllustration}
               onAttach={(nodeId, dataUrl) => {

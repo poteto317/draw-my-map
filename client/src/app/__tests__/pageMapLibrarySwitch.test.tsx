@@ -375,7 +375,7 @@ describe("マップの切り替えと混在の防止", () => {
     await switchTo(user, "B");
     expect(options?.signal?.aborted).toBe(true);
     selectNode(0, 1);
-    expect(screen.getByRole("complementary", { name: "イラスト" })).toHaveTextContent("みかん");
+    expect(screen.getByRole("region", { name: "イラスト" })).toHaveTextContent("みかん");
     expect(screen.getByRole("button", { name: "イラストを生成" })).toBeEnabled();
     request.resolve(IMAGE);
     await settle();
