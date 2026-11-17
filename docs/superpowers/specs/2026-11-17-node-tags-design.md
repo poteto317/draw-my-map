@@ -44,7 +44,7 @@
 ### 3.1 タグの規則（`domain/nodes/nodeTag.ts`）
 
 - 定数: `NODE_TAGS_MAX_COUNT = 10`、`NODE_TAG_MAX_LENGTH = 30`、`NODE_TAG_INPUT_MAX_LENGTH = 256`（入力の先行判定。§「タグ名の規則」②）。
-- `normalizeNodeTagName(input: string): NodeTagNameResult`。`NodeTagNameResult = { ok: true; name: string } | { ok: false; reason: NodeTagNameFailureReason }`。`NodeTagNameFailureReason = "empty" | "too-long" | "invalid"`。検査の順は上の規則どおり（trim → empty → 入力の先行判定（too-long）→ 空白を 1 個にまとめる → 使えない文字（制御文字・見えない書式文字。invalid）→ 長さ（too-long））。
+- `normalizeNodeTagName(input: string): NodeTagNameResult`。`NodeTagNameResult = { ok: true; name: string } | { ok: false; reason: NodeTagNameFailureReason }`。`NodeTagNameFailureReason = "empty" | "too-long" | "invalid"`。検査の順は上の規則どおり（trim → empty → 入力の先行判定（too-long）→ 空白を 1 個にまとめる → 使えない文字（制御文字・見えない書式文字。invalid）→ 許可した見えない書式文字（`U+200D`・`U+FE0E`・`U+FE0F`）だけで `nodeTagKey` が空（invalid）→ 長さ（too-long））。
 - `nodeTagKey(name: string): string` — 同一性の鍵。
 - `uniqueNodeTags(tags: readonly string[]): string[]` — `nodeTagKey` が同じものは最初のものを残して除く。統合 `planNodeMerge` と保存データの検証 `mapDocumentNodeTags.ts` で共有。
 - `addNodeTag(nodes, id, input): AddNodeTagResult`。`AddNodeTagFailureReason = NodeTagNameFailureReason | "node-missing" | "duplicate" | "too-many"`。`AddNodeTagResult = { ok: true; nodes: Node[] } | { ok: false; reason: AddNodeTagFailureReason }`。検査の順は「node-missing → タグ名の検査 → duplicate（`nodeTagKey` が同じ）→ too-many」。成功時は対象ノードの `tags` に末尾追加した新しいノードを返す（ほかのノードは同じ参照）。
