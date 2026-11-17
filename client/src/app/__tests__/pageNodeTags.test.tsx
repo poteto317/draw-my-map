@@ -160,6 +160,8 @@ describe("タグ", () => {
     expect(nodeOf(3).tags).toEqual(["python"]);
     await user.click(undoButton());
     expect(nodeOf(3).tags).toEqual(["python", "資料"]);
+    await user.click(redoButton());
+    expect(nodeOf(3).tags).toEqual(["python"]);
   });
 
   it("JSON に書き出したタグは、読み込むと戻る", async () => {
