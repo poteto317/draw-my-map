@@ -16,6 +16,7 @@ function preview(overrides: Partial<NodeMergePreview> = {}): NodeMergePreview {
     discardedIllustrationCount: 0,
     absorbedLabels: ["りんご"],
     hiddenAbsorbedCount: 0,
+    noteText: null,
     ...overrides,
   };
 }
@@ -89,6 +90,22 @@ describe("NodeMergeDialog", () => {
       expect(screen.getByText("重要度").nextElementSibling).toHaveTextContent("高");
       expect(screen.getByText("イラスト").nextElementSibling).toHaveTextContent("主選択のイラストを残す");
       expect(screen.getByText("付け替える子").nextElementSibling).toHaveTextContent("2件");
+    });
+
+    it("メモを連結するときは「メモ」の行に件数と文字数を出す。見出しは縮まず、値は高さに上限がある", () => {
+      renderDialog({ preview: preview({ noteText: "2 件のメモを連結（8 文字）" }) });
+
+      const term = screen.getByText("メモ");
+      expect(term.tagName).toBe("DT");
+      expect(term).toHaveClass("shrink-0");
+      expect(term.nextElementSibling).toHaveTextContent("2 件のメモを連結（8 文字）");
+      expect(term.nextElementSibling).toHaveClass("max-h-40", "overflow-y-auto");
+    });
+
+    it("メモが無いときは「メモ」の行を出さない", () => {
+      renderDialog({ preview: preview({ noteText: null }) });
+
+      expect(screen.queryByText("メモ")).toBeNull();
     });
 
     it("残すノードのラベルを出し、空のラベルは「（空）」、空白だけなら「（空白のみ）」にする", () => {

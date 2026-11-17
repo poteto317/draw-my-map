@@ -63,6 +63,7 @@ describe("buildNodeMergePreview", () => {
       discardedIllustrationCount: 0,
       absorbedLabels: ["りんご"],
       hiddenAbsorbedCount: 0,
+      noteText: null,
     });
   });
 
@@ -126,5 +127,33 @@ describe("buildNodeMergePreview", () => {
 
     expect(preview?.absorbedLabels).toHaveLength(NODE_MERGE_PREVIEW_LIMIT);
     expect(preview?.hiddenAbsorbedCount).toBe(0);
+  });
+
+  describe("メモの連結", () => {
+    it("メモのあるノードが 1 つ以上あれば、件数と連結後の文字数を示す（本文は出さない）", () => {
+      const nodes = [node(1, "a", { note: "メモ1" }), node(2, "b"), node(3, "c", { note: "メモ3" })];
+
+      // "メモ1" + "\n\n" + "メモ3" = 3 + 2 + 3 = 8
+      expect(buildNodeMergePreview(nodes, okPlan(nodes, [1, 2, 3], 1))?.noteText).toBe("2 件のメモを連結（8 文字）");
+    });
+
+    it("文字数は 3 桁区切りで示す", () => {
+      const nodes = [node(1, "a", { note: "a".repeat(10000) }), node(2, "b")];
+
+      expect(buildNodeMergePreview(nodes, okPlan(nodes, [1, 2], 1))?.noteText).toBe("1 件のメモを連結（10,000 文字）");
+    });
+
+    it("メモが 1 つも無ければ null（行を出さない）", () => {
+      const nodes = [node(1, "a"), node(2, "b")];
+
+      expect(buildNodeMergePreview(nodes, okPlan(nodes, [1, 2], 1))?.noteText).toBeNull();
+    });
+  });
+
+  it("note-too-long の計画はプレビューを作らず、状態文言は失敗の文言", () => {
+    const plan: NodeMergePlan = { ok: false, reason: "note-too-long" };
+
+    expect(buildNodeMergePreview([], plan)).toBeNull();
+    expect(describeNodeMergeStatus(false, plan)).toBe("メモをまとめると文字数の上限（10,000 文字）を超えるため、統合できません。");
   });
 });

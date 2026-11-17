@@ -1,5 +1,6 @@
 import type { NodeMergePlan } from "@/domain/nodes/nodeMerge";
 import { formatNodeMergeFailureNotice } from "@/domain/nodes/nodeMergeMessages";
+import { formatNodeNoteLength } from "@/domain/nodes/nodeNote";
 import { STALE_DIALOG_MESSAGE, formatPreviewLabel } from "@/hooks/dialogPreviewText";
 import type { Node } from "@/types/node";
 import type { NodeImportance } from "@/types/nodeImportance";
@@ -25,6 +26,8 @@ export type NodeMergePreview = {
   // 統合されて消えるノードのラベル（配列順で先頭から NODE_MERGE_PREVIEW_LIMIT 件まで。整形前）
   absorbedLabels: readonly string[];
   hiddenAbsorbedCount: number;
+  // メモの連結の説明（「N 件のメモを連結（M 文字）」。本文は長くなるため出さない）。メモが無ければ null
+  noteText: string | null;
 };
 
 // 統合ダイアログの状態文言。stale を最優先し、失敗の計画はその reason の文言にする
@@ -42,6 +45,11 @@ function describeIllustration(plan: Extract<NodeMergePlan, { ok: true }>, labelB
   return `『${formatPreviewLabel(sourceLabel)}』のイラストを引き継ぐ`;
 }
 
+function describeNote(plan: Extract<NodeMergePlan, { ok: true }>): string | null {
+  if (plan.note === undefined) return null;
+  return `${plan.noteSourceCount} 件のメモを連結（${formatNodeNoteLength(plan.note.length)} 文字）`;
+}
+
 // 統合の計画をプレビューの表示用にまとめる。失敗の計画（見せるものが無い）は null
 export function buildNodeMergePreview(nodes: readonly Node[], plan: NodeMergePlan): NodeMergePreview | null {
   if (!plan.ok) return null;
@@ -56,5 +64,6 @@ export function buildNodeMergePreview(nodes: readonly Node[], plan: NodeMergePla
     discardedIllustrationCount: plan.discardedIllustrationCount,
     absorbedLabels: absorbedLabels.slice(0, NODE_MERGE_PREVIEW_LIMIT),
     hiddenAbsorbedCount: Math.max(0, absorbedLabels.length - NODE_MERGE_PREVIEW_LIMIT),
+    noteText: describeNote(plan),
   };
 }

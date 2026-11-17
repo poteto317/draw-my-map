@@ -6,6 +6,7 @@ import {
   planNodeMerge,
   type NodeMergePlan,
 } from "@/domain/nodes/nodeMerge";
+import { NODE_NOTE_MAX_LENGTH } from "@/domain/nodes/nodeNote";
 import { createMapDocument, serializeMapDocument } from "@/domain/persistence/mapDocumentEncoder";
 import { parseMapDocumentJson } from "@/domain/persistence/mapDocumentDecoder";
 import { createTestNode } from "@/testing/createTestNode";
@@ -77,6 +78,8 @@ describe("planNodeMerge", () => {
       illustrationSourceId: null,
       discardedIllustrationCount: 0,
       movedChildCount: 1,
+      note: undefined,
+      noteSourceCount: 0,
     });
   });
 
@@ -179,6 +182,63 @@ describe("planNodeMerge", () => {
     const frozen = Object.freeze(family.map((item) => Object.freeze({ ...item })));
 
     expect(planNodeMerge(frozen, [2, 3], 3, " ", visibleOf(frozen)).ok).toBe(true);
+  });
+
+  describe("メモの連結", () => {
+    // 親 1 の下の兄弟 2・3・4・5。2 と 4 がメモを持ち、3・5 は持たない
+    const withNotes = [
+      node(1, null, "親"),
+      node(2, 1, "a", { note: "メモA" }),
+      node(3, 1, "b"),
+      node(4, 1, "c", { note: "メモC\n2行目" }),
+      node(5, 1, "d"),
+    ];
+
+    it("選択中のメモを配列順に空行で連結し、メモの無いノードは飛ばす（ids の順序に依存しない）", () => {
+      expect(okPlan(withNotes, [4, 3, 2], 3)).toMatchObject({ note: "メモA\n\nメモC\n2行目", noteSourceCount: 2 });
+    });
+
+    it("主選択のメモも、配列上の位置に入る", () => {
+      expect(okPlan(withNotes, [2, 4], 4)).toMatchObject({ note: "メモA\n\nメモC\n2行目", noteSourceCount: 2 });
+    });
+
+    it("メモが 1 つだけなら、そのまま", () => {
+      expect(okPlan(withNotes, [3, 4], 3)).toMatchObject({ note: "メモC\n2行目", noteSourceCount: 1 });
+    });
+
+    it("誰もメモを持たなければ undefined と 0", () => {
+      expect(okPlan(withNotes, [3, 5], 3)).toMatchObject({ note: undefined, noteSourceCount: 0 });
+    });
+
+    it("連結がちょうど上限なら統合できる", () => {
+      const nodes = [
+        node(1, null, "親"),
+        node(2, 1, "a", { note: "a".repeat(5000) }),
+        node(3, 1, "b", { note: "b".repeat(NODE_NOTE_MAX_LENGTH - 5000 - 2) }),
+      ];
+
+      expect(okPlan(nodes, [2, 3], 2).note).toHaveLength(NODE_NOTE_MAX_LENGTH);
+    });
+
+    it("連結が上限を 1 超えると note-too-long（黙って切り詰めない）", () => {
+      const nodes = [
+        node(1, null, "親"),
+        node(2, 1, "a", { note: "a".repeat(5000) }),
+        node(3, 1, "b", { note: "b".repeat(NODE_NOTE_MAX_LENGTH - 5000 - 1) }),
+      ];
+
+      expect(planNodeMerge(nodes, [2, 3], 2, " ", visibleOf(nodes))).toEqual({ ok: false, reason: "note-too-long" });
+    });
+
+    it("メモの長さの検査は different-parents の後（親が違えば、メモが長くても different-parents）", () => {
+      const nodes = [
+        node(1, null, "親"),
+        node(2, 1, "a", { note: "a".repeat(NODE_NOTE_MAX_LENGTH) }),
+        node(3, null, "b", { note: "b".repeat(NODE_NOTE_MAX_LENGTH) }),
+      ];
+
+      expect(planNodeMerge(nodes, [2, 3], 2, " ", visibleOf(nodes))).toEqual({ ok: false, reason: "different-parents" });
+    });
   });
 
   describe("各 reason と、検査の順序", () => {
@@ -294,6 +354,11 @@ describe("isSameNodeMergePlan", () => {
     it("付け替える子の件数が違う計画は偽", () => {
       expect(isSameNodeMergePlan(base, { ...base, movedChildCount: base.movedChildCount + 1 })).toBe(false);
     });
+  });
+
+  it("連結したメモ・メモの件数が違えば偽（プレビューで見せた内容が確定時に変わっていない。L-036）", () => {
+    expect(isSameNodeMergePlan(base, { ...base, note: "確認の後に書いたメモ" })).toBe(false);
+    expect(isSameNodeMergePlan(base, { ...base, noteSourceCount: base.noteSourceCount + 1 })).toBe(false);
   });
 
   it("吸収されるノードの順が違えば偽", () => {
@@ -459,6 +524,50 @@ describe("mergeNodes", () => {
 
       expect(byId(result.nodes, 3)).toMatchObject({ x: 200, y: 100 });
       expect(byId(result.nodes, 1)).toMatchObject({ x: 0, y: 0 });
+    });
+  });
+
+  describe("詳細メモ", () => {
+    const withNotes = [
+      node(1, null, "親"),
+      node(2, 1, "a", { note: "メモA" }),
+      node(3, 1, "b"),
+      node(4, 1, "c", { note: "メモC" }),
+    ];
+
+    it("残すノードのメモは、選択中のメモを配列順に空行で連結したもの（残すノードがメモを持たなくても付く）", () => {
+      const survivor = byId(merged(withNotes, [2, 3, 4], 3).nodes, 3);
+
+      expect(survivor.note).toBe("メモA\n\nメモC");
+    });
+
+    it("残すノードだけがメモを持つときは、そのメモのまま", () => {
+      const survivor = byId(merged(withNotes, [2, 3], 2).nodes, 2);
+
+      expect(survivor.note).toBe("メモA");
+    });
+
+    it("誰もメモを持たなければ note のキーを持たない", () => {
+      const plain = [node(1, null, "親"), node(2, 1, "a"), node(3, 1, "b")];
+
+      expect("note" in byId(merged(plain, [2, 3], 2).nodes, 2)).toBe(false);
+    });
+
+    it("連結が上限を超えるときは note-too-long を返し、統合しない", () => {
+      const long = [
+        node(1, null, "親"),
+        node(2, 1, "a", { note: "a".repeat(6000) }),
+        node(3, 1, "b", { note: "b".repeat(4000) }),
+      ];
+
+      expect(mergeNodes(long, [2, 3], 2, " ", visibleOf(long), "manual")).toEqual({ ok: false, reason: "note-too-long" });
+    });
+
+    it("連結したメモは保存と読み込みで往復する", () => {
+      const result = merged(withNotes, [2, 3, 4], 3);
+      const parsed = parseMapDocumentJson(serializeMapDocument(createMapDocument(result.nodes, "manual")));
+
+      expect(parsed.ok && parsed.value.nodes.find((item) => item.id === 3)?.note).toBe("メモA\n\nメモC");
     });
   });
 
