@@ -28,6 +28,15 @@ describe("normalizeMapDocumentNodeTags", () => {
       .toEqual({ ok: true, value: ["Python", "重要"] });
   });
 
+  it("U+200D・U+FE0F を挟んだだけの違いは同じタグとみなし、後のものを捨てる（最初の表記を残す）", () => {
+    expect(normalizeMapDocumentNodeTags(["AI", "A\u200dI", "A\ufe0fI"], 0, 3)).toEqual({ ok: true, value: ["AI"] });
+  });
+
+  it("絵文字（ZWJ・異体字セレクタを含む）は名前をそのまま保つ", () => {
+    expect(normalizeMapDocumentNodeTags(["\u{1F468}\u200d\u{1F469}", "\u2764\ufe0f"], 0, 3))
+      .toEqual({ ok: true, value: ["\u{1F468}\u200d\u{1F469}", "\u2764\ufe0f"] });
+  });
+
   it("空の配列は undefined（項目ごと持たない）", () => {
     expect(normalizeMapDocumentNodeTags([], 0, 3)).toEqual({ ok: true, value: undefined });
   });
@@ -51,6 +60,8 @@ describe("normalizeMapDocumentNodeTags", () => {
     ["制御文字を含む要素", ["a\u0000b"]],
     ["ゼロ幅スペースを含む要素", ["a\u200bb"]],
     ["WORD JOINER（U+2060）を含む要素", ["A\u2060I"]],
+    ["U+200D だけの要素（見た目が空）", ["\u200d"]],
+    ["U+FE0F だけの要素（見た目が空）", ["\ufe0f"]],
     ["31 文字の要素", ["a".repeat(NODE_TAG_MAX_LENGTH + 1)]],
     ["11 件", tagsOf(NODE_TAGS_MAX_COUNT + 1)],
     ["正しい要素の後ろに不正な要素", ["重要", "a\u0000b"]],

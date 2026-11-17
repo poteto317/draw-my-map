@@ -85,6 +85,15 @@ describe("normalizeNodeTagName", () => {
   });
 
   it.each<[string, string]>([
+    ["U+200D だけ", "\u200d"],
+    ["U+FE0F だけ", "\ufe0f"],
+    ["U+FE0E だけ", "\ufe0e"],
+    ["U+200D と U+FE0F だけ", "\u200d\ufe0f"],
+  ])("許可した見えない書式文字だけの名前（%s）は、見た目が空なので invalid で拒否する", (_name, input) => {
+    expect(normalizeNodeTagName(input)).toEqual({ ok: false, reason: "invalid" });
+  });
+
+  it.each<[string, string]>([
     ["家族の絵文字（U+200D で連結）", "\u{1F468}\u200d\u{1F469}\u200d\u{1F467}"],
     ["絵文字表示の異体字セレクタ U+FE0F", "\u2764\ufe0f"],
     ["テキスト表示の異体字セレクタ U+FE0E", "\u2764\ufe0e"],
@@ -150,6 +159,15 @@ describe("nodeTagKey", () => {
     expect(nodeTagKey("Ｐｙｔｈｏｎ")).toBe("python");
   });
 
+  it.each<[string, string, string]>([
+    ["U+200D（ZWJ）を挟んだもの", "A\u200dI", "AI"],
+    ["U+FE0F（絵文字表示の異体字セレクタ）を挟んだもの", "A\ufe0fI", "AI"],
+    ["U+FE0E（テキスト表示の異体字セレクタ）を挟んだもの", "A\ufe0eI", "AI"],
+    ["絵文字の ❤ と ❤️", "\u2764", "\u2764\ufe0f"],
+  ])("%s は、ないものと同じ鍵にする", (_name, a, b) => {
+    expect(nodeTagKey(a)).toBe(nodeTagKey(b));
+  });
+
   it("空白の有無は区別する（空白は名前の検査でまとめる）", () => {
     expect(nodeTagKey("機械学習")).not.toBe(nodeTagKey("機械 学習"));
   });
@@ -175,6 +193,11 @@ describe("areNodeTagsEqual", () => {
 describe("uniqueNodeTags", () => {
   it("nodeTagKey が同じものは最初に出てきたものを残して除き、順と表記を保つ", () => {
     expect(uniqueNodeTags(["Python", "設計", "python", "ＰＹＴＨＯＮ", "レビュー", "設計"])).toEqual(["Python", "設計", "レビュー"]);
+  });
+
+  it("U+200D・U+FE0F・U+FE0E を挟んだだけの違いは同じタグとみなし、最初の表記を残す", () => {
+    expect(uniqueNodeTags(["AI", "A\u200dI", "A\ufe0fI", "A\ufe0eI"])).toEqual(["AI"]);
+    expect(uniqueNodeTags(["A\u200dI", "AI"])).toEqual(["A\u200dI"]);
   });
 
   it("空の並びは空の並びを返す", () => {
@@ -222,6 +245,7 @@ describe("addNodeTag", () => {
     Object.freeze(createTestNode({ id: 1, label: "タグあり", tags: ["Python"] })),
     Object.freeze(createTestNode({ id: 2, label: "タグなし", x: 200 })),
     Object.freeze(createTestNode({ id: 3, label: "上限", x: 400, tags: tagsOf(NODE_TAGS_MAX_COUNT) })),
+    Object.freeze(createTestNode({ id: 4, label: "AI", x: 600, tags: ["AI"] })),
   ]);
 
   function success(id: number, input: string): Node[] {
@@ -236,6 +260,21 @@ describe("addNodeTag", () => {
     expect(next[0].tags).toEqual(["Python", "機械 学習"]);
     expect(next[1]).toBe(nodes[1]);
     expect(next[2]).toBe(nodes[2]);
+  });
+
+  it("絵文字（ZWJ・異体字セレクタを含む）は追加でき、名前は入力どおりに保存する", () => {
+    const family = "\u{1F468}\u200d\u{1F469}";
+    const heart = "\u2764\ufe0f";
+
+    expect(success(2, family)[1].tags).toEqual([family]);
+    expect(success(2, heart)[1].tags).toEqual([heart]);
+  });
+
+  it("❤ と ❤️ は同じタグ（後から足す表記は duplicate。保存済みの表記はそのまま）", () => {
+    const heart = "\u2764\ufe0f";
+    const withHeart = [createTestNode({ id: 1, tags: [heart] })];
+
+    expect(addNodeTag(withHeart, 1, "\u2764")).toEqual({ ok: false, reason: "duplicate" });
   });
 
   it("タグの無いノードには 1 件の並びを作る", () => {
@@ -257,6 +296,12 @@ describe("addNodeTag", () => {
     ["見えない書式文字を挟んだだけの同じ見た目のタグ（重複ではなく invalid）", 1, "P\u2060ython", "invalid"],
     ["大文字小文字だけが違う同じタグがすでにある", 1, "python", "duplicate"],
     ["全角半角だけが違う同じタグがすでにある", 1, "Ｐｙｔｈｏｎ", "duplicate"],
+    ["U+200D（ZWJ）を挟んだだけの同じ見た目のタグがすでにある", 4, "A\u200dI", "duplicate"],
+    ["U+FE0F を挟んだだけの同じ見た目のタグがすでにある", 4, "A\ufe0fI", "duplicate"],
+    ["U+FE0E を挟んだだけの同じ見た目のタグがすでにある", 4, "A\ufe0eI", "duplicate"],
+    ["U+200D だけの名前（見た目が空）", 2, "\u200d", "invalid"],
+    ["U+FE0F だけの名前（見た目が空）", 2, "\ufe0f", "invalid"],
+    ["U+200D と U+FE0F だけの名前（見た目が空）", 2, "\u200d\ufe0f", "invalid"],
     ["上限の 10 件に達している", 3, "重要", "too-many"],
     ["上限に達していても、同じタグなら duplicate を先に返す", 3, "TAG0", "duplicate"],
     ["上限に達していても、タグ名が不正なら名前の理由を先に返す", 3, "a\u0000b", "invalid"],
