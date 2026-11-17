@@ -2,17 +2,21 @@ import { IllustrationPanel } from "@/components/layout/IllustrationPanel";
 import { NodeLinksSection } from "@/components/layout/NodeLinksSection";
 import { NodeNoteEditor } from "@/components/layout/NodeNoteEditor";
 import { NodeNoteSection } from "@/components/layout/NodeNoteSection";
+import { NodeTagsSection } from "@/components/layout/NodeTagsSection";
 import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
 import type { AddNodeLinkOutcome } from "@/domain/nodes/nodeLink";
+import type { AddNodeTagOutcome } from "@/domain/nodes/nodeTag";
 import type { IllustrationGenerationState } from "@/types/illustrationGeneration";
 import type { Node } from "@/types/node";
 
 type NodeDetailPanelProps = {
-  selectedNode: Pick<Node, "id" | "label" | "note" | "links" | "illustration"> | null;
+  selectedNode: Pick<Node, "id" | "label" | "note" | "tags" | "links" | "illustration"> | null;
   selectionCount: number;
   documentRevision: number;
   onPreviewNote: (id: number, note: string) => boolean;
   onBeginNoteEdit: () => MapHistoryGroupLease;
+  onAddTag: (id: number, input: string) => AddNodeTagOutcome;
+  onRemoveTag: (id: number, tag: string) => boolean;
   onAddLink: (id: number, input: string) => AddNodeLinkOutcome;
   onRemoveLink: (id: number, url: string) => boolean;
   generation: IllustrationGenerationState;
@@ -21,13 +25,15 @@ type NodeDetailPanelProps = {
   onRemove: (nodeId: number) => void;
 };
 
-// 右のパネル。上から詳細メモ、リンク、イラストを縦に積み、内容が高さを超えたら縦にスクロールする
+// 右のパネル。上から詳細メモ、タグ、リンク、イラストを縦に積み、内容が高さを超えたら縦にスクロールする
 export function NodeDetailPanel({
   selectedNode,
   selectionCount,
   documentRevision,
   onPreviewNote,
   onBeginNoteEdit,
+  onAddTag,
+  onRemoveTag,
   onAddLink,
   onRemoveLink,
   generation,
@@ -51,8 +57,16 @@ export function NodeDetailPanel({
           onBeginNoteEdit={onBeginNoteEdit}
         />
       )}
-      {/* key はノードの ID だけ（兄弟の NodeNoteEditor と重ならないよう接頭辞を付ける）。documentRevision では作り直さず、
-          節の中で下書きとエラーだけを消す（作り直すとリンク・削除ボタンのフォーカスが body へ落ちる。L-155・L-588） */}
+      {/* タグ・リンクの節の key はノードの ID だけ（兄弟の NodeNoteEditor や互いと重ならないよう接頭辞を付ける）。
+          documentRevision では作り直さず、節の中で下書きとエラーだけを消す（作り直すとリンク・削除ボタンのフォーカスが
+          body へ落ちる。L-155・L-588） */}
+      <NodeTagsSection
+        key={selectedNode === null ? "tags:none" : `tags:${selectedNode.id}`}
+        node={selectedNode}
+        documentRevision={documentRevision}
+        onAddTag={onAddTag}
+        onRemoveTag={onRemoveTag}
+      />
       <NodeLinksSection
         key={selectedNode === null ? "links:none" : `links:${selectedNode.id}`}
         node={selectedNode}
