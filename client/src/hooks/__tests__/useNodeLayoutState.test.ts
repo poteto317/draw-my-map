@@ -432,6 +432,80 @@ describe("useNodeLayoutState", () => {
       expect(result.current.nodes).toBe(start);
     });
 
+    describe("applyNonStructuralPreview", () => {
+      it("グループ中は表示上の現在値だけを更新し、終了時に1操作として記録する（途中の値は履歴に残らない）", () => {
+        const { result } = renderHook(() => useNodeLayoutState());
+        const start = [node(1, null, 50, 70)];
+        act(() => { result.current.applyNonStructuralChange(() => start); });
+
+        act(() => {
+          const lease = result.current.beginMoveHistory();
+          result.current.applyNonStructuralPreview((current) => current.map((item) => ({ ...item, label: "途中" })));
+          result.current.applyNonStructuralPreview((current) => current.map((item) => ({ ...item, label: "最後" })));
+          lease.finish();
+        });
+        expect(result.current.nodes[0].label).toBe("最後");
+
+        act(() => { result.current.undo(); });
+        expect(result.current.nodes).toBe(start);
+        act(() => { result.current.undo(); });
+        expect(result.current.nodes).toEqual([]);
+        expect(result.current.canUndo).toBe(false);
+      });
+
+      it("グループ外では1操作として確定する", () => {
+        const { result } = renderHook(() => useNodeLayoutState());
+        const start = [node(1, null, 50, 70)];
+        act(() => result.current.replaceLayoutState(start, "manual"));
+        let applied!: boolean;
+
+        act(() => {
+          applied = result.current.applyNonStructuralPreview((current) => current.map((item) => ({ ...item, label: "確定" })));
+        });
+
+        expect(applied).toBe(true);
+        expect(result.current.canUndo).toBe(true);
+        act(() => { result.current.undo(); });
+        expect(result.current.nodes).toBe(start);
+      });
+
+      it("自動配置でも候補を受理し、再配置しない（applyManualMove と違い配置モードに依存しない）", () => {
+        const { result } = renderHook(() => useNodeLayoutState());
+        act(() => result.current.replaceLayoutState([node(1, null, 900, 800)], "auto"));
+        let applied!: boolean;
+
+        act(() => {
+          applied = result.current.applyNonStructuralPreview((current) => current.map((item) => ({ ...item, label: "メモ" })));
+        });
+
+        expect(applied).toBe(true);
+        expect(result.current.nodes[0]).toMatchObject({ x: 900, y: 800, label: "メモ" });
+        expect(result.current.layoutMode).toBe("auto");
+      });
+
+      it("null の候補は false を返し、状態と履歴を変えない", () => {
+        const { result } = renderHook(() => useNodeLayoutState());
+        const start = [node(1, null, 50, 70)];
+        act(() => result.current.replaceLayoutState(start, "manual"));
+        let applied!: boolean;
+
+        act(() => { applied = result.current.applyNonStructuralPreview(() => null); });
+
+        expect(applied).toBe(false);
+        expect(result.current.nodes).toBe(start);
+        expect(result.current.canUndo).toBe(false);
+      });
+
+      it("関数参照は更新後も安定している", () => {
+        const { result } = renderHook(() => useNodeLayoutState());
+        const { applyNonStructuralPreview } = result.current;
+
+        act(() => { result.current.applyNonStructuralPreview(() => [node(1, null, 50, 70)]); });
+
+        expect(result.current.applyNonStructuralPreview).toBe(applyNonStructuralPreview);
+      });
+    });
+
     it("履歴操作の関数参照は更新後も安定している", () => {
       const { result } = renderHook(() => useNodeLayoutState());
       const { undo, redo, beginMoveHistory, replaceLayoutState } = result.current;

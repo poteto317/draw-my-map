@@ -14,6 +14,8 @@ type UseNodeLayoutStateReturn = {
   // 同じイベント内の直前の変更も含めた最新の状態を読み取る。状態と履歴は変えない
   getCurrentState: () => NodeMapState;
   applyNonStructuralChange: (update: NodeChange) => boolean;
+  // 配置モードに依存しない非構造の変更。グループ中は表示上の現在値だけを更新し、グループ外では1操作として確定する
+  applyNonStructuralPreview: (update: NodeChange) => boolean;
   applyManualMove: (update: NodeChange) => boolean;
   applyTreeChange: (update: TreeChange) => boolean;
   setLayoutMode: (mode: NodeLayoutMode) => void;
@@ -58,6 +60,17 @@ export function useNodeLayoutState(): UseNodeLayoutStateReturn {
     return true;
   }, [getPresent, commit]);
 
+  // 履歴グループ中は表示上の現在値だけを更新し、グループ外では1操作として確定する。
+  // applyManualMove と違い、自動配置でも受理する（詳細メモの途中反映に使う）
+  const applyNonStructuralPreview = useCallback((update: NodeChange): boolean => {
+    const current = getPresent();
+    const nextNodes = update(current.nodes);
+    if (!nextNodes) return false;
+
+    preview({ layoutMode: current.layoutMode, nodes: nextNodes });
+    return true;
+  }, [getPresent, preview]);
+
   // 移動グループ中は表示上の現在値だけを更新し、グループ外では1操作として確定する
   const applyManualMove = useCallback((update: NodeChange): boolean => {
     const current = getPresent();
@@ -100,6 +113,7 @@ export function useNodeLayoutState(): UseNodeLayoutStateReturn {
     canRedo,
     getCurrentState: getPresent,
     applyNonStructuralChange,
+    applyNonStructuralPreview,
     applyManualMove,
     applyTreeChange,
     setLayoutMode,
