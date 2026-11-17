@@ -133,3 +133,11 @@ describe("イラスト付きノード", () => {
     expect(labels).toContain(`<tspan x="${10 + 5 + 50}" y="${layout.firstBaseline}">予算</tspan>`);
   });
 });
+
+it("URL の有無で画像書き出しの内容は変わらない（リンクありの印はキャンバス表示専用）", () => {
+  const bounds = { minX: 0, minY: 0, width: 164, height: 124, offsetX: 32, offsetY: 32 };
+  const plain = createTestNode({ label: "資料" });
+
+  expect(createMapSvgNodes([{ ...plain, links: ["https://example.com/"] }], bounds, measureText))
+    .toEqual(createMapSvgNodes([plain], bounds, measureText));
+});
