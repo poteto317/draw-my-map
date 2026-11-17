@@ -17,6 +17,7 @@ function preview(overrides: Partial<NodeMergePreview> = {}): NodeMergePreview {
     absorbedLabels: ["りんご"],
     hiddenAbsorbedCount: 0,
     noteText: null,
+    linkText: null,
     ...overrides,
   };
 }
@@ -106,6 +107,21 @@ describe("NodeMergeDialog", () => {
       renderDialog({ preview: preview({ noteText: null }) });
 
       expect(screen.queryByText("メモ")).toBeNull();
+    });
+
+    it("URL を連結するときは「URL」の行に件数を出す。見出しは縮まない", () => {
+      renderDialog({ preview: preview({ linkText: "3 件（重複 1 件を除く）" }) });
+
+      const term = screen.getByText("URL");
+      expect(term.tagName).toBe("DT");
+      expect(term).toHaveClass("shrink-0");
+      expect(term.nextElementSibling).toHaveTextContent("3 件（重複 1 件を除く）");
+    });
+
+    it("URL が無いときは「URL」の行を出さない", () => {
+      renderDialog({ preview: preview({ linkText: null }) });
+
+      expect(screen.queryByText("URL")).toBeNull();
     });
 
     it("残すノードのラベルを出し、空のラベルは「（空）」、空白だけなら「（空白のみ）」にする", () => {

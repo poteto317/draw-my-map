@@ -3,6 +3,7 @@ import { keepFirstRootPosition } from "@/domain/nodes/nodeFirstRootPosition";
 import { hasInvalidNodeGeometry } from "@/domain/nodes/nodeGeometryValidation";
 import { maxNodeImportance } from "@/domain/nodes/nodeImportance";
 import { indexNodeForest } from "@/domain/nodes/nodeLayoutForest";
+import { NODE_LINKS_MAX_COUNT, areNodeLinksEqual, withNodeLinks } from "@/domain/nodes/nodeLink";
 import { NODE_NOTE_MERGE_JOINER, isNodeNoteWithinLimit, withNodeNote } from "@/domain/nodes/nodeNote";
 import type { Node } from "@/types/node";
 import type { NodeImportance } from "@/types/nodeImportance";
@@ -18,6 +19,8 @@ export type NodeMergeFailureReason =
   | "placement-failed"
   // 選択中のメモを連結すると上限（NODE_NOTE_MAX_LENGTH）を超える。黙って切り詰めない
   | "note-too-long"
+  // 選択中の URL を重複を除いて連結すると上限（NODE_LINKS_MAX_COUNT）を超える。黙って切り詰めない
+  | "links-too-many"
   // 確定時の再計画が、プレビューで見せた計画と違う（useNodes.mergeNodes が返す）
   | "plan-changed";
 
@@ -42,6 +45,12 @@ export type NodeMergePlan =
     note: string | undefined;
     // メモを持つノードの件数（プレビューで見せる）
     noteSourceCount: number;
+    // 選択中のノードの URL を配列順に並べ、最初に出てきたものを残して重複を除いたもの。1 つも無ければ undefined
+    links: readonly string[] | undefined;
+    // URL を持つノードの件数
+    linkSourceCount: number;
+    // 重複で捨てる URL の件数（プレビューで見せる）
+    linkDuplicateCount: number;
   }
   | { ok: false; reason: NodeMergeFailureReason };
 
@@ -123,8 +132,13 @@ export function planNodeMerge(
   const illustrationCount = selected.filter((node) => node.illustration !== undefined).length;
   const notes = selected.flatMap((node) => (node.note === undefined ? [] : [node.note]));
   const note = notes.length === 0 ? undefined : notes.join(NODE_NOTE_MERGE_JOINER);
-  // 検査の順の最後（different-parents の後）
+  // 検査の順: different-parents の後
   if (note !== undefined && !isNodeNoteWithinLimit(note)) return failed("note-too-long");
+  const linkLists = selected.flatMap((node) => (node.links === undefined || node.links.length === 0 ? [] : [node.links]));
+  const allLinks = linkLists.flat();
+  const links = [...new Set(allLinks)];
+  // 検査の順の最後（note-too-long の後）
+  if (links.length > NODE_LINKS_MAX_COUNT) return failed("links-too-many");
 
   return {
     ok: true,
@@ -138,11 +152,15 @@ export function planNodeMerge(
     movedChildCount: nodes.filter((node) => node.parentId !== null && absorbedIdSet.has(node.parentId)).length,
     note,
     noteSourceCount: notes.length,
+    links: links.length === 0 ? undefined : links,
+    linkSourceCount: linkLists.length,
+    linkDuplicateCount: allLinks.length - links.length,
   };
 }
 
 // 確定時の再計画とプレビューの計画が同じか。プレビューで見せた内容（残すノード・吸収されるノードの順・ラベル・重要度・
-// イラストの扱いと引き継ぎ元・失われるイラストの件数・付け替える子の件数・連結したメモとその件数）で比べる（L-036）。
+// イラストの扱いと引き継ぎ元・失われるイラストの件数・付け替える子の件数・連結したメモとその件数・連結した URL と
+// その元の件数・重複で捨てる件数）で比べる（L-036）。URL は要素ごとに比べる（別の配列でも内容が同じなら同じ）。
 // 引き継ぐイラスト本体は illustrationFrom と引き継ぎ元で決まるので比べない。失敗した計画は同じとみなさない
 export function isSameNodeMergePlan(a: NodeMergePlan, b: NodeMergePlan): boolean {
   if (!a.ok || !b.ok) return false;
@@ -155,17 +173,24 @@ export function isSameNodeMergePlan(a: NodeMergePlan, b: NodeMergePlan): boolean
     && a.movedChildCount === b.movedChildCount
     && a.note === b.note
     && a.noteSourceCount === b.noteSourceCount
+    && areNodeLinksEqual(a.links, b.links)
+    && a.linkSourceCount === b.linkSourceCount
+    && a.linkDuplicateCount === b.linkDuplicateCount
     && a.absorbedIds.length === b.absorbedIds.length
     && a.absorbedIds.every((id, index) => id === b.absorbedIds[index]);
 }
 
 // 残すノードの属性を計画どおりに更新する。位置と大きさは変えない（イラストを引き継ぐときだけ、
 // attachIllustration と同じ規則で高さをイラスト付きの高さにする）。メモは計画の連結結果で置き換え
-// （残すノードのメモも連結に含まれるので失われない）、連結結果が無ければ note のキーを持たせない。
+// （残すノードのメモも連結に含まれるので失われない）、連結結果が無ければ note のキーを持たせない。URL も同じく
+// 計画の連結結果で置き換え、連結結果が無ければ links のキーを持たせない。
 // Node に属性を足したときは、ここで残すノードの値を残すか、吸収されるノードの値を引き継ぐかを決める
 // （何もしないと、吸収されるノードの値は警告なしに捨てられる）。計画・プレビュー・isSameNodeMergePlan も合わせて見直す
 function applyPlanToSurvivor(survivor: Node, plan: Extract<NodeMergePlan, { ok: true }>): Node {
-  const updated = withNodeNote({ ...survivor, label: plan.label, importance: plan.importance }, plan.note);
+  const updated = withNodeLinks(
+    withNodeNote({ ...survivor, label: plan.label, importance: plan.importance }, plan.note),
+    plan.links,
+  );
   if (plan.illustrationFrom !== "absorbed" || plan.illustration === undefined) return updated;
   return { ...updated, illustration: plan.illustration, height: ILLUSTRATED_NODE_HEIGHT };
 }

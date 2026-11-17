@@ -12,6 +12,7 @@ describe("formatNodeMergeFailureNotice", () => {
     ["plan-changed", "統合の内容が変わりました。もう一度確認してください。"],
     ["placement-failed", "ノードを統合できませんでした。"],
     ["note-too-long", "メモをまとめると文字数の上限（10,000 文字）を超えるため、統合できません。"],
+    ["links-too-many", "URLをまとめると件数の上限（10 件）を超えるため、統合できません。"],
   ];
 
   it.each(cases)("%s はエラーの通知「%s」にする", (reason, message) => {

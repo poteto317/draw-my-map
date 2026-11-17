@@ -6,6 +6,7 @@ import {
   planNodeMerge,
   type NodeMergePlan,
 } from "@/domain/nodes/nodeMerge";
+import { NODE_LINKS_MAX_COUNT } from "@/domain/nodes/nodeLink";
 import { NODE_NOTE_MAX_LENGTH } from "@/domain/nodes/nodeNote";
 import { createMapDocument, serializeMapDocument } from "@/domain/persistence/mapDocumentEncoder";
 import { parseMapDocumentJson } from "@/domain/persistence/mapDocumentDecoder";
@@ -16,6 +17,15 @@ import type { NodeLayoutMode } from "@/types/nodeLayout";
 
 function node(id: number, parentId: number | null, label: string, overrides: Partial<Node> = {}): Node {
   return createTestNode({ id, parentId, label, x: id * 10, y: id * 20, ...overrides });
+}
+
+const LINK_A = "https://example.com/a";
+const LINK_B = "https://example.com/b";
+const LINK_C = "https://example.org/c";
+
+// 正規化済みの URL を count 件（https://example.com/{prefix}0 …）
+function urls(prefix: string, count: number): string[] {
+  return Array.from({ length: count }, (_, index) => `https://example.com/${prefix}${index}`);
 }
 
 function visibleOf(nodes: readonly Node[]): Set<number> {
@@ -80,6 +90,9 @@ describe("planNodeMerge", () => {
       movedChildCount: 1,
       note: undefined,
       noteSourceCount: 0,
+      links: undefined,
+      linkSourceCount: 0,
+      linkDuplicateCount: 0,
     });
   });
 
@@ -241,6 +254,74 @@ describe("planNodeMerge", () => {
     });
   });
 
+  describe("URL の連結", () => {
+    // 親 1 の下の兄弟 2・3・4・5。2・4・5 が URL を持ち、3 は持たない。B と C は 2 つのノードが持つ
+    const withLinks = [
+      node(1, null, "親"),
+      node(2, 1, "a", { links: [LINK_A, LINK_B] }),
+      node(3, 1, "b"),
+      node(4, 1, "c", { links: [LINK_B, LINK_C] }),
+      node(5, 1, "d", { links: [LINK_C] }),
+    ];
+
+    it("選択中の URL を配列順に並べ、最初に出てきたものを残して重複を除く（ids の順序に依存しない）", () => {
+      expect(okPlan(withLinks, [5, 4, 3, 2], 3)).toMatchObject({
+        links: [LINK_A, LINK_B, LINK_C],
+        linkSourceCount: 3,
+        linkDuplicateCount: 2,
+      });
+    });
+
+    it("主選択の URL も、配列上の位置に入る", () => {
+      expect(okPlan(withLinks, [2, 4], 4)).toMatchObject({
+        links: [LINK_A, LINK_B, LINK_C],
+        linkSourceCount: 2,
+        linkDuplicateCount: 1,
+      });
+    });
+
+    it("URL を持つノードが 1 つだけなら、その URL のまま（重複 0 件）", () => {
+      expect(okPlan(withLinks, [3, 2], 3)).toMatchObject({ links: [LINK_A, LINK_B], linkSourceCount: 1, linkDuplicateCount: 0 });
+    });
+
+    it("誰も URL を持たなければ undefined と 0 件", () => {
+      const plain = [node(1, null, "親"), node(2, 1, "a"), node(3, 1, "b")];
+
+      expect(okPlan(plain, [2, 3], 2)).toMatchObject({ links: undefined, linkSourceCount: 0, linkDuplicateCount: 0 });
+    });
+
+    it("重複を除いてちょうど上限（10 件）なら統合できる", () => {
+      const nodes = [
+        node(1, null, "親"),
+        node(2, 1, "a", { links: urls("a", 6) }),
+        node(3, 1, "b", { links: [...urls("a", 2), ...urls("b", 4)] }),
+      ];
+
+      expect(okPlan(nodes, [2, 3], 2)).toMatchObject({ linkSourceCount: 2, linkDuplicateCount: 2 });
+      expect(okPlan(nodes, [2, 3], 2).links).toHaveLength(NODE_LINKS_MAX_COUNT);
+    });
+
+    it("重複を除いて上限を 1 超えると links-too-many（黙って切り詰めない）", () => {
+      const nodes = [
+        node(1, null, "親"),
+        node(2, 1, "a", { links: urls("a", 6) }),
+        node(3, 1, "b", { links: urls("b", 5) }),
+      ];
+
+      expect(planNodeMerge(nodes, [2, 3], 2, " ", visibleOf(nodes))).toEqual({ ok: false, reason: "links-too-many" });
+    });
+
+    it("URL の件数の検査は note-too-long の後（メモも長ければ note-too-long）", () => {
+      const nodes = [
+        node(1, null, "親"),
+        node(2, 1, "a", { links: urls("a", 6), note: "a".repeat(NODE_NOTE_MAX_LENGTH) }),
+        node(3, 1, "b", { links: urls("b", 5), note: "b" }),
+      ];
+
+      expect(planNodeMerge(nodes, [2, 3], 2, " ", visibleOf(nodes))).toEqual({ ok: false, reason: "note-too-long" });
+    });
+  });
+
   describe("各 reason と、検査の順序", () => {
     const failure = (
       nodes: readonly Node[],
@@ -359,6 +440,19 @@ describe("isSameNodeMergePlan", () => {
   it("連結したメモ・メモの件数が違えば偽（プレビューで見せた内容が確定時に変わっていない。L-036）", () => {
     expect(isSameNodeMergePlan(base, { ...base, note: "確認の後に書いたメモ" })).toBe(false);
     expect(isSameNodeMergePlan(base, { ...base, noteSourceCount: base.noteSourceCount + 1 })).toBe(false);
+  });
+
+  it("連結した URL・URL の件数・重複の件数が違えば偽（L-036）", () => {
+    expect(isSameNodeMergePlan(base, { ...base, links: [LINK_A] })).toBe(false);
+    expect(isSameNodeMergePlan(base, { ...base, linkSourceCount: base.linkSourceCount + 1 })).toBe(false);
+    expect(isSameNodeMergePlan(base, { ...base, linkDuplicateCount: base.linkDuplicateCount + 1 })).toBe(false);
+  });
+
+  it("連結した URL は要素ごとに比べる（別の配列でも内容が同じなら真、順が違えば偽）", () => {
+    const withLinks = { ...base, links: [LINK_A, LINK_B] };
+
+    expect(isSameNodeMergePlan(withLinks, { ...base, links: [LINK_A, LINK_B] })).toBe(true);
+    expect(isSameNodeMergePlan(withLinks, { ...base, links: [LINK_B, LINK_A] })).toBe(false);
   });
 
   it("吸収されるノードの順が違えば偽", () => {
@@ -568,6 +662,46 @@ describe("mergeNodes", () => {
       const parsed = parseMapDocumentJson(serializeMapDocument(createMapDocument(result.nodes, "manual")));
 
       expect(parsed.ok && parsed.value.nodes.find((item) => item.id === 3)?.note).toBe("メモA\n\nメモC");
+    });
+  });
+
+  describe("URL", () => {
+    const withLinks = [
+      node(1, null, "親"),
+      node(2, 1, "a", { links: [LINK_A, LINK_B] }),
+      node(3, 1, "b"),
+      node(4, 1, "c", { links: [LINK_B, LINK_C] }),
+    ];
+
+    it("残すノードの URL は、選択中の URL を配列順に重複を除いて並べたもの（残すノードが URL を持たなくても付く）", () => {
+      expect(byId(merged(withLinks, [2, 3, 4], 3).nodes, 3).links).toEqual([LINK_A, LINK_B, LINK_C]);
+    });
+
+    it("残すノードだけが URL を持つときは、その URL のまま", () => {
+      expect(byId(merged(withLinks, [2, 3], 2).nodes, 2).links).toEqual([LINK_A, LINK_B]);
+    });
+
+    it("誰も URL を持たなければ links のキーを持たない", () => {
+      const plain = [node(1, null, "親"), node(2, 1, "a"), node(3, 1, "b")];
+
+      expect("links" in byId(merged(plain, [2, 3], 2).nodes, 2)).toBe(false);
+    });
+
+    it("重複を除いて上限を超えるときは links-too-many を返し、統合しない", () => {
+      const many = [
+        node(1, null, "親"),
+        node(2, 1, "a", { links: urls("a", 6) }),
+        node(3, 1, "b", { links: urls("b", 5) }),
+      ];
+
+      expect(mergeNodes(many, [2, 3], 2, " ", visibleOf(many), "manual")).toEqual({ ok: false, reason: "links-too-many" });
+    });
+
+    it("連結した URL は保存と読み込みで往復する", () => {
+      const result = merged(withLinks, [2, 3, 4], 3);
+      const parsed = parseMapDocumentJson(serializeMapDocument(createMapDocument(result.nodes, "manual")));
+
+      expect(parsed.ok && parsed.value.nodes.find((item) => item.id === 3)?.links).toEqual([LINK_A, LINK_B, LINK_C]);
     });
   });
 
