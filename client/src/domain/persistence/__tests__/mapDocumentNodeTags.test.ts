@@ -32,6 +32,13 @@ describe("normalizeMapDocumentNodeTags", () => {
     expect(normalizeMapDocumentNodeTags(["AI", "A\u200dI", "A\ufe0fI"], 0, 3)).toEqual({ ok: true, value: ["AI"] });
   });
 
+  it("合成済みの文字と、U+200D で合成が途切れた並び（é・ガ・가・Å）は同じタグとみなし、後のものを捨てる", () => {
+    expect(normalizeMapDocumentNodeTags(["\u00e9", "e\u200d\u0301"], 0, 3)).toEqual({ ok: true, value: ["\u00e9"] });
+    expect(normalizeMapDocumentNodeTags(["\u30ac", "\uff76\u200d\uff9e", "\u30ab\u200d\u3099"], 0, 3)).toEqual({ ok: true, value: ["\u30ac"] });
+    expect(normalizeMapDocumentNodeTags(["\uac00", "\u1100\u200d\u1161"], 0, 3)).toEqual({ ok: true, value: ["\uac00"] });
+    expect(normalizeMapDocumentNodeTags(["\u00c5", "A\ufe0e\u030a"], 0, 3)).toEqual({ ok: true, value: ["\u00c5"] });
+  });
+
   it("絵文字（ZWJ・異体字セレクタを含む）は名前をそのまま保つ", () => {
     expect(normalizeMapDocumentNodeTags(["\u{1F468}\u200d\u{1F469}", "\u2764\ufe0f"], 0, 3))
       .toEqual({ ok: true, value: ["\u{1F468}\u200d\u{1F469}", "\u2764\ufe0f"] });

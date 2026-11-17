@@ -367,6 +367,16 @@ describe("planNodeMerge", () => {
       expect(okPlan(nodes, [2, 3], 2)).toMatchObject({ tags: ["AI"], tagSourceCount: 2, tagDuplicateCount: 2 });
     });
 
+    it("合成済みの文字と、U+200D で合成が途切れた並びも同じタグとみなして除く", () => {
+      const nodes = [
+        node(1, null, "親"),
+        node(2, 1, "a", { tags: ["\u00e9", "\u30ac"] }),
+        node(3, 1, "b", { tags: ["e\u200d\u0301", "\uff76\u200d\uff9e"] }),
+      ];
+
+      expect(okPlan(nodes, [2, 3], 2)).toMatchObject({ tags: ["\u00e9", "\u30ac"], tagSourceCount: 2, tagDuplicateCount: 2 });
+    });
+
     it("タグを持つノードが 1 つだけなら、そのタグのまま（重複 0 件）", () => {
       expect(okPlan(withTags, [3, 2], 3)).toMatchObject({ tags: ["Python", "資料"], tagSourceCount: 1, tagDuplicateCount: 0 });
     });

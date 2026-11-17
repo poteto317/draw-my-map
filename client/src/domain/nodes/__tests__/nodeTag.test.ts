@@ -16,6 +16,15 @@ import {
 import { createTestNode } from "@/testing/createTestNode";
 import type { Node } from "@/types/node";
 
+const COMPOSED_PAIRS: ReadonlyArray<readonly [string, string, string]> = [
+  ["é と e+U+200D+U+0301", "\u00e9", "e\u200d\u0301"],
+  ["é と e+U+FE0F+U+0301", "\u00e9", "e\ufe0f\u0301"],
+  ["ガ と 半角ｶ+U+200D+ﾞ", "\u30ac", "\uff76\u200d\uff9e"],
+  ["ガ と カ+U+200D+U+3099", "\u30ac", "\u30ab\u200d\u3099"],
+  ["가 と U+1100+U+200D+U+1161", "\uac00", "\u1100\u200d\u1161"],
+  ["Å と A+U+FE0E+U+030A", "\u00c5", "A\ufe0e\u030a"],
+];
+
 // タグ名を count 件（tag0 …）
 function tagsOf(count: number): string[] {
   return Array.from({ length: count }, (_, index) => `tag${index}`);
@@ -168,6 +177,23 @@ describe("nodeTagKey", () => {
     expect(nodeTagKey(a)).toBe(nodeTagKey(b));
   });
 
+  it.each(COMPOSED_PAIRS)("合成済みの文字と、U+200D・U+FE0E・U+FE0F で合成が途切れた並び（%s）は同じ鍵にする", (_name, composed, split) => {
+    expect(nodeTagKey(split)).toBe(nodeTagKey(composed));
+  });
+
+  it.each([
+    "AI",
+    "A\u200dI",
+    "\u2764\ufe0f",
+    "\u00e9",
+    "e\u200d\u0301",
+    "\uff76\u200d\uff9e",
+    "\u1100\u200d\u1161",
+    "A\ufe0e\u030a",
+  ])("冪等（鍵の鍵が鍵と同じ）: %j", (name) => {
+    expect(nodeTagKey(nodeTagKey(name))).toBe(nodeTagKey(name));
+  });
+
   it("空白の有無は区別する（空白は名前の検査でまとめる）", () => {
     expect(nodeTagKey("機械学習")).not.toBe(nodeTagKey("機械 学習"));
   });
@@ -260,6 +286,14 @@ describe("addNodeTag", () => {
     expect(next[0].tags).toEqual(["Python", "機械 学習"]);
     expect(next[1]).toBe(nodes[1]);
     expect(next[2]).toBe(nodes[2]);
+  });
+
+  it.each(COMPOSED_PAIRS)("合成済みの文字と合成が途切れた並び（%s）は、後から足すと duplicate", (_name, composed, split) => {
+    const withComposed = [createTestNode({ id: 1, tags: [composed] })];
+    const withSplit = [createTestNode({ id: 1, tags: [split] })];
+
+    expect(addNodeTag(withComposed, 1, split)).toEqual({ ok: false, reason: "duplicate" });
+    expect(addNodeTag(withSplit, 1, composed)).toEqual({ ok: false, reason: "duplicate" });
   });
 
   it("絵文字（ZWJ・異体字セレクタを含む）は追加でき、名前は入力どおりに保存する", () => {
