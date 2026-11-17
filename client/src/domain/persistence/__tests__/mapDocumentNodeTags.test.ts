@@ -32,6 +32,11 @@ describe("normalizeMapDocumentNodeTags", () => {
     expect(normalizeMapDocumentNodeTags(["AI", "A\u200dI", "A\ufe0fI"], 0, 3)).toEqual({ ok: true, value: ["AI"] });
   });
 
+  it("3 文字を除いて空白が残る組（AI と末尾に空白と U+200D、機械 学習 と間に U+200D を挟んだもの）も同じタグとみなす", () => {
+    expect(normalizeMapDocumentNodeTags(["AI", "AI \u200d"], 0, 3)).toEqual({ ok: true, value: ["AI"] });
+    expect(normalizeMapDocumentNodeTags(["機械 学習", "機械 \u200d 学習"], 0, 3)).toEqual({ ok: true, value: ["機械 学習"] });
+  });
+
   it("合成済みの文字と、U+200D で合成が途切れた並び（é・ガ・가・Å）は同じタグとみなし、後のものを捨てる", () => {
     expect(normalizeMapDocumentNodeTags(["\u00e9", "e\u200d\u0301"], 0, 3)).toEqual({ ok: true, value: ["\u00e9"] });
     expect(normalizeMapDocumentNodeTags(["\u30ac", "\uff76\u200d\uff9e", "\u30ab\u200d\u3099"], 0, 3)).toEqual({ ok: true, value: ["\u30ac"] });
@@ -68,6 +73,7 @@ describe("normalizeMapDocumentNodeTags", () => {
     ["ゼロ幅スペースを含む要素", ["a\u200bb"]],
     ["WORD JOINER（U+2060）を含む要素", ["A\u2060I"]],
     ["U+200D だけの要素（見た目が空）", ["\u200d"]],
+    ["U+200D の間に空白だけの要素（見た目が空白だけ）", ["\u200d \u200d"]],
     ["U+FE0F だけの要素（見た目が空）", ["\ufe0f"]],
     ["31 文字の要素", ["a".repeat(NODE_TAG_MAX_LENGTH + 1)]],
     ["11 件", tagsOf(NODE_TAGS_MAX_COUNT + 1)],
