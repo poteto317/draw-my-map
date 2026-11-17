@@ -107,3 +107,32 @@ describe("normalizeMapDocumentNode の note", () => {
     });
   });
 });
+
+describe("normalizeMapDocumentNode の links", () => {
+  it("V3 の links を正規化して読み込む", () => {
+    expect(normalizeMapDocumentNode({ ...validNode, links: ["https://Example.com"] }, 0, 3)).toEqual({
+      ok: true,
+      value: { ...validNode, links: ["https://example.com/"] },
+    });
+  });
+
+  it("V3 の空の links は、項目ごと持たない", () => {
+    const result = normalizeMapDocumentNode({ ...validNode, links: [] }, 0, 3);
+
+    expect(result.ok && "links" in result.value).toBe(false);
+  });
+
+  it("V2 の links は無視する", () => {
+    const result = normalizeMapDocumentNode({ ...validNode, links: ["https://example.com/"] }, 0, 2);
+
+    expect(result).toEqual({ ok: true, value: validNode });
+    expect(result.ok && "links" in result.value).toBe(false);
+  });
+
+  it("V3 の不正な links は、位置付きのエラーで拒否する", () => {
+    expect(normalizeMapDocumentNode({ ...validNode, links: ["javascript:alert(1)"] }, 4, 3)).toEqual({
+      ok: false,
+      error: "node[4].linksは、http または https の URL（2048文字以内）の配列（最大10件）である必要があります。",
+    });
+  });
+});
