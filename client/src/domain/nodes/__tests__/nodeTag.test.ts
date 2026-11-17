@@ -105,9 +105,16 @@ describe("normalizeNodeTagName", () => {
     ["異体字セレクタ U+FE00", "a\ufe00b"],
     ["U+FE0D", "a\ufe0db"],
     ["行内注釈 U+FFF9", "a\ufff9b"],
+    ["行内注釈 U+FFFA", "a\ufffab"],
+    ["行内注釈 U+FFFB", "a\ufffbb"],
+    ["U+FFF8（Default_Ignorable_Code_Point。行内注釈の範囲の直前）", "a\ufff8b"],
     ["タグ文字 U+E0001（サロゲートペア）", "a\u{E0001}b"],
   ])("見えない書式文字 %s は invalid で拒否する", (_name, input) => {
     expect(normalizeNodeTagName(input)).toEqual({ ok: false, reason: "invalid" });
+  });
+
+  it("行内注釈の範囲の直後の U+FFFC（オブジェクト置換文字。見えない書式文字ではない）は受け付ける", () => {
+    expect(normalizeNodeTagName("a\ufffcb")).toEqual({ ok: true, name: "a\ufffcb" });
   });
 
   it.each<[string, string]>([
@@ -127,6 +134,14 @@ describe("normalizeNodeTagName", () => {
     ["テキスト表示の異体字セレクタ U+FE0E", "\u2764\ufe0e"],
   ])("絵文字に要る %s は受け付ける", (_name, input) => {
     expect(normalizeNodeTagName(input)).toEqual({ ok: true, name: input });
+  });
+
+  it.each<[string, string]>([
+    ["U+200D が 31 個（鍵が空。30 文字超でも too-long ではなく invalid）", "\u200d".repeat(NODE_TAG_MAX_LENGTH + 1)],
+    ["U+200D と空白が交互で 30 文字超（鍵が空）", `${"\u200d ".repeat(NODE_TAG_MAX_LENGTH)}\u200d`],
+    ["U+FE0F が 256 個（入力の先行判定の上限ちょうど。鍵が空）", "\ufe0f".repeat(NODE_TAG_INPUT_MAX_LENGTH)],
+  ])("鍵が空になる検査は、30 文字超の検査より先（%s）", (_name, input) => {
+    expect(normalizeNodeTagName(input)).toEqual({ ok: false, reason: "invalid" });
   });
 
   it("まとめた後がちょうど 30 文字なら受け付け、31 文字は too-long", () => {
@@ -185,6 +200,22 @@ describe("nodeTagKey", () => {
 
   it("NFKC＋小文字化の値を返す", () => {
     expect(nodeTagKey("Ｐｙｔｈｏｎ")).toBe("python");
+  });
+
+  it.each<[string, string, string]>([
+    ["数学用太字の AI（NFKC で大文字の AI になる）と AI", "\u{1D400}\u{1D408}", "AI"],
+    ["二重線の H（ℍ。NFKC で大文字の H になる）と h", "\u210d", "h"],
+    ["修飾文字の ᴬ + I（NFKC で A になる）と AI", "\u1d2cI", "AI"],
+  ])("小文字化は NFKC の後（%s）。NFKC で大文字になる文字も、小文字の同じ文字と同じ鍵にする", (_name, a, b) => {
+    expect(nodeTagKey(a)).toBe(nodeTagKey(b));
+    expect(nodeTagKey(a)).toBe(b.toLowerCase());
+  });
+
+  it("空白のまとめと trim は NFKC の後（U+FFE3 は NFKC で空白 + 結合マクロンになる）", () => {
+    // U+FFE3（全角マクロン）は NFKC で U+0020 + U+0304 に展開される。NFKC の前にまとめると空白が 2 つ並んで残る
+    expect(nodeTagKey("顔\uffe3")).toBe(nodeTagKey("顔 \uffe3"));
+    expect(nodeTagKey("顔 \uffe3")).toBe("顔 \u0304");
+    expect(nodeTagKey("\uffe3")).toBe("\u0304");
   });
 
   it.each<[string, string, string]>([
