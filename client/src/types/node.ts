@@ -37,6 +37,6 @@ export type Node = {
   // 更新は domain/nodes/nodeTag.ts の addNodeTag・removeNodeTag。分割では元のノードにだけ残し、統合では選択中のタグを
   // 配列順に同じタグとみなすものを除いて連結し、複製・貼り付け・別マップへの移動では写し、親の挿入では新しい親に持たせない。
   // 今は検索（domain/search/nodeLabelSearch.ts）・キャンバスの描画（components/map/pixi/renderMapNodes.ts）・アウトライン書き出し・画像書き出しに
-  // 使っていない。使うときは、それらと nodeTagKey の規則をそろえる（NFKC と小文字化はノード検索の normalizeNodeSearchText と同じ。nodeTagKey はさらに、NFKC の前に U+200D・U+FE0E・U+FE0F を除き、NFKC の後に空白をまとめて trim する）
+  // 使っていない。使うときは、それらと nodeTagKey の規則をそろえる（NFKC と小文字化はノード検索の normalizeNodeSearchText と同じ。nodeTagKey はさらに、NFKC の前に U+200D・U+FE0E・U+FE0F を除き、NFKC の後に空白をまとめて trim し、小文字化の後にもう一度 NFKC をかける）
   tags?: readonly string[];
 };
