@@ -5,6 +5,7 @@ import { normalizeMapDocumentNodeImportance } from "@/domain/persistence/mapDocu
 import { normalizeMapDocumentNodeIllustration } from "@/domain/persistence/mapDocumentNodeIllustration";
 import { normalizeMapDocumentNodeLinks } from "@/domain/persistence/mapDocumentNodeLinks";
 import { normalizeMapDocumentNodeNote } from "@/domain/persistence/mapDocumentNodeNote";
+import { normalizeMapDocumentNodeTags } from "@/domain/persistence/mapDocumentNodeTags";
 import { projectMapDocumentNode } from "@/domain/persistence/mapDocumentNodeProjection";
 import { isRecord } from "@/domain/shared/unknownRecord";
 
@@ -79,6 +80,11 @@ export function normalizeMapDocumentNode(
     return linksResult;
   }
   const links = linksResult.value;
+  const tagsResult = normalizeMapDocumentNodeTags(node.tags, index, version);
+  if (!tagsResult.ok) {
+    return tagsResult;
+  }
+  const tags = tagsResult.value;
   return {
     ok: true,
     value: projectMapDocumentNode({
@@ -93,6 +99,7 @@ export function normalizeMapDocumentNode(
       ...(illustration === undefined ? {} : { illustration }),
       ...(note === undefined ? {} : { note }),
       ...(links === undefined ? {} : { links }),
+      ...(tags === undefined ? {} : { tags }),
     }),
   };
 }

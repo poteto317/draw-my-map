@@ -136,3 +136,32 @@ describe("normalizeMapDocumentNode の links", () => {
     });
   });
 });
+
+describe("normalizeMapDocumentNode の tags", () => {
+  it("V3 の tags を正規化して読み込み、同じタグとみなす要素は後のものを捨てる", () => {
+    expect(normalizeMapDocumentNode({ ...validNode, tags: [" Python ", "python", "重要"] }, 0, 3)).toEqual({
+      ok: true,
+      value: { ...validNode, tags: ["Python", "重要"] },
+    });
+  });
+
+  it("V3 の空の tags は、項目ごと持たない", () => {
+    const result = normalizeMapDocumentNode({ ...validNode, tags: [] }, 0, 3);
+
+    expect(result.ok && "tags" in result.value).toBe(false);
+  });
+
+  it("V2 の tags は無視する", () => {
+    const result = normalizeMapDocumentNode({ ...validNode, tags: ["重要"] }, 0, 2);
+
+    expect(result).toEqual({ ok: true, value: validNode });
+    expect(result.ok && "tags" in result.value).toBe(false);
+  });
+
+  it("V3 の不正な tags は、位置付きのエラーで拒否する", () => {
+    expect(normalizeMapDocumentNode({ ...validNode, tags: ["a\u0000b"] }, 4, 3)).toEqual({
+      ok: false,
+      error: "node[4].tagsは、30文字以内のタグ名の配列（最大10件）である必要があります。",
+    });
+  });
+});

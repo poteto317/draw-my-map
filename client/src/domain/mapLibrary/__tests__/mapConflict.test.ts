@@ -359,6 +359,47 @@ describe("mapConflict", () => {
       expect(isDocumentContentEqual(left, right)).toBe(true);
       expect(isDocumentContentEqual(baseDoc, explicitUndefined)).toBe(true);
     });
+
+    it("タグだけが違う 2 文書は別物と判定する（表記・順の違いも別物。別タブで変えたタグの競合を見逃さない）", () => {
+      const withTags: MapDocumentV3 = {
+        ...baseDoc,
+        nodes: [baseDoc.nodes[0], { ...baseDoc.nodes[1], tags: ["Python"] }],
+      };
+      const otherSpelling: MapDocumentV3 = {
+        ...baseDoc,
+        nodes: [baseDoc.nodes[0], { ...baseDoc.nodes[1], tags: ["python"] }],
+      };
+      const ordered: MapDocumentV3 = {
+        ...baseDoc,
+        nodes: [baseDoc.nodes[0], { ...baseDoc.nodes[1], tags: ["Python", "重要"] }],
+      };
+      const reordered: MapDocumentV3 = {
+        ...baseDoc,
+        nodes: [baseDoc.nodes[0], { ...baseDoc.nodes[1], tags: ["重要", "Python"] }],
+      };
+
+      expect(isDocumentContentEqual(baseDoc, withTags)).toBe(false);
+      expect(isDocumentContentEqual(withTags, otherSpelling)).toBe(false);
+      expect(isDocumentContentEqual(ordered, reordered)).toBe(false);
+    });
+
+    it("tags は要素ごとに比べ、別の配列でも内容が同じなら等価。未定義とオプショナル未定義も等価", () => {
+      const left: MapDocumentV3 = {
+        ...baseDoc,
+        nodes: [baseDoc.nodes[0], { ...baseDoc.nodes[1], tags: ["重要"] }],
+      };
+      const right: MapDocumentV3 = {
+        ...baseDoc,
+        nodes: [baseDoc.nodes[0], { ...baseDoc.nodes[1], tags: ["重要"] }],
+      };
+      const explicitUndefined: MapDocumentV3 = {
+        ...baseDoc,
+        nodes: [{ ...baseDoc.nodes[0], tags: undefined }, baseDoc.nodes[1]],
+      };
+
+      expect(isDocumentContentEqual(left, right)).toBe(true);
+      expect(isDocumentContentEqual(baseDoc, explicitUndefined)).toBe(true);
+    });
   });
 
   describe("createConflictCopyName", () => {
