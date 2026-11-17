@@ -71,6 +71,7 @@ describe("useNodeMergeDialog", () => {
       absorbedLabels: ["りんご"],
       hiddenAbsorbedCount: 0,
       noteText: null,
+      linkText: null,
     });
   });
 

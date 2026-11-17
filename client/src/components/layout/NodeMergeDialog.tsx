@@ -118,6 +118,12 @@ export function NodeMergeDialog({
                   <dd className={boundedLabelClassName}>{preview.noteText}</dd>
                 </div>
               )}
+              {preview.linkText !== null && (
+                <div className="flex gap-2">
+                  <dt className="shrink-0 font-medium">URL</dt>
+                  <dd>{preview.linkText}</dd>
+                </div>
+              )}
               <div className="flex gap-2">
                 <dt className="shrink-0 font-medium">付け替える子</dt>
                 <dd>{`${preview.movedChildCount}件`}</dd>

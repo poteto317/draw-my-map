@@ -64,6 +64,7 @@ describe("buildNodeMergePreview", () => {
       absorbedLabels: ["りんご"],
       hiddenAbsorbedCount: 0,
       noteText: null,
+      linkText: null,
     });
   });
 
@@ -155,5 +156,36 @@ describe("buildNodeMergePreview", () => {
 
     expect(buildNodeMergePreview([], plan)).toBeNull();
     expect(describeNodeMergeStatus(false, plan)).toBe("メモをまとめると文字数の上限（10,000 文字）を超えるため、統合できません。");
+  });
+
+  describe("URL の連結", () => {
+    const A = "https://example.com/a";
+    const B = "https://example.com/b";
+    const C = "https://example.org/c";
+
+    it("URL を持つノードが 1 つ以上あれば、重複を除いた件数と重複の件数を示す（URL の本文は出さない）", () => {
+      const nodes = [node(1, "a", { links: [A, B] }), node(2, "b"), node(3, "c", { links: [B, C] })];
+
+      expect(buildNodeMergePreview(nodes, okPlan(nodes, [1, 2, 3], 1))?.linkText).toBe("3 件（重複 1 件を除く）");
+    });
+
+    it("重複が無ければ括弧を出さない", () => {
+      const nodes = [node(1, "a", { links: [A] }), node(2, "b", { links: [B] })];
+
+      expect(buildNodeMergePreview(nodes, okPlan(nodes, [1, 2], 1))?.linkText).toBe("2 件");
+    });
+
+    it("URL が 1 つも無ければ null（行を出さない）", () => {
+      const nodes = [node(1, "a"), node(2, "b")];
+
+      expect(buildNodeMergePreview(nodes, okPlan(nodes, [1, 2], 1))?.linkText).toBeNull();
+    });
+  });
+
+  it("links-too-many の計画はプレビューを作らず、状態文言は失敗の文言", () => {
+    const plan: NodeMergePlan = { ok: false, reason: "links-too-many" };
+
+    expect(buildNodeMergePreview([], plan)).toBeNull();
+    expect(describeNodeMergeStatus(false, plan)).toBe("URLをまとめると件数の上限（10 件）を超えるため、統合できません。");
   });
 });
