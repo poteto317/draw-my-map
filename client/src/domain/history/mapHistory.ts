@@ -22,14 +22,14 @@ export function createMapHistory(initial: NodeMapState): MapHistoryState {
   return { past: [], present: initial, future: [], groupStart: null };
 }
 
-// 配列の値（links）は要素ごとに比べる。別の配列でも内容が同じなら、実変更の無い履歴を積まない（L-135）
+// 配列の値（links・tags）は要素ごとに比べる。別の配列でも内容が同じなら、実変更の無い履歴を積まない（L-135）
 function areArrayValuesEqual(a: readonly unknown[], b: readonly unknown[]): boolean {
   return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
 function areNodesEqual(a: Node, b: Node): boolean {
   if (a === b) return true;
-  // Node は型エイリアスのため、キャストなしで任意のキーを読める型へ代入できる（illustration・links の有無も比較する）
+  // Node は型エイリアスのため、キャストなしで任意のキーを読める型へ代入できる（illustration・links・tags の有無も比較する）
   const left: Readonly<Record<string, unknown>> = a;
   const right: Readonly<Record<string, unknown>> = b;
   const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
