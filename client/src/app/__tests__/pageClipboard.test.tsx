@@ -295,7 +295,7 @@ describe("ページの枝のコピーと貼り付け", () => {
     selectNode(1, 2, 450, 200);
     copy(clipboard, document.body);
     await user.click(filterButton("高のみ"));
-    expect(screen.getByText("ノードを選択してください")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "イラスト" })).getByText("ノードを選択してください")).toBeInTheDocument();
     const viewportBefore = worldPosition();
 
     paste(clipboard, document.body);
@@ -305,7 +305,7 @@ describe("ページの枝のコピーと貼り付け", () => {
       CHILD,
       { ...CHILD, id: 2, parentId: null, y: 270 },
     ]);
-    expect(screen.getByText("ノードを選択してください")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "イラスト" })).getByText("ノードを選択してください")).toBeInTheDocument();
     expect(duplicateButton()).toBeDisabled();
     expect(screen.getByText(PASTE_MESSAGE)).toHaveAttribute("role", "status");
     expect(filterButton("高のみ")).toHaveAttribute("aria-pressed", "true");

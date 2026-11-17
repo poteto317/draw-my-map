@@ -16,10 +16,7 @@ export function IllustrationPanel({ selectedNode, generation, onGenerate, onAtta
   const view = getIllustrationPanelView(selectedNode, generation);
   const preview = view.image?.kind === "preview" ? view.image : null;
   return (
-    <aside
-      aria-label="イラスト"
-      className="flex w-60 shrink-0 flex-col gap-3 border-l border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800"
-    >
+    <section aria-label="イラスト" className="flex flex-col gap-3">
       <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">イラスト</h2>
       {selectedNode === null ? (
         <p className="text-sm text-zinc-500 dark:text-zinc-400">ノードを選択してください</p>
@@ -85,6 +82,6 @@ export function IllustrationPanel({ selectedNode, generation, onGenerate, onAtta
       >
         {view.isGenerating ? "生成中…" : view.generateLabel}
       </button>
-    </aside>
+    </section>
   );
 }

@@ -103,7 +103,7 @@ async function openPreview(user: ReturnType<typeof userEvent.setup>, text: strin
 
 // 側面のパネルの「対象ノード」に、選択中のノードの表示名が出る
 function selectedLabel(): string | null {
-  const panel = within(screen.getByRole("complementary", { name: "イラスト" }));
+  const panel = within(screen.getByRole("region", { name: "イラスト" }));
   if (panel.queryByText("ノードを選択してください") !== null) return null;
   return panel.getByText("対象ノード").nextElementSibling!.textContent;
 }
