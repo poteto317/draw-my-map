@@ -47,6 +47,7 @@ describe("normalizeMapDocumentNodeTags", () => {
     expect(normalizeMapDocumentNodeTags(["\u30ac", "\uff76\u200d\uff9e", "\u30ab\u200d\u3099"], 0, 3)).toEqual({ ok: true, value: ["\u30ac"] });
     expect(normalizeMapDocumentNodeTags(["\uac00", "\u1100\u200d\u1161"], 0, 3)).toEqual({ ok: true, value: ["\uac00"] });
     expect(normalizeMapDocumentNodeTags(["\u00c5", "A\ufe0e\u030a"], 0, 3)).toEqual({ ok: true, value: ["\u00c5"] });
+    expect(normalizeMapDocumentNodeTags(["\u00e9", "e\ufe0f\u0301"], 0, 3)).toEqual({ ok: true, value: ["\u00e9"] });
   });
 
   it("絵文字（ZWJ・異体字セレクタを含む）は名前をそのまま保つ", () => {
