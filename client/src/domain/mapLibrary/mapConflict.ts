@@ -1,4 +1,5 @@
 import { MAX_MAP_NAME_LENGTH } from "@/domain/mapLibrary/mapName";
+import { areNodeLinksEqual } from "@/domain/nodes/nodeLink";
 import type { MapDocumentV3 } from "@/types/mapDocument";
 import type { Node } from "@/types/node";
 
@@ -57,7 +58,8 @@ function areNodesEqual(a: Node, b: Node): boolean {
     a.label === b.label &&
     a.importance === b.importance &&
     (a.illustration ?? "") === (b.illustration ?? "") &&
-    (a.note ?? "") === (b.note ?? "")
+    (a.note ?? "") === (b.note ?? "") &&
+    areNodeLinksEqual(a.links, b.links)
   );
 }
 

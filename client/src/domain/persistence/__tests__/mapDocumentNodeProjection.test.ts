@@ -38,4 +38,14 @@ describe("projectMapDocumentNode", () => {
     expect("note" in projectMapDocumentNode(base)).toBe(false);
     expect("note" in projectMapDocumentNode({ ...base, note: undefined })).toBe(false);
   });
+
+  it("links があるときだけ項目を出す", () => {
+    const base = {
+      id: 1, parentId: null, x: 0, y: 0, width: 100, height: 60, label: "a", importance: "medium" as const,
+    };
+
+    expect(projectMapDocumentNode({ ...base, links: ["https://example.com/"] })).toEqual({ ...base, links: ["https://example.com/"] });
+    expect("links" in projectMapDocumentNode(base)).toBe(false);
+    expect("links" in projectMapDocumentNode({ ...base, links: undefined })).toBe(false);
+  });
 });

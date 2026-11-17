@@ -322,6 +322,43 @@ describe("mapConflict", () => {
 
       expect(isDocumentContentEqual(baseDoc, explicitUndefined)).toBe(true);
     });
+
+    it("URL だけが違う 2 文書は別物と判定する（別タブで変えた URL の競合を見逃さない）", () => {
+      const withLinks: MapDocumentV3 = {
+        ...baseDoc,
+        nodes: [baseDoc.nodes[0], { ...baseDoc.nodes[1], links: ["https://example.com/a"] }],
+      };
+      const reordered: MapDocumentV3 = {
+        ...baseDoc,
+        nodes: [baseDoc.nodes[0], { ...baseDoc.nodes[1], links: ["https://example.com/b", "https://example.com/a"] }],
+      };
+      const ordered: MapDocumentV3 = {
+        ...baseDoc,
+        nodes: [baseDoc.nodes[0], { ...baseDoc.nodes[1], links: ["https://example.com/a", "https://example.com/b"] }],
+      };
+
+      expect(isDocumentContentEqual(baseDoc, withLinks)).toBe(false);
+      expect(isDocumentContentEqual(withLinks, ordered)).toBe(false);
+      expect(isDocumentContentEqual(ordered, reordered)).toBe(false);
+    });
+
+    it("links は要素ごとに比べ、別の配列でも内容が同じなら等価。未定義とオプショナル未定義も等価", () => {
+      const left: MapDocumentV3 = {
+        ...baseDoc,
+        nodes: [baseDoc.nodes[0], { ...baseDoc.nodes[1], links: ["https://example.com/a"] }],
+      };
+      const right: MapDocumentV3 = {
+        ...baseDoc,
+        nodes: [baseDoc.nodes[0], { ...baseDoc.nodes[1], links: ["https://example.com/a"] }],
+      };
+      const explicitUndefined: MapDocumentV3 = {
+        ...baseDoc,
+        nodes: [{ ...baseDoc.nodes[0], links: undefined }, baseDoc.nodes[1]],
+      };
+
+      expect(isDocumentContentEqual(left, right)).toBe(true);
+      expect(isDocumentContentEqual(baseDoc, explicitUndefined)).toBe(true);
+    });
   });
 
   describe("createConflictCopyName", () => {

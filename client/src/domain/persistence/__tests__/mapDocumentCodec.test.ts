@@ -47,4 +47,17 @@ describe("MapDocument Codec", () => {
     expect(parsed.ok && parsed.value.nodes[0].note).toBe("  1行目\n\n2行目 😀\n");
     expect(parsed.ok && "note" in parsed.value.nodes[1]).toBe(false);
   });
+
+  it("V3 の URL（日本語のパスはパーセントエンコード済み）を往復し、URL の無いノードは項目を持たない", () => {
+    const links = ["https://example.com/", "https://xn--r8jz45g.jp/%E3%83%91%E3%82%B9"];
+    const withLinks = createTestNode({ ...node(1, null, "high"), links });
+    const withoutLinks = node(2, 1, "low");
+    const document = createMapDocument([withLinks, withoutLinks], "manual");
+
+    const parsed = parseMapDocumentJson(serializeMapDocument(document));
+
+    expect(parsed).toEqual({ ok: true, value: document });
+    expect(parsed.ok && parsed.value.nodes[0].links).toEqual(links);
+    expect(parsed.ok && "links" in parsed.value.nodes[1]).toBe(false);
+  });
 });

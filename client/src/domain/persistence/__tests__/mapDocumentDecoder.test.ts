@@ -235,3 +235,29 @@ describe("version 3 の詳細メモ", () => {
     });
   });
 });
+
+describe("version 3 の URL", () => {
+  it("version 3 の links を正規化して読み込み、重複は後のものを捨てる", () => {
+    const parsed = parseMapDocumentJsonWithVersion(json(3, {
+      ...baseNode,
+      links: ["https://Example.com", "https://example.com/"],
+    }));
+
+    expect(parsed.ok && parsed.value.document.nodes[0].links).toEqual(["https://example.com/"]);
+  });
+
+  it.each([1, 2])("version %i の links は無視する", (version) => {
+    const links = ["javascript:alert(1)"];
+    const node = version === 1 ? { ...baseNode, links, importance: undefined } : { ...baseNode, links };
+    const parsed = parseMapDocumentJsonWithVersion(json(version, node));
+
+    expect(parsed.ok && "links" in parsed.value.document.nodes[0]).toBe(false);
+  });
+
+  it("version 3 で http/https 以外の links は、読み込みを失敗にする", () => {
+    expect(parseMapDocumentJsonWithVersion(json(3, { ...baseNode, links: ["javascript:alert(1)"] }))).toEqual({
+      ok: false,
+      error: "node[0].linksは、http または https の URL（2048文字以内）の配列（最大10件）である必要があります。",
+    });
+  });
+});
