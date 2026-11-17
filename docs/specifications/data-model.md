@@ -156,6 +156,11 @@ export type Node = {
    * 10,000 文字は `string.length`（UTF-16 のコード単位）で数える（絵文字などは 2 文字分）
    */
   note?: string;
+  /**
+   * 添付した URL（Phase 18 以降）。正規化した http / https の URL（URL.href）の読み取り専用の配列。
+   * 最大 10 件、各 2,048 文字以内、重複なし。URL が無いノードではプロパティ自体が存在しない（空配列も持たない）
+   */
+  links?: readonly string[];
 };
 ```
 
@@ -720,6 +725,7 @@ Phase 6 で追加された解像度フィルタリング（ズーム連動表示
 Phase 7（現行バージョン）で策定されたスキーマです。AI イラスト生成機能で作成されたサムネイル画像をノードに埋め込む `illustration` プロパティ（オプショナル）が追加されました。
 
 Phase 18 では、Version 3 のまま（版は上げません）、詳細メモを保存する任意項目 `note`（文字列、10,000 文字以内）がノードに追加されました。メモが無いノードは項目ごと持ちません。古いアプリは `note` を知らないため、古いアプリで開いて保存し直すとメモは失われます。
+同じく Phase 18 で、URL を保存する任意項目 `links`（http / https の URL の配列、最大 10 件、各 2,048 文字以内）がノードに追加されました。URL が無いノードは項目ごと持ちません。古いアプリで開いて保存し直すと URL は失われます。
 
 #### JSON サンプル (Version 3)
 ```json
@@ -759,6 +765,7 @@ Phase 18 では、Version 3 のまま（版は上げません）、詳細メモ�
 | `nodes[].height` | `number` | ○ | `illustration` を持つノードは最低 116px (`ILLUSTRATED_NODE_HEIGHT`) |
 | `nodes[].illustration` | `string` | △ (任意) | 縮小 JPEG の Data URL。イラストが無い場合は **キー自体を含めない** |
 | `nodes[].note` | `string` | △ (任意) | 詳細メモ（10,000 文字以内。空白だけのメモは項目ごと持たない）。無い場合はキー自体を含めない。V1/V2 では存在しても無視する |
+| `nodes[].links` | `string[]` | △ (任意) | 添付した URL（http / https、最大 10 件、各 2,048 文字以内）。読み込みでは各要素を `URL.href` に正規化し、重複は後のものを捨て、空なら項目ごと持たない。無い場合はキー自体を含めない。V1/V2 では存在しても無視する |
 
 ---
 
@@ -771,6 +778,7 @@ Phase 18 では、Version 3 のまま（版は上げません）、詳細メモ�
 | **`nodes[].importance`** | 未対応（読込時 `"medium"` 補完） | **必須** (`"high" \| "medium" \| "low"`) | **必須** (`"high" \| "medium" \| "low"`) |
 | **`nodes[].illustration`**| 未対応（存在しても破棄） | 未対応（存在しても破棄） | **対応** (JPEG Data URL、省略可能) |
 | **`nodes[].note`** | 未対応（存在しても破棄） | 未対応（存在しても破棄） | **対応** (文字列、10,000 文字以内、省略可能) |
+| **`nodes[].links`** | 未対応（存在しても破棄） | 未対応（存在しても破棄） | **対応** (http/https の URL の配列、最大 10 件、省略可能) |
 | **最小ノード高制約** | 0 超の有限数値 | 0 超の有限数値 | イラスト有りの場合 最低 116px |
 | **保存時出力形式** | — | — | **常に Version 3 形式で出力** |
 
@@ -797,7 +805,8 @@ Phase 18 では、Version 3 のまま（版は上げません）、詳細メモ�
     ├─ 基本型検証 (id, parentId, x, y, width, height, label)
     ├─ importance マイグレーション & 検証
     ├─ illustration マイグレーション & 検証
-    └─ note 検証（V3 のみ。V1/V2 は無視）
+    ├─ note 検証（V3 のみ。V1/V2 は無視）
+    └─ links 検証（V3 のみ。V1/V2 は無視）
       │ 不正あり ──────────────────────────────► エラー: "node[i].xxxは..."
       ▼ 全ノード正常
  4. グラフ構造整合性検証 (validateMapDocumentGraph)
@@ -826,7 +835,7 @@ export function parseMapDocumentJsonWithVersion(
 
 ### 4.2 バージョンマイグレーション規則
 
-| 入力バージョン | `importance` の処理 | `illustration` の処理（`note` も同様に、V1 / V2 では無視し、V3 では検証して保持） | 出力バージョン |
+| 入力バージョン | `importance` の処理 | `illustration` の処理（`note`・`links` も同様に、V1 / V2 では無視し、V3 では検証して保持） | 出力バージョン |
 | :--- | :--- | :--- | :--- |
 | **Version 1** | デフォルト値 `"medium"`（`DEFAULT_NODE_IMPORTANCE`）を自動補完。もし入力中に `importance` フィールドが存在しても無視・上書きされる。 | 存在しても完全に無視され、`undefined`（項目なし）へ正規化される。 | **Version 3** |
 | **Version 2** | 入力値の検証を厳格に実施（`"high"`, `"medium"`, `"low"` 以外はエラー）。 | 存在しても完全に無視され、`undefined`（項目なし）へ正規化される。 | **Version 3** |
@@ -868,6 +877,11 @@ export function parseMapDocumentJsonWithVersion(
    - 10,000 文字は `string.length`（UTF-16 のコード単位）で数える（絵文字などは 2 文字分）。
    - 上限内では、末尾の対になっていない上位サロゲートを削り、空文字・空白だけなら `undefined`（項目ごと持たない）に正規化する。
    - エラー: `"node[${index}].noteは10000文字以内の文字列である必要があります。"`
+10. **`links`**（`mapDocumentNodeLinks.ts`）:
+   - Version 3 のみ検証。V1 / V2 では存在しても無視（`undefined`）。`undefined` は項目なし。
+   - 条件: 配列で、件数が 10 以下、各要素が文字列で `length` が 2,048 以下（前後の空白を削る前の値。件数と長さは URL の解析より先に判定する）、各要素が `normalizeNodeLinkUrl`（前後の空白を削り、`new URL` で解釈でき、`protocol` が `http:` / `https:`、`username` / `password` が空、`href` の長さが 2,048 以下）を通る。
+   - 通った要素は `URL.href` に正規化し、重複は後のものを捨てる。空になれば `undefined`（項目ごと持たない）。
+   - エラー: `"node[${index}].linksは、http または https の URL（2048文字以内）の配列（最大10件）である必要があります。"`
 
 ### 4.4 イラスト画像・Data URL バリデーション仕様
 
@@ -941,6 +955,7 @@ graph TD
 | **ノード単体** | `node[${i}].importanceはhigh、medium、lowのいずれかである必要があります。` | V2/V3 で重要度値が不正 |
 | **ノード単体** | `node[${i}].illustrationは、画像のdata URLである必要があります。` | V3 で Data URL 形式違反、10万文字超過、512px超過 |
 | **ノード単体** | `node[${i}].noteは10000文字以内の文字列である必要があります。` | V3 で `note` が文字列でない、または 10,000 文字超過 |
+| **ノード単体** | `node[${i}].linksは、http または https の URL（2048文字以内）の配列（最大10件）である必要があります。` | V3 で `links` が配列でない、11 件以上、文字列でない要素、2,048 文字超過の要素、http / https 以外・資格情報つき・URL として不正な要素 |
 | **グラフ整合性**| `ノードID ${id} が重複しています。` | 同一 ID を持つノードが複数存在 |
 | **グラフ整合性**| `親ノード ${parentId} が存在しません。` | `parentId` がノードリスト内に存在しない |
 | **グラフ整合性**| `親子関係が循環しています。` | 自己ループまたは循環参照が存在 |
@@ -1336,12 +1351,12 @@ sequenceDiagram
 | :--- | :--- |
 | `type` | 文字列 `"draw-my-map/subtree"` のみ受け付ける |
 | `version` | 数値 `1` のみ受け付ける |
-| `nodes` | 空でない配列。各要素は V3 のノード（`id`, `parentId`, `x`, `y`, `width`, `height`, `label`, `importance`, 任意の `illustration`・`note`）。配列の順序を保つ |
+| `nodes` | 空でない配列。各要素は V3 のノード（`id`, `parentId`, `x`, `y`, `width`, `height`, `label`, `importance`, 任意の `illustration`・`note`・`links`）。配列の順序を保つ |
 | 根 | `parentId: null` のノードがちょうど 1 つ。`rootId` は形式に含めず、読み取り時にこのノードから求める。コピー時は選択ノードの `parentId` を `null` にして書き出す |
 | 保存しないもの | 元のマップの配置モード、枝の折りたたみ指定、生成中の画像、プレビュー、選択、viewport |
 | 上限 | 文字数 5,000,000（UTF-16 コード単位。`string.length`）、ノード数 10,000。コピーと貼り付けに同じ上限を適用する。文字数は `JSON.parse` の前に、ノード数は各ノードの検証の前に判定する |
 
-- **検証**: 貼り付けの入力は信用せず、`type` / `version`、非空の `nodes`、単一の根を確認します。各ノードは V3 の `normalizeMapDocumentNode(..., 3)` で検証し、既知の項目だけで作り直します（イラストは Data URL・寸法の検証と高さ補正を V3 と同じ規則で適用。詳細メモ `note` も V3 と同じ規則で検証し、10,000 文字超過・文字列以外は拒否）。グラフは `validateMapDocumentGraph` で検証し、重複 ID・循環・存在しない親・複数の根を拒否します。普通のテキストや `MapDocument` の JSON は枝形式として受け付けません。
+- **検証**: 貼り付けの入力は信用せず、`type` / `version`、非空の `nodes`、単一の根を確認します。各ノードは V3 の `normalizeMapDocumentNode(..., 3)` で検証し、既知の項目だけで作り直します（イラストは Data URL・寸法の検証と高さ補正を V3 と同じ規則で適用。詳細メモ `note`・URL `links` も V3 と同じ規則で検証し、規則に合わない値は拒否）。グラフは `validateMapDocumentGraph` で検証し、重複 ID・循環・存在しない親・複数の根を拒否します。普通のテキストや `MapDocument` の JSON は枝形式として受け付けません。
 - **計算量**: デコードと単一の根の判定は、10,000 ノードに対して線形で終わります（逆順に並んだ深い鎖や、全件が衝突する ID でも、配列要素と `id` の読み取り回数がノード数の定数倍以内）。
 - **貼り付け時の ID**: 形式の中の ID は貼り付け先の ID と対応付けるための仮のものです。貼り付けでは全ノードに未使用の新しい ID を一括で発行し（`nextAvailableIds`）、根の `parentId` は `null`、子孫の `parentId` は新しい ID へ付け替えます。元の ID は引き継ぎません。コピーは折りたたみで隠れた子孫も含み、貼り付けた枝は折りたたみ指定を持たないため、展開した状態で追加されます。
 

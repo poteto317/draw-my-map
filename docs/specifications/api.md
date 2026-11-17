@@ -644,7 +644,7 @@ HTTP エンドポイントは追加せず、ブラウザの window `storage` イ
 - `classifyStorageChange(params: { key: string | null; newValue: string | null; currentMapId: string; hasPendingEdits: boolean; isCurrentMapInIndex: boolean }): ConflictState`
   - 受信した `StorageEvent` から `"none" | "conflict" | "externalUpdate" | "externallyDeleted"` を判定します。
 - `isDocumentContentEqual(docA: MapDocumentV3, docB: MapDocumentV3): boolean`
-  - ノード配列順・各ノードフィールド（ID・親ID・座標・寸法・重要度・イラスト）を正規化比較し、表記差や余剰プロパティに影響されないドキュメント同一性を判定します（知見 L-530）。
+  - ノード配列順・各ノードフィールド（ID・親ID・座標・寸法・ラベル・重要度・イラスト・詳細メモ `note`・URL `links`（要素ごと、順も含めて））を正規化比較し、表記差や余剰プロパティに影響されないドキュメント同一性を判定します（知見 L-530）。
 - `createConflictCopyName(baseName: string): string`
   - 「別名で保存」時の安全な退避名を生成します。末尾に「（退避）」を付与し、50コードポイント上限を超えないよう手前で切り詰めます。
 
