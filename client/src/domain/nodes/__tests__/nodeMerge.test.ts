@@ -8,6 +8,7 @@ import {
 } from "@/domain/nodes/nodeMerge";
 import { NODE_LINKS_MAX_COUNT } from "@/domain/nodes/nodeLink";
 import { NODE_NOTE_MAX_LENGTH } from "@/domain/nodes/nodeNote";
+import { NODE_TAGS_MAX_COUNT } from "@/domain/nodes/nodeTag";
 import { createMapDocument, serializeMapDocument } from "@/domain/persistence/mapDocumentEncoder";
 import { parseMapDocumentJson } from "@/domain/persistence/mapDocumentDecoder";
 import { createTestNode } from "@/testing/createTestNode";
@@ -26,6 +27,11 @@ const LINK_C = "https://example.org/c";
 // 正規化済みの URL を count 件（https://example.com/{prefix}0 …）
 function urls(prefix: string, count: number): string[] {
   return Array.from({ length: count }, (_, index) => `https://example.com/${prefix}${index}`);
+}
+
+// タグ名を count 件（{prefix}0 …）
+function tagNames(prefix: string, count: number): string[] {
+  return Array.from({ length: count }, (_, index) => `${prefix}${index}`);
 }
 
 function visibleOf(nodes: readonly Node[]): Set<number> {
@@ -93,6 +99,9 @@ describe("planNodeMerge", () => {
       links: undefined,
       linkSourceCount: 0,
       linkDuplicateCount: 0,
+      tags: undefined,
+      tagSourceCount: 0,
+      tagDuplicateCount: 0,
     });
   });
 
@@ -322,6 +331,74 @@ describe("planNodeMerge", () => {
     });
   });
 
+  describe("タグの連結", () => {
+    // 親 1 の下の兄弟 2・3・4・5。2・4・5 がタグを持ち、3 は持たない。「Python」と「重要」は表記違いで 2 つのノードが持つ
+    const withTags = [
+      node(1, null, "親"),
+      node(2, 1, "a", { tags: ["Python", "資料"] }),
+      node(3, 1, "b"),
+      node(4, 1, "c", { tags: ["python", "重要"] }),
+      node(5, 1, "d", { tags: ["ＰＹＴＨＯＮ", "重要"] }),
+    ];
+
+    it("選択中のタグを配列順に並べ、同じタグとみなすもの（nodeTagKey）は最初の表記を残して除く（ids の順序に依存しない）", () => {
+      expect(okPlan(withTags, [5, 4, 3, 2], 3)).toMatchObject({
+        tags: ["Python", "資料", "重要"],
+        tagSourceCount: 3,
+        tagDuplicateCount: 3,
+      });
+    });
+
+    it("主選択のタグも、配列上の位置に入る（主選択の表記が後なら、前のノードの表記が残る）", () => {
+      expect(okPlan(withTags, [2, 4], 4)).toMatchObject({
+        tags: ["Python", "資料", "重要"],
+        tagSourceCount: 2,
+        tagDuplicateCount: 1,
+      });
+    });
+
+    it("タグを持つノードが 1 つだけなら、そのタグのまま（重複 0 件）", () => {
+      expect(okPlan(withTags, [3, 2], 3)).toMatchObject({ tags: ["Python", "資料"], tagSourceCount: 1, tagDuplicateCount: 0 });
+    });
+
+    it("誰もタグを持たなければ undefined と 0 件", () => {
+      const plain = [node(1, null, "親"), node(2, 1, "a"), node(3, 1, "b")];
+
+      expect(okPlan(plain, [2, 3], 2)).toMatchObject({ tags: undefined, tagSourceCount: 0, tagDuplicateCount: 0 });
+    });
+
+    it("同じタグとみなすものを除いてちょうど上限（10 件）なら統合できる", () => {
+      const nodes = [
+        node(1, null, "親"),
+        node(2, 1, "a", { tags: tagNames("a", 6) }),
+        node(3, 1, "b", { tags: [...tagNames("A", 2), ...tagNames("b", 4)] }),
+      ];
+
+      expect(okPlan(nodes, [2, 3], 2)).toMatchObject({ tagSourceCount: 2, tagDuplicateCount: 2 });
+      expect(okPlan(nodes, [2, 3], 2).tags).toHaveLength(NODE_TAGS_MAX_COUNT);
+    });
+
+    it("同じタグとみなすものを除いて上限を 1 超えると tags-too-many（黙って切り詰めない）", () => {
+      const nodes = [
+        node(1, null, "親"),
+        node(2, 1, "a", { tags: tagNames("a", 6) }),
+        node(3, 1, "b", { tags: tagNames("b", 5) }),
+      ];
+
+      expect(planNodeMerge(nodes, [2, 3], 2, " ", visibleOf(nodes))).toEqual({ ok: false, reason: "tags-too-many" });
+    });
+
+    it("タグの件数の検査は links-too-many の後（URL も多ければ links-too-many）", () => {
+      const nodes = [
+        node(1, null, "親"),
+        node(2, 1, "a", { tags: tagNames("a", 6), links: urls("a", 6) }),
+        node(3, 1, "b", { tags: tagNames("b", 5), links: urls("b", 5) }),
+      ];
+
+      expect(planNodeMerge(nodes, [2, 3], 2, " ", visibleOf(nodes))).toEqual({ ok: false, reason: "links-too-many" });
+    });
+  });
+
   describe("各 reason と、検査の順序", () => {
     const failure = (
       nodes: readonly Node[],
@@ -453,6 +530,20 @@ describe("isSameNodeMergePlan", () => {
 
     expect(isSameNodeMergePlan(withLinks, { ...base, links: [LINK_A, LINK_B] })).toBe(true);
     expect(isSameNodeMergePlan(withLinks, { ...base, links: [LINK_B, LINK_A] })).toBe(false);
+  });
+
+  it("連結したタグ・タグの件数・重複の件数が違えば偽（L-036）", () => {
+    expect(isSameNodeMergePlan(base, { ...base, tags: ["重要"] })).toBe(false);
+    expect(isSameNodeMergePlan(base, { ...base, tagSourceCount: base.tagSourceCount + 1 })).toBe(false);
+    expect(isSameNodeMergePlan(base, { ...base, tagDuplicateCount: base.tagDuplicateCount + 1 })).toBe(false);
+  });
+
+  it("連結したタグは要素ごとに比べる（別の配列でも内容が同じなら真、順や表記が違えば偽）", () => {
+    const withTags = { ...base, tags: ["Python", "重要"] };
+
+    expect(isSameNodeMergePlan(withTags, { ...base, tags: ["Python", "重要"] })).toBe(true);
+    expect(isSameNodeMergePlan(withTags, { ...base, tags: ["重要", "Python"] })).toBe(false);
+    expect(isSameNodeMergePlan(withTags, { ...base, tags: ["python", "重要"] })).toBe(false);
   });
 
   it("吸収されるノードの順が違えば偽", () => {
@@ -702,6 +793,46 @@ describe("mergeNodes", () => {
       const parsed = parseMapDocumentJson(serializeMapDocument(createMapDocument(result.nodes, "manual")));
 
       expect(parsed.ok && parsed.value.nodes.find((item) => item.id === 3)?.links).toEqual([LINK_A, LINK_B, LINK_C]);
+    });
+  });
+
+  describe("タグ", () => {
+    const withTags = [
+      node(1, null, "親"),
+      node(2, 1, "a", { tags: ["Python", "資料"] }),
+      node(3, 1, "b"),
+      node(4, 1, "c", { tags: ["python", "重要"] }),
+    ];
+
+    it("残すノードのタグは、選択中のタグを配列順に同じタグとみなすものを除いて並べたもの（残すノードがタグを持たなくても付く）", () => {
+      expect(byId(merged(withTags, [2, 3, 4], 3).nodes, 3).tags).toEqual(["Python", "資料", "重要"]);
+    });
+
+    it("残すノードだけがタグを持つときは、そのタグのまま", () => {
+      expect(byId(merged(withTags, [2, 3], 2).nodes, 2).tags).toEqual(["Python", "資料"]);
+    });
+
+    it("誰もタグを持たなければ tags のキーを持たない", () => {
+      const plain = [node(1, null, "親"), node(2, 1, "a"), node(3, 1, "b")];
+
+      expect("tags" in byId(merged(plain, [2, 3], 2).nodes, 2)).toBe(false);
+    });
+
+    it("同じタグとみなすものを除いて上限を超えるときは tags-too-many を返し、統合しない", () => {
+      const many = [
+        node(1, null, "親"),
+        node(2, 1, "a", { tags: tagNames("a", 6) }),
+        node(3, 1, "b", { tags: tagNames("b", 5) }),
+      ];
+
+      expect(mergeNodes(many, [2, 3], 2, " ", visibleOf(many), "manual")).toEqual({ ok: false, reason: "tags-too-many" });
+    });
+
+    it("連結したタグは保存と読み込みで往復する", () => {
+      const result = merged(withTags, [2, 3, 4], 3);
+      const parsed = parseMapDocumentJson(serializeMapDocument(createMapDocument(result.nodes, "manual")));
+
+      expect(parsed.ok && parsed.value.nodes.find((item) => item.id === 3)?.tags).toEqual(["Python", "資料", "重要"]);
     });
   });
 

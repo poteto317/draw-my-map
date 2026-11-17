@@ -532,5 +532,40 @@ describe("useNodes の mergeNodes", () => {
       expect(outcome).toEqual({ ok: false, reason: "plan-changed" });
       expect(result.current.nodes).toBe(before.nodes);
     });
+
+    it("同じタグとみなすものを除いたタグが上限を超えるときは tags-too-many で、何も変えない", () => {
+      const tagNames = (prefix: string, count: number) => (
+        Array.from({ length: count }, (_, index) => `${prefix}${index}`)
+      );
+      const many: NodeMapState = {
+        layoutMode: "manual",
+        nodes: mergeMap().nodes.map((item) => {
+          if (item.id === 2) return { ...item, tags: tagNames("a", 6) };
+          if (item.id === 3) return { ...item, tags: tagNames("b", 5) };
+          return item;
+        }),
+      };
+      const { result } = renderNodes(many);
+      const before = result.current;
+
+      const outcome = merge(() => result.current, [2, 3], 3);
+
+      expect(outcome).toEqual({ ok: false, reason: "tags-too-many" });
+      expect(result.current.nodes).toBe(before.nodes);
+      expect(result.current.canUndo).toBe(false);
+    });
+
+    it("確認の後にタグが増えたら plan-changed（連結後のタグが警告なしに変わらない）", () => {
+      const { result } = renderNodes(mergeMap());
+      const shown = planNodeMerge(result.current.nodes, [2, 3], 3, " ", ALL);
+      act(() => { result.current.addNodeTag(2, "重要"); });
+      const before = result.current;
+
+      let outcome!: MergeNodesResult;
+      act(() => { outcome = result.current.mergeNodes([2, 3], 3, " ", ALL, shown); });
+
+      expect(outcome).toEqual({ ok: false, reason: "plan-changed" });
+      expect(result.current.nodes).toBe(before.nodes);
+    });
   });
 });

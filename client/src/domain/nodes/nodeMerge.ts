@@ -5,6 +5,7 @@ import { maxNodeImportance } from "@/domain/nodes/nodeImportance";
 import { indexNodeForest } from "@/domain/nodes/nodeLayoutForest";
 import { NODE_LINKS_MAX_COUNT, areNodeLinksEqual, withNodeLinks } from "@/domain/nodes/nodeLink";
 import { NODE_NOTE_MERGE_JOINER, isNodeNoteWithinLimit, withNodeNote } from "@/domain/nodes/nodeNote";
+import { NODE_TAGS_MAX_COUNT, areNodeTagsEqual, uniqueNodeTags, withNodeTags } from "@/domain/nodes/nodeTag";
 import type { Node } from "@/types/node";
 import type { NodeImportance } from "@/types/nodeImportance";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
@@ -21,6 +22,8 @@ export type NodeMergeFailureReason =
   | "note-too-long"
   // 選択中の URL を重複を除いて連結すると上限（NODE_LINKS_MAX_COUNT）を超える。黙って切り詰めない
   | "links-too-many"
+  // 選択中のタグを同じタグとみなすもの（nodeTagKey）を除いて連結すると上限（NODE_TAGS_MAX_COUNT）を超える。黙って切り詰めない
+  | "tags-too-many"
   // 確定時の再計画が、プレビューで見せた計画と違う（useNodes.mergeNodes が返す）
   | "plan-changed";
 
@@ -51,6 +54,13 @@ export type NodeMergePlan =
     linkSourceCount: number;
     // 重複で捨てる URL の件数（プレビューで見せる）
     linkDuplicateCount: number;
+    // 選択中のノードのタグを配列順に並べ、同じタグとみなすもの（nodeTagKey）は最初に出てきたものを残して除いたもの。
+    // 1 つも無ければ undefined
+    tags: readonly string[] | undefined;
+    // タグを持つノードの件数
+    tagSourceCount: number;
+    // 同じタグとみなして捨てるタグの件数（プレビューで見せる）
+    tagDuplicateCount: number;
   }
   | { ok: false; reason: NodeMergeFailureReason };
 
@@ -137,8 +147,13 @@ export function planNodeMerge(
   const linkLists = selected.flatMap((node) => (node.links === undefined || node.links.length === 0 ? [] : [node.links]));
   const allLinks = linkLists.flat();
   const links = [...new Set(allLinks)];
-  // 検査の順の最後（note-too-long の後）
+  // 検査の順: note-too-long の後
   if (links.length > NODE_LINKS_MAX_COUNT) return failed("links-too-many");
+  const tagLists = selected.flatMap((node) => (node.tags === undefined || node.tags.length === 0 ? [] : [node.tags]));
+  const allTags = tagLists.flat();
+  const tags = uniqueNodeTags(allTags);
+  // 検査の順の最後（links-too-many の後）
+  if (tags.length > NODE_TAGS_MAX_COUNT) return failed("tags-too-many");
 
   return {
     ok: true,
@@ -155,12 +170,16 @@ export function planNodeMerge(
     links: links.length === 0 ? undefined : links,
     linkSourceCount: linkLists.length,
     linkDuplicateCount: allLinks.length - links.length,
+    tags: tags.length === 0 ? undefined : tags,
+    tagSourceCount: tagLists.length,
+    tagDuplicateCount: allTags.length - tags.length,
   };
 }
 
 // 確定時の再計画とプレビューの計画が同じか。プレビューで見せた内容（残すノード・吸収されるノードの順・ラベル・重要度・
 // イラストの扱いと引き継ぎ元・失われるイラストの件数・付け替える子の件数・連結したメモとその件数・連結した URL と
-// その元の件数・重複で捨てる件数）で比べる（L-036）。URL は要素ごとに比べる（別の配列でも内容が同じなら同じ）。
+// その元の件数・重複で捨てる件数・連結したタグとその元の件数・重複で捨てる件数）で比べる（L-036）。URL とタグは
+// 要素ごとに比べる（別の配列でも内容が同じなら同じ）。
 // 引き継ぐイラスト本体は illustrationFrom と引き継ぎ元で決まるので比べない。失敗した計画は同じとみなさない
 export function isSameNodeMergePlan(a: NodeMergePlan, b: NodeMergePlan): boolean {
   if (!a.ok || !b.ok) return false;
@@ -176,6 +195,9 @@ export function isSameNodeMergePlan(a: NodeMergePlan, b: NodeMergePlan): boolean
     && areNodeLinksEqual(a.links, b.links)
     && a.linkSourceCount === b.linkSourceCount
     && a.linkDuplicateCount === b.linkDuplicateCount
+    && areNodeTagsEqual(a.tags, b.tags)
+    && a.tagSourceCount === b.tagSourceCount
+    && a.tagDuplicateCount === b.tagDuplicateCount
     && a.absorbedIds.length === b.absorbedIds.length
     && a.absorbedIds.every((id, index) => id === b.absorbedIds[index]);
 }
@@ -183,13 +205,17 @@ export function isSameNodeMergePlan(a: NodeMergePlan, b: NodeMergePlan): boolean
 // 残すノードの属性を計画どおりに更新する。位置と大きさは変えない（イラストを引き継ぐときだけ、
 // attachIllustration と同じ規則で高さをイラスト付きの高さにする）。メモは計画の連結結果で置き換え
 // （残すノードのメモも連結に含まれるので失われない）、連結結果が無ければ note のキーを持たせない。URL も同じく
-// 計画の連結結果で置き換え、連結結果が無ければ links のキーを持たせない。
+// 計画の連結結果で置き換え、連結結果が無ければ links のキーを持たせない。タグも同じく計画の連結結果で置き換え、
+// 連結結果が無ければ tags のキーを持たせない。
 // Node に属性を足したときは、ここで残すノードの値を残すか、吸収されるノードの値を引き継ぐかを決める
 // （何もしないと、吸収されるノードの値は警告なしに捨てられる）。計画・プレビュー・isSameNodeMergePlan も合わせて見直す
 function applyPlanToSurvivor(survivor: Node, plan: Extract<NodeMergePlan, { ok: true }>): Node {
-  const updated = withNodeLinks(
-    withNodeNote({ ...survivor, label: plan.label, importance: plan.importance }, plan.note),
-    plan.links,
+  const updated = withNodeTags(
+    withNodeLinks(
+      withNodeNote({ ...survivor, label: plan.label, importance: plan.importance }, plan.note),
+      plan.links,
+    ),
+    plan.tags,
   );
   if (plan.illustrationFrom !== "absorbed" || plan.illustration === undefined) return updated;
   return { ...updated, illustration: plan.illustration, height: ILLUSTRATED_NODE_HEIGHT };
