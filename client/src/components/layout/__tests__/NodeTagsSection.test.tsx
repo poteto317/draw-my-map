@@ -244,6 +244,42 @@ describe("NodeTagsSection", () => {
     expect(tagInput()).toHaveFocus();
   });
 
+  it("上限のエラーを出した後に削除すると、エラー（alert・aria-invalid）を消す", async () => {
+    const user = userEvent.setup();
+    render(<Harness tags={tagsOf(NODE_TAGS_MAX_COUNT)} />);
+    fireEvent.change(tagInput(), { target: { value: "重要" } });
+    fireEvent.submit(tagInput().form!);
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(tagInput()).toHaveAttribute("aria-invalid", "true");
+
+    await user.click(screen.getByRole("button", { name: "タグを削除: tag9" }));
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(tagInput()).not.toHaveAttribute("aria-invalid", "true");
+    expect(tagInput()).toHaveFocus();
+  });
+
+  it("削除が成功しなかったとき（対象のタグが既に無い）は、エラーを残してフォーカスを入力欄へ移す", async () => {
+    const user = userEvent.setup();
+    const node = createTestNode({ id: 1, label: "りんご", tags: tagsOf(NODE_TAGS_MAX_COUNT) });
+    render(
+      <NodeTagsSection
+        node={node}
+        documentRevision={0}
+        onAddTag={() => ({ ok: false, reason: "too-many" })}
+        onRemoveTag={() => false}
+      />,
+    );
+    fireEvent.change(tagInput(), { target: { value: "重要" } });
+    fireEvent.submit(tagInput().form!);
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "タグを削除: tag9" }));
+
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(tagInput()).toHaveFocus();
+  });
+
   it("documentRevision が変わると、作り直さずに入力欄の下書きとエラーを消す（フォーカスと要素はそのまま。L-588・L-155）", async () => {
     const user = userEvent.setup();
     const { rerender } = render(<Harness tags={["Python"]} />);
