@@ -169,6 +169,7 @@ describe("mapHistory", () => {
       ["illustration", { illustration: "data:x" }],
       ["links", { links: ["https://example.com/"] }],
       ["tags", { tags: ["重要"] }],
+      ["sources", { sources: [{ title: "設計" }] }],
     ])("%sの違いを検出する", (_name, override) => {
       expect(areMapStatesEqual(make({}), make(override))).toBe(false);
     });
@@ -231,6 +232,43 @@ describe("mapHistory", () => {
         ["長さが違う", ["Python"], ["Python", "重要"]],
       ])("%s なら等しくない", (_name, left, right) => {
         expect(areMapStatesEqual(withTags(left), withTags(right))).toBe(false);
+      });
+    });
+
+    describe("配列の値（sources）", () => {
+      const withSources = (
+        sources: readonly { title: string; page?: string; url?: string }[] | undefined,
+      ): NodeMapState => ({
+        layoutMode: "manual",
+        nodes: [createTestNode({ id: 1, ...(sources === undefined ? {} : { sources }) })],
+      });
+
+      it("内容が同じなら別の配列・別オブジェクトでも等しく、確定しても履歴を積まない（L-135）", () => {
+        expect(
+          areMapStatesEqual(
+            withSources([{ title: "設計", page: "12" }]),
+            withSources([{ title: "設計", page: "12" }]),
+          ),
+        ).toBe(true);
+
+        const committed = commitMapHistory(
+          createMapHistory(withSources([{ title: "設計" }])),
+          withSources([{ title: "設計" }]),
+        );
+        expect(committed.past).toHaveLength(0);
+      });
+
+      it("未定義と空配列は等しい", () => {
+        expect(areMapStatesEqual(withSources(undefined), withSources([]))).toBe(true);
+      });
+
+      it.each<[string, readonly { title: string; page?: string; url?: string }[], readonly { title: string; page?: string; url?: string }[]]>([
+        ["表記が違う", [{ title: "Python" }], [{ title: "python" }]],
+        ["ページが違う", [{ title: "設計", page: "1" }], [{ title: "設計", page: "2" }]],
+        ["順が違う", [{ title: "A" }, { title: "B" }], [{ title: "B" }, { title: "A" }]],
+        ["長さが違う", [{ title: "A" }], [{ title: "A" }, { title: "B" }]],
+      ])("%s なら等しくない", (_name, left, right) => {
+        expect(areMapStatesEqual(withSources(left), withSources(right))).toBe(false);
       });
     });
   });

@@ -58,4 +58,15 @@ describe("projectMapDocumentNode", () => {
     expect("tags" in projectMapDocumentNode(base)).toBe(false);
     expect("tags" in projectMapDocumentNode({ ...base, tags: undefined })).toBe(false);
   });
+
+  it("sources があるときだけ項目を出す", () => {
+    const base = {
+      id: 1, parentId: null, x: 0, y: 0, width: 100, height: 60, label: "a", importance: "medium" as const,
+    };
+    const sources = [{ title: "設計", page: "12", url: "https://example.com/" }] as const;
+
+    expect(projectMapDocumentNode({ ...base, sources })).toEqual({ ...base, sources });
+    expect("sources" in projectMapDocumentNode(base)).toBe(false);
+    expect("sources" in projectMapDocumentNode({ ...base, sources: undefined })).toBe(false);
+  });
 });

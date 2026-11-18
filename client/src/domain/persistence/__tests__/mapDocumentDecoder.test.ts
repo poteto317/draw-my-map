@@ -287,3 +287,39 @@ describe("version 3 のタグ", () => {
     });
   });
 });
+
+describe("version 3 の出典", () => {
+  it("version 3 の sources を正規化して読み込み、同じ出典とみなす要素は後のものを捨てる", () => {
+    const parsed = parseMapDocumentJsonWithVersion(json(3, {
+      ...baseNode,
+      sources: [
+        { title: "  Python ", page: "1", url: "https://Example.com" },
+        { title: "PYTHON", page: "1", url: "https://example.com/" },
+        { title: "設計" },
+      ],
+    }));
+
+    expect(parsed.ok && parsed.value.document.nodes[0].sources).toEqual([
+      { title: "Python", page: "1", url: "https://example.com/" },
+      { title: "設計" },
+    ]);
+  });
+
+  it.each([1, 2])("version %i の sources は無視する", (version) => {
+    const sources = [{ title: "a\u0000b" }];
+    const node = version === 1 ? { ...baseNode, sources, importance: undefined } : { ...baseNode, sources };
+    const parsed = parseMapDocumentJsonWithVersion(json(version, node));
+
+    expect(parsed.ok && "sources" in parsed.value.document.nodes[0]).toBe(false);
+  });
+
+  it("version 3 で未知キーを含む sources は、読み込みを失敗にする", () => {
+    expect(
+      parseMapDocumentJsonWithVersion(json(3, { ...baseNode, sources: [{ title: "設計", author: "x" }] })),
+    ).toEqual({
+      ok: false,
+      error:
+        "node[0].sourcesは、タイトル（200文字以内）・ページ（80文字以内）・http/https の URL からなる出典の配列（最大10件）である必要があります。",
+    });
+  });
+});

@@ -400,6 +400,58 @@ describe("mapConflict", () => {
       expect(isDocumentContentEqual(left, right)).toBe(true);
       expect(isDocumentContentEqual(baseDoc, explicitUndefined)).toBe(true);
     });
+
+    it("出典だけが違う 2 文書は別物と判定する（表記・順・ページの違いも別物。別タブで変えた出典の競合を見逃さない）", () => {
+      const withSources: MapDocumentV3 = {
+        ...baseDoc,
+        nodes: [baseDoc.nodes[0], { ...baseDoc.nodes[1], sources: [{ title: "Python" }] }],
+      };
+      const otherSpelling: MapDocumentV3 = {
+        ...baseDoc,
+        nodes: [baseDoc.nodes[0], { ...baseDoc.nodes[1], sources: [{ title: "python" }] }],
+      };
+      const ordered: MapDocumentV3 = {
+        ...baseDoc,
+        nodes: [
+          baseDoc.nodes[0],
+          { ...baseDoc.nodes[1], sources: [{ title: "Python" }, { title: "設計", page: "1" }] },
+        ],
+      };
+      const reordered: MapDocumentV3 = {
+        ...baseDoc,
+        nodes: [
+          baseDoc.nodes[0],
+          { ...baseDoc.nodes[1], sources: [{ title: "設計", page: "1" }, { title: "Python" }] },
+        ],
+      };
+
+      expect(isDocumentContentEqual(baseDoc, withSources)).toBe(false);
+      expect(isDocumentContentEqual(withSources, otherSpelling)).toBe(false);
+      expect(isDocumentContentEqual(ordered, reordered)).toBe(false);
+    });
+
+    it("sources は内容ごとに比べ、別の配列・別オブジェクトでも内容が同じなら等価。未定義と空配列・オプショナル未定義も等価", () => {
+      const left: MapDocumentV3 = {
+        ...baseDoc,
+        nodes: [baseDoc.nodes[0], { ...baseDoc.nodes[1], sources: [{ title: "設計", page: "12" }] }],
+      };
+      const right: MapDocumentV3 = {
+        ...baseDoc,
+        nodes: [baseDoc.nodes[0], { ...baseDoc.nodes[1], sources: [{ title: "設計", page: "12" }] }],
+      };
+      const explicitUndefined: MapDocumentV3 = {
+        ...baseDoc,
+        nodes: [{ ...baseDoc.nodes[0], sources: undefined }, baseDoc.nodes[1]],
+      };
+      const emptyArray: MapDocumentV3 = {
+        ...baseDoc,
+        nodes: [{ ...baseDoc.nodes[0], sources: [] }, baseDoc.nodes[1]],
+      };
+
+      expect(isDocumentContentEqual(left, right)).toBe(true);
+      expect(isDocumentContentEqual(baseDoc, explicitUndefined)).toBe(true);
+      expect(isDocumentContentEqual(baseDoc, emptyArray)).toBe(true);
+    });
   });
 
   describe("createConflictCopyName", () => {

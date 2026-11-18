@@ -1,4 +1,5 @@
-import type { Node } from "@/types/node";
+import { areNodeSourcesEqual } from "@/domain/nodes/nodeSource";
+import type { Node, NodeSource } from "@/types/node";
 import type { NodeMapState } from "@/types/nodeMapState";
 
 export const MAP_HISTORY_LIMIT = 100;
@@ -22,14 +23,15 @@ export function createMapHistory(initial: NodeMapState): MapHistoryState {
   return { past: [], present: initial, future: [], groupStart: null };
 }
 
-// 配列の値（links・tags）は要素ごとに比べる。別の配列でも内容が同じなら、実変更の無い履歴を積まない（L-135）
+// 配列の値（links・tags）は要素ごとに比べる。sources はオブジェクト要素なので areNodeSourcesEqual。
+// 別の配列でも内容が同じなら、実変更の無い履歴を積まない（L-135）
 function areArrayValuesEqual(a: readonly unknown[], b: readonly unknown[]): boolean {
   return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
 function areNodesEqual(a: Node, b: Node): boolean {
   if (a === b) return true;
-  // Node は型エイリアスのため、キャストなしで任意のキーを読める型へ代入できる（illustration・links・tags の有無も比較する）
+  // Node は型エイリアスのため、キャストなしで任意のキーを読める型へ代入できる（illustration・links・tags・sources の有無も比較する）
   const left: Readonly<Record<string, unknown>> = a;
   const right: Readonly<Record<string, unknown>> = b;
   const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
@@ -37,6 +39,17 @@ function areNodesEqual(a: Node, b: Node): boolean {
     const leftValue = left[key];
     const rightValue = right[key];
     if (leftValue === rightValue) continue;
+    if (key === "sources") {
+      if (
+        areNodeSourcesEqual(
+          leftValue as readonly NodeSource[] | undefined,
+          rightValue as readonly NodeSource[] | undefined,
+        )
+      ) {
+        continue;
+      }
+      return false;
+    }
     if (Array.isArray(leftValue) && Array.isArray(rightValue) && areArrayValuesEqual(leftValue, rightValue)) continue;
     return false;
   }

@@ -165,3 +165,52 @@ describe("normalizeMapDocumentNode の tags", () => {
     });
   });
 });
+
+describe("normalizeMapDocumentNode の sources", () => {
+  it("V3 の sources を正規化して読み込み、同じ出典とみなす要素は後のものを捨てる", () => {
+    expect(
+      normalizeMapDocumentNode(
+        {
+          ...validNode,
+          sources: [
+            { title: " Python ", page: " 1 ", url: "https://Example.com" },
+            { title: "python", page: "1", url: "https://example.com/" },
+            { title: "設計" },
+          ],
+        },
+        0,
+        3,
+      ),
+    ).toEqual({
+      ok: true,
+      value: {
+        ...validNode,
+        sources: [
+          { title: "Python", page: "1", url: "https://example.com/" },
+          { title: "設計" },
+        ],
+      },
+    });
+  });
+
+  it("V3 の空の sources は、項目ごと持たない", () => {
+    const result = normalizeMapDocumentNode({ ...validNode, sources: [] }, 0, 3);
+
+    expect(result.ok && "sources" in result.value).toBe(false);
+  });
+
+  it("V2 の sources は無視する", () => {
+    const result = normalizeMapDocumentNode({ ...validNode, sources: [{ title: "設計" }] }, 0, 2);
+
+    expect(result).toEqual({ ok: true, value: validNode });
+    expect(result.ok && "sources" in result.value).toBe(false);
+  });
+
+  it("V3 の不正な sources は、位置付きのエラーで拒否する", () => {
+    expect(normalizeMapDocumentNode({ ...validNode, sources: [{ title: "設計", author: "x" }] }, 4, 3)).toEqual({
+      ok: false,
+      error:
+        "node[4].sourcesは、タイトル（200文字以内）・ページ（80文字以内）・http/https の URL からなる出典の配列（最大10件）である必要があります。",
+    });
+  });
+});
