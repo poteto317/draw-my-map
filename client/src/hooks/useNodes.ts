@@ -70,6 +70,12 @@ import {
   removeNodeTag as computeNodeTagRemoval,
   type AddNodeTagOutcome,
 } from "@/domain/nodes/nodeTag";
+import {
+  addNodeSource as computeNodeSourceAddition,
+  removeNodeSource as computeNodeSourceRemoval,
+  type AddNodeSourceOutcome,
+  type NodeSourceInput,
+} from "@/domain/nodes/nodeSource";
 import { clearNodeIllustration, replaceNodeIllustration } from "@/domain/nodes/nodeIllustrationUpdate";
 import {
   moveNodeBranch,
@@ -134,6 +140,11 @@ type UseNodesReturn = {
   addNodeTag: (id: number, input: string) => AddNodeTagOutcome;
   // タグの削除。保存されている名前と完全に一致するタグだけを消し、1操作として確定する。受理したかを返す
   removeNodeTag: (id: number, tag: string) => boolean;
+  // 出典の追加（右パネルの「出典」節）。最新の状態から判定し、成功なら1操作として確定する。
+  // 失敗は理由を返し、何も変えない。documentRevision は変えない
+  addNodeSource: (id: number, input: NodeSourceInput) => AddNodeSourceOutcome;
+  // 出典の削除。指定 index の出典だけを消し、1操作として確定する。受理したかを返す
+  removeNodeSource: (id: number, index: number) => boolean;
   moveNode: (id: number, x: number, y: number) => void;
   connectNodes: (parentId: number, childId: number) => boolean;
   // 成功時は複製根のIDを返して選択する。対象不在・配置不能・自動配置失敗ではnullを返し何も変えない
@@ -381,6 +392,18 @@ export function useNodes(): UseNodesReturn {
     applyNonStructuralChange((currentNodes) => computeNodeTagRemoval(currentNodes, id, tag))
   ), [applyNonStructuralChange]);
 
+  // 判定と確定は同じ最新の状態で行う（addNodeTag と同じ。L-001・L-453）
+  const addNodeSource = useCallback((id: number, input: NodeSourceInput): AddNodeSourceOutcome => {
+    const result = computeNodeSourceAddition(getCurrentState().nodes, id, input);
+    if (!result.ok) return { ok: false, reason: result.reason };
+    applyNonStructuralChange(() => result.nodes);
+    return { ok: true };
+  }, [getCurrentState, applyNonStructuralChange]);
+
+  const removeNodeSource = useCallback((id: number, index: number) => (
+    applyNonStructuralChange((currentNodes) => computeNodeSourceRemoval(currentNodes, id, index))
+  ), [applyNonStructuralChange]);
+
   const moveNode = useCallback((id: number, x: number, y: number) => {
     applyManualMove((currentNodes) => (
       moveNodeSubtree(currentNodes, id, x, y)
@@ -618,6 +641,8 @@ export function useNodes(): UseNodesReturn {
     removeNodeLink,
     addNodeTag,
     removeNodeTag,
+    addNodeSource,
+    removeNodeSource,
     moveNode,
     connectNodes,
     duplicateSubtree,
