@@ -254,4 +254,39 @@ describe("詳細メモ", () => {
     expect(screen.queryByText(/件選択中。主選択のノードのメモを編集します/)).toBeNull();
     expect(noteBox()).toHaveValue("リンゴのメモ");
   });
+
+  it("Markdown をプレビュー表示でき、元に戻す 1 回で変更前へ戻り、タブやプレビュー内リンク上の Delete/Backspace でノードが消えない（L-522）", async () => {
+    seed();
+    await renderPage();
+    const user = userEvent.setup();
+    selectNode(BANANA, NODE_COUNT);
+
+    const markdown = "# 概要\n\n- 項目1\n\n[参考](https://example.com/ref)\n\n![構成図](https://example.com/diagram.png)";
+    act(() => noteBox().focus());
+    fireEvent.change(noteBox(), { target: { value: markdown } });
+
+    await user.click(screen.getByRole("tab", { name: "プレビュー" }));
+
+    expect(screen.getByRole("heading", { level: 1, name: "概要" })).toBeVisible();
+    expect(screen.getByRole("listitem")).toHaveTextContent("項目1");
+    const refLink = screen.getByRole("link", { name: "参考" });
+    expect(refLink).toHaveAttribute("href", "https://example.com/ref");
+    const imageLink = screen.getByRole("link", { name: "[画像: 構成図]" });
+    expect(imageLink).toHaveAttribute("href", "https://example.com/diagram.png");
+
+    const previewTab = screen.getByRole("tab", { name: "プレビュー" });
+    act(() => previewTab.focus());
+    fireEvent.keyDown(previewTab, { key: "Delete" });
+    fireEvent.keyDown(previewTab, { key: "Backspace" });
+
+    act(() => refLink.focus());
+    fireEvent.keyDown(refLink, { key: "Delete" });
+    fireEvent.keyDown(refLink, { key: "Backspace" });
+
+    expect(nodesOf().map((node) => node.id)).toEqual([1, 2, 3, 4]);
+
+    await user.click(undoButton());
+    expect(nodeOf(4).note).toBeUndefined();
+    expect(noteBox()).toHaveValue("");
+  });
 });

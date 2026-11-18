@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { NodeNoteEditor } from "@/components/layout/NodeNoteEditor";
 import { createMapHistoryLeaseSpy } from "@/testing/createTestMapHistoryLease";
 
@@ -111,5 +113,67 @@ describe("NodeNoteEditor", () => {
     unmount();
 
     expect(onPreviewNote).not.toHaveBeenCalled();
+  });
+
+  describe("編集・プレビューのタブ切り替え", () => {
+    function setupStateful(initialNote?: string) {
+      const spy = createMapHistoryLeaseSpy();
+      const onPreviewNote = jest.fn<boolean, [number, string]>(() => true);
+
+      function Wrapper() {
+        const [note, setNote] = useState<string | undefined>(initialNote);
+        const handlePreviewNote = (id: number, nextNote: string) => {
+          onPreviewNote(id, nextNote);
+          setNote(nextNote);
+          return true;
+        };
+        return (
+          <NodeNoteEditor
+            node={{ id: 5, label: "対象", note }}
+            selectionCount={1}
+            onPreviewNote={handlePreviewNote}
+            onBeginNoteEdit={spy.onBeginNodeMove}
+          />
+        );
+      }
+
+      const view = render(<Wrapper />);
+      const box = () => screen.getByRole("textbox", { name: "詳細メモ", hidden: true }) as HTMLTextAreaElement;
+      return { ...view, spy, onPreviewNote, box };
+    }
+
+    it("入力直後（300ms 未満）にプレビュータブをクリックすると即時確定して見出しが表示され、編集タブへ戻しても値が残る（L-473・L-737）", async () => {
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+      const { box, onPreviewNote, spy } = setupStateful();
+
+      await user.click(box());
+      await user.type(box(), "# 見出し");
+      expect(onPreviewNote).not.toHaveBeenCalled();
+
+      await user.click(screen.getByRole("tab", { name: "プレビュー" }));
+
+      expect(onPreviewNote).toHaveBeenCalledTimes(1);
+      expect(onPreviewNote).toHaveBeenLastCalledWith(5, "# 見出し");
+      expect(spy.lease.finish).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole("heading", { level: 1, name: "見出し" })).toBeVisible();
+
+      await user.click(screen.getByRole("tab", { name: "編集" }));
+      expect(box()).toHaveValue("# 見出し");
+    });
+
+    it("fireEvent.click で textarea にフォーカスが残ったままプレビュータブを押しても、フォールバック経路で即時確定してプレビューが表示される", () => {
+      const { box, onPreviewNote, spy } = setupStateful();
+
+      act(() => box().focus());
+      fireEvent.change(box(), { target: { value: "# フォールバック" } });
+      expect(document.activeElement).toBe(box());
+
+      fireEvent.click(screen.getByRole("tab", { name: "プレビュー" }));
+
+      expect(onPreviewNote).toHaveBeenCalledTimes(1);
+      expect(onPreviewNote).toHaveBeenLastCalledWith(5, "# フォールバック");
+      expect(spy.lease.finish).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole("heading", { level: 1, name: "フォールバック" })).toBeVisible();
+    });
   });
 });
