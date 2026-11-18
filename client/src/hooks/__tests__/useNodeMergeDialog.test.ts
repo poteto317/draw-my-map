@@ -73,6 +73,7 @@ describe("useNodeMergeDialog", () => {
       noteText: null,
       linkText: null,
       tagText: null,
+      sourceText: null,
     });
   });
 

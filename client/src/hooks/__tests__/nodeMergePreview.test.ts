@@ -66,6 +66,7 @@ describe("buildNodeMergePreview", () => {
       noteText: null,
       linkText: null,
       tagText: null,
+      sourceText: null,
     });
   });
 
@@ -215,5 +216,41 @@ describe("buildNodeMergePreview", () => {
 
     expect(buildNodeMergePreview([], plan)).toBeNull();
     expect(describeNodeMergeStatus(false, plan)).toBe("タグをまとめると件数の上限（10 件）を超えるため、統合できません。");
+  });
+
+  describe("出典の連結", () => {
+    it("出典を持つノードが 1 つ以上あれば、同じ出典とみなすものを除いた件数と除いた件数を示す（本文は出さない）", () => {
+      const nodes = [
+        node(1, "a", { sources: [{ title: "Book A", page: "12" }, { title: "Book B" }] }),
+        node(2, "b"),
+        node(3, "c", { sources: [{ title: "book a", page: "12" }, { title: "Book C" }] }),
+      ];
+
+      expect(buildNodeMergePreview(nodes, okPlan(nodes, [1, 2, 3], 1))?.sourceText).toBe("3 件（重複 1 件を除く）");
+    });
+
+    it("重複が無ければ括弧を出さない", () => {
+      const nodes = [
+        node(1, "a", { sources: [{ title: "Book A" }] }),
+        node(2, "b", { sources: [{ title: "Book B" }] }),
+      ];
+
+      expect(buildNodeMergePreview(nodes, okPlan(nodes, [1, 2], 1))?.sourceText).toBe("2 件");
+    });
+
+    it("出典が 1 つも無ければ null（行を出さない）", () => {
+      const nodes = [node(1, "a"), node(2, "b")];
+
+      expect(buildNodeMergePreview(nodes, okPlan(nodes, [1, 2], 1))?.sourceText).toBeNull();
+    });
+  });
+
+  it("sources-too-many の計画はプレビューを作らず、状態文言は失敗の文言", () => {
+    const plan: NodeMergePlan = { ok: false, reason: "sources-too-many" };
+
+    expect(buildNodeMergePreview([], plan)).toBeNull();
+    expect(describeNodeMergeStatus(false, plan)).toBe(
+      "出典をまとめると件数の上限（10 件）を超えるため、統合できません。",
+    );
   });
 });

@@ -8,12 +8,13 @@ import {
 } from "@/domain/nodes/nodeMerge";
 import { NODE_LINKS_MAX_COUNT } from "@/domain/nodes/nodeLink";
 import { NODE_NOTE_MAX_LENGTH } from "@/domain/nodes/nodeNote";
+import { NODE_SOURCES_MAX_COUNT } from "@/domain/nodes/nodeSource";
 import { NODE_TAGS_MAX_COUNT } from "@/domain/nodes/nodeTag";
 import { createMapDocument, serializeMapDocument } from "@/domain/persistence/mapDocumentEncoder";
 import { parseMapDocumentJson } from "@/domain/persistence/mapDocumentDecoder";
 import { createTestNode } from "@/testing/createTestNode";
 import { createJpegDataUrl } from "@/testing/jpegFixture";
-import type { Node } from "@/types/node";
+import type { Node, NodeSource } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 
 function node(id: number, parentId: number | null, label: string, overrides: Partial<Node> = {}): Node {
@@ -33,6 +34,15 @@ function urls(prefix: string, count: number): string[] {
 function tagNames(prefix: string, count: number): string[] {
   return Array.from({ length: count }, (_, index) => `${prefix}${index}`);
 }
+
+// 出典を count 件（title: {prefix}0 …）
+function sourceItems(prefix: string, count: number): NodeSource[] {
+  return Array.from({ length: count }, (_, index) => ({ title: `${prefix}${index}` }));
+}
+
+const SOURCE_A: NodeSource = { title: "Book A", page: "12" };
+const SOURCE_B: NodeSource = { title: "Book B", url: "https://example.com/b" };
+const SOURCE_C: NodeSource = { title: "Book C" };
 
 function visibleOf(nodes: readonly Node[]): Set<number> {
   return new Set(nodes.map((item) => item.id));
@@ -102,6 +112,9 @@ describe("planNodeMerge", () => {
       tags: undefined,
       tagSourceCount: 0,
       tagDuplicateCount: 0,
+      sources: undefined,
+      sourceSourceCount: 0,
+      sourceDuplicateCount: 0,
     });
   });
 
@@ -439,6 +452,88 @@ describe("planNodeMerge", () => {
     });
   });
 
+  describe("出典の連結", () => {
+    // 親 1 の下の兄弟 2・3・4・5。2・4・5 が出典を持ち、3 は持たない。「Book A」は表記違いで 2 つのノードが持つ
+    const withSources = [
+      node(1, null, "親"),
+      node(2, 1, "a", { sources: [SOURCE_A, SOURCE_B] }),
+      node(3, 1, "b"),
+      node(4, 1, "c", { sources: [{ title: "book a", page: "12" }, SOURCE_C] }),
+      node(5, 1, "d", { sources: [{ title: "ＢＯＯＫ　Ａ", page: "12" }, SOURCE_C] }),
+    ];
+
+    it("選択中の出典を配列順に並べ、同じ出典とみなすもの（nodeSourceKey）は最初の表記を残して除く（ids の順序に依存しない）", () => {
+      expect(okPlan(withSources, [5, 4, 3, 2], 3)).toMatchObject({
+        sources: [SOURCE_A, SOURCE_B, SOURCE_C],
+        sourceSourceCount: 3,
+        sourceDuplicateCount: 3,
+      });
+    });
+
+    it("主選択の出典も、配列上の位置に入る（主選択の表記が後なら、前のノードの表記が残る）", () => {
+      expect(okPlan(withSources, [2, 4], 4)).toMatchObject({
+        sources: [SOURCE_A, SOURCE_B, SOURCE_C],
+        sourceSourceCount: 2,
+        sourceDuplicateCount: 1,
+      });
+    });
+
+    it("出典を持つノードが 1 つだけなら、その出典のまま（重複 0 件）", () => {
+      expect(okPlan(withSources, [3, 2], 3)).toMatchObject({
+        sources: [SOURCE_A, SOURCE_B],
+        sourceSourceCount: 1,
+        sourceDuplicateCount: 0,
+      });
+    });
+
+    it("誰も出典を持たなければ undefined と 0 件", () => {
+      const plain = [node(1, null, "親"), node(2, 1, "a"), node(3, 1, "b")];
+
+      expect(okPlan(plain, [2, 3], 2)).toMatchObject({
+        sources: undefined,
+        sourceSourceCount: 0,
+        sourceDuplicateCount: 0,
+      });
+    });
+
+    it("同じ出典とみなすものを除いてちょうど上限（10 件）なら統合できる", () => {
+      const nodes = [
+        node(1, null, "親"),
+        node(2, 1, "a", { sources: sourceItems("a", 6) }),
+        node(3, 1, "b", { sources: [...sourceItems("A", 2), ...sourceItems("b", 4)] }),
+      ];
+
+      expect(okPlan(nodes, [2, 3], 2)).toMatchObject({ sourceSourceCount: 2, sourceDuplicateCount: 2 });
+      expect(okPlan(nodes, [2, 3], 2).sources).toHaveLength(NODE_SOURCES_MAX_COUNT);
+    });
+
+    it("同じ出典とみなすものを除いて上限を 1 超えると sources-too-many（黙って切り詰めない）", () => {
+      const nodes = [
+        node(1, null, "親"),
+        node(2, 1, "a", { sources: sourceItems("a", 6) }),
+        node(3, 1, "b", { sources: sourceItems("b", 5) }),
+      ];
+
+      expect(planNodeMerge(nodes, [2, 3], 2, " ", visibleOf(nodes))).toEqual({
+        ok: false,
+        reason: "sources-too-many",
+      });
+    });
+
+    it("出典の件数の検査は tags-too-many の後（タグも多ければ tags-too-many）", () => {
+      const nodes = [
+        node(1, null, "親"),
+        node(2, 1, "a", { sources: sourceItems("a", 6), tags: tagNames("a", 6) }),
+        node(3, 1, "b", { sources: sourceItems("b", 5), tags: tagNames("b", 5) }),
+      ];
+
+      expect(planNodeMerge(nodes, [2, 3], 2, " ", visibleOf(nodes))).toEqual({
+        ok: false,
+        reason: "tags-too-many",
+      });
+    });
+  });
+
   describe("各 reason と、検査の順序", () => {
     const failure = (
       nodes: readonly Node[],
@@ -584,6 +679,21 @@ describe("isSameNodeMergePlan", () => {
     expect(isSameNodeMergePlan(withTags, { ...base, tags: ["Python", "重要"] })).toBe(true);
     expect(isSameNodeMergePlan(withTags, { ...base, tags: ["重要", "Python"] })).toBe(false);
     expect(isSameNodeMergePlan(withTags, { ...base, tags: ["python", "重要"] })).toBe(false);
+  });
+
+  it("連結した出典・出典の件数・重複の件数が違えば偽（L-036）", () => {
+    expect(isSameNodeMergePlan(base, { ...base, sources: [SOURCE_A] })).toBe(false);
+    expect(isSameNodeMergePlan(base, { ...base, sourceSourceCount: base.sourceSourceCount + 1 })).toBe(false);
+    expect(isSameNodeMergePlan(base, { ...base, sourceDuplicateCount: base.sourceDuplicateCount + 1 })).toBe(false);
+  });
+
+  it("連結した出典は要素ごとに比べる（別の配列でも内容が同じなら真、順や表記が違えば偽）", () => {
+    const withSources = { ...base, sources: [SOURCE_A, SOURCE_B] };
+
+    expect(isSameNodeMergePlan(withSources, { ...base, sources: [SOURCE_A, SOURCE_B] })).toBe(true);
+    expect(isSameNodeMergePlan(withSources, { ...base, sources: [{ ...SOURCE_A }, { ...SOURCE_B }] })).toBe(true);
+    expect(isSameNodeMergePlan(withSources, { ...base, sources: [SOURCE_B, SOURCE_A] })).toBe(false);
+    expect(isSameNodeMergePlan(withSources, { ...base, sources: [{ title: "book a", page: "12" }, SOURCE_B] })).toBe(false);
   });
 
   it("吸収されるノードの順が違えば偽", () => {
@@ -873,6 +983,53 @@ describe("mergeNodes", () => {
       const parsed = parseMapDocumentJson(serializeMapDocument(createMapDocument(result.nodes, "manual")));
 
       expect(parsed.ok && parsed.value.nodes.find((item) => item.id === 3)?.tags).toEqual(["Python", "資料", "重要"]);
+    });
+  });
+
+  describe("出典", () => {
+    const withSources = [
+      node(1, null, "親"),
+      node(2, 1, "a", { sources: [SOURCE_A, SOURCE_B] }),
+      node(3, 1, "b"),
+      node(4, 1, "c", { sources: [{ title: "book a", page: "12" }, SOURCE_C] }),
+    ];
+
+    it("残すノードの出典は、選択中の出典を配列順に同じ出典とみなすものを除いて並べたもの（残すノードが出典を持たなくても付く）", () => {
+      expect(byId(merged(withSources, [2, 3, 4], 3).nodes, 3).sources).toEqual([SOURCE_A, SOURCE_B, SOURCE_C]);
+    });
+
+    it("残すノードだけが出典を持つときは、その出典のまま", () => {
+      expect(byId(merged(withSources, [2, 3], 2).nodes, 2).sources).toEqual([SOURCE_A, SOURCE_B]);
+    });
+
+    it("誰も出典を持たなければ sources のキーを持たない", () => {
+      const plain = [node(1, null, "親"), node(2, 1, "a"), node(3, 1, "b")];
+
+      expect("sources" in byId(merged(plain, [2, 3], 2).nodes, 2)).toBe(false);
+    });
+
+    it("同じ出典とみなすものを除いて上限を超えるときは sources-too-many を返し、統合しない", () => {
+      const many = [
+        node(1, null, "親"),
+        node(2, 1, "a", { sources: sourceItems("a", 6) }),
+        node(3, 1, "b", { sources: sourceItems("b", 5) }),
+      ];
+
+      expect(mergeNodes(many, [2, 3], 2, " ", visibleOf(many), "manual")).toEqual({
+        ok: false,
+        reason: "sources-too-many",
+      });
+    });
+
+    it("連結した出典は保存と読み込みで往復する", () => {
+      const result = merged(withSources, [2, 3, 4], 3);
+      const parsed = parseMapDocumentJson(serializeMapDocument(createMapDocument(result.nodes, "manual")));
+
+      expect(parsed.ok && parsed.value.nodes.find((item) => item.id === 3)?.sources).toEqual([
+        SOURCE_A,
+        SOURCE_B,
+        SOURCE_C,
+      ]);
     });
   });
 

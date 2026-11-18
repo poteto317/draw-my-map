@@ -19,6 +19,7 @@ function preview(overrides: Partial<NodeMergePreview> = {}): NodeMergePreview {
     noteText: null,
     linkText: null,
     tagText: null,
+    sourceText: null,
     ...overrides,
   };
 }
@@ -139,6 +140,22 @@ describe("NodeMergeDialog", () => {
       renderDialog({ preview: preview({ tagText: null }) });
 
       expect(screen.queryByText("タグ")).toBeNull();
+    });
+
+    it("出典を連結するときは、タグの行の後の「出典」の行に件数を出す。見出しは縮まない", () => {
+      renderDialog({ preview: preview({ tagText: "1 件", sourceText: "3 件（重複 1 件を除く）" }) });
+
+      const term = screen.getByText("出典");
+      expect(term.tagName).toBe("DT");
+      expect(term).toHaveClass("shrink-0");
+      expect(term.nextElementSibling).toHaveTextContent("3 件（重複 1 件を除く）");
+      expect(screen.getByText("タグ").parentElement?.nextElementSibling).toBe(term.parentElement);
+    });
+
+    it("出典が無いときは「出典」の行を出さない", () => {
+      renderDialog({ preview: preview({ sourceText: null }) });
+
+      expect(screen.queryByText("出典")).toBeNull();
     });
 
     it("残すノードのラベルを出し、空のラベルは「（空）」、空白だけなら「（空白のみ）」にする", () => {

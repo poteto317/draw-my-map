@@ -235,6 +235,16 @@ describe("splitNode", () => {
     for (const id of [101, 102]) expect("tags" in nodes.find((item) => item.id === id)!).toBe(false);
   });
 
+  it("出典は元のノード（最初の断片）にだけ残し、新しい断片には付けない", () => {
+    const sources = [{ title: "出典A", page: "3" }];
+    const withSources = rootNodes.map((item) => (item.id === 2 ? { ...item, sources } : item));
+
+    const { nodes } = success(withSources, 2, [101, 102]);
+
+    expect(nodes.find((item) => item.id === 2)?.sources).toEqual(sources);
+    for (const id of [101, 102]) expect("sources" in nodes.find((item) => item.id === id)!).toBe(false);
+  });
+
   it("表示されていない（隠れた）兄弟も含めた全体の配列を基準に座標を決める（L-460）", () => {
     // 最も下の兄弟 3（下端 360）と、2 の子 5 を、表示されていないことにする
     const visible = new Set([1, 2]);

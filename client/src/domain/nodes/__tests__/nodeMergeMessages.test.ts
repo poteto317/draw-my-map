@@ -14,6 +14,7 @@ describe("formatNodeMergeFailureNotice", () => {
     ["note-too-long", "メモをまとめると文字数の上限（10,000 文字）を超えるため、統合できません。"],
     ["links-too-many", "URLをまとめると件数の上限（10 件）を超えるため、統合できません。"],
     ["tags-too-many", "タグをまとめると件数の上限（10 件）を超えるため、統合できません。"],
+    ["sources-too-many", "出典をまとめると件数の上限（10 件）を超えるため、統合できません。"],
   ];
 
   it.each(cases)("%s はエラーの通知「%s」にする", (reason, message) => {

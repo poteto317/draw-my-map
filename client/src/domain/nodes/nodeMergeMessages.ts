@@ -1,5 +1,6 @@
 import { NODE_LINKS_MAX_COUNT } from "@/domain/nodes/nodeLink";
 import { NODE_NOTE_MAX_LENGTH, formatNodeNoteLength } from "@/domain/nodes/nodeNote";
+import { NODE_SOURCES_MAX_COUNT } from "@/domain/nodes/nodeSource";
 import { NODE_TAGS_MAX_COUNT } from "@/domain/nodes/nodeTag";
 import type { NodeMergeFailureReason } from "@/domain/nodes/nodeMerge";
 import type { OperationNotice } from "@/types/operationNotice";
@@ -27,6 +28,8 @@ export function formatNodeMergeFailureNotice(reason: NodeMergeFailureReason): Op
       return { kind: "error", message: `URLをまとめると件数の上限（${NODE_LINKS_MAX_COUNT} 件）を超えるため、統合できません。` };
     case "tags-too-many":
       return { kind: "error", message: `タグをまとめると件数の上限（${NODE_TAGS_MAX_COUNT} 件）を超えるため、統合できません。` };
+    case "sources-too-many":
+      return { kind: "error", message: `出典をまとめると件数の上限（${NODE_SOURCES_MAX_COUNT} 件）を超えるため、統合できません。` };
     default: {
       const unreachable: never = reason;
       return unreachable;

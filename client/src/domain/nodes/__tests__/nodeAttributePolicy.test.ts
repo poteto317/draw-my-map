@@ -28,6 +28,7 @@ const SAMPLE: Required<Node> = {
   note: "見本のメモ",
   links: ["https://example.com/sample"],
   tags: ["見本"],
+  sources: [{ title: "見本の出典", page: "1" }],
 };
 
 // 各属性を見本と別の値にしたもの（比較の付け忘れを検査する）。Node に属性を足すと、ここでも型エラーになる
@@ -44,6 +45,7 @@ const DIFFERENT: Required<Node> = {
   note: "別のメモ",
   links: ["https://example.com/other"],
   tags: ["別の見本"],
+  sources: [{ title: "別の出典", url: "https://example.com/src" }],
 };
 
 const OPTIONAL_KEYS = Object.keys(NODE_ATTRIBUTE_POLICY) as OptionalNodeKey[];
@@ -72,7 +74,7 @@ function expectedMergedValue(key: OptionalNodeKey): unknown {
     case "joined":
       return `${SAMPLE.note}${NODE_NOTE_MERGE_JOINER}${DIFFERENT.note}`;
     case "union":
-      return [...(SAMPLE[key] as readonly string[]), ...(DIFFERENT[key] as readonly string[])];
+      return [...(SAMPLE[key] as readonly unknown[]), ...(DIFFERENT[key] as readonly unknown[])];
     default: {
       const unreachable: never = merge;
       return unreachable;
@@ -81,8 +83,8 @@ function expectedMergedValue(key: OptionalNodeKey): unknown {
 }
 
 describe("NODE_ATTRIBUTE_POLICY", () => {
-  it("任意の属性（illustration・note・links・tags）だけを持つ", () => {
-    expect([...OPTIONAL_KEYS].sort()).toEqual(["illustration", "links", "note", "tags"]);
+  it("任意の属性（illustration・note・links・tags・sources）だけを持つ", () => {
+    expect([...OPTIONAL_KEYS].sort()).toEqual(["illustration", "links", "note", "sources", "tags"]);
   });
 });
 
@@ -146,7 +148,12 @@ describe("全属性の往復と比較の検査（書き出し・読み込み・�
   });
 
   it("同じ内容（別の配列）なら、競合判定も履歴の同値判定も同じとみなす", () => {
-    const copy: Node = { ...SAMPLE, links: [...SAMPLE.links], tags: [...SAMPLE.tags] };
+    const copy: Node = {
+      ...SAMPLE,
+      links: [...SAMPLE.links],
+      tags: [...SAMPLE.tags],
+      sources: SAMPLE.sources.map((source) => ({ ...source })),
+    };
 
     expect(isDocumentContentEqual(documentOf(SAMPLE), documentOf(copy))).toBe(true);
     expect(areMapStatesEqual(documentOf(SAMPLE), documentOf(copy))).toBe(true);
