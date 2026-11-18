@@ -27,6 +27,7 @@ export type ExportedNode = {
   note?: string;
   links?: readonly string[];
   tags?: readonly string[];
+  sources?: readonly { title: string; page?: string; url?: string }[];
 };
 export type ExportedMap = { version: number; layoutMode: string; nodes: ExportedNode[] };
 
