@@ -231,14 +231,15 @@ describe("NodeSourcesSection", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it.each<[string, NodeSourceInput, readonly NodeSource[] | undefined, string]>([
-    ["長すぎるタイトル", { title: "あ".repeat(201) }, undefined, "出典のタイトルが長すぎます（200 文字まで）。"],
-    ["使えないタイトル", { title: "a\u0000b" }, undefined, "出典のタイトルに使えない文字が含まれています。"],
-    ["長すぎるページ", { title: "設計", page: "あ".repeat(81) }, undefined, "出典のページが長すぎます（80 文字まで）。"],
-    ["javascript: URL", { title: "設計", url: "javascript:alert(1)" }, undefined, "http または https の URL だけを追加できます。"],
-    ["資格情報つき", { title: "設計", url: "https://user:pass@example.com/" }, undefined, "ユーザー名やパスワードを含む URL は追加できません。"],
-    ["重複", { title: "設計入門", page: "12" }, [source("設計入門", "12")], "同じ出典がすでに追加されています。"],
-  ])("%s は理由を role=alert で出し、入力を残す", (_name, input, sources, message) => {
+  it.each<[string, NodeSourceInput, readonly NodeSource[] | undefined, string, "title" | "page" | "url"]>([
+    ["長すぎるタイトル", { title: "あ".repeat(201) }, undefined, "出典のタイトルが長すぎます（200 文字まで）。", "title"],
+    ["使えないタイトル", { title: "a\u0000b" }, undefined, "出典のタイトルに使えない文字が含まれています。", "title"],
+    ["長すぎるページ", { title: "設計", page: "あ".repeat(81) }, undefined, "出典のページが長すぎます（80 文字まで）。", "page"],
+    ["使えないページ", { title: "設計", page: "a\u0000b" }, undefined, "出典のページに使えない文字が含まれています。", "page"],
+    ["javascript: URL", { title: "設計", url: "javascript:alert(1)" }, undefined, "http または https の URL だけを追加できます。", "url"],
+    ["資格情報つき", { title: "設計", url: "https://user:pass@example.com/" }, undefined, "ユーザー名やパスワードを含む URL は追加できません。", "url"],
+    ["重複", { title: "設計入門", page: "12" }, [source("設計入門", "12")], "同じ出典がすでに追加されています。", "title"],
+  ])("%s は理由を role=alert で出し、失敗した欄だけに aria-invalid を付ける", (_name, input, sources, message, field) => {
     render(<Harness sources={sources} />);
     fireEvent.change(titleInput(), { target: { value: input.title } });
     if (input.page !== undefined) fireEvent.change(pageInput(), { target: { value: input.page } });
@@ -251,8 +252,23 @@ describe("NodeSourcesSection", () => {
     expect(titleInput()).toHaveValue(input.title);
     if (input.page !== undefined) expect(pageInput()).toHaveValue(input.page);
     if (input.url !== undefined) expect(urlInput()).toHaveValue(input.url);
-    expect(titleInput()).toHaveAttribute("aria-invalid", "true");
-    expect(titleInput().getAttribute("aria-describedby")?.split(" ")).toContain(alert.id);
+
+    const invalidInput = field === "title" ? titleInput() : field === "page" ? pageInput() : urlInput();
+    const otherInputs = [titleInput(), pageInput(), urlInput()].filter((el) => el !== invalidInput);
+    expect(invalidInput).toHaveAttribute("aria-invalid", "true");
+    expect(invalidInput.getAttribute("aria-describedby")?.split(" ")).toContain(alert.id);
+    for (const other of otherInputs) {
+      expect(other).not.toHaveAttribute("aria-invalid");
+      expect(other.getAttribute("aria-describedby")?.split(" ") ?? []).not.toContain(alert.id);
+    }
+  });
+
+  it("「追加」はフォーム末尾の独立した行にあり、URL 入力と同じ行に置かない", () => {
+    render(<Harness />);
+
+    const form = titleInput().form!;
+    expect(urlInput().parentElement).not.toContainElement(addButton());
+    expect(form.lastElementChild).toContainElement(addButton());
   });
 
   it("入力を変えるとエラーを消す", async () => {

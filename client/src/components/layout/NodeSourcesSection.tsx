@@ -6,6 +6,7 @@ import { toSafeLinkHref } from "@/domain/nodes/nodeLink";
 import {
   NODE_SOURCES_MAX_COUNT,
   formatNodeSourceFailure,
+  type AddNodeSourceFailureReason,
   type AddNodeSourceOutcome,
   type NodeSourceInput,
 } from "@/domain/nodes/nodeSource";
@@ -20,10 +21,29 @@ type NodeSourcesSectionProps = {
   onRemoveSource: (id: number, index: number) => boolean;
 };
 
+type SourceFormField = "title" | "page" | "url";
+type SourceFormErrorReason = Exclude<AddNodeSourceFailureReason, "empty-title">;
+
 const NO_SOURCES: readonly NodeSource[] = [];
 
 const buttonClassName = "shrink-0 rounded-md bg-zinc-100 px-2 py-1 text-xs text-zinc-700 transition-colors hover:bg-zinc-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:bg-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-600";
 const inputClassName = "min-w-0 w-full rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm text-zinc-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100";
+
+// 失敗理由に対応する入力欄（欄に紐づかない duplicate / too-many などはタイトル）
+function invalidFieldFor(reason: SourceFormErrorReason): SourceFormField {
+  switch (reason) {
+    case "too-long-page":
+    case "invalid-page":
+      return "page";
+    case "too-long":
+    case "invalid":
+    case "unsupported-scheme":
+    case "has-credentials":
+      return "url";
+    default:
+      return "title";
+  }
+}
 
 // 右パネルの「出典」節。一覧（開く・削除）と追加のフォームを持ち、入力欄の下書き・エラーの文言・フォーカスを受け持つ。
 // NodeDetailPanel が対象のノードの ID だけを key にして作り直す（別のノードの下書きを引き継がない）。
@@ -46,7 +66,7 @@ export function NodeSourcesSection({
   const [title, setTitle] = useState("");
   const [page, setPage] = useState("");
   const [url, setUrl] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [errorReason, setErrorReason] = useState<SourceFormErrorReason | null>(null);
   const [seenRevision, setSeenRevision] = useState(documentRevision);
 
   // 文書が入れ替わったら、古い下書きとエラーを新しい文書へ残さない（レンダー中に調整し、effect 内の同期 setState を避ける）
@@ -55,10 +75,27 @@ export function NodeSourcesSection({
     setTitle("");
     setPage("");
     setUrl("");
-    setError(null);
+    setErrorReason(null);
   }
   const sources = node?.sources ?? NO_SOURCES;
   const isAtLimit = sources.length >= NODE_SOURCES_MAX_COUNT;
+  const invalidField = errorReason === null ? null : invalidFieldFor(errorReason);
+  const errorMessage = errorReason === null ? null : formatNodeSourceFailure(errorReason);
+
+  const fieldAria = (field: SourceFormField) => {
+    const isInvalid = invalidField === field;
+    // 件数はタイトル欄が常に参照。失敗した欄は件数＋エラーを指す
+    if (field === "title") {
+      return {
+        "aria-invalid": isInvalid ? ("true" as const) : undefined,
+        "aria-describedby": isInvalid ? `${countId} ${errorId}` : countId,
+      };
+    }
+    return {
+      "aria-invalid": isInvalid ? ("true" as const) : undefined,
+      "aria-describedby": isInvalid ? `${countId} ${errorId}` : undefined,
+    };
+  };
 
   // 確定は送信の 1 か所だけ（type="url" のブラウザの検証は noValidate で止め、独自の文言を出す。L-057・L-161）
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -69,11 +106,11 @@ export function NodeSourcesSection({
       setTitle("");
       setPage("");
       setUrl("");
-      setError(null);
+      setErrorReason(null);
       titleInputRef.current?.focus();
       return;
     }
-    if (outcome.reason !== "empty-title") setError(formatNodeSourceFailure(outcome.reason));
+    if (outcome.reason !== "empty-title") setErrorReason(outcome.reason);
   };
 
   // IME の変換中の Enter（L-474）と、押し続けの Enter（L-408）では送信しない
@@ -85,12 +122,12 @@ export function NodeSourcesSection({
   // 押した削除ボタンは消えるので、フォーカスを常に有効なタイトル入力欄へ移す（L-155）
   const handleRemove = (index: number) => {
     if (node === null) return;
-    if (onRemoveSource(node.id, index)) setError(null);
+    if (onRemoveSource(node.id, index)) setErrorReason(null);
     titleInputRef.current?.focus();
   };
 
   const clearErrorOnChange = () => {
-    if (error !== null) setError(null);
+    if (errorReason !== null) setErrorReason(null);
   };
 
   return (
@@ -179,8 +216,7 @@ export function NodeSourcesSection({
                 type="text"
                 autoComplete="off"
                 value={title}
-                aria-invalid={error === null ? undefined : "true"}
-                aria-describedby={error === null ? countId : `${countId} ${errorId}`}
+                {...fieldAria("title")}
                 onChange={(event) => {
                   setTitle(event.target.value);
                   clearErrorOnChange();
@@ -196,6 +232,7 @@ export function NodeSourcesSection({
                 type="text"
                 autoComplete="off"
                 value={page}
+                {...fieldAria("page")}
                 onChange={(event) => {
                   setPage(event.target.value);
                   clearErrorOnChange();
@@ -206,25 +243,26 @@ export function NodeSourcesSection({
             </div>
             <div className="flex flex-col gap-1">
               <label htmlFor={urlInputId} className="text-xs font-medium text-zinc-700 dark:text-zinc-300">URL</label>
-              <div className="flex gap-2">
-                <input
-                  id={urlInputId}
-                  type="url"
-                  autoComplete="off"
-                  value={url}
-                  onChange={(event) => {
-                    setUrl(event.target.value);
-                    clearErrorOnChange();
-                  }}
-                  onKeyDown={handleKeyDown}
-                  className={inputClassName}
-                />
-                <button type="submit" className={buttonClassName}>追加</button>
-              </div>
+              <input
+                id={urlInputId}
+                type="url"
+                autoComplete="off"
+                value={url}
+                {...fieldAria("url")}
+                onChange={(event) => {
+                  setUrl(event.target.value);
+                  clearErrorOnChange();
+                }}
+                onKeyDown={handleKeyDown}
+                className={inputClassName}
+              />
             </div>
-            {error !== null && (
-              <p id={errorId} role="alert" className="text-xs text-red-700 dark:text-red-300">{error}</p>
+            {errorMessage !== null && (
+              <p id={errorId} role="alert" className="text-xs text-red-700 dark:text-red-300">{errorMessage}</p>
             )}
+            <div>
+              <button type="submit" className={buttonClassName}>追加</button>
+            </div>
           </form>
         </>
       )}
