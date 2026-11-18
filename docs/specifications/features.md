@@ -1,6 +1,6 @@
 # Draw My Map 全機能仕様・操作マニュアル
 
-本書は、**Draw My Map** が提供するすべての機能（Phase 0 〜 Phase 18。枝の複製、枝のコピー＆ペースト、ノード検索と移動、枝の折りたたみ・展開、複数マップの保存・切り替え、箇条書きからの追加、兄弟ノードの順序変更、階層の上げ下げ、途中への親ノード挿入、ノードだけ削除、アウトライン表示・編集、Markdown・箇条書き書き出し、保存状態常設表示、全マップ一括バックアップと追加復元、複数タブの編集競合検出、削除マップのゴミ箱、複数ノード選択、選択ノードの一括編集（重要度）、ラベルの一括置換、ノードの分割・統合、詳細メモ、URLの添付、タグを含む）の詳細な動作仕様およびユーザー操作マニュアルです。
+本書は、**Draw My Map** が提供するすべての機能（Phase 0 〜 Phase 18。枝の複製、枝のコピー＆ペースト、ノード検索と移動、枝の折りたたみ・展開、複数マップの保存・切り替え、箇条書きからの追加、兄弟ノードの順序変更、階層の上げ下げ、途中への親ノード挿入、ノードだけ削除、アウトライン表示・編集、Markdown・箇条書き書き出し、保存状態常設表示、全マップ一括バックアップと追加復元、複数タブの編集競合検出、削除マップのゴミ箱、複数ノード選択、選択ノードの一括編集（重要度）、ラベルの一括置換、ノードの分割・統合、詳細メモ（Markdownプレビュー対応）、URLの添付、タグを含む）の詳細な動作仕様およびユーザー操作マニュアルです。
 グラフィックス描画エンジン（Pixi.js）、ツリー構造計算アルゴリズム、解像度フィルタリング、データ永続化・エクスポート、AI イラスト生成パイプラインの実装に厳密に準拠しています。
 
 ---
@@ -65,7 +65,7 @@ Pixi.js による高速な 2D キャンバス描画と、React 19 による宣�
 | **Phase 15** | アウトラインとの往復（アウトライン表示・編集、Markdown・箇条書き書き出し） | ヘッダーの「マップ」「アウトライン」切替ボタンによるアウトライン表示（親→子の先行順ツリー表示、インライン編集、子や兄弟の追加、階層変更、ノードだけ削除）、Markdown（`.md`）および箇条書き（`.txt`）形式でのテキスト書き出し（19章、20章） |
 | **Phase 16** | 保存の保護と基本バックアップ（保存状態の表示、全マップの一括バックアップ・追加復元、複数タブの編集競合検出、削除マップのゴミ箱） | ヘッダーの開いているマップ本体の保存状態常設表示（保存済み／保存待ち／失敗／保護モード／競合／削除）、マップ一覧からの全マップ一括バックアップ JSON エクスポート、ファイルからの追加復元（新規ID発行、既存マップ保持、ジャーナル保護）、複数タブでの編集競合検出（二重防御による自動保存ブロック、警告バッジ、別名保存 flush バイパス、最新読込の破棄確認モーダル、JSON書き出し）、および削除マップのゴミ箱（30日保持、復元、個別完全削除、ゴミ箱を空にする、期限切れ自動削除、容量不足・破損時の完全削除フォールバック）（6章、12.5節、12.11節、12.12節、21章） |
 | **Phase 17** | 複数選択と一括編集（複数ノード選択、選択ノードの一括編集（重要度）、一括検索・置換、ノードの分割・統合） | キャンバスでの複数ノード選択（`Cmd`/`Ctrl`+クリックのトグル、`Shift`+クリックの範囲追加、`Alt`+空き背景ドラッグの矩形選択）。ヘッダーの重要度ボタンで選択中の全ノードの重要度を一括変更（1 操作で Undo / Redo。アウトライン表示中は主選択のみ）。それ以外の削除・接続・ヘッダー操作・コピーは主選択のみに作用。選択は永続化しない（3.3 節）。ヘッダーの「一括置換」ダイアログによるラベルの一括置換（全ノード、または開いた時点の選択集合だけが対象。部分一致で大文字小文字と全角・半角を区別しない。プレビューで置換前後を確認し、置換後に空になるノードは対象外。確定は1操作で Undo / Redo。マップ表示でのみ操作。22 章）。ヘッダーの「ノードを分割」「ノードを統合」ダイアログによるノードの分割・統合（区切り文字を選んでプレビューで確認。分割は主選択のラベルを区切り文字で分け、最初の断片を元のノードに残して残りを直後の兄弟にする。統合は同じ親の兄弟を主選択へまとめる。確定は1操作で Undo / Redo。マップ表示でのみ操作。23 章） |
-| **Phase 18** | 詳細情報と出典の蓄積（進行中。詳細メモ・URLの添付・タグ） | 右パネル「ノードの詳細」の一番上で、選択中のノードに長い説明（プレーンテキスト、最大 10,000 文字）を保存。入力は止まってから 300ms（入力が続いても最長 2 秒）でマップへ反映し、フォーカスを外したときに 1 操作の Undo / Redo にまとめる（24 章）。「リンク」の節で http / https の URL を 1 ノード 10 件まで追加・削除・新しいタブで開け、キャンバスに「リンクあり」の印を出し、ノード検索で URL からも見つかる（25 章）。メモの下の「タグ」の節で、自由入力のタグを 1 ノード 10 件（各 30 文字）まで追加・削除でき、大文字小文字・全角半角の違いは同じタグとみなす（26 章）。保存形式は V3 のまま任意項目 `note`・`links`・`tags` を追加。複製・コピー＆貼り付け・分割・統合と整合 |
+| **Phase 18** | 詳細情報と出典の蓄積（進行中。詳細メモ・Markdownメモ・URLの添付・タグ） | 右パネル「ノードの詳細」の一番上で、選択中のノードに長い説明（最大 10,000 文字）を保存。ノード選択時は「編集」「プレビュー」タブを切り替えて Markdown（CommonMark + GFM、生 HTML は非解釈、画像はリンク文字化）として表示可能。入力は止まってから 300ms（入力が続いても最長 2 秒）でマップへ反映し、フォーカスを外したとき・プレビューへ切り替えたときに 1 操作の Undo / Redo にまとめる（24 章）。「リンク」の節で http / https の URL を 1 ノード 10 件まで追加・削除・新しいタブで開け、キャンバスに「リンクあり」の印を出し、ノード検索で URL からも見つかる（25 章）。メモの下の「タグ」の節で、自由入力のタグを 1 ノード 10 件（各 30 文字）まで追加・削除でき、大文字小文字・全角半角の違いは同じタグとみなす（26 章）。保存形式は V3 のまま任意項目 `note`・`links`・`tags` を追加。複製・コピー＆貼り付け・分割・統合と整合 |
 
 ### 1.2 アプリケーション画面レイアウト
 
@@ -971,7 +971,7 @@ sequenceDiagram
 | **テキスト書き出し** | `Markdown書き出し` / `箇条書き書き出し` | 正本の全ノードを `.md` / `.txt` の先行順テキストとしてダウンロード開始（20章）。map / outline 両モードで表示 |
 | **操作通知バー** | （10系統独立表示） | ヘッダー下段に自動配置不能の通知・永続化通知・画像エクスポート通知・枝の複製の通知・枝のコピー／貼り付けの通知・ノード検索の通知・箇条書きからの追加の成功の通知・枝の構造の変更の通知（兄弟の順序変更・階層の上げ下げ・親の挿入・ノードだけ削除・同じマップ内の枝の移動・ラベルの一括置換・ノードの分割・統合の成功）・アウトライン書き出しの通知・複数タブ競合通知を独立して表示（マップを切り替えると消える） |
 | **シェルの通知** | （常設のライブリージョン） | ヘッダーの上の1行に、マップの作成・切り替え・開いているマップの削除の結果と、起動時の通知を表示する（マップを切り替えても残り、次のシェルの通知で置き換わる） |
-| **ノードの詳細（詳細メモ）** | テキスト欄「詳細メモ」 | 選択中のノード（複数選択では主選択）の詳細メモを編集。入力は止まってから 300ms（入力が続いても最長 2 秒）でマップへ反映し、フォーカスを外すと 1 操作の履歴に確定。`Escape` で取り消し。最大 10,000 文字 |
+| **ノードの詳細（詳細メモ）** | テキスト欄「詳細メモ」 / タブ「編集」「プレビュー」 | 選択中のノード（複数選択では主選択）の詳細メモを編集し、「編集」「プレビュー」タブで Markdown（CommonMark + GFM）プレビューに切り替え。入力は止まってから 300ms（入力が続いても最長 2 秒）でマップへ反映し、フォーカスを外すか「プレビュー」へ切り替えると 1 操作の履歴に確定。`Escape` で取り消し。最大 10,000 文字 |
 | **ノードの詳細（タグ）** | 入力欄「タグを追加」 / `追加` / `タグを削除: {名前}`（見た目は「×」） | 選択中のノード（複数選択では主選択）にタグを追加（`Enter` または「追加」。IME の変換中・押し続けの `Enter` では追加しない）・削除する。最大 10 件・各 30 文字。大文字小文字・全角半角の違いは同じタグとみなす。各 1 操作の履歴 |
 | **ノードの詳細（リンク）** | 入力欄「URLを追加」 / `追加` / `リンクを削除: {URL}` / URL のリンク | 選択中のノード（複数選択では主選択）に http / https の URL を追加（`Enter` または「追加」。IME の変換中・押し続けの `Enter` では追加しない）・削除し、URL を新しいタブで開く（`noopener noreferrer`）。最大 10 件。各 1 操作の履歴 |
 | **イラストパネル** | `イラストを生成` / `イラストを再生成` | AI によるノードアイコン画像生成を実行（生成中は `生成中…` となり無効化） |
@@ -2408,7 +2408,7 @@ Phase 17・候補035。ヘッダーの「ノードを分割」「ノードを統
 
 ## 24. 詳細メモ
 
-Phase 18・候補011。キャンバスには短い見出し（ラベル）だけを置き、長い説明は右パネル「ノードの詳細」の**詳細メモ**に保存します。メモはプレーンテキストで、HTML や Markdown としては解釈しません。
+Phase 18・候補011 / 候補053。キャンバスには短い見出し（ラベル）だけを置き、長い説明は右パネル「ノードの詳細」の**詳細メモ**に保存します。ノード選択時は「編集」「プレビュー」タブを切り替え、見出し・箇条書き・コード・表・タスクリスト・リンクなどの Markdown（CommonMark + GFM）として整形表示できます（生 HTML は解釈しません）。
 
 ### 24.1 操作と表示
 
@@ -2417,8 +2417,10 @@ Phase 18・候補011。キャンバスには短い見出し（ラベル）だけ
 | 置き場所 | 右パネル「ノードの詳細」（`NodeDetailPanel.tsx`、`<aside aria-label="ノードの詳細">`、幅 `w-72`）の一番上。下へタグ（26 章）、リンク（25 章）、イラスト（7.3 節）と続きます。マップ表示・アウトライン表示のどちらでも出ます |
 | 見出しと対象 | 見出し「詳細メモ」。ノード未選択では「ノードを選択してください」とし、テキスト欄は無効。選択中は「対象ノード」に表示ラベル（`getNodeDisplayLabel`、3 行まで、全文は `title`） |
 | 複数選択 | 対象は**主選択の 1 ノード**。マップ表示で 2 件以上を選んでいるときだけ「N 件選択中。主選択のノードのメモを編集します」と出します。アウトライン表示は単一選択として扱い、キャンバスで残った複数選択の件数を出しません（重要度の一括変更と同じ規則。3.3 節） |
+| 表示切替（編集 / プレビュー） | ノード選択時のみ `role="tablist"`（`aria-label="詳細メモの表示切替"`）と「編集」「プレビュー」の 2 つの `role="tab"` を表示します（未選択時はタブを出さず無効な `<textarea>` のみ表示）。既定は「編集」（`aria-selected="true"`・`tabIndex={0}`。非選択側は `tabIndex={-1}`）。`ArrowRight` / `ArrowLeft` で前後に循環切替、`Home` で「編集」、`End` で「プレビュー」へ切り替え、フォーカスも移動先タブへ移します（`Alt` / `Ctrl` / `Meta` 付きキー操作は無視）。編集とプレビューの 2 つの `role="tabpanel"` は両方とも DOM に保持し、非選択側を `hidden` で隠します（`<textarea>` 内のブラウザ標準 Undo 履歴を保つため。`<NodeNoteMarkdown>` はプレビュー表示時のみ描画）。「プレビュー」へ切り替える際、`<textarea>` にフォーカスが残っていれば先に `blur()` して未反映の下書きを即時確定します。別のノードを選んだ場合や、Undo / Redo・JSON 読み込み・マップ切り替え等で `documentRevision` が進んだ場合は `NodeNoteEditor` が再作成され、「編集」へ戻ります |
 | テキスト欄 | `<label>`「詳細メモ」付きの `<textarea>`（8 行、縦にだけ広げられる）。プレースホルダー「このノードの詳細な説明を書けます」 |
-| 文字数 | 「{入力済みの文字数} / 10,000 文字」を常に表示します。上限に達すると、その下に「上限に達しました」（`role="status"`）を併記します |
+| Markdown プレビュー（候補053） | `react-markdown` + `remark-gfm`（`rehype-raw` なし）で CommonMark + GFM を描画します。見出し（`h1`〜`h6`）、段落、太字、斜体、打ち消し線（`del`）、箇条書き・番号付きリスト、引用、インラインコード、コードブロック（`pre`）、水平線、表（`table`）、タスクリスト（チェックボックスは `disabled`・`readOnly`・`tabIndex={-1}` の表示専用）、GFM 自動リンクに対応します。リンク（`a`。GFM 自動リンクを含む）は `toSafeNoteMarkdownLinkHref` で `http:` / `https:` / `mailto:` のみ許可し（10,000 文字先行判定・正規化後 `href.length` 判定・制御文字拒否・`http:` / `https:` の資格情報拒否・相対パスや `javascript:` / `data:` 等の危険スキーム拒否・括弧付き URL 保持）、`target="_blank" rel="noopener noreferrer"` のリンクにし、不許可時は `<span>` に落とします。画像（`img`）は `<img>` を一切描画せず（外部通信・読み込みなし）、alt ありは `[画像: trimmed]`、なしは `[画像]` の文字列にし、`toSafeNoteMarkdownImageHref` で `http:` / `https:` のみ安全なリンク化を行います（ただし `InsideMarkdownLinkContext` により `<a>` の内側の画像は常に `<span>` で描画して `<a>` の入れ子を防ぎます）。生 HTML は解釈せずプレーンテキスト表示します。描画前に `normalizeNodeNote` を通し（末尾の孤立上位サロゲートは除去）、結果が `undefined`（空文字または空白・改行のみのメモ）のときは「メモはありません」と表示し、非空時は正規化後の文字列を描画します。`role="tabpanel"`・`<pre>`・`<table>` には `tabIndex` も独立スクロールも設けず（`w-72` 内に折り返して収め）、`Delete` / `Backspace` キーによる意図しないノード削除を防ぎます（タブボタンや `a[href]` フォーカス時も `isInteractiveTarget` により保護） |
+| 文字数 | 「{入力済みの文字数} / 10,000 文字」を両タブパネルの下に常に表示します。上限に達すると、その下に「上限に達しました」（`role="status"`）を併記します |
 
 ### 24.2 文字数の上限
 
@@ -2464,8 +2466,8 @@ Phase 18・候補011。キャンバスには短い見出し（ラベル）だけ
 
 ### 24.6 検証範囲と対象外
 
-- **検証範囲**: Jest（jsdom）で、ドメイン（`nodeNote.test.ts`、`mapDocumentNodeNote.test.ts`、`mapDocumentNode.test.ts`、`mapDocumentNodeProjection.test.ts`、`mapDocumentCodec.test.ts`、`mapDocumentDecoder.test.ts`、`mapConflict.test.ts`、`subtreeClipboardCodec.test.ts`、`nodeSubtreeInsertion.test.ts`、`nodeSplit.test.ts`、`nodeParentInsertion.test.ts`、`nodeMerge.test.ts`、`nodeMergeMessages.test.ts`）、フック（`useNodeLayoutState.test.ts`、`useNodesNote.test.ts`、`useNodesSplitMerge.test.ts`、`useNodeNoteEditing.test.ts`、`nodeNotePreviewDelay.test.ts`、`nodeMergePreview.test.ts`）、部品（`NodeNoteSection.test.tsx`、`NodeNoteEditor.test.tsx`、`NodeDetailPanel.test.tsx`、`IllustrationPanel.test.tsx`、`NodeMergeDialog.test.tsx`）、ページ統合（`pageNodeNote.test.tsx`）を確認しています。実ブラウザでの確認（[AF 節](../testing/browser-test-cases.md)）は未実施です。
-- **対象外（YAGNI）**: キャンバス・アウトラインでのメモの有無や本文の表示、検索・一括置換・アウトライン書き出し・画像書き出しへのメモの反映、Markdown の描画（候補053）、URL（25 章）、タグ（26 章）、出典（候補054）、複数ノードへのメモの一括編集、版の引き上げ（V4）と古いアプリへの書き戻し互換。
+- **検証範囲**: Jest（jsdom）で、ドメイン（`nodeNote.test.ts`、`nodeNoteMarkdownUrl.test.ts`、`mapDocumentNodeNote.test.ts`、`mapDocumentNode.test.ts`、`mapDocumentNodeProjection.test.ts`、`mapDocumentCodec.test.ts`、`mapDocumentDecoder.test.ts`、`mapConflict.test.ts`、`subtreeClipboardCodec.test.ts`、`nodeSubtreeInsertion.test.ts`、`nodeSplit.test.ts`、`nodeParentInsertion.test.ts`、`nodeMerge.test.ts`、`nodeMergeMessages.test.ts`）、フック（`useNodeLayoutState.test.ts`、`useNodesNote.test.ts`、`useNodesSplitMerge.test.ts`、`useNodeNoteEditing.test.ts`、`nodeNotePreviewDelay.test.ts`、`nodeMergePreview.test.ts`）、部品（`NodeNoteSection.test.tsx`、`NodeNoteEditor.test.tsx`、`NodeNoteMarkdown.test.tsx`、`NodeDetailPanel.test.tsx`、`IllustrationPanel.test.tsx`、`NodeMergeDialog.test.tsx`）、ページ統合（`pageNodeNote.test.tsx`）を確認しています。実ブラウザでの確認（[AF 節](../testing/browser-test-cases.md#af-詳細メモphase-18候補011)・[AI 節](../testing/browser-test-cases.md#ai-markdownメモphase-18候補053)）は未実施です。
+- **対象外（YAGNI）**: キャンバス・アウトラインでのメモの有無や本文の表示、検索・一括置換・アウトライン書き出し・画像書き出しへのメモの反映、リッチテキスト（WYSIWYG）エディタ・記法挿入ツールバー・編集とプレビューの同時並列表示、タスクリストのプレビュー上でのチェック切替、画像の実体読み込み（`<img>` 表示）、生 HTML の解釈、数式・Mermaid・シンタックスハイライト、URL（25 章）、タグ（26 章）、出典（候補054）、複数ノードへのメモの一括編集、版の引き上げ（V4）と古いアプリへの書き戻し互換。
 
 ## 25. URLの添付
 
@@ -2538,7 +2540,7 @@ Phase 18・候補012。資料や Web ページの URL をノードに付け、�
 ### 25.6 検証範囲と対象外
 
 - **検証範囲**: Jest（jsdom）で、ドメイン（`nodeLink.test.ts`、`mapDocumentNodeLinks.test.ts`、`mapDocumentNode.test.ts`、`mapDocumentNodeProjection.test.ts`、`mapDocumentCodec.test.ts`、`mapDocumentDecoder.test.ts`、`mapConflict.test.ts`、`mapHistory.test.ts`、`subtreeClipboardCodec.test.ts`、`nodeSubtreeInsertion.test.ts`、`nodeSplit.test.ts`、`nodeParentInsertion.test.ts`、`nodeBranchMove.test.ts`、`nodeMerge.test.ts`、`nodeMergeMessages.test.ts`、`nodeLabelSearch.test.ts`、`mapSvgNodes.test.ts`）、フック（`useNodesLinks.test.ts`、`useNodesSplitMerge.test.ts`、`useNodeLabelSearch.test.ts`、`nodeMergePreview.test.ts`、`useNodeMergeDialog.test.ts`）、部品（`NodeLinksSection.test.tsx`、`NodeDetailPanel.test.tsx`、`NodeMergeDialog.test.tsx`、`NodeSearchBox.test.tsx`、`renderMapNodes.test.ts`）、ページ統合（`pageNodeLinks.test.tsx`）を確認しています。実ブラウザでの確認（[AG 節](../testing/browser-test-cases.md)）は未実施です。
-- **対象外（YAGNI）**: URL の表示名、ページタイトルの自動取得、リンク先の存在確認、favicon・プレビュー、`http` / `https` 以外のスキーム、スキームの補完、キャンバスの印からの直接のリンクの開き方、アウトライン書き出し・画像書き出し・一括置換への URL の反映、複数ノードへの URL の一括追加、ノードの右クリックメニュー・ショートカットからの操作、出典情報（候補054）、タグ（26 章）、Markdown メモ（候補053）、版の引き上げ（V4）と古いアプリへの書き戻し互換。
+- **対象外（YAGNI）**: URL の表示名、ページタイトルの自動取得、リンク先の存在確認、favicon・プレビュー、`http` / `https` 以外のスキーム、スキームの補完、キャンバスの印からの直接のリンクの開き方、アウトライン書き出し・画像書き出し・一括置換への URL の反映、複数ノードへの URL の一括追加、ノードの右クリックメニュー・ショートカットからの操作、出典情報（候補054）、タグ（26 章）、版の引き上げ（V4）と古いアプリへの書き戻し互換。
 - **既知の制限**: IDN のホストは punycode の形（`xn--…`）でだけ検索できます。URL の有無は画像書き出し・アウトライン書き出しでは分かりません。
 
 ## 26. タグ
@@ -2621,4 +2623,4 @@ Phase 18・候補023。親子関係とは別の分類軸（「重要」「資料
 ### 26.7 検証範囲と対象外
 
 - **検証範囲**: Jest（jsdom）で、ドメイン（`nodeTag.test.ts`、`mapDocumentNodeTags.test.ts`、`mapDocumentNode.test.ts`、`mapDocumentNodeProjection.test.ts`、`mapDocumentCodec.test.ts`、`mapDocumentDecoder.test.ts`、`mapConflict.test.ts`、`mapHistory.test.ts`、`subtreeClipboardCodec.test.ts`、`nodeSubtreeInsertion.test.ts`、`nodeSplit.test.ts`、`nodeParentInsertion.test.ts`、`nodeBranchMove.test.ts`、`nodeMerge.test.ts`、`nodeMergeMessages.test.ts`、`nodeAttributePolicy.test.ts`）、フック（`useNodesTags.test.ts`、`useNodesSplitMerge.test.ts`、`nodeMergePreview.test.ts`、`useNodeMergeDialog.test.ts`）、部品（`NodeTagsSection.test.tsx`、`NodeDetailPanel.test.tsx`、`NodeMergeDialog.test.tsx`）、ページ統合（`pageNodeTags.test.tsx`）を確かめています。実ブラウザでの確認（`docs/testing/browser-test-cases.md` の AH 節）は、2026-11-17 にアプリ内ブラウザ（Chromium）と開発サーバーで実施しました（AH-09 の実 IME と `Enter` の押し続け、スクリーンリーダー、Safari・Firefox、本番ビルド、コピー＆貼り付けの実キー・実クリップボードは未確認）。
-- **対象外（YAGNI）**: タグでの絞り込み・ノード検索・入力候補・キャンバスの印・アウトライン書き出し／画像書き出しへの反映、タグの名前の変更・色・マップ全体のタグ一覧の管理・並べ替え・一括付与、`#` 始まりの特別な扱い、複数ノードへの一括追加・削除、Markdown メモ（候補053）、出典情報（候補054）、版の引き上げ（V4）と古いアプリへの書き戻し互換。
+- **対象外（YAGNI）**: タグでの絞り込み・ノード検索・入力候補・キャンバスの印・アウトライン書き出し／画像書き出しへの反映、タグの名前の変更・色・マップ全体のタグ一覧の管理・並べ替え・一括付与、`#` 始まりの特別な扱い、複数ノードへの一括追加・削除、出典情報（候補054）、版の引き上げ（V4）と古いアプリへの書き戻し互換。
