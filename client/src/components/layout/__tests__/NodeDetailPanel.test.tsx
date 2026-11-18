@@ -180,4 +180,20 @@ describe("NodeDetailPanel", () => {
     expect(screen.getByRole("button", { name: "タグを削除: 果物" })).toBe(deleteButton);
     expect(deleteButton).toHaveFocus();
   });
+
+  it("プレビュータブに切り替えた後、選択ノードの id または documentRevision が変わるとタブが編集に戻る（L-588）", () => {
+    const { props, rerender } = renderPanel();
+
+    fireEvent.click(screen.getByRole("tab", { name: "プレビュー" }));
+    expect(screen.getByRole("tab", { name: "プレビュー" })).toHaveAttribute("aria-selected", "true");
+
+    rerender(<NodeDetailPanel {...props} selectedNode={{ id: 2, label: "みかん", note: "みかんのメモ" }} />);
+    expect(screen.getByRole("tab", { name: "編集" })).toHaveAttribute("aria-selected", "true");
+
+    fireEvent.click(screen.getByRole("tab", { name: "プレビュー" }));
+    expect(screen.getByRole("tab", { name: "プレビュー" })).toHaveAttribute("aria-selected", "true");
+
+    rerender(<NodeDetailPanel {...props} documentRevision={1} selectedNode={{ id: 2, label: "みかん", note: "みかんのメモ" }} />);
+    expect(screen.getByRole("tab", { name: "編集" })).toHaveAttribute("aria-selected", "true");
+  });
 });

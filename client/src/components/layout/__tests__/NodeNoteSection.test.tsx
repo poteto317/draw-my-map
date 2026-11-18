@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { FALLBACK_NODE_LABEL } from "@/config/nodeLabel";
 import { NodeNoteSection } from "@/components/layout/NodeNoteSection";
 import type { NodeNoteEditing } from "@/hooks/useNodeNoteEditing";
@@ -89,5 +89,175 @@ describe("NodeNoteSection", () => {
     expect(handlers.onCompositionEnd).toHaveBeenCalledTimes(1);
     expect(handlers.onKeyDown).toHaveBeenCalledTimes(1);
     expect(handlers.onBlur).toHaveBeenCalledTimes(1);
+  });
+
+  it("未選択のときはタブリストとタブパネルを描画しない", () => {
+    render(<NodeNoteSection targetLabel={null} selectionCount={0} editing={null} />);
+
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.queryByRole("tab")).toBeNull();
+    expect(screen.queryByRole("tabpanel", { hidden: true })).toBeNull();
+  });
+
+  it("選択時は編集・プレビューの 2 タブと 2 パネルを持ち、初期状態では編集が選択されプレビューのパネルが hidden になり、プレビューの中身は描画しない（L-552・L-411）", () => {
+    render(<NodeNoteSection targetLabel="a" selectionCount={1} editing={editing({ value: "# 見出し" })} />);
+
+    const tablist = screen.getByRole("tablist", { name: "詳細メモの表示切替" });
+    const tabs = within(tablist).getAllByRole("tab");
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["編集", "プレビュー"]);
+
+    const editTab = screen.getByRole("tab", { name: "編集" });
+    const previewTab = screen.getByRole("tab", { name: "プレビュー" });
+    expect(editTab).toHaveAttribute("aria-selected", "true");
+    expect(editTab).toHaveAttribute("tabindex", "0");
+    expect(previewTab).toHaveAttribute("aria-selected", "false");
+    expect(previewTab).toHaveAttribute("tabindex", "-1");
+
+    const panels = screen.getAllByRole("tabpanel", { hidden: true });
+    expect(panels).toHaveLength(2);
+    const editPanel = screen.getByRole("tabpanel", { name: "編集" });
+    const previewPanel = panels.find((panel) => panel.id === previewTab.getAttribute("aria-controls"));
+    expect(previewPanel).toBeDefined();
+    expect(editPanel).not.toHaveAttribute("hidden");
+    expect(previewPanel).toHaveAttribute("hidden");
+    expect(previewPanel).toBeEmptyDOMElement();
+    expect(editTab).toHaveAttribute("aria-controls", editPanel.id);
+    expect(previewPanel).toHaveAttribute("aria-labelledby", previewTab.id);
+  });
+
+  it("mode='preview' ではプレビュータブとプレビューパネルが有効になり、編集パネルは hidden のまま残り、文字数表示も見える", () => {
+    render(
+      <NodeNoteSection
+        targetLabel="a"
+        selectionCount={1}
+        editing={editing({ value: "# 見出し\n\n本文", length: 8 })}
+        mode="preview"
+      />,
+    );
+
+    const editTab = screen.getByRole("tab", { name: "編集" });
+    const previewTab = screen.getByRole("tab", { name: "プレビュー" });
+    expect(editTab).toHaveAttribute("aria-selected", "false");
+    expect(editTab).toHaveAttribute("tabindex", "-1");
+    expect(previewTab).toHaveAttribute("aria-selected", "true");
+    expect(previewTab).toHaveAttribute("tabindex", "0");
+
+    const panels = screen.getAllByRole("tabpanel", { hidden: true });
+    expect(panels).toHaveLength(2);
+    const editPanel = panels.find((panel) => panel.id === editTab.getAttribute("aria-controls"));
+    const previewPanel = screen.getByRole("tabpanel", { name: "プレビュー" });
+    expect(editPanel).toBeDefined();
+    expect(editPanel).toHaveAttribute("hidden");
+    expect(editPanel).toHaveAttribute("aria-labelledby", editTab.id);
+    expect(previewPanel).not.toHaveAttribute("hidden");
+    expect(within(previewPanel).getByRole("heading", { level: 1, name: "見出し" })).toBeVisible();
+    expect(screen.getByText("8 / 10,000 文字")).toBeVisible();
+  });
+
+  it("tablist の ArrowRight / ArrowLeft / Home / End で切り替えとフォーカス移動ができ、修飾キー付きでは切り替わらない", () => {
+    const onModeChange = jest.fn();
+    const { rerender } = render(
+      <NodeNoteSection targetLabel="a" selectionCount={1} editing={editing()} mode="edit" onModeChange={onModeChange} />,
+    );
+
+    const tablist = screen.getByRole("tablist", { name: "詳細メモの表示切替" });
+    const editTab = screen.getByRole("tab", { name: "編集" });
+    const previewTab = screen.getByRole("tab", { name: "プレビュー" });
+
+    act(() => editTab.focus());
+    fireEvent.keyDown(tablist, { key: "ArrowRight", altKey: true });
+    fireEvent.keyDown(tablist, { key: "ArrowRight", ctrlKey: true });
+    fireEvent.keyDown(tablist, { key: "ArrowRight", metaKey: true });
+    expect(onModeChange).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(tablist, { key: "ArrowRight" });
+    expect(onModeChange).toHaveBeenLastCalledWith("preview");
+    expect(previewTab).toHaveFocus();
+
+    rerender(
+      <NodeNoteSection targetLabel="a" selectionCount={1} editing={editing()} mode="preview" onModeChange={onModeChange} />,
+    );
+    fireEvent.keyDown(tablist, { key: "ArrowLeft" });
+    expect(onModeChange).toHaveBeenLastCalledWith("edit");
+    expect(editTab).toHaveFocus();
+
+    rerender(
+      <NodeNoteSection targetLabel="a" selectionCount={1} editing={editing()} mode="edit" onModeChange={onModeChange} />,
+    );
+    fireEvent.keyDown(tablist, { key: "End" });
+    expect(onModeChange).toHaveBeenLastCalledWith("preview");
+    expect(previewTab).toHaveFocus();
+
+    rerender(
+      <NodeNoteSection targetLabel="a" selectionCount={1} editing={editing()} mode="preview" onModeChange={onModeChange} />,
+    );
+    fireEvent.keyDown(tablist, { key: "Home" });
+    expect(onModeChange).toHaveBeenLastCalledWith("edit");
+    expect(editTab).toHaveFocus();
+
+    // 逆方向の矢印キー循環（edit で ArrowLeft → preview、preview で ArrowRight → edit）
+    rerender(
+      <NodeNoteSection targetLabel="a" selectionCount={1} editing={editing()} mode="edit" onModeChange={onModeChange} />,
+    );
+    fireEvent.keyDown(tablist, { key: "ArrowLeft" });
+    expect(onModeChange).toHaveBeenLastCalledWith("preview");
+    expect(previewTab).toHaveFocus();
+
+    rerender(
+      <NodeNoteSection targetLabel="a" selectionCount={1} editing={editing()} mode="preview" onModeChange={onModeChange} />,
+    );
+    fireEvent.keyDown(tablist, { key: "ArrowRight" });
+    expect(onModeChange).toHaveBeenLastCalledWith("edit");
+    expect(editTab).toHaveFocus();
+
+    // すでに選択中のタブへの移動キー（preview で End、edit で Home）や無関係なキーでは onModeChange を呼ばない
+    onModeChange.mockClear();
+    fireEvent.keyDown(tablist, { key: "End" });
+    fireEvent.keyDown(tablist, { key: "Enter" });
+    fireEvent.keyDown(tablist, { key: "ArrowDown" });
+    expect(onModeChange).not.toHaveBeenCalled();
+
+    rerender(
+      <NodeNoteSection targetLabel="a" selectionCount={1} editing={editing()} mode="edit" onModeChange={onModeChange} />,
+    );
+    fireEvent.keyDown(tablist, { key: "Home" });
+    expect(onModeChange).not.toHaveBeenCalled();
+  });
+
+  it("すでに選択中のタブをクリックしても onModeChange を呼ばず、別タブをクリックしたときだけ呼ぶ", () => {
+    const onModeChange = jest.fn();
+    const { rerender } = render(
+      <NodeNoteSection targetLabel="a" selectionCount={1} editing={editing()} mode="edit" onModeChange={onModeChange} />,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "編集" }));
+    expect(onModeChange).not.toHaveBeenCalled();
+
+    rerender(
+      <NodeNoteSection targetLabel="a" selectionCount={1} editing={editing()} mode="preview" onModeChange={onModeChange} />,
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "プレビュー" }));
+    expect(onModeChange).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("tab", { name: "編集" }));
+    expect(onModeChange).toHaveBeenCalledTimes(1);
+    expect(onModeChange).toHaveBeenLastCalledWith("edit");
+  });
+
+  it("textarea にフォーカスがある状態でプレビュータブを押すと、先に onBlur を呼んでから onModeChange('preview') を呼ぶ（L-473）", () => {
+    const callOrder: string[] = [];
+    const handlers = editing({
+      onBlur: jest.fn(() => { callOrder.push("blur"); }),
+    });
+    const onModeChange = jest.fn((nextMode) => { callOrder.push(`mode:${nextMode}`); });
+
+    render(
+      <NodeNoteSection targetLabel="a" selectionCount={1} editing={handlers} mode="edit" onModeChange={onModeChange} />,
+    );
+
+    act(() => box().focus());
+    fireEvent.click(screen.getByRole("tab", { name: "プレビュー" }));
+
+    expect(callOrder).toEqual(["blur", "mode:preview"]);
   });
 });
