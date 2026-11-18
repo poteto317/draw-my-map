@@ -114,6 +114,24 @@ describe("encodeSubtreeClipboard / decodeSubtreeClipboard", () => {
     expect("tags" in decoded.value.nodes.find((item) => item.id === 3)!).toBe(false);
   });
 
+  it("出典もコピーに含めて往復する（出典の無いノードは項目を持たない）", () => {
+    const withSources: Node[] = [
+      node(1, null),
+      node(2, 1, { sources: [{ title: "出典A", page: "12" }, { title: "出典B", url: "https://example.com/b" }] }),
+      node(3, 2),
+    ];
+
+    const decoded = encodeAndDecode(withSources, 2);
+
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) return;
+    expect(decoded.value.nodes.find((item) => item.id === 2)?.sources).toEqual([
+      { title: "出典A", page: "12" },
+      { title: "出典B", url: "https://example.com/b" },
+    ]);
+    expect("sources" in decoded.value.nodes.find((item) => item.id === 3)!).toBe(false);
+  });
+
   it("専用の形式で書き出し、元の配列にない項目を持ち込まない", () => {
     const source = [{ ...node(1, null), extra: "x" } as Node];
 
@@ -184,6 +202,27 @@ describe("decodeSubtreeClipboard", () => {
       .toEqual({ ok: false, reason: "invalid" });
     expect(decodeSubtreeClipboard(clipboardText([{ ...valid, tags: [" Python ", "python"] }])))
       .toEqual({ ok: true, value: { rootId: 1, nodes: [{ ...valid, tags: ["Python"] }] } });
+  });
+
+  it("貼り付けでも出典を検証し、使えない文字を含む枝は受け付けない。同じ出典とみなす要素は後のものを捨てる", () => {
+    expect(decodeSubtreeClipboard(clipboardText([{ ...valid, sources: [{ title: "a\u0000b" }] }])))
+      .toEqual({ ok: false, reason: "invalid" });
+    expect(
+      decodeSubtreeClipboard(
+        clipboardText([
+          {
+            ...valid,
+            sources: [
+              { title: " Book A ", page: "1" },
+              { title: "book a", page: "1" },
+            ],
+          },
+        ]),
+      ),
+    ).toEqual({
+      ok: true,
+      value: { rootId: 1, nodes: [{ ...valid, sources: [{ title: "Book A", page: "1" }] }] },
+    });
   });
 
   it("画像の高さ補正は既存のV3と一致する", () => {

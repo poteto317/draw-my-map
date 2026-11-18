@@ -405,3 +405,15 @@ describe("親の挿入とタグ", () => {
     expect(result.nodes.find((node) => node.id === 2)?.tags).toEqual(["重要"]);
   });
 });
+
+describe("親の挿入と出典", () => {
+  it("新しい親は出典を持たず、対象のノードの出典は変わらない", () => {
+    const sources = [{ title: "出典A", page: "5" }];
+    const nodes = [n(1, null, 0, 0), n(2, 1, 220, 0, { sources })];
+
+    const result = succeed(nodes, 2, undefined, "manual");
+
+    expect("sources" in result.nodes.find((node) => node.id === 50)!).toBe(false);
+    expect(result.nodes.find((node) => node.id === 2)?.sources).toEqual(sources);
+  });
+});

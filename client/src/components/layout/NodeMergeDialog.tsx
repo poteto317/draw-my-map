@@ -130,6 +130,12 @@ export function NodeMergeDialog({
                   <dd>{preview.tagText}</dd>
                 </div>
               )}
+              {preview.sourceText !== null && (
+                <div className="flex gap-2">
+                  <dt className="shrink-0 font-medium">出典</dt>
+                  <dd>{preview.sourceText}</dd>
+                </div>
+              )}
               <div className="flex gap-2">
                 <dt className="shrink-0 font-medium">付け替える子</dt>
                 <dd>{`${preview.movedChildCount}件`}</dd>

@@ -5,8 +5,14 @@ import { maxNodeImportance } from "@/domain/nodes/nodeImportance";
 import { indexNodeForest } from "@/domain/nodes/nodeLayoutForest";
 import { NODE_LINKS_MAX_COUNT, areNodeLinksEqual, withNodeLinks } from "@/domain/nodes/nodeLink";
 import { NODE_NOTE_MERGE_JOINER, isNodeNoteWithinLimit, withNodeNote } from "@/domain/nodes/nodeNote";
+import {
+  NODE_SOURCES_MAX_COUNT,
+  areNodeSourcesEqual,
+  uniqueNodeSources,
+  withNodeSources,
+} from "@/domain/nodes/nodeSource";
 import { NODE_TAGS_MAX_COUNT, areNodeTagsEqual, uniqueNodeTags, withNodeTags } from "@/domain/nodes/nodeTag";
-import type { Node } from "@/types/node";
+import type { Node, NodeSource } from "@/types/node";
 import type { NodeImportance } from "@/types/nodeImportance";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 
@@ -24,6 +30,8 @@ export type NodeMergeFailureReason =
   | "links-too-many"
   // 選択中のタグを同じタグとみなすもの（nodeTagKey）を除いて連結すると上限（NODE_TAGS_MAX_COUNT）を超える。黙って切り詰めない
   | "tags-too-many"
+  // 選択中の出典を同じ出典とみなすもの（nodeSourceKey）を除いて連結すると上限（NODE_SOURCES_MAX_COUNT）を超える。黙って切り詰めない
+  | "sources-too-many"
   // 確定時の再計画が、プレビューで見せた計画と違う（useNodes.mergeNodes が返す）
   | "plan-changed";
 
@@ -61,6 +69,13 @@ export type NodeMergePlan =
     tagSourceCount: number;
     // 同じタグとみなして捨てるタグの件数（プレビューで見せる）
     tagDuplicateCount: number;
+    // 選択中のノードの出典を配列順に並べ、同じ出典とみなすもの（nodeSourceKey）は最初に出てきたものを残して除いたもの。
+    // 1 つも無ければ undefined
+    sources: readonly NodeSource[] | undefined;
+    // 出典を持つノードの件数
+    sourceSourceCount: number;
+    // 同じ出典とみなして捨てる出典の件数（プレビューで見せる）
+    sourceDuplicateCount: number;
   }
   | { ok: false; reason: NodeMergeFailureReason };
 
@@ -152,8 +167,15 @@ export function planNodeMerge(
   const tagLists = selected.flatMap((node) => (node.tags === undefined || node.tags.length === 0 ? [] : [node.tags]));
   const allTags = tagLists.flat();
   const tags = uniqueNodeTags(allTags);
-  // 検査の順の最後（links-too-many の後）
+  // 検査の順: links-too-many の後
   if (tags.length > NODE_TAGS_MAX_COUNT) return failed("tags-too-many");
+  const sourceLists = selected.flatMap((node) =>
+    (node.sources === undefined || node.sources.length === 0 ? [] : [node.sources]),
+  );
+  const allSources = sourceLists.flat();
+  const sources = uniqueNodeSources(allSources);
+  // 検査の順の最後（tags-too-many の後）
+  if (sources.length > NODE_SOURCES_MAX_COUNT) return failed("sources-too-many");
 
   return {
     ok: true,
@@ -173,13 +195,16 @@ export function planNodeMerge(
     tags: tags.length === 0 ? undefined : tags,
     tagSourceCount: tagLists.length,
     tagDuplicateCount: allTags.length - tags.length,
+    sources: sources.length === 0 ? undefined : sources,
+    sourceSourceCount: sourceLists.length,
+    sourceDuplicateCount: allSources.length - sources.length,
   };
 }
 
 // 確定時の再計画とプレビューの計画が同じか。プレビューで見せた内容（残すノード・吸収されるノードの順・ラベル・重要度・
 // イラストの扱いと引き継ぎ元・失われるイラストの件数・付け替える子の件数・連結したメモとその件数・連結した URL と
-// その元の件数・重複で捨てる件数・連結したタグとその元の件数・重複で捨てる件数）で比べる（L-036）。URL とタグは
-// 要素ごとに比べる（別の配列でも内容が同じなら同じ）。
+// その元の件数・重複で捨てる件数・連結したタグとその元の件数・重複で捨てる件数・連結した出典とその元の件数・
+// 重複で捨てる件数）で比べる（L-036）。URL・タグ・出典は要素ごとに比べる（別の配列でも内容が同じなら同じ）。
 // 引き継ぐイラスト本体は illustrationFrom と引き継ぎ元で決まるので比べない。失敗した計画は同じとみなさない
 export function isSameNodeMergePlan(a: NodeMergePlan, b: NodeMergePlan): boolean {
   if (!a.ok || !b.ok) return false;
@@ -198,6 +223,9 @@ export function isSameNodeMergePlan(a: NodeMergePlan, b: NodeMergePlan): boolean
     && areNodeTagsEqual(a.tags, b.tags)
     && a.tagSourceCount === b.tagSourceCount
     && a.tagDuplicateCount === b.tagDuplicateCount
+    && areNodeSourcesEqual(a.sources, b.sources)
+    && a.sourceSourceCount === b.sourceSourceCount
+    && a.sourceDuplicateCount === b.sourceDuplicateCount
     && a.absorbedIds.length === b.absorbedIds.length
     && a.absorbedIds.every((id, index) => id === b.absorbedIds[index]);
 }
@@ -206,16 +234,20 @@ export function isSameNodeMergePlan(a: NodeMergePlan, b: NodeMergePlan): boolean
 // attachIllustration と同じ規則で高さをイラスト付きの高さにする）。メモは計画の連結結果で置き換え
 // （残すノードのメモも連結に含まれるので失われない）、連結結果が無ければ note のキーを持たせない。URL も同じく
 // 計画の連結結果で置き換え、連結結果が無ければ links のキーを持たせない。タグも同じく計画の連結結果で置き換え、
-// 連結結果が無ければ tags のキーを持たせない。
+// 連結結果が無ければ tags のキーを持たせない。出典も同じく計画の連結結果で置き換え、連結結果が無ければ
+// sources のキーを持たせない。
 // Node に属性を足したときは、ここで残すノードの値を残すか、吸収されるノードの値を引き継ぐかを決める
 // （何もしないと、吸収されるノードの値は警告なしに捨てられる）。計画・プレビュー・isSameNodeMergePlan も合わせて見直す
 function applyPlanToSurvivor(survivor: Node, plan: Extract<NodeMergePlan, { ok: true }>): Node {
-  const updated = withNodeTags(
-    withNodeLinks(
-      withNodeNote({ ...survivor, label: plan.label, importance: plan.importance }, plan.note),
-      plan.links,
+  const updated = withNodeSources(
+    withNodeTags(
+      withNodeLinks(
+        withNodeNote({ ...survivor, label: plan.label, importance: plan.importance }, plan.note),
+        plan.links,
+      ),
+      plan.tags,
     ),
-    plan.tags,
+    plan.sources,
   );
   if (plan.illustrationFrom !== "absorbed" || plan.illustration === undefined) return updated;
   return { ...updated, illustration: plan.illustration, height: ILLUSTRATED_NODE_HEIGHT };
