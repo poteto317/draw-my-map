@@ -73,4 +73,20 @@ describe("MapDocument Codec", () => {
     expect(parsed.ok && parsed.value.nodes[0].tags).toEqual(tags);
     expect(parsed.ok && "tags" in parsed.value.nodes[1]).toBe(false);
   });
+
+  it("V3 の出典（ページ・URL 付き）を往復し、出典の無いノードは項目を持たない", () => {
+    const sources = [
+      { title: "設計入門", page: "12", url: "https://example.com/" },
+      { title: "別冊" },
+    ] as const;
+    const withSources = createTestNode({ ...node(1, null, "high"), sources });
+    const withoutSources = node(2, 1, "low");
+    const document = createMapDocument([withSources, withoutSources], "manual");
+
+    const parsed = parseMapDocumentJson(serializeMapDocument(document));
+
+    expect(parsed).toEqual({ ok: true, value: document });
+    expect(parsed.ok && parsed.value.nodes[0].sources).toEqual(sources);
+    expect(parsed.ok && "sources" in parsed.value.nodes[1]).toBe(false);
+  });
 });
