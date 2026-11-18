@@ -2,15 +2,17 @@ import { IllustrationPanel } from "@/components/layout/IllustrationPanel";
 import { NodeLinksSection } from "@/components/layout/NodeLinksSection";
 import { NodeNoteEditor } from "@/components/layout/NodeNoteEditor";
 import { NodeNoteSection } from "@/components/layout/NodeNoteSection";
+import { NodeSourcesSection } from "@/components/layout/NodeSourcesSection";
 import { NodeTagsSection } from "@/components/layout/NodeTagsSection";
 import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
 import type { AddNodeLinkOutcome } from "@/domain/nodes/nodeLink";
+import type { AddNodeSourceOutcome, NodeSourceInput } from "@/domain/nodes/nodeSource";
 import type { AddNodeTagOutcome } from "@/domain/nodes/nodeTag";
 import type { IllustrationGenerationState } from "@/types/illustrationGeneration";
 import type { Node } from "@/types/node";
 
 type NodeDetailPanelProps = {
-  selectedNode: Pick<Node, "id" | "label" | "note" | "tags" | "links" | "illustration"> | null;
+  selectedNode: Pick<Node, "id" | "label" | "note" | "tags" | "links" | "sources" | "illustration"> | null;
   selectionCount: number;
   documentRevision: number;
   onPreviewNote: (id: number, note: string) => boolean;
@@ -19,13 +21,15 @@ type NodeDetailPanelProps = {
   onRemoveTag: (id: number, tag: string) => boolean;
   onAddLink: (id: number, input: string) => AddNodeLinkOutcome;
   onRemoveLink: (id: number, url: string) => boolean;
+  onAddSource: (id: number, input: NodeSourceInput) => AddNodeSourceOutcome;
+  onRemoveSource: (id: number, index: number) => boolean;
   generation: IllustrationGenerationState;
   onGenerate: (nodeId: number) => void;
   onAttach: (nodeId: number, dataUrl: string) => void;
   onRemove: (nodeId: number) => void;
 };
 
-// 右のパネル。上から詳細メモ、タグ、リンク、イラストを縦に積み、内容が高さを超えたら縦にスクロールする
+// 右のパネル。上から詳細メモ、タグ、リンク、出典、イラストを縦に積み、内容が高さを超えたら縦にスクロールする
 export function NodeDetailPanel({
   selectedNode,
   selectionCount,
@@ -36,6 +40,8 @@ export function NodeDetailPanel({
   onRemoveTag,
   onAddLink,
   onRemoveLink,
+  onAddSource,
+  onRemoveSource,
   generation,
   onGenerate,
   onAttach,
@@ -57,7 +63,7 @@ export function NodeDetailPanel({
           onBeginNoteEdit={onBeginNoteEdit}
         />
       )}
-      {/* タグ・リンクの節の key はノードの ID だけ（兄弟の NodeNoteEditor や互いと重ならないよう接頭辞を付ける）。
+      {/* タグ・リンク・出典の節の key はノードの ID だけ（兄弟の NodeNoteEditor や互いと重ならないよう接頭辞を付ける）。
           documentRevision では作り直さず、節の中で下書きとエラーだけを消す（作り直すとリンク・削除ボタンのフォーカスが
           body へ落ちる。L-155・L-588） */}
       <NodeTagsSection
@@ -73,6 +79,13 @@ export function NodeDetailPanel({
         documentRevision={documentRevision}
         onAddLink={onAddLink}
         onRemoveLink={onRemoveLink}
+      />
+      <NodeSourcesSection
+        key={selectedNode === null ? "sources:none" : `sources:${selectedNode.id}`}
+        node={selectedNode}
+        documentRevision={documentRevision}
+        onAddSource={onAddSource}
+        onRemoveSource={onRemoveSource}
       />
       <IllustrationPanel
         selectedNode={selectedNode}

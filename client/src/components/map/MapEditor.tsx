@@ -151,6 +151,8 @@ export function MapEditor({
     removeNodeLink,
     addNodeTag,
     removeNodeTag,
+    addNodeSource,
+    removeNodeSource,
     beginMoveHistory,
     documentRevision,
     canUndo,
@@ -611,6 +613,8 @@ export function MapEditor({
               onRemoveTag={removeNodeTag}
               onAddLink={addNodeLink}
               onRemoveLink={removeNodeLink}
+              onAddSource={addNodeSource}
+              onRemoveSource={removeNodeSource}
               generation={generation}
               onGenerate={generateIllustration}
               onAttach={(nodeId, dataUrl) => {

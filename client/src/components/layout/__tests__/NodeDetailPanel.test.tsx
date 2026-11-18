@@ -3,16 +3,25 @@ import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { NodeDetailPanel } from "@/components/layout/NodeDetailPanel";
 import type { AddNodeLinkOutcome } from "@/domain/nodes/nodeLink";
+import type { AddNodeSourceOutcome } from "@/domain/nodes/nodeSource";
 import type { AddNodeTagOutcome } from "@/domain/nodes/nodeTag";
 import { createMapHistoryLeaseSpy, createTestMapHistoryLease } from "@/testing/createTestMapHistoryLease";
 
 type Props = ComponentProps<typeof NodeDetailPanel>;
 
 const APPLE_URL = "https://example.com/apple";
+const SOURCE_URL = "https://example.com/book";
 
 function renderPanel(overrides: Partial<Props> = {}) {
   const props: Props = {
-    selectedNode: { id: 1, label: "りんご", note: "りんごのメモ", tags: ["果物"], links: [APPLE_URL] },
+    selectedNode: {
+      id: 1,
+      label: "りんご",
+      note: "りんごのメモ",
+      tags: ["果物"],
+      links: [APPLE_URL],
+      sources: [{ title: "設計入門", page: "12", url: SOURCE_URL }],
+    },
     selectionCount: 1,
     documentRevision: 0,
     onPreviewNote: jest.fn(() => true),
@@ -21,6 +30,8 @@ function renderPanel(overrides: Partial<Props> = {}) {
     onRemoveTag: jest.fn(() => true),
     onAddLink: jest.fn((): AddNodeLinkOutcome => ({ ok: true })),
     onRemoveLink: jest.fn(() => true),
+    onAddSource: jest.fn((): AddNodeSourceOutcome => ({ ok: true })),
+    onRemoveSource: jest.fn(() => true),
     generation: { status: "idle" },
     onGenerate: jest.fn(),
     onAttach: jest.fn(),
@@ -46,6 +57,18 @@ function urlInput(): HTMLInputElement {
   return screen.getByRole("textbox", { name: "URLを追加" }) as HTMLInputElement;
 }
 
+function sourceTitleInput(): HTMLInputElement {
+  return screen.getByRole("textbox", { name: "タイトル" }) as HTMLInputElement;
+}
+
+function sourcePageInput(): HTMLInputElement {
+  return screen.getByRole("textbox", { name: "ページ" }) as HTMLInputElement;
+}
+
+function sourceUrlInput(): HTMLInputElement {
+  return screen.getByRole("textbox", { name: "URL" }) as HTMLInputElement;
+}
+
 describe("NodeDetailPanel", () => {
   it("名前付きの補足領域で、幅 w-72・縮まない・内容が高さを超えたら縦にスクロールする", () => {
     renderPanel();
@@ -53,13 +76,14 @@ describe("NodeDetailPanel", () => {
     expect(panel()).toHaveClass("w-72", "shrink-0", "min-h-0", "overflow-y-auto");
   });
 
-  it("上から詳細メモ、タグ、リンク、イラストの順に置く", () => {
+  it("上から詳細メモ、タグ、リンク、出典、イラストの順に置く", () => {
     renderPanel();
 
     const headings = within(panel()).getAllByRole("heading").map((heading) => heading.textContent);
-    expect(headings).toEqual(["詳細メモ", "タグ", "リンク", "イラスト"]);
+    expect(headings).toEqual(["詳細メモ", "タグ", "リンク", "出典", "イラスト"]);
     expect(within(panel()).getByRole("region", { name: "タグ" })).toBeInTheDocument();
     expect(within(panel()).getByRole("region", { name: "リンク" })).toBeInTheDocument();
+    expect(within(panel()).getByRole("region", { name: "出典" })).toBeInTheDocument();
     expect(within(panel()).getByRole("region", { name: "イラスト" })).toBeInTheDocument();
   });
 
@@ -72,21 +96,25 @@ describe("NodeDetailPanel", () => {
     expect(props.onGenerate).toHaveBeenCalledWith(1);
   });
 
-  it("未選択のときはメモの欄を無効にし、タグ・URL の入力欄を出さず、4 つの節すべてに案内を出す", () => {
+  it("未選択のときはメモの欄を無効にし、タグ・URL・出典の入力欄を出さず、5 つの節すべてに案内を出す", () => {
     renderPanel({ selectedNode: null, selectionCount: 0 });
 
     expect(box()).toBeDisabled();
     expect(screen.queryByRole("textbox", { name: "タグを追加" })).toBeNull();
     expect(screen.queryByRole("textbox", { name: "URLを追加" })).toBeNull();
-    expect(within(panel()).getAllByText("ノードを選択してください")).toHaveLength(4);
+    expect(screen.queryByRole("textbox", { name: "タイトル" })).toBeNull();
+    expect(within(panel()).getAllByText("ノードを選択してください")).toHaveLength(5);
   });
 
-  it("選択中のノードのメモ・タグ・URL を出し、選択件数を渡す", () => {
+  it("選択中のノードのメモ・タグ・URL・出典を出し、選択件数を渡す", () => {
     renderPanel({ selectionCount: 2 });
 
     expect(box()).toHaveValue("りんごのメモ");
     expect(screen.getByRole("button", { name: "タグを削除: 果物" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: APPLE_URL })).toHaveAttribute("href", APPLE_URL);
+    expect(screen.getByText("設計入門")).toBeInTheDocument();
+    expect(screen.getByText("p. 12")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: SOURCE_URL })).toHaveAttribute("href", SOURCE_URL);
     expect(screen.getByText("2 件選択中。主選択のノードのメモを編集します")).toBeInTheDocument();
   });
 
@@ -101,7 +129,7 @@ describe("NodeDetailPanel", () => {
     expect(props.onRemoveLink).toHaveBeenCalledWith(1, APPLE_URL);
   });
 
-  it("タグの追加と削除は、選択中のノードの ID で通知し、リンクの通知とは混ざらない", async () => {
+  it("タグの追加と削除は、選択中のノードの ID で通知し、リンク・出典の通知とは混ざらない", async () => {
     const user = userEvent.setup();
     const { props } = renderPanel();
 
@@ -112,6 +140,29 @@ describe("NodeDetailPanel", () => {
     expect(props.onRemoveTag).toHaveBeenCalledWith(1, "果物");
     expect(props.onAddLink).not.toHaveBeenCalled();
     expect(props.onRemoveLink).not.toHaveBeenCalled();
+    expect(props.onAddSource).not.toHaveBeenCalled();
+    expect(props.onRemoveSource).not.toHaveBeenCalled();
+  });
+
+  it("出典の追加と削除は、選択中のノードの ID で通知し、リンク・タグの通知とは混ざらない", async () => {
+    const user = userEvent.setup();
+    const { props } = renderPanel();
+
+    await user.type(sourceTitleInput(), "実装ガイド");
+    await user.type(sourcePageInput(), "3");
+    await user.type(sourceUrlInput(), "https://example.com/guide{Enter}");
+    await user.click(screen.getByRole("button", { name: `出典を削除: 設計入門 p. 12 ${SOURCE_URL}` }));
+
+    expect(props.onAddSource).toHaveBeenCalledWith(1, {
+      title: "実装ガイド",
+      page: "3",
+      url: "https://example.com/guide",
+    });
+    expect(props.onRemoveSource).toHaveBeenCalledWith(1, 0);
+    expect(props.onAddLink).not.toHaveBeenCalled();
+    expect(props.onRemoveLink).not.toHaveBeenCalled();
+    expect(props.onAddTag).not.toHaveBeenCalled();
+    expect(props.onRemoveTag).not.toHaveBeenCalled();
   });
 
   it("選択の ID が変わると作り直す。フォーカスを外さずに変わっても、前のノードの下書きを反映してから切り替える", () => {
@@ -121,6 +172,7 @@ describe("NodeDetailPanel", () => {
     fireEvent.change(box(), { target: { value: "下書き" } });
     fireEvent.change(urlInput(), { target: { value: "https://example.com/draft" } });
     fireEvent.change(tagInput(), { target: { value: "下書きのタグ" } });
+    fireEvent.change(sourceTitleInput(), { target: { value: "下書きの出典" } });
 
     rerender(<NodeDetailPanel {...props} selectedNode={{ id: 2, label: "みかん" }} />);
 
@@ -130,6 +182,8 @@ describe("NodeDetailPanel", () => {
     expect(screen.getByText("リンクはありません")).toBeInTheDocument();
     expect(tagInput()).toHaveValue("");
     expect(screen.getByText("タグはありません")).toBeInTheDocument();
+    expect(sourceTitleInput()).toHaveValue("");
+    expect(screen.getByText("出典はありません")).toBeInTheDocument();
   });
 
   it("documentRevision が変わると作り直し、文書の入れ替え（グループの失効）では古い下書きを書かない（L-588）", () => {
@@ -178,6 +232,28 @@ describe("NodeDetailPanel", () => {
     expect(within(panel()).queryByRole("alert")).toBeNull();
     expect(tagInput()).toHaveValue("");
     expect(screen.getByRole("button", { name: "タグを削除: 果物" })).toBe(deleteButton);
+    expect(deleteButton).toHaveFocus();
+  });
+
+  it("documentRevision が変わると、出典の節は作り直さずに入力とエラーだけを消し、削除ボタンのフォーカスを保つ（L-588・L-155）", () => {
+    const { props, rerender } = renderPanel({
+      onAddSource: jest.fn((): AddNodeSourceOutcome => ({ ok: false, reason: "duplicate" })),
+    });
+    fireEvent.change(sourceTitleInput(), { target: { value: "設計入門" } });
+    fireEvent.change(sourcePageInput(), { target: { value: "12" } });
+    fireEvent.change(sourceUrlInput(), { target: { value: SOURCE_URL } });
+    fireEvent.submit(sourceTitleInput().form!);
+    expect(within(panel()).getByRole("alert")).toHaveTextContent("同じ出典がすでに追加されています。");
+    const deleteButton = screen.getByRole("button", { name: `出典を削除: 設計入門 p. 12 ${SOURCE_URL}` });
+    act(() => deleteButton.focus());
+
+    rerender(<NodeDetailPanel {...props} documentRevision={1} />);
+
+    expect(within(panel()).queryByRole("alert")).toBeNull();
+    expect(sourceTitleInput()).toHaveValue("");
+    expect(sourcePageInput()).toHaveValue("");
+    expect(sourceUrlInput()).toHaveValue("");
+    expect(screen.getByRole("button", { name: `出典を削除: 設計入門 p. 12 ${SOURCE_URL}` })).toBe(deleteButton);
     expect(deleteButton).toHaveFocus();
   });
 
