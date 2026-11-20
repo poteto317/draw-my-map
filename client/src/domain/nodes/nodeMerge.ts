@@ -4,6 +4,13 @@ import { hasInvalidNodeGeometry } from "@/domain/nodes/nodeGeometryValidation";
 import { maxNodeImportance } from "@/domain/nodes/nodeImportance";
 import { indexNodeForest } from "@/domain/nodes/nodeLayoutForest";
 import { NODE_LINKS_MAX_COUNT, areNodeLinksEqual, withNodeLinks } from "@/domain/nodes/nodeLink";
+import {
+  NODE_MAP_LINKS_MAX_COUNT,
+  areNodeMapLinksEqual,
+  isSelfNodeMapLink,
+  uniqueNodeMapLinks,
+  withNodeMapLinks,
+} from "@/domain/nodes/nodeMapLink";
 import { NODE_NOTE_MERGE_JOINER, isNodeNoteWithinLimit, withNodeNote } from "@/domain/nodes/nodeNote";
 import {
   NODE_SOURCES_MAX_COUNT,
@@ -12,7 +19,7 @@ import {
   withNodeSources,
 } from "@/domain/nodes/nodeSource";
 import { NODE_TAGS_MAX_COUNT, areNodeTagsEqual, uniqueNodeTags, withNodeTags } from "@/domain/nodes/nodeTag";
-import type { Node, NodeSource } from "@/types/node";
+import type { Node, NodeMapLink, NodeSource } from "@/types/node";
 import type { NodeImportance } from "@/types/nodeImportance";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 
@@ -32,6 +39,8 @@ export type NodeMergeFailureReason =
   | "tags-too-many"
   // 選択中の出典を同じ出典とみなすもの（nodeSourceKey）を除いて連結すると上限（NODE_SOURCES_MAX_COUNT）を超える。黙って切り詰めない
   | "sources-too-many"
+  // 選択中のマップ間リンクを同じリンクとみなすもの（nodeMapLinkKey）を除いて連結すると上限（NODE_MAP_LINKS_MAX_COUNT）を超える。黙って切り詰めない
+  | "map-links-too-many"
   // 確定時の再計画が、プレビューで見せた計画と違う（useNodes.mergeNodes が返す）
   | "plan-changed";
 
@@ -76,6 +85,15 @@ export type NodeMergePlan =
     sourceSourceCount: number;
     // 同じ出典とみなして捨てる出典の件数（プレビューで見せる）
     sourceDuplicateCount: number;
+    // 選択中のノードのマップ間リンクを配列順に並べ、同じリンク（nodeMapLinkKey）は最初に出てきたものを残して除いたもの。
+    // 1 つも無ければ undefined
+    mapLinks: readonly NodeMapLink[] | undefined;
+    // マップ間リンクを持つノードの件数
+    mapLinkSourceCount: number;
+    // 重複して捨てるマップ間リンクの件数（プレビューで見せる）。残すノード自身を指すものは除いた後で数える
+    mapLinkDuplicateCount: number;
+    // 現在マップの残すノード自身を指すために捨てるマップ間リンクの件数（プレビューで見せる）
+    mapLinkSelfCount: number;
   }
   | { ok: false; reason: NodeMergeFailureReason };
 
@@ -142,13 +160,15 @@ function chooseMergeIllustration(
   return { illustration: undefined, illustrationFrom: "none", illustrationSourceId: null };
 }
 
-// 対象を検査して統合の計画を作る（配列は変えない）。並びは配列順で、ids の順序には依存しない
+// 対象を検査して統合の計画を作る（配列は変えない）。並びは配列順で、ids の順序には依存しない。
+// currentMapId は統合するマップの ID で、残すノード自身を指すマップ間リンクを除くために使う
 export function planNodeMerge(
   nodes: readonly Node[],
   ids: readonly number[],
   primaryId: number | null,
   joiner: string,
   visibleNodeIds: ReadonlySet<number>,
+  currentMapId: string,
 ): NodeMergePlan {
   const selection = validateMergeSelection(nodes, ids, primaryId, visibleNodeIds);
   if (!selection.ok) return selection;
@@ -174,8 +194,17 @@ export function planNodeMerge(
   );
   const allSources = sourceLists.flat();
   const sources = uniqueNodeSources(allSources);
-  // 検査の順の最後（tags-too-many の後）
+  // 検査の順: tags-too-many の後
   if (sources.length > NODE_SOURCES_MAX_COUNT) return failed("sources-too-many");
+  const mapLinkLists = selected.flatMap((node) =>
+    (node.mapLinks === undefined || node.mapLinks.length === 0 ? [] : [node.mapLinks]),
+  );
+  const allMapLinks = mapLinkLists.flat();
+  // 吸収されるノードが残すノードを指していたリンクは、統合後に自分自身へのリンクになるので除く（追加の self-node と揃える）
+  const nonSelfMapLinks = allMapLinks.filter((link) => !isSelfNodeMapLink(link, currentMapId, survivor.id));
+  const mapLinks = uniqueNodeMapLinks(nonSelfMapLinks);
+  // 検査の順の最後（sources-too-many の後）
+  if (mapLinks.length > NODE_MAP_LINKS_MAX_COUNT) return failed("map-links-too-many");
 
   return {
     ok: true,
@@ -198,13 +227,18 @@ export function planNodeMerge(
     sources: sources.length === 0 ? undefined : sources,
     sourceSourceCount: sourceLists.length,
     sourceDuplicateCount: allSources.length - sources.length,
+    mapLinks: mapLinks.length === 0 ? undefined : mapLinks,
+    mapLinkSourceCount: mapLinkLists.length,
+    mapLinkDuplicateCount: nonSelfMapLinks.length - mapLinks.length,
+    mapLinkSelfCount: allMapLinks.length - nonSelfMapLinks.length,
   };
 }
 
 // 確定時の再計画とプレビューの計画が同じか。プレビューで見せた内容（残すノード・吸収されるノードの順・ラベル・重要度・
 // イラストの扱いと引き継ぎ元・失われるイラストの件数・付け替える子の件数・連結したメモとその件数・連結した URL と
 // その元の件数・重複で捨てる件数・連結したタグとその元の件数・重複で捨てる件数・連結した出典とその元の件数・
-// 重複で捨てる件数）で比べる（L-036）。URL・タグ・出典は要素ごとに比べる（別の配列でも内容が同じなら同じ）。
+// 重複で捨てる件数・連結したマップ間リンクとその元の件数・重複で捨てる件数・自分自身を指すため捨てる件数）で比べる（L-036）。URL・タグ・出典・
+// マップ間リンクは要素ごとに比べる（別の配列でも内容が同じなら同じ）。
 // 引き継ぐイラスト本体は illustrationFrom と引き継ぎ元で決まるので比べない。失敗した計画は同じとみなさない
 export function isSameNodeMergePlan(a: NodeMergePlan, b: NodeMergePlan): boolean {
   if (!a.ok || !b.ok) return false;
@@ -226,6 +260,10 @@ export function isSameNodeMergePlan(a: NodeMergePlan, b: NodeMergePlan): boolean
     && areNodeSourcesEqual(a.sources, b.sources)
     && a.sourceSourceCount === b.sourceSourceCount
     && a.sourceDuplicateCount === b.sourceDuplicateCount
+    && areNodeMapLinksEqual(a.mapLinks, b.mapLinks)
+    && a.mapLinkSourceCount === b.mapLinkSourceCount
+    && a.mapLinkDuplicateCount === b.mapLinkDuplicateCount
+    && a.mapLinkSelfCount === b.mapLinkSelfCount
     && a.absorbedIds.length === b.absorbedIds.length
     && a.absorbedIds.every((id, index) => id === b.absorbedIds[index]);
 }
@@ -235,19 +273,22 @@ export function isSameNodeMergePlan(a: NodeMergePlan, b: NodeMergePlan): boolean
 // （残すノードのメモも連結に含まれるので失われない）、連結結果が無ければ note のキーを持たせない。URL も同じく
 // 計画の連結結果で置き換え、連結結果が無ければ links のキーを持たせない。タグも同じく計画の連結結果で置き換え、
 // 連結結果が無ければ tags のキーを持たせない。出典も同じく計画の連結結果で置き換え、連結結果が無ければ
-// sources のキーを持たせない。
+// sources のキーを持たせない。マップ間リンクも同じく計画の連結結果で置き換え、無ければ mapLinks のキーを持たせない。
 // Node に属性を足したときは、ここで残すノードの値を残すか、吸収されるノードの値を引き継ぐかを決める
 // （何もしないと、吸収されるノードの値は警告なしに捨てられる）。計画・プレビュー・isSameNodeMergePlan も合わせて見直す
 function applyPlanToSurvivor(survivor: Node, plan: Extract<NodeMergePlan, { ok: true }>): Node {
-  const updated = withNodeSources(
-    withNodeTags(
-      withNodeLinks(
-        withNodeNote({ ...survivor, label: plan.label, importance: plan.importance }, plan.note),
-        plan.links,
+  const updated = withNodeMapLinks(
+    withNodeSources(
+      withNodeTags(
+        withNodeLinks(
+          withNodeNote({ ...survivor, label: plan.label, importance: plan.importance }, plan.note),
+          plan.links,
+        ),
+        plan.tags,
       ),
-      plan.tags,
+      plan.sources,
     ),
-    plan.sources,
+    plan.mapLinks,
   );
   if (plan.illustrationFrom !== "absorbed" || plan.illustration === undefined) return updated;
   return { ...updated, illustration: plan.illustration, height: ILLUSTRATED_NODE_HEIGHT };
@@ -289,8 +330,9 @@ export function mergeNodes(
   joiner: string,
   visibleNodeIds: ReadonlySet<number>,
   mode: NodeLayoutMode,
+  currentMapId: string,
 ): NodeMergeResult {
-  const plan = planNodeMerge(nodes, ids, primaryId, joiner, visibleNodeIds);
+  const plan = planNodeMerge(nodes, ids, primaryId, joiner, visibleNodeIds, currentMapId);
   if (!plan.ok) return plan;
   const survivor = nodes.find((node) => node.id === plan.survivorId);
   // 計画が成功なら残すノードは必ず見つかる。型の絞り込みのため到達しない

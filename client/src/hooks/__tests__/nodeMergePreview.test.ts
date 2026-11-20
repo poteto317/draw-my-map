@@ -9,12 +9,14 @@ import { createTestNode } from "@/testing/createTestNode";
 import { createJpegDataUrl } from "@/testing/jpegFixture";
 import type { Node } from "@/types/node";
 
+const CURRENT_MAP_ID = "map-current";
+
 function node(id: number, label: string, overrides: Partial<Node> = {}): Node {
   return createTestNode({ id, parentId: null, label, ...overrides });
 }
 
 function okPlan(nodes: readonly Node[], ids: readonly number[], primaryId: number, joiner = " "): NodeMergePlan {
-  return planNodeMerge(nodes, ids, primaryId, joiner, new Set(nodes.map((item) => item.id)));
+  return planNodeMerge(nodes, ids, primaryId, joiner, new Set(nodes.map((item) => item.id)), CURRENT_MAP_ID);
 }
 
 describe("describeNodeMergeStatus", () => {
@@ -67,6 +69,7 @@ describe("buildNodeMergePreview", () => {
       linkText: null,
       tagText: null,
       sourceText: null,
+      mapLinkText: null,
     });
   });
 
@@ -251,6 +254,62 @@ describe("buildNodeMergePreview", () => {
     expect(buildNodeMergePreview([], plan)).toBeNull();
     expect(describeNodeMergeStatus(false, plan)).toBe(
       "出典をまとめると件数の上限（10 件）を超えるため、統合できません。",
+    );
+  });
+
+  describe("マップ間リンクの連結", () => {
+    it("マップ間リンクを持つノードが 1 つ以上あれば、重複を除いた件数と除いた件数を示す", () => {
+      const nodes = [
+        node(1, "a", { mapLinks: [{ targetMapId: "map-a", targetNodeId: 1 }, { targetMapId: "map-b" }] }),
+        node(2, "b"),
+        node(3, "c", { mapLinks: [{ targetMapId: "map-a", targetNodeId: 1 }, { targetMapId: "map-c" }] }),
+      ];
+
+      expect(buildNodeMergePreview(nodes, okPlan(nodes, [1, 2, 3], 1))?.mapLinkText).toBe("3 件（重複 1 件を除く）");
+    });
+
+    it("重複が無ければ括弧を出さない", () => {
+      const nodes = [
+        node(1, "a", { mapLinks: [{ targetMapId: "map-a" }] }),
+        node(2, "b", { mapLinks: [{ targetMapId: "map-b", targetNodeId: 2 }] }),
+      ];
+
+      expect(buildNodeMergePreview(nodes, okPlan(nodes, [1, 2], 1))?.mapLinkText).toBe("2 件");
+    });
+
+    it("マップ間リンクが 1 つも無ければ null（行を出さない）", () => {
+      const nodes = [node(1, "a"), node(2, "b")];
+
+      expect(buildNodeMergePreview(nodes, okPlan(nodes, [1, 2], 1))?.mapLinkText).toBeNull();
+    });
+
+    it("残すノード自身を指すリンクを除いたら、その件数を括弧に添える（重複と並ぶときは読点で区切る）", () => {
+      const self = { targetMapId: CURRENT_MAP_ID, targetNodeId: 1 };
+      const nodes = [
+        node(1, "a", { mapLinks: [{ targetMapId: "map-a" }] }),
+        node(2, "b", { mapLinks: [self, { targetMapId: "map-a" }] }),
+      ];
+
+      expect(buildNodeMergePreview(nodes, okPlan(nodes, [1, 2], 1))?.mapLinkText)
+        .toBe("1 件（重複 1 件、自分自身へのリンク 1 件を除く）");
+      const selfOnly = [node(1, "a", { mapLinks: [{ targetMapId: "map-a" }] }), node(2, "b", { mapLinks: [self] })];
+      expect(buildNodeMergePreview(selfOnly, okPlan(selfOnly, [1, 2], 1))?.mapLinkText)
+        .toBe("1 件（自分自身へのリンク 1 件を除く）");
+    });
+
+    it("自己リンクだけで残るリンクが無くても、除いたことが分かるよう 0 件の行を出す", () => {
+      const nodes = [node(1, "a"), node(2, "b", { mapLinks: [{ targetMapId: CURRENT_MAP_ID, targetNodeId: 1 }] })];
+
+      expect(buildNodeMergePreview(nodes, okPlan(nodes, [1, 2], 1))?.mapLinkText).toBe("0 件（自分自身へのリンク 1 件を除く）");
+    });
+  });
+
+  it("map-links-too-many の計画はプレビューを作らず、状態文言は失敗の文言", () => {
+    const plan: NodeMergePlan = { ok: false, reason: "map-links-too-many" };
+
+    expect(buildNodeMergePreview([], plan)).toBeNull();
+    expect(describeNodeMergeStatus(false, plan)).toBe(
+      "マップ間リンクをまとめると件数の上限（10 件）を超えるため、統合できません。",
     );
   });
 });

@@ -9,6 +9,8 @@ import { createJpegDataUrl } from "@/testing/jpegFixture";
 import type { Node } from "@/types/node";
 import type { NodeMapState } from "@/types/nodeMapState";
 
+const CURRENT_MAP_ID = "map-current";
+
 jest.mock("@/domain/nodes/nodeAutoLayout", () => {
   const actual = jest.requireActual<typeof import("@/domain/nodes/nodeAutoLayout")>(
     "@/domain/nodes/nodeAutoLayout",
@@ -92,7 +94,8 @@ function merge(
       primaryId,
       joiner,
       visible,
-      planNodeMerge(current().nodes, selectedIds, primaryId, joiner, visible),
+      planNodeMerge(current().nodes, selectedIds, primaryId, joiner, visible, CURRENT_MAP_ID),
+      CURRENT_MAP_ID,
     );
   });
   return outcome;
@@ -370,11 +373,26 @@ describe("useNodes の mergeNodes", () => {
     const outcome = merge(() => result.current, [1, 2], 2, " ", visible);
 
     expect(outcome.ok).toBe(true);
-    const candidate = computeNodeMerge(before, [1, 2], 2, " ", visible, "auto");
+    const candidate = computeNodeMerge(before, [1, 2], 2, " ", visible, "auto", CURRENT_MAP_ID);
     expect(candidate.ok).toBe(true);
     if (!candidate.ok) return;
     expect(result.current.nodes).toEqual(layoutNodeForest(candidate.nodes));
     expect(result.current.nodes[0]).toMatchObject({ id: 2, x: 30, y: 40 });
+  });
+
+  it("渡した現在マップの ID で計画し、残すノード自身を指すマップ間リンクを統合後に残さない", () => {
+    const self = { targetMapId: CURRENT_MAP_ID, targetNodeId: 3 };
+    const other = { targetMapId: "map-other", targetNodeId: 3 };
+    const base = mergeMap();
+    const { result } = renderNodes({
+      ...base,
+      nodes: base.nodes.map((item) => (item.id === 2 ? { ...item, mapLinks: [self, other] } : item)),
+    });
+
+    const outcome = merge(() => result.current, [2, 3], 3);
+
+    expect(outcome).toEqual({ ok: true, survivorId: 3, absorbedCount: 1 });
+    expect(result.current.nodes.find((item) => item.id === 3)?.mapLinks).toEqual([other]);
   });
 
   describe("失敗では何も変えず、選択も履歴も変えない", () => {
@@ -397,7 +415,8 @@ describe("useNodes の mergeNodes", () => {
           primaryId,
           " ",
           visible,
-          planNodeMerge(before.nodes, selectedIds, primaryId, " ", visible),
+          planNodeMerge(before.nodes, selectedIds, primaryId, " ", visible, CURRENT_MAP_ID),
+          CURRENT_MAP_ID,
         );
       });
 
@@ -410,12 +429,12 @@ describe("useNodes の mergeNodes", () => {
 
     it("確認の時点の計画と最新の計画が違えば plan-changed（確認の後にラベルが変わった場合）", () => {
       const { result } = renderNodes(mergeMap());
-      const shown = planNodeMerge(result.current.nodes, [2, 3], 3, " ", ALL);
+      const shown = planNodeMerge(result.current.nodes, [2, 3], 3, " ", ALL, CURRENT_MAP_ID);
       act(() => result.current.updateNodeLabel(2, "ミカン"));
       const before = result.current;
 
       let outcome!: MergeNodesResult;
-      act(() => { outcome = result.current.mergeNodes([2, 3], 3, " ", ALL, shown); });
+      act(() => { outcome = result.current.mergeNodes([2, 3], 3, " ", ALL, shown, CURRENT_MAP_ID); });
 
       expect(outcome).toEqual({ ok: false, reason: "plan-changed" });
       expect(result.current.nodes).toBe(before.nodes);
@@ -426,13 +445,13 @@ describe("useNodes の mergeNodes", () => {
       const { result } = renderNodes(mergeMap());
       // 主選択 3 だけがイラストを持つ状態でプレビューを作る（失われる件数は 0）
       act(() => { result.current.attachIllustration(3, illustration); });
-      const shown = planNodeMerge(result.current.nodes, [2, 3], 3, " ", ALL);
+      const shown = planNodeMerge(result.current.nodes, [2, 3], 3, " ", ALL, CURRENT_MAP_ID);
       expect(shown).toMatchObject({ ok: true, discardedIllustrationCount: 0 });
       act(() => { result.current.attachIllustration(2, illustration); });
       const before = result.current;
 
       let outcome!: MergeNodesResult;
-      act(() => { outcome = result.current.mergeNodes([2, 3], 3, " ", ALL, shown); });
+      act(() => { outcome = result.current.mergeNodes([2, 3], 3, " ", ALL, shown, CURRENT_MAP_ID); });
 
       expect(outcome).toEqual({ ok: false, reason: "plan-changed" });
       expect(result.current.nodes).toBe(before.nodes);
@@ -442,11 +461,11 @@ describe("useNodes の mergeNodes", () => {
 
     it("区切り文字だけが確認の時点と違うときも plan-changed（ラベルが違う）", () => {
       const { result } = renderNodes(mergeMap());
-      const shown = planNodeMerge(result.current.nodes, [2, 3], 3, "・", ALL);
+      const shown = planNodeMerge(result.current.nodes, [2, 3], 3, "・", ALL, CURRENT_MAP_ID);
       const before = result.current;
 
       let outcome!: MergeNodesResult;
-      act(() => { outcome = result.current.mergeNodes([2, 3], 3, " ", ALL, shown); });
+      act(() => { outcome = result.current.mergeNodes([2, 3], 3, " ", ALL, shown, CURRENT_MAP_ID); });
 
       expect(outcome).toEqual({ ok: false, reason: "plan-changed" });
       expect(result.current.nodes).toBe(before.nodes);
@@ -487,12 +506,12 @@ describe("useNodes の mergeNodes", () => {
 
     it("確認の後にメモが変わったら plan-changed（連結後のメモが警告なしに変わらない）", () => {
       const { result } = renderNodes(mergeMap());
-      const shown = planNodeMerge(result.current.nodes, [2, 3], 3, " ", ALL);
+      const shown = planNodeMerge(result.current.nodes, [2, 3], 3, " ", ALL, CURRENT_MAP_ID);
       act(() => { result.current.previewNodeNote(2, "確認の後に書いたメモ"); });
       const before = result.current;
 
       let outcome!: MergeNodesResult;
-      act(() => { outcome = result.current.mergeNodes([2, 3], 3, " ", ALL, shown); });
+      act(() => { outcome = result.current.mergeNodes([2, 3], 3, " ", ALL, shown, CURRENT_MAP_ID); });
 
       expect(outcome).toEqual({ ok: false, reason: "plan-changed" });
       expect(result.current.nodes).toBe(before.nodes);
@@ -522,12 +541,12 @@ describe("useNodes の mergeNodes", () => {
 
     it("確認の後に URL が増えたら plan-changed（連結後の URL が警告なしに変わらない）", () => {
       const { result } = renderNodes(mergeMap());
-      const shown = planNodeMerge(result.current.nodes, [2, 3], 3, " ", ALL);
+      const shown = planNodeMerge(result.current.nodes, [2, 3], 3, " ", ALL, CURRENT_MAP_ID);
       act(() => { result.current.addNodeLink(2, "https://example.com/added"); });
       const before = result.current;
 
       let outcome!: MergeNodesResult;
-      act(() => { outcome = result.current.mergeNodes([2, 3], 3, " ", ALL, shown); });
+      act(() => { outcome = result.current.mergeNodes([2, 3], 3, " ", ALL, shown, CURRENT_MAP_ID); });
 
       expect(outcome).toEqual({ ok: false, reason: "plan-changed" });
       expect(result.current.nodes).toBe(before.nodes);
@@ -557,12 +576,12 @@ describe("useNodes の mergeNodes", () => {
 
     it("確認の後にタグが増えたら plan-changed（連結後のタグが警告なしに変わらない）", () => {
       const { result } = renderNodes(mergeMap());
-      const shown = planNodeMerge(result.current.nodes, [2, 3], 3, " ", ALL);
+      const shown = planNodeMerge(result.current.nodes, [2, 3], 3, " ", ALL, CURRENT_MAP_ID);
       act(() => { result.current.addNodeTag(2, "重要"); });
       const before = result.current;
 
       let outcome!: MergeNodesResult;
-      act(() => { outcome = result.current.mergeNodes([2, 3], 3, " ", ALL, shown); });
+      act(() => { outcome = result.current.mergeNodes([2, 3], 3, " ", ALL, shown, CURRENT_MAP_ID); });
 
       expect(outcome).toEqual({ ok: false, reason: "plan-changed" });
       expect(result.current.nodes).toBe(before.nodes);
@@ -592,12 +611,12 @@ describe("useNodes の mergeNodes", () => {
 
     it("確認の後に出典が増えたら plan-changed（連結後の出典が警告なしに変わらない）", () => {
       const { result } = renderNodes(mergeMap());
-      const shown = planNodeMerge(result.current.nodes, [2, 3], 3, " ", ALL);
+      const shown = planNodeMerge(result.current.nodes, [2, 3], 3, " ", ALL, CURRENT_MAP_ID);
       act(() => { result.current.addNodeSource(2, { title: "設計入門" }); });
       const before = result.current;
 
       let outcome!: MergeNodesResult;
-      act(() => { outcome = result.current.mergeNodes([2, 3], 3, " ", ALL, shown); });
+      act(() => { outcome = result.current.mergeNodes([2, 3], 3, " ", ALL, shown, CURRENT_MAP_ID); });
 
       expect(outcome).toEqual({ ok: false, reason: "plan-changed" });
       expect(result.current.nodes).toBe(before.nodes);

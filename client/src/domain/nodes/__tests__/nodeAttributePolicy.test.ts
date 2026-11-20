@@ -13,6 +13,8 @@ import { createJpegDataUrl } from "@/testing/jpegFixture";
 import type { MapDocumentV3 } from "@/types/mapDocument";
 import type { Node } from "@/types/node";
 
+const CURRENT_MAP_ID = "map-current";
+
 // 全属性を持つ見本のノード。Node に属性を足すと、ここで型エラーになる（見本の値を足し忘れない。L-825）。
 // 値は保存形式の検証を通る値にする（イラストは寸法を宣言した JPEG、高さはイラスト付きの高さ）
 const SAMPLE: Required<Node> = {
@@ -29,6 +31,7 @@ const SAMPLE: Required<Node> = {
   links: ["https://example.com/sample"],
   tags: ["見本"],
   sources: [{ title: "見本の出典", page: "1" }],
+  mapLinks: [{ targetMapId: "sample-map", targetNodeId: 1 }],
 };
 
 // 各属性を見本と別の値にしたもの（比較の付け忘れを検査する）。Node に属性を足すと、ここでも型エラーになる
@@ -46,6 +49,7 @@ const DIFFERENT: Required<Node> = {
   links: ["https://example.com/other"],
   tags: ["別の見本"],
   sources: [{ title: "別の出典", url: "https://example.com/src" }],
+  mapLinks: [{ targetMapId: "other-map" }],
 };
 
 const OPTIONAL_KEYS = Object.keys(NODE_ATTRIBUTE_POLICY) as OptionalNodeKey[];
@@ -83,8 +87,8 @@ function expectedMergedValue(key: OptionalNodeKey): unknown {
 }
 
 describe("NODE_ATTRIBUTE_POLICY", () => {
-  it("任意の属性（illustration・note・links・tags・sources）だけを持つ", () => {
-    expect([...OPTIONAL_KEYS].sort()).toEqual(["illustration", "links", "note", "sources", "tags"]);
+  it("任意の属性（illustration・note・links・tags・sources・mapLinks）だけを持つ", () => {
+    expect([...OPTIONAL_KEYS].sort()).toEqual(["illustration", "links", "mapLinks", "note", "sources", "tags"]);
   });
 });
 
@@ -114,7 +118,7 @@ describe("表の振る舞いの検査（表を直さず属性の扱いを実装�
     const absorbed: Node = { ...createTestNode({ id: 3, parentId: 1, x: 200, y: 300, label: "吸収" }), [key]: SAMPLE[key] };
     const nodes = [ROOT, survivor, absorbed];
 
-    const result = mergeNodes(nodes, [2, 3], 2, " ", new Set([1, 2, 3]), "manual");
+    const result = mergeNodes(nodes, [2, 3], 2, " ", new Set([1, 2, 3]), "manual", CURRENT_MAP_ID);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -127,7 +131,7 @@ describe("表の振る舞いの検査（表を直さず属性の扱いを実装�
     const absorbed: Node = { ...createTestNode({ id: 3, parentId: 1, x: 200, y: 300, label: "吸収" }), [key]: DIFFERENT[key] };
     const nodes = [ROOT, survivor, absorbed];
 
-    const result = mergeNodes(nodes, [2, 3], 2, " ", new Set([1, 2, 3]), "manual");
+    const result = mergeNodes(nodes, [2, 3], 2, " ", new Set([1, 2, 3]), "manual", CURRENT_MAP_ID);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -153,6 +157,7 @@ describe("全属性の往復と比較の検査（書き出し・読み込み・�
       links: [...SAMPLE.links],
       tags: [...SAMPLE.tags],
       sources: SAMPLE.sources.map((source) => ({ ...source })),
+      mapLinks: SAMPLE.mapLinks.map((link) => ({ ...link })),
     };
 
     expect(isDocumentContentEqual(documentOf(SAMPLE), documentOf(copy))).toBe(true);

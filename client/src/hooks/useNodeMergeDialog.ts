@@ -24,6 +24,7 @@ export type UseNodeMergeDialogOptions = {
     joiner: string,
     visibleNodeIds: ReadonlySet<number>,
     expected: NodeMergePlan,
+    currentMapId: string,
   ) => MergeNodesResult;
   publishNotice: (notice: OperationNotice) => void;
 };
@@ -59,8 +60,8 @@ export function useNodeMergeDialog(options: UseNodeMergeDialogOptions): UseNodeM
   const plan = useMemo(
     () => (target === null
       ? null
-      : planNodeMerge(options.nodes, target.ids, target.primaryId, joiner, options.visibleNodeIds)),
-    [target, options.nodes, options.visibleNodeIds, joiner],
+      : planNodeMerge(options.nodes, target.ids, target.primaryId, joiner, options.visibleNodeIds, options.mapId)),
+    [target, options.nodes, options.visibleNodeIds, joiner, options.mapId],
   );
   const preview = useMemo(
     () => (plan === null ? null : buildNodeMergePreview(options.nodes, plan)),
@@ -95,6 +96,7 @@ export function useNodeMergeDialog(options: UseNodeMergeDialogOptions): UseNodeM
       shownJoiner,
       current.visibleNodeIds,
       shownPlan,
+      current.mapId,
     );
     if (!result.ok) {
       fail(formatNodeMergeFailureNotice(result.reason).message);
