@@ -1,3 +1,4 @@
+import { collectDisplayVisibleNodeIds } from "@/domain/nodes/mapDisplayVisibility";
 import { resolveResolutionLevel } from "@/domain/nodes/nodeResolutionLevel";
 import {
   collectAncestorIds,
@@ -37,11 +38,12 @@ export function resolveRestoredMapView(snapshot: MapViewSnapshot, nodes: readonl
   const collapse = index ? deriveNodeCollapse(index, collapsedIds) : null;
   const level = resolveResolutionLevel(snapshot.resolutionMode, snapshot.viewport.scale, snapshot.autoResolutionLevel);
   const resolutionIds = collectVisibleNodeIds(nodes, level);
-  const visibleIds = new Set<number>();
-  for (const { id } of nodes) {
-    if ((focusIds?.has(id) ?? true) && (collapse?.visibleNodeIds.has(id) ?? true)
-      && (id === focusRootId || resolutionIds.has(id))) visibleIds.add(id);
-  }
+  const visibleIds = collectDisplayVisibleNodeIds(nodes.map(({ id }) => id), {
+    collapseVisibleNodeIds: collapse?.visibleNodeIds ?? null,
+    focusVisibleNodeIds: focusIds,
+    resolutionVisibleNodeIds: resolutionIds,
+    focusRootId,
+  });
 
   const selection = pruneMissing({
     primaryId: snapshot.selectedNodeId,

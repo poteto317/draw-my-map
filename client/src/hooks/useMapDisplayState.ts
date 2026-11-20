@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 
+import { collectDisplayVisibleNodeIds } from "@/domain/nodes/mapDisplayVisibility";
 import { projectCollapsedLayout } from "@/domain/nodes/nodeCollapseLayout";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
@@ -35,15 +36,21 @@ export function useMapDisplayState({
   const fitNodes = useMemo(() => projection.nodes.filter(({ id }) =>
     collapseVisibleNodeIds.has(id) && (focusVisibleNodeIds?.has(id) ?? true),
   ), [collapseVisibleNodeIds, focusVisibleNodeIds, projection.nodes]);
-  const visibleNodeIds = useMemo(() => {
-    const visible = new Set<number>();
-    for (const node of fitNodes) {
-      if (node.id === focusRootId || resolutionVisibleNodeIds.has(node.id)) {
-        visible.add(node.id);
-      }
-    }
-    return visible;
-  }, [fitNodes, focusRootId, resolutionVisibleNodeIds]);
+  const visibleNodeIds = useMemo(() => collectDisplayVisibleNodeIds(
+    projection.nodes.map(({ id }) => id),
+    {
+      collapseVisibleNodeIds,
+      focusVisibleNodeIds,
+      resolutionVisibleNodeIds,
+      focusRootId,
+    },
+  ), [
+    collapseVisibleNodeIds,
+    focusRootId,
+    focusVisibleNodeIds,
+    projection.nodes,
+    resolutionVisibleNodeIds,
+  ]);
 
   return {
     displayNodes: projection.nodes,
