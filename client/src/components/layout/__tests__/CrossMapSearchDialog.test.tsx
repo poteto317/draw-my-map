@@ -234,6 +234,15 @@ describe("CrossMapSearchDialog", () => {
 
     fireEvent.keyDown(input, { key: "Enter" });
     expect(props.onSelectMatch).toHaveBeenLastCalledWith("map-other", 11);
+
+    // ArrowDown で末尾（3 件目）→ 先頭へ循環
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(getButtons()[0]).toHaveAttribute("aria-selected", "true");
+    expect(getButtons()[2]).toHaveAttribute("aria-selected", "false");
+    expect(input).toHaveAttribute("aria-activedescendant", getButtons()[0].id);
+
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(props.onSelectMatch).toHaveBeenLastCalledWith("map-current", 1);
   });
 
   it("検索結果件数が減ったときアクティブインデックスを範囲内へ正規化し、先頭結果を選択できる", async () => {
