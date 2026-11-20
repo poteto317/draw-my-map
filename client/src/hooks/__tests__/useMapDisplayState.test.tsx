@@ -48,6 +48,22 @@ describe("useMapDisplayState", () => {
     expect([...result.current.visibleNodeIds]).toEqual([1]);
   });
 
+  it("集中範囲外は隠し、集中先は解像度集合外でも可視にする", () => {
+    const nodes = [node(1, null), node(2, 1), node(3, 1), node(4, 1)];
+
+    const { result } = renderHook(() => useMapDisplayState({
+      nodes,
+      layoutMode: "auto",
+      collapseVisibleNodeIds: new Set([1, 2, 3, 4]),
+      focusVisibleNodeIds: new Set([1, 2]),
+      focusRootId: 1,
+      resolutionVisibleNodeIds: new Set([2]),
+    }));
+
+    expect([...result.current.visibleNodeIds]).toEqual([1, 2]);
+    expect([...result.current.fitNodes.map(({ id }) => id)]).toEqual([1, 2]);
+  });
+
   it("配置失敗でも折りたたみと解像度の積集合を維持する", () => {
     const nodes = [
       node(1, null, { y: 2 ** 57 }),

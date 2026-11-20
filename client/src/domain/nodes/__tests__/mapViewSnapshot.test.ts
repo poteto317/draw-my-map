@@ -1,5 +1,12 @@
-import { createNodeCollapseIndex } from "@/domain/nodes/nodeCollapse";
+import { collectDisplayVisibleNodeIds } from "@/domain/nodes/mapDisplayVisibility";
 import { isSameMapView, resolveRestoredMapView } from "@/domain/nodes/mapViewSnapshot";
+import {
+  collectSubtreeIds,
+  createNodeCollapseIndex,
+  deriveNodeCollapse,
+} from "@/domain/nodes/nodeCollapse";
+import { resolveResolutionLevel } from "@/domain/nodes/nodeResolutionLevel";
+import { collectVisibleNodeIds } from "@/domain/nodes/nodeVisibility";
 import { createTestNode } from "@/testing/createTestNode";
 import type { MapViewSnapshot } from "@/types/mapViewSnapshot";
 import type { Node } from "@/types/node";
@@ -111,6 +118,32 @@ describe("resolveRestoredMapView", () => {
     expect(result.normalized.selectedNodeIds).toEqual([3]);
     expect(result.selection.primaryId).toBe(3);
     expect([...result.selection.selectedIds]).toEqual([3]);
+  });
+
+  it("選択の prune に使う可視集合は collectDisplayVisibleNodeIds と一致する", () => {
+    const index = createNodeCollapseIndex(nestedNodes)!;
+    const source = snapshot({
+      selectedNodeId: 4,
+      selectedNodeIds: [3, 4],
+      focusRootId: 2,
+      collapsedNodeIds: [],
+      resolutionMode: "high",
+      autoResolutionLevel: "high",
+    });
+    const result = resolveRestoredMapView(source, nestedNodes, index);
+    const focusIds = collectSubtreeIds(index, 2);
+    const collapse = deriveNodeCollapse(index, new Set());
+    const level = resolveResolutionLevel(source.resolutionMode, source.viewport.scale, source.autoResolutionLevel);
+    const expectedVisible = collectDisplayVisibleNodeIds(nestedNodes.map(({ id }) => id), {
+      collapseVisibleNodeIds: collapse.visibleNodeIds,
+      focusVisibleNodeIds: focusIds,
+      resolutionVisibleNodeIds: collectVisibleNodeIds(nestedNodes, level),
+      focusRootId: 2,
+    });
+
+    expect([...result.selection.selectedIds].every((id) => expectedVisible.has(id))).toBe(true);
+    expect(expectedVisible.has(4)).toBe(false);
+    expect(expectedVisible.has(3)).toBe(true);
   });
 
   it('resolutionMode が "auto" のとき解決後レベルを autoResolutionLevel に書く', () => {
