@@ -61,3 +61,12 @@ it("保存成功で一覧を更新し、空名は失敗にする", () => {
   expect(result.current.bookmarks).toEqual([{ name: "遠景", snapshot }]);
   expect(result.current.notice).toBeNull();
 });
+
+it("初回読込失敗では ready・空一覧・読込失敗 notice になる", () => {
+  const { storage } = createRecordingStorage({ failGetItem: true });
+  const { result } = renderHook(() => useMapViewBookmarks(storage, identity.id, identity.createdAt, true));
+
+  expect(result.current.ready).toBe(true);
+  expect(result.current.bookmarks).toEqual([]);
+  expect(result.current.notice?.message).toBe("表示ブックマークを読み込めませんでした。");
+});
