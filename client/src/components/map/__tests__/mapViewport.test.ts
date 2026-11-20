@@ -2,12 +2,48 @@ import {
   INITIAL_VIEWPORT,
   MIN_VIEWPORT_SCALE,
   MAX_VIEWPORT_SCALE,
+  fitViewportToNodes,
   isValidViewport,
   panViewport,
   screenToWorld,
   worldToScreen,
   zoomViewportAt,
 } from "@/components/map/mapViewport";
+
+describe("fitViewportToNodes", () => {
+  const screen = { width: 800, height: 600 };
+
+  it("負の座標を含む外接矩形を余白付きで中央へ配置する", () => {
+    const viewport = fitViewportToNodes([
+      { x: -500, y: -120, width: 100, height: 60 },
+      { x: 300, y: 100, width: 100, height: 60 },
+    ], screen)!;
+
+    const topLeft = worldToScreen({ x: -500, y: -120 }, viewport);
+    const bottomRight = worldToScreen({ x: 400, y: 160 }, viewport);
+    expect(topLeft.x).toBeGreaterThan(0);
+    expect(bottomRight.x).toBeLessThan(screen.width);
+    expect(topLeft.x + bottomRight.x).toBeCloseTo(screen.width);
+    expect(topLeft.y + bottomRight.y).toBeCloseTo(screen.height);
+  });
+
+  it.each([
+    [10, MAX_VIEWPORT_SCALE],
+    [4000, MIN_VIEWPORT_SCALE],
+  ])("倍率が範囲を越える一つのノードも中央に配置する（幅 %s）", (width, scale) => {
+    const viewport = fitViewportToNodes([{ x: -50, y: 20, width, height: 10 }], screen)!;
+    expect(viewport.scale).toBe(scale);
+    expect(worldToScreen({ x: -50 + width / 2, y: 25 }, viewport)).toEqual({ x: 400, y: 300 });
+  });
+
+  it("空の対象、無効な画面サイズ、無効なノード寸法では変換を返さない", () => {
+    const node = { x: 0, y: 0, width: 100, height: 60 };
+    expect(fitViewportToNodes([], screen)).toBeNull();
+    expect(fitViewportToNodes([node], { width: 0, height: 600 })).toBeNull();
+    expect(fitViewportToNodes([node], { width: 800, height: Infinity })).toBeNull();
+    expect(fitViewportToNodes([{ ...node, height: -1 }], screen)).toBeNull();
+  });
+});
 
 describe("map viewport", () => {
   it("初期viewportではワールド座標と画面座標が一致する", () => {

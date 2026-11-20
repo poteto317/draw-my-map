@@ -1,4 +1,4 @@
-import { isValidViewport, type ScreenSize, type Viewport } from "@/components/map/mapViewport";
+import { isValidScreenSize, isValidViewport, type ScreenSize, type Viewport } from "@/components/map/mapViewport";
 import type { Node } from "@/types/node";
 
 export function focusViewportOnNode(
@@ -6,9 +6,7 @@ export function focusViewportOnNode(
   node: Node,
   screen: ScreenSize,
 ): Viewport {
-  if (!isValidViewport(viewport)
-    || !Number.isFinite(screen.width)
-    || !Number.isFinite(screen.height)) {
+  if (!isValidViewport(viewport) || !isValidScreenSize(screen)) {
     return viewport;
   }
   const center = { x: node.x + node.width / 2, y: node.y + node.height / 2 };
