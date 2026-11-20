@@ -31,17 +31,12 @@ export function useMapViewBookmarks(
 
   useEffect(() => {
     if (key === null) return;
-    let cancelled = false;
-    void Promise.resolve().then(() => {
-      if (cancelled) return;
-      const result = readMapViewBookmarks(storage, { id, createdAt });
-      setState({
-        storage, key,
-        bookmarks: result.ok ? result.bookmarks : EMPTY_BOOKMARKS,
-        notice: result.ok ? null : mapViewBookmarkReadFailedNotice(),
-      });
+    const result = readMapViewBookmarks(storage, { id, createdAt });
+    setState({
+      storage, key,
+      bookmarks: result.ok ? result.bookmarks : EMPTY_BOOKMARKS,
+      notice: result.ok ? null : mapViewBookmarkReadFailedNotice(),
     });
-    return () => { cancelled = true; };
   }, [key, storage, id, createdAt]);
 
   function update(change: { kind: "save"; name: string; snapshot: MapViewSnapshot } | { kind: "delete"; name: string }) {
