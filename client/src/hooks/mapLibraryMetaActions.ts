@@ -482,6 +482,7 @@ export function runDeleteFolder(
 }
 
 // 破損時（corrupt）のみの明示的初期化。ready や unavailable では自動・誤上書きを防ぐため拒否する（L-669）。
+// ストレージ上の最新がまだ壊れているときだけ空で初期化し、別タブで回復済みなら最新を読み込むだけにする。
 export function runResetLibraryMeta(
   current: PersistentLibraryState,
 ): LibraryMetaActionOutcome {
@@ -491,6 +492,27 @@ export function runResetLibraryMeta(
         kind: "error",
         message: "メタデータの初期化は破損時のみ実行できます。",
       }),
+    };
+  }
+  // 初期化の直前にも最新を読む。別タブがすでに初期化・更新していたら、その内容を空で上書きしない
+  const latest = readLatestLibraryMeta(current);
+  if (latest.ok) {
+    return {
+      nextState: { libraryMeta: latest.meta, libraryMetaStatus: "ready" },
+      result: succeededOperation(
+        {
+          kind: "warning",
+          message:
+            "別のタブでお気に入り・フォルダー情報がすでに回復していたため、初期化せずに最新の情報を読み込みました。",
+        },
+        false,
+      ),
+    };
+  }
+  if (latest.status === "unavailable") {
+    return {
+      nextState: { libraryMeta: current.libraryMeta, libraryMetaStatus: "unavailable" },
+      result: failedOperation(metaStatusBlockedNotice("unavailable")),
     };
   }
   const written = resetMapLibraryMeta(current.storage);

@@ -3656,6 +3656,73 @@ describe("useMapLibrary のメタデータの複数タブ（別タブの更新�
     expect(hook.entries()[MAP_LIBRARY_META_STORAGE_KEY]).toBe("{corrupt");
   });
 
+  function corruptThreeMaps(): Record<string, string> {
+    return { ...threeMapsWithBodies(), [MAP_LIBRARY_META_STORAGE_KEY]: "{corrupt" };
+  }
+
+  it("「メタデータを初期化」は、別タブですでに回復・更新されていたら上書きせず、画面を最新（ready）にして warning で伝える", () => {
+    const hook = setup({ initial: corruptThreeMaps() });
+    expect(readyView(hook.result.current.view).libraryMetaStatus).toBe("corrupt");
+    // 別タブ（タブ B）が初期化し、フォルダーとお気に入りを付けた
+    hook.storage.setItem(
+      MAP_LIBRARY_META_STORAGE_KEY,
+      encodeMapLibraryMeta(folderWithMap2FromOtherTab(favoriteMap2FromOtherTab(createEmptyMapLibraryMeta()))),
+    );
+    const before = hook.entries()[MAP_LIBRARY_META_STORAGE_KEY];
+
+    let reset: ReturnType<typeof hook.result.current.resetLibraryMeta> | undefined;
+    act(() => {
+      reset = hook.result.current.resetLibraryMeta();
+    });
+
+    expect(reset?.ok).toBe(true);
+    expect(reset?.notice).toEqual({
+      kind: "warning",
+      message:
+        "別のタブでお気に入り・フォルダー情報がすでに回復していたため、初期化せずに最新の情報を読み込みました。",
+    });
+    expect(hook.entries()[MAP_LIBRARY_META_STORAGE_KEY]).toBe(before);
+    const view = readyView(hook.result.current.view);
+    expect(view.libraryMetaStatus).toBe("ready");
+    expect(view.libraryMeta).toEqual(storedLibraryMeta(hook.entries()));
+    expect(view.libraryMeta.mapMeta["map-2"]).toMatchObject({ favorite: true, folderId: OTHER_TAB_FOLDER.id });
+  });
+
+  it("「メタデータを初期化」は、最新もまだ壊れていれば従来どおり空のメタデータで初期化する", () => {
+    const hook = setup({ initial: corruptThreeMaps() });
+
+    let reset: ReturnType<typeof hook.result.current.resetLibraryMeta> | undefined;
+    act(() => {
+      reset = hook.result.current.resetLibraryMeta();
+    });
+
+    expect(reset?.ok).toBe(true);
+    expect(reset?.notice).toEqual({ kind: "status", message: "お気に入り・フォルダー情報を初期化しました。" });
+    expect(storedLibraryMeta(hook.entries())).toEqual(createEmptyMapLibraryMeta());
+    expect(readyView(hook.result.current.view).libraryMetaStatus).toBe("ready");
+  });
+
+  it("「メタデータを初期化」は、直前の読み取りに失敗したら書き込まず、読み込めない扱いで拒否する", () => {
+    let blockMetaRead = false;
+    const hook = setup({
+      initial: corruptThreeMaps(),
+      throwOnGetItem: (key) => blockMetaRead && key === MAP_LIBRARY_META_STORAGE_KEY,
+    });
+    blockMetaRead = true;
+    const writesBefore = hook.operations.filter((op) => op.key === MAP_LIBRARY_META_STORAGE_KEY).length;
+
+    let reset: ReturnType<typeof hook.result.current.resetLibraryMeta> | undefined;
+    act(() => {
+      reset = hook.result.current.resetLibraryMeta();
+    });
+
+    expect(reset?.ok).toBe(false);
+    expect(reset?.notice?.message).toBe("お気に入り・フォルダー情報を読み込めなかったため操作できません。");
+    expect(hook.entries()[MAP_LIBRARY_META_STORAGE_KEY]).toBe("{corrupt");
+    expect(hook.operations.filter((op) => op.key === MAP_LIBRARY_META_STORAGE_KEY)).toHaveLength(writesBefore);
+    expect(readyView(hook.result.current.view).libraryMetaStatus).toBe("unavailable");
+  });
+
   it("書き込みの直前の読み取りに失敗したら、メタデータを上書きしない（お気に入り操作は失敗、切り替えは warning）", () => {
     let blockMetaRead = false;
     const hook = setup({
