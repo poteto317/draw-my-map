@@ -1,11 +1,13 @@
 import {
   canCollapse,
   collectAncestorIds,
+  collectSubtreeIds,
   createNodeCollapseIndex,
   deriveNodeCollapse,
   expandCollapsedNodes,
   normalizeCollapsedNodeIds,
   toggleCollapsedNode,
+  updateSubtreeCollapsedIds,
   type NodeCollapseIndex,
 } from "@/domain/nodes/nodeCollapse";
 import { createTestNode } from "@/testing/createTestNode";
@@ -128,6 +130,19 @@ describe("nodeCollapse", () => {
     expect(collectAncestorIds(index, 3)).toEqual([2, 1]);
     expect(collectAncestorIds(index, 1)).toEqual([]);
     expect(collectAncestorIds(index, 999)).toBeNull();
+  });
+
+  it("部分木IDを自身込みで集め、一括折りたたみ対象を更新する", () => {
+    const index = createNodeCollapseIndex(nestedNodes)!;
+    expect(ids(collectSubtreeIds(index, 2)!).sort((a, b) => a - b)).toEqual([2, 3]);
+    expect(collectSubtreeIds(index, 999)).toBeNull();
+
+    const current = new Set([1]);
+    Object.freeze(current);
+    // 葉(3,4)は折りたためないので、根1の部分木では内部節だけが対象になる
+    expect(ids(updateSubtreeCollapsedIds(index, current, collectSubtreeIds(index, 1)!, true))).toEqual([1, 2]);
+    expect(ids(updateSubtreeCollapsedIds(index, new Set([1, 2]), collectSubtreeIds(index, 1)!, false))).toEqual([]);
+    expect(updateSubtreeCollapsedIds(index, current, collectSubtreeIds(index, 3)!, true)).toBe(current);
   });
 
   it("toggleは入力を変更せず葉・不在IDを無視する", () => {

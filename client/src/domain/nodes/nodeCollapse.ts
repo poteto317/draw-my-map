@@ -110,6 +110,39 @@ export function collectAncestorIds(
   return ancestors;
 }
 
+export function collectSubtreeIds(
+  index: NodeCollapseIndex,
+  nodeId: number,
+): ReadonlySet<number> | null {
+  if (!index.nodesById.has(nodeId)) return null;
+  const ids = new Set<number>();
+  const pending = [nodeId];
+  while (pending.length > 0) {
+    const id = pending.pop()!;
+    ids.add(id);
+    for (const child of index.childrenByParent.get(id) ?? []) {
+      pending.push(child.id);
+    }
+  }
+  return ids;
+}
+
+export function updateSubtreeCollapsedIds(
+  index: NodeCollapseIndex,
+  current: ReadonlySet<number>,
+  subtreeIds: ReadonlySet<number>,
+  collapsed: boolean,
+): ReadonlySet<number> {
+  let next: Set<number> | null = null;
+  for (const id of subtreeIds) {
+    if (!canCollapse(index, id) || current.has(id) === collapsed) continue;
+    next ??= new Set(current);
+    if (collapsed) next.add(id);
+    else next.delete(id);
+  }
+  return next ?? current;
+}
+
 export function toggleCollapsedNode(
   index: NodeCollapseIndex,
   current: ReadonlySet<number>,
