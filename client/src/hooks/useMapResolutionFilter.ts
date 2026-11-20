@@ -7,7 +7,7 @@ import {
   resolveEffectiveFilterScale,
 } from "@/hooks/mapResolutionFilterState";
 import type { Node } from "@/types/node";
-import type { ResolutionFilterMode } from "@/types/nodeResolution";
+import type { ResolutionFilterMode, ResolutionLevel } from "@/types/nodeResolution";
 
 // 表示のリセットで使う、最新の自動の表示レベルと、リセットを待つ間の倍率
 type ResolutionResetState = {
@@ -77,5 +77,13 @@ export function useMapResolutionFilter({
       pendingScale: scale !== nextScale ? nextScale : null });
   }, [scale]);
 
-  return { mode, level, visibleNodeIds, setMode, resetViewportScale };
+  const restoreResolution = useCallback((nextMode: ResolutionFilterMode, autoLevel: ResolutionLevel, nextScale: number) => {
+    dispatch({ type: "restore", mode: nextMode, level: autoLevel, pendingScale: scale !== nextScale ? nextScale : null });
+  }, [scale]);
+  const getAutoResolutionLevel = useCallback((viewportScale: number) => (
+    mode === "auto" ? resolveResolutionLevel("auto", viewportScale, previousAutoLevel)
+      : previousAutoLevel ?? resolveResolutionLevel("auto", viewportScale, null)
+  ), [mode, previousAutoLevel]);
+
+  return { mode, level, visibleNodeIds, setMode, resetViewportScale, restoreResolution, getAutoResolutionLevel };
 }

@@ -223,3 +223,35 @@ it.each(["auto", "high"] as const)("viewport復帰は%sモードを保持して�
   rerender({ scale: 0.97 });
   expect(result.current).toMatchObject({ mode, level: mode === "auto" ? "all" : "high" });
 });
+
+it.each([
+  ["all", 0.97, 0.5],
+  ["medium", 0.97, 1],
+  ["high", 0.62, 1],
+  ["medium", 0.62, 0.5],
+] as const)("保存したautoの%sを旧倍率の通知中から維持する", (level, restoredScale, oldScale) => {
+  const { result, rerender } = renderHook(({ scale }) => useMapResolutionFilter({ nodes, scale, resetRevision: 0 }), {
+    initialProps: { scale: oldScale as number },
+  });
+  act(() => result.current.restoreResolution("auto", level, restoredScale));
+  expect(result.current.level).toBe(level);
+  rerender({ scale: restoredScale });
+  expect(result.current.getAutoResolutionLevel(restoredScale)).toBe(level);
+});
+
+it("固定モードを保存するときは直前の自動レベルを取得する", () => {
+  const { result } = renderHook(() => useMapResolutionFilter({ nodes, scale: 0.5, resetRevision: 0 }));
+  act(() => result.current.setMode("all"));
+  expect(result.current.level).toBe("all");
+  expect(result.current.getAutoResolutionLevel(0.5)).toBe("high");
+});
+
+it("固定モードの復元時に保存した自動レベルを倍率から上書きしない", () => {
+  const { result, rerender } = renderHook(({ scale }) => useMapResolutionFilter({ nodes, scale, resetRevision: 0 }), {
+    initialProps: { scale: 1 },
+  });
+  act(() => result.current.restoreResolution("all", "high", 0.97));
+  rerender({ scale: 0.97 });
+  expect(result.current.level).toBe("all");
+  expect(result.current.getAutoResolutionLevel(0.97)).toBe("high");
+});
