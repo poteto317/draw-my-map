@@ -202,11 +202,21 @@ export function persistRestoredMeta(
     kind: "status",
     message: "バックアップのマップを追加しました。",
   };
-  if (
-    current.libraryMetaStatus !== "ready" ||
-    (backup.folders === undefined && backup.mapMeta === undefined)
-  ) {
+  if (backup.folders === undefined && backup.mapMeta === undefined) {
     return { libraryMeta: current.libraryMeta, notice: defaultSuccessNotice };
+  }
+  if (current.libraryMetaStatus !== "ready") {
+    // 破損・読込不可のメタは上書きしない（L-669）。バックアップのお気に入り・フォルダーを反映しなかったことは伝える（L-001）
+    return {
+      libraryMeta: current.libraryMeta,
+      notice: {
+        kind: "warning",
+        message:
+          current.libraryMetaStatus === "corrupt"
+            ? "バックアップのマップを追加しましたが、お気に入り・フォルダー情報が破損しているため、バックアップのお気に入り・フォルダーは復元していません。"
+            : "バックアップのマップを追加しましたが、お気に入り・フォルダー情報を読み込めなかったため、バックアップのお気に入り・フォルダーは復元していません。",
+      },
+    };
   }
   const merged = mergeLibraryMetaForRestore(
     current.libraryMeta,
