@@ -36,6 +36,10 @@ type UseCrossMapNavigationParams = {
   issueCanvasFocusRequest: (nodeId: number) => void;
   clearCanvasFocusRequest: () => void;
   navigateToNodeInMapView: (nodeId: number) => void;
+  navigateToArrivalInMapView?: (nodeId: number) => void;
+  onBeforeLocalOutlineJump?: () => void;
+  focusRootId?: number | null;
+  onValidOutlineTarget?: (nodeId: number) => void;
   pendingNavigation: PendingMapNodeNavigation | null;
   onConsumePendingNavigation: (token: number) => void;
   onSwitchToMapTarget: (targetMapId: string, targetNodeId?: number) => void;
@@ -68,6 +72,10 @@ export function useCrossMapNavigation({
   issueCanvasFocusRequest,
   clearCanvasFocusRequest,
   navigateToNodeInMapView,
+  navigateToArrivalInMapView,
+  onBeforeLocalOutlineJump,
+  focusRootId,
+  onValidOutlineTarget,
   pendingNavigation,
   onConsumePendingNavigation,
   onSwitchToMapTarget,
@@ -78,7 +86,8 @@ export function useCrossMapNavigation({
   } = useRevisionScopedNotice(documentRevision);
 
   const navigateToLocalNode = useCallback(
-    (nodeId: number) => {
+    (nodeId: number, options: { recordNavigation?: boolean } = {}) => {
+      const recordNavigation = options.recordNavigation !== false;
       if (!nodes.some((candidate) => candidate.id === nodeId)) {
         publishNavigationNotice(TARGET_NODE_MISSING_NOTICE);
         return;
@@ -93,12 +102,15 @@ export function useCrossMapNavigation({
           initialViewportScale,
           collapseIndex,
           collapsedNodeIds,
+          focusRootId,
         });
         if (plan === null) {
           publishNavigationNotice(TARGET_NODE_MISSING_NOTICE);
           return;
         }
         clearCanvasFocusRequest();
+        if (recordNavigation) onBeforeLocalOutlineJump?.();
+        onValidOutlineTarget?.(nodeId);
         setViewportScale(initialViewportScale);
         resetViewportScale(initialViewportScale);
         if (plan.ancestorIdsToExpand.length > 0) {
@@ -115,17 +127,24 @@ export function useCrossMapNavigation({
         setViewMode("map");
         return;
       }
-      navigateToNodeInMapView(nodeId);
+      const navigate = recordNavigation
+        ? navigateToNodeInMapView
+        : navigateToArrivalInMapView ?? navigateToNodeInMapView;
+      navigate(nodeId);
     },
     [
       clearCanvasFocusRequest,
       collapseIndex,
       collapsedNodeIds,
       expandNodes,
+      focusRootId,
       initialViewportScale,
       issueCanvasFocusRequest,
+      navigateToArrivalInMapView,
       navigateToNodeInMapView,
+      onBeforeLocalOutlineJump,
       nodes,
+      onValidOutlineTarget,
       publishNavigationNotice,
       resetViewportScale,
       resolutionMode,
@@ -158,7 +177,7 @@ export function useCrossMapNavigation({
     }
     if (consumedNavigationTokenRef.current === pendingNavigation.token) return;
     consumedNavigationTokenRef.current = pendingNavigation.token;
-    navigateToLocalNode(pendingNavigation.nodeId);
+    navigateToLocalNode(pendingNavigation.nodeId, { recordNavigation: false });
     onConsumePendingNavigation(pendingNavigation.token);
   }, [
     pendingNavigation,

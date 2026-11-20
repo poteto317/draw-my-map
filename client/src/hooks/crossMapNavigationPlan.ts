@@ -18,6 +18,7 @@ type OutlineNodeJumpInput = {
   // 親子関係が壊れたマップでは createNodeCollapseIndex が null を返す（useNodeSearchNavigation と同じ契約）
   collapseIndex: NodeCollapseIndex | null;
   collapsedNodeIds: ReadonlySet<number>;
+  focusRootId?: number | null;
 };
 
 export type OutlineNodeJumpPlan = {
@@ -35,6 +36,7 @@ export function planOutlineNodeJump({
   initialViewportScale,
   collapseIndex,
   collapsedNodeIds,
+  focusRootId,
 }: OutlineNodeJumpInput): OutlineNodeJumpPlan | null {
   const level = resolveResolutionLevel(resolutionMode, initialViewportScale, null);
   const reveal = resolveNodeSearchReveal({
@@ -49,14 +51,15 @@ export function planOutlineNodeJump({
   if (reveal.ancestorIdsToExpand.length > 0) {
     messages.push("検索結果を表示するため、祖先の枝を展開しました。");
   }
-  if (reveal.resolutionLevel !== null) {
+  const resolutionLevel = nodeId === focusRootId ? null : reveal.resolutionLevel;
+  if (resolutionLevel !== null) {
     messages.push(
-      `表示を『${RESOLUTION_LEVEL_LABELS[reveal.resolutionLevel]}』に切り替えました。ズームに連動させるには『自動』を選んでください。`,
+      `表示を『${RESOLUTION_LEVEL_LABELS[resolutionLevel]}』に切り替えました。ズームに連動させるには『自動』を選んでください。`,
     );
   }
   return {
     ancestorIdsToExpand: reveal.ancestorIdsToExpand,
-    resolutionLevel: reveal.resolutionLevel,
+    resolutionLevel,
     notice: messages.length > 0 ? { kind: "status", message: messages.join(" ") } : null,
   };
 }
