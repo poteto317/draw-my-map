@@ -200,6 +200,7 @@
     2. 無ければ、合計フォルダー数が `MAX_MAP_FOLDERS`（50）未満なら追加する（既存フォルダーと `id` が衝突している場合は `generateId()` で新 ID を採番し `folderIdMapping` に記録）。
     3. 50 件上限に達していたら追加せず `droppedFolderCount` を記録する。
     4. バックアップの各 `mapMeta[oldMapId]` を `newMapId` へ付け替え、`folderId` を `folderIdMapping.get(oldFolderId)` へ変換する（上限超過でマッピングが無い場合は `folderId` キーを外し未分類化）。
+  - `libraryMetaStatus` が `corrupt` / `unavailable` でバックアップに `folders` または `mapMeta` がある場合は、メタデータを上書きせず（L-669）、成功通知の代わりに warning「バックアップのマップを追加しましたが、お気に入り・フォルダー情報が破損しているため（`unavailable` は「読み込めなかったため」）、バックアップのお気に入り・フォルダーは復元していません。」を返す（L-001）。`folders` / `mapMeta` の無いバックアップは状態によらず通常の成功通知。
   - メタデータ保存失敗や上限超過による未分類化は警告通知に留め、確定済みのマップ本体復元は巻き戻さない（L-575）。
 
 ---
