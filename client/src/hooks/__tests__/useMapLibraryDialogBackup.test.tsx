@@ -1,4 +1,5 @@
 import { act, renderHook } from "@testing-library/react";
+import { createEmptyMapLibraryMeta } from "@/domain/mapLibrary/mapLibraryMeta";
 import { useMapLibraryDialogState } from "@/hooks/useMapLibraryDialogState";
 import type { UseMapLibraryResult } from "@/hooks/useMapLibrary";
 import type { LibraryBackupPreview } from "@/services/persistence/libraryBackupExport";
@@ -20,8 +21,9 @@ function setup() {
     downloadBackup: jest.fn<MapLibraryOperationResult, [LibraryBackupPreview]>(() => ({ ok: true, remounted: false, notice: { kind: "status", message: "ダウンロードを開始しました。" }, saveRetryNotice: null })),
     previewRestore: jest.fn<Promise<MapDocumentResult<LibraryRestorePreview>>, [File]>(async () => ({ ok: true, value: restore })),
     confirmRestore: jest.fn<MapLibraryOperationResult, [LibraryRestorePreview]>(() => ({ ok: true, remounted: false, notice: { kind: "status", message: "追加しました。" }, saveRetryNotice: null })),
+    toggleFavorite: jest.fn(), assignFolder: jest.fn(), createFolder: jest.fn(), renameFolder: jest.fn(), deleteFolder: jest.fn(), resetLibraryMeta: jest.fn(),
   };
-  const hook = renderHook(() => useMapLibraryDialogState({ library, maps, trashEntries: [], startupNotice: null }));
+  const hook = renderHook(() => useMapLibraryDialogState({ library, maps, trashEntries: [], libraryMeta: createEmptyMapLibraryMeta(), startupNotice: null }));
   act(() => hook.result.current.openList());
   return { ...hook, library };
 }

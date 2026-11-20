@@ -1,5 +1,10 @@
-import { decodeLibraryBackup, type LibraryBackupV1 } from "@/domain/mapLibrary/libraryBackupCodec";
+import {
+  decodeLibraryBackup,
+  type LibraryBackupMap,
+  type LibraryBackupV1,
+} from "@/domain/mapLibrary/libraryBackupCodec";
 import { decodeMapIndex, encodeMapIndex, pickUnusedMapId, type MapIndexV1 } from "@/domain/mapLibrary/mapIndex";
+import { remapNodeMapLinks } from "@/domain/nodes/nodeMapLink";
 import type { MapDocumentResult } from "@/types/mapDocument";
 import { BRANCH_MOVE_JOURNAL_KEY } from "./branchMoveJournal";
 import { decodeLibraryRestoreJournal, encodeLibraryRestoreJournal,
@@ -12,6 +17,7 @@ export type RestoreWritePlan = {
   indexBeforeRaw: string;
   indexAfter: MapIndexV1;
   journal: LibraryRestoreJournal;
+  mapIdMapping: Map<string, string>;
 };
 
 export type RestoreWriteResult =
@@ -70,25 +76,36 @@ export function planLibraryRestore(
       storage.getItem(BRANCH_MOVE_JOURNAL_KEY) !== null) return failure(CHANGED);
 
     const used = new Set(index.maps.map(map => map.id));
+    const mapIdMapping = new Map<string, string>();
     const additions: MapIndexV1["maps"] = [];
-    const bodies: LibraryRestoreJournal["bodies"] = [];
+    const plannedMaps: { id: string; document: LibraryBackupMap["document"] }[] = [];
     for (const map of decoded.value.maps) {
       const id = pickUnusedMapId(generateId, candidate =>
         used.has(candidate) || storage.getItem(mapBodyKey(candidate)) !== null);
       if (id === null) return failure(NO_ID);
       used.add(id);
+      mapIdMapping.set(map.id, id);
       additions.push({ id, name: map.name, createdAt: map.createdAt, updatedAt: map.updatedAt });
-      bodies.push({ id, json: JSON.stringify(map.document) });
+      plannedMaps.push({ id, document: map.document });
     }
+    // 全マップの新 ID 採番完了後にバックアップ内の mapLinks をまとめてリマップする。
+    const bodies: LibraryRestoreJournal["bodies"] = plannedMaps.map(({ id, document }) => ({
+      id,
+      json: JSON.stringify({
+        ...document,
+        nodes: remapNodeMapLinks(document.nodes, mapIdMapping),
+      }),
+    }));
     const indexAfter: MapIndexV1 = { ...index, maps: [...index.maps, ...additions] };
     const journal: LibraryRestoreJournal = {
       format: "draw-my-map-library-restore", version: 1,
       indexBefore: indexBeforeRaw, indexAfter: encodeMapIndex(indexAfter), bodies,
     };
     if (decodeLibraryRestoreJournal(encodeLibraryRestoreJournal(journal)) === null) return failure(CHANGED);
+    const plan: RestoreWritePlan = { indexBeforeRaw, indexAfter, journal, mapIdMapping };
     // ID を選んでいる間の変化も書込前に検知する。
-    if (!prerequisitesUnchanged(storage, { indexBeforeRaw, indexAfter, journal })) return failure(CHANGED);
-    return { ok: true, value: { indexBeforeRaw, indexAfter, journal } };
+    if (!prerequisitesUnchanged(storage, plan)) return failure(CHANGED);
+    return { ok: true, value: plan };
   } catch {
     return failure(UNAVAILABLE);
   }

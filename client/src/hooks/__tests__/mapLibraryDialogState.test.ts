@@ -1,18 +1,29 @@
 import type { MapIndexEntry } from "@/domain/mapLibrary/mapIndex";
+import {
+  createEmptyMapLibraryMeta,
+  type MapFolder,
+  type MapLibraryMetaV1,
+} from "@/domain/mapLibrary/mapLibraryMeta";
 import type { MapTrashEntry } from "@/domain/mapLibrary/mapTrash";
 import {
   backFrom,
   backToList,
   closeAfterEnteringProtectedMode,
   closeAfterSuccess,
+  closeDialogSilently,
   INITIAL_STATE,
   nextNotices,
   nextScreenAfterActiveDeletion,
   nextScreenOnBack,
   openScreen,
+  publishShellNoticeState,
   returnAfterActiveDeletion,
+  returnToFoldersAfterAction,
   returnToList,
   returnToTrashAfterAction,
+  selectFocusAfterFavoriteToggle,
+  selectFocusAfterFolderAssign,
+  selectFocusAfterFolderRemoval,
   selectFocusAfterRemoval,
   selectFocusAfterTrashRemoval,
   showFailure,
@@ -71,6 +82,79 @@ describe("mapLibraryDialogState", () => {
     });
   });
 
+  describe("selectFocusAfterFavoriteToggle", () => {
+    const maps = [mapEntry("a", "A"), mapEntry("b", "B"), mapEntry("c", "C")];
+    const meta: MapLibraryMetaV1 = {
+      ...createEmptyMapLibraryMeta(),
+      mapMeta: { a: { favorite: true }, b: { favorite: true }, c: { lastOpenedAt: "2026-11-01T00:00:00.000Z" } },
+    };
+
+    it("お気に入りタブで表示中のお気に入りを解除すると、消える行の次行へフォーカスする", () => {
+      expect(selectFocusAfterFavoriteToggle(maps, meta, "favorites", "a")).toEqual({
+        kind: "row",
+        mapId: "b",
+        action: "open",
+      });
+    });
+
+    it("お気に入りタブ以外では行が消えないので null を返す", () => {
+      expect(selectFocusAfterFavoriteToggle(maps, meta, "all", "a")).toBeNull();
+      expect(selectFocusAfterFavoriteToggle(maps, meta, "recent", "a")).toBeNull();
+    });
+
+    it("お気に入りでないマップ・表示されていないマップでは null を返す", () => {
+      expect(selectFocusAfterFavoriteToggle(maps, meta, "favorites", "c")).toBeNull();
+      expect(selectFocusAfterFavoriteToggle([mapEntry("b", "B")], meta, "favorites", "a")).toBeNull();
+    });
+
+    it("__proto__ のような継承キーをお気に入りとみなさない", () => {
+      expect(
+        selectFocusAfterFavoriteToggle([mapEntry("__proto__", "P")], meta, "favorites", "__proto__"),
+      ).toBeNull();
+    });
+  });
+
+  describe("selectFocusAfterFolderAssign", () => {
+    const maps = [mapEntry("a", "A"), mapEntry("b", "B")];
+
+    it("フォルダーで絞り込み中に別フォルダーや未分類へ移すと、消える行の隣へフォーカスする", () => {
+      const filter = { kind: "folder", folderId: "f1" } as const;
+      expect(selectFocusAfterFolderAssign(maps, filter, "a", "f2")).toEqual({
+        kind: "row",
+        mapId: "b",
+        action: "open",
+      });
+      expect(selectFocusAfterFolderAssign(maps, filter, "b", null)).toEqual({
+        kind: "row",
+        mapId: "a",
+        action: "open",
+      });
+    });
+
+    it("同じフォルダーへの割り当てでは null を返す", () => {
+      expect(
+        selectFocusAfterFolderAssign(maps, { kind: "folder", folderId: "f1" }, "a", "f1"),
+      ).toBeNull();
+    });
+
+    it("未分類で絞り込み中はフォルダーへ入れたときだけ行が消える", () => {
+      const filter = { kind: "unclassified" } as const;
+      expect(selectFocusAfterFolderAssign(maps, filter, "a", "f1")).toEqual({
+        kind: "row",
+        mapId: "b",
+        action: "open",
+      });
+      expect(selectFocusAfterFolderAssign(maps, filter, "a", null)).toBeNull();
+    });
+
+    it("すべてのフォルダー表示や、表示されていないマップでは null を返す", () => {
+      expect(selectFocusAfterFolderAssign(maps, { kind: "all" }, "a", "f1")).toBeNull();
+      expect(
+        selectFocusAfterFolderAssign(maps, { kind: "unclassified" }, "missing", "f1"),
+      ).toBeNull();
+    });
+  });
+
   describe("selectFocusAfterTrashRemoval", () => {
     const entries = [trashEntry("t1", "T1"), trashEntry("t2", "T2"), trashEntry("t3", "T3")];
 
@@ -108,6 +192,9 @@ describe("mapLibraryDialogState", () => {
       [{ kind: "restoreConfirm", preview: dummyRestorePreview }, { kind: "list" }],
       [{ kind: "trashPermanentDelete", trashId: "t1" }, { kind: "trash" }],
       [{ kind: "trashEmptyConfirm" }, { kind: "trash" }],
+      [{ kind: "folders" }, { kind: "list" }],
+      [{ kind: "folderRename", folderId: "f1" }, { kind: "folders" }],
+      [{ kind: "folderDeleteConfirm", folderId: "f1" }, { kind: "folders" }],
     ])("画面 %o の戻り先は %o", (screen, expected) => {
       expect(nextScreenOnBack(screen)).toEqual(expected);
     });
@@ -445,6 +532,102 @@ describe("mapLibraryDialogState", () => {
         sequence: permanentDeleteScreenState.notices.sequence + 1,
       });
       expect(next.focusTarget).toEqual(permanentDeleteScreenState.focusTarget);
+    });
+  });
+
+  describe("フォルダー画面遷移・closeDialogSilently・publishShellNoticeState", () => {
+    const folderEntry = (id: string, name: string): MapFolder => ({
+      id,
+      name,
+      createdAt: "2026-10-01T00:00:00.000Z",
+      updatedAt: "2026-10-01T00:00:00.000Z",
+    });
+
+    it("selectFocusAfterFolderRemoval は次行・前行・folderCreateInput の順に選ぶ", () => {
+      const folders = [folderEntry("f1", "F1"), folderEntry("f2", "F2"), folderEntry("f3", "F3")];
+      expect(selectFocusAfterFolderRemoval(folders, "f1")).toEqual({
+        kind: "folderRow",
+        folderId: "f2",
+        action: "rename",
+      });
+      expect(selectFocusAfterFolderRemoval(folders, "f3")).toEqual({
+        kind: "folderRow",
+        folderId: "f2",
+        action: "rename",
+      });
+      expect(selectFocusAfterFolderRemoval([folderEntry("f1", "F1")], "f1")).toEqual({
+        kind: "folderCreateInput",
+      });
+    });
+
+    it("backFrom は folders・folderRename・folderDeleteConfirm から元のボタンへ戻す", () => {
+      const fromFolders = backFrom(openScreen(INITIAL_STATE, { kind: "folders" }));
+      expect(fromFolders.screen).toEqual({ kind: "list" });
+      expect(fromFolders.focusTarget).toEqual({ kind: "folderButton" });
+
+      const fromRename = backFrom(
+        openScreen(INITIAL_STATE, { kind: "folderRename", folderId: "f1" }),
+      );
+      expect(fromRename.screen).toEqual({ kind: "folders" });
+      expect(fromRename.focusTarget).toEqual({
+        kind: "folderRow",
+        folderId: "f1",
+        action: "rename",
+      });
+
+      const fromDelete = backFrom(
+        openScreen(INITIAL_STATE, { kind: "folderDeleteConfirm", folderId: "f2" }),
+      );
+      expect(fromDelete.screen).toEqual({ kind: "folders" });
+      expect(fromDelete.focusTarget).toEqual({
+        kind: "folderRow",
+        folderId: "f2",
+        action: "delete",
+      });
+    });
+
+    it("returnToFoldersAfterAction はフォルダー管理画面へ戻し通知とフォーカス先を設定する", () => {
+      const state = openScreen(INITIAL_STATE, { kind: "folderRename", folderId: "f1" });
+      const next = returnToFoldersAfterAction(
+        state,
+        {
+          ok: true,
+          remounted: false,
+          notice: { kind: "status", message: "変更しました。" },
+          saveRetryNotice: null,
+        },
+        { kind: "folderRow", folderId: "f1", action: "rename" },
+      );
+      expect(next.screen).toEqual({ kind: "folders" });
+      expect(next.notices.status).toBe("変更しました。");
+      expect(next.focusTarget).toEqual({ kind: "folderRow", folderId: "f1", action: "rename" });
+    });
+
+    it("closeDialogSilently は headerFocusRequest を立てずにダイアログを閉じる", () => {
+      const opened = openScreen(INITIAL_STATE, { kind: "list" });
+      const closed = closeDialogSilently(opened);
+      expect(closed.screen).toEqual({ kind: "closed" });
+      expect(closed.headerFocusRequest).toBeNull();
+      expect(closed.focusTarget).toBeNull();
+    });
+
+    it("publishShellNoticeState は shellNotice の sequence を進めて通知を積む", () => {
+      const first = publishShellNoticeState(INITIAL_STATE, {
+        kind: "error",
+        message: "移動に失敗しました。",
+      });
+      expect(first.shellNotice).toEqual({
+        sequence: 1,
+        notice: { kind: "error", message: "移動に失敗しました。" },
+      });
+      const second = publishShellNoticeState(first, {
+        kind: "status",
+        message: "移動しました。",
+      });
+      expect(second.shellNotice).toEqual({
+        sequence: 2,
+        notice: { kind: "status", message: "移動しました。" },
+      });
     });
   });
 });

@@ -95,7 +95,14 @@ async function renderEditor({
     <MapEditor
       mapId={storage.session.mapId}
       exportButtonRef={{ current: null }}
-      mapMoveTargets={[{ id: storage.session.mapId, name: mapName, updatedAt: "2026-10-31T00:00:00.000Z" }]}
+      mapMoveTargets={[
+        {
+          id: storage.session.mapId,
+          name: mapName,
+          createdAt: "2026-10-31T00:00:00.000Z",
+          updatedAt: "2026-10-31T00:00:00.000Z",
+        },
+      ]}
       onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "移動先がありません。" } })}
       mapName={mapName}
       storageSession={storage.session} storageMode="persistent"
@@ -103,6 +110,11 @@ async function renderEditor({
       shortcutsEnabled={shortcutsEnabled}
       dialogMouseClickedAtRef={dialogMouseClickedAtRef}
       onSaveCurrentAsNewMap={onSaveCurrentAsNewMap}
+      pendingNavigation={null}
+      onConsumePendingNavigation={() => {}}
+      onSwitchToMapTarget={() => {}}
+      brokenLinksDialogRequest={0}
+      onBrokenLinksDialogClosed={() => {}}
     />,
   );
   mockStageBounds(stageContainer());

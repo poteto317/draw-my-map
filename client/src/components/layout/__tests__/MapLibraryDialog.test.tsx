@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { MapLibraryDialog } from "@/components/layout/MapLibraryDialog";
 import type { MapIndexEntry } from "@/domain/mapLibrary/mapIndex";
+import { createEmptyMapLibraryMeta, type MapLibraryMetaV1 } from "@/domain/mapLibrary/mapLibraryMeta";
 import type { MapTrashEntry } from "@/domain/mapLibrary/mapTrash";
 
 type Props = Parameters<typeof MapLibraryDialog>[0];
@@ -53,6 +54,21 @@ function createProps(overrides: Partial<Props> = {}): Props {
     currentMapId: "a",
     trashEntries: [],
     trashStatus: "ok",
+    libraryMeta: createEmptyMapLibraryMeta(),
+    libraryMetaStatus: "ready",
+    listTab: "all",
+    folderFilter: { kind: "all" },
+    onChangeListTab: jest.fn(),
+    onChangeFolderFilter: jest.fn(),
+    onOpenFolders: jest.fn(),
+    onOpenFolderRename: jest.fn(),
+    onOpenFolderDelete: jest.fn(),
+    onToggleFavorite: jest.fn(),
+    onAssignFolder: jest.fn(),
+    onCreateFolder: jest.fn(() => true),
+    onSubmitRenameFolder: jest.fn(),
+    onConfirmDeleteFolder: jest.fn(),
+    onResetLibraryMeta: jest.fn(),
     now: NOW,
     notices: { status: "", alert: "", sequence: 0 },
     focusTarget: null,
@@ -63,6 +79,7 @@ function createProps(overrides: Partial<Props> = {}): Props {
     onOpenRename: jest.fn(),
     onOpenDelete: jest.fn(),
     onOpenTrash: jest.fn(),
+    onOpenBrokenLinks: jest.fn(),
     onSwitch: jest.fn(),
     onCancel: jest.fn(),
     onSubmitCreate: jest.fn(),
@@ -754,6 +771,140 @@ describe("MapLibraryDialog", () => {
       expect(screen.queryByRole("button", { name: "完全に削除" })).not.toBeInTheDocument();
       expect(props.onCancel).toHaveBeenCalledTimes(1);
       expect(props.onFocusTargetApplied).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("フォルダー管理画面・幅拡張", () => {
+    const metaWithFolders: MapLibraryMetaV1 = {
+      version: 1,
+      folders: [
+        {
+          id: "f1",
+          name: "仕事",
+          createdAt: "2026-10-01T00:00:00.000Z",
+          updatedAt: "2026-10-01T00:00:00.000Z",
+        },
+        {
+          id: "f2",
+          name: "読書",
+          createdAt: "2026-10-01T00:00:00.000Z",
+          updatedAt: "2026-10-01T00:00:00.000Z",
+        },
+      ],
+      mapMeta: {
+        a: { folderId: "f1" },
+      },
+    };
+
+    it("ダイアログ幅が max-w-[36rem] に拡張されている", () => {
+      render(<MapLibraryDialog {...createProps()} />);
+      expect(screen.getByRole("dialog")).toHaveClass("max-w-[36rem]");
+    });
+
+    it("folders / folderRename / folderDeleteConfirm の既定フォーカス・説明・コールバックが動作する", async () => {
+      const user = userEvent.setup();
+      const props = createProps({
+        screen: { kind: "folders" },
+        libraryMeta: metaWithFolders,
+        focusTarget: { kind: "screenDefault" },
+      });
+      const { rerender } = render(<MapLibraryDialog {...props} />);
+
+      const createInput = screen.getByRole("textbox", { name: "新しいフォルダー名" });
+      await waitFor(() => expect(createInput).toHaveFocus());
+
+      await user.click(screen.getByRole("button", { name: "名前を変更: 仕事" }));
+      expect(props.onOpenFolderRename).toHaveBeenCalledWith("f1");
+
+      rerender(
+        <MapLibraryDialog
+          {...props}
+          screen={{ kind: "folderRename", folderId: "f1" }}
+          focusTarget={{ kind: "screenDefault" }}
+        />,
+      );
+      const renameInput = screen.getByRole("textbox", { name: "フォルダー名" }) as HTMLInputElement;
+      await waitFor(() => expect(renameInput).toHaveFocus());
+      expect(renameInput).toHaveValue("仕事");
+      await user.clear(renameInput);
+      await user.type(renameInput, "開発{Enter}");
+      expect(props.onSubmitRenameFolder).toHaveBeenCalledWith("f1", "開発");
+
+      rerender(
+        <MapLibraryDialog
+          {...props}
+          screen={{ kind: "folderDeleteConfirm", folderId: "f1" }}
+          focusTarget={{ kind: "screenDefault" }}
+        />,
+      );
+      const deleteGroup = screen.getByRole("group", { name: "フォルダーを削除" });
+      await waitFor(() =>
+        expect(within(deleteGroup).getByRole("button", { name: "キャンセル" })).toHaveFocus(),
+      );
+      expect(deleteGroup).toHaveAccessibleDescription(
+        /中のマップは削除されず『未分類』になります/,
+      );
+      await user.click(within(deleteGroup).getByRole("button", { name: "このフォルダーを削除" }));
+      expect(props.onConfirmDeleteFolder).toHaveBeenCalledWith("f1");
+    });
+
+    it.each([
+      { kind: "folderRename", folderId: "missing" } as const,
+      { kind: "folderDeleteConfirm", folderId: "missing" } as const,
+    ])("%o の対象フォルダーが不在のときは描画せず onCancel を1回呼び、focusTarget を消費しない", (screenState) => {
+      const props = createProps({
+        screen: screenState,
+        libraryMeta: metaWithFolders,
+        focusTarget: { kind: "screenDefault" },
+      });
+      render(<MapLibraryDialog {...props} />);
+
+      expect(props.onCancel).toHaveBeenCalledTimes(1);
+      expect(props.onFocusTargetApplied).not.toHaveBeenCalled();
+    });
+
+    it("folderButton / folderRow / folderCreateInput の各フォーカス先を適用する", async () => {
+      const props = createProps({
+        screen: { kind: "list" },
+        libraryMeta: metaWithFolders,
+        focusTarget: { kind: "folderButton" },
+      });
+      const { rerender } = render(<MapLibraryDialog {...props} />);
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "フォルダー管理" })).toHaveFocus(),
+      );
+
+      rerender(
+        <MapLibraryDialog
+          {...props}
+          screen={{ kind: "folders" }}
+          focusTarget={{ kind: "folderRow", folderId: "f2", action: "delete" }}
+        />,
+      );
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "削除: 読書" })).toHaveFocus(),
+      );
+
+      rerender(
+        <MapLibraryDialog
+          {...props}
+          screen={{ kind: "folders" }}
+          focusTarget={{ kind: "folderCreateInput" }}
+        />,
+      );
+      await waitFor(() =>
+        expect(screen.getByRole("textbox", { name: "新しいフォルダー名" })).toHaveFocus(),
+      );
+    });
+
+    it("一覧画面の「リンク切れを確認」ボタンで onOpenBrokenLinks を呼ぶ", async () => {
+      const user = userEvent.setup();
+      const props = createProps({ screen: { kind: "list" } });
+      render(<MapLibraryDialog {...props} />);
+
+      await user.click(screen.getByRole("button", { name: "リンク切れを確認" }));
+
+      expect(props.onOpenBrokenLinks).toHaveBeenCalledTimes(1);
     });
   });
 });

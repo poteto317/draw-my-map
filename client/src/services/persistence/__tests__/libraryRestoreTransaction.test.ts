@@ -1,5 +1,6 @@
 import { encodeMapIndex, type MapIndexV1 } from "@/domain/mapLibrary/mapIndex";
 import type { LibraryBackupV1 } from "@/domain/mapLibrary/libraryBackupCodec";
+import { createTestNode } from "@/testing/createTestNode";
 import { createRecordingStorage } from "@/testing/mapLibraryTestStorage";
 import { BRANCH_MOVE_JOURNAL_KEY } from "../branchMoveJournal";
 import { encodeLibraryRestoreJournal, LIBRARY_RESTORE_JOURNAL_KEY as JOURNAL } from "../libraryRestoreJournal";
@@ -139,6 +140,102 @@ it("一覧rollbackが失敗しても本体削除を試し、journalを保持す�
   expect(f.entries()[INDEX]).not.toBe(beforeRaw);
   expect(f.entries()[mapBodyKey("new-a")]).toBeUndefined();
   expect(f.entries()[mapBodyKey("new-b")]).toBeUndefined();
+});
+
+it("planLibraryRestore は mapIdMapping を返し、バックアップ内の mapLinks を新 ID へリマップし外部参照は保持する", () => {
+  const f = createRecordingStorage({ initial });
+  const linkedBackup: LibraryBackupV1 = {
+    format: "draw-my-map-library-backup",
+    version: 1,
+    exportedAt: date,
+    currentMapId: "source-a",
+    maps: [
+      {
+        id: "source-a",
+        name: "一",
+        createdAt: date,
+        updatedAt: date,
+        document: {
+          version: 3,
+          layoutMode: "manual",
+          nodes: [
+            createTestNode({
+              id: 1,
+              parentId: null,
+              label: "A1",
+              mapLinks: [
+                { targetMapId: "source-b" },
+                { targetMapId: "source-b", targetNodeId: 2 },
+                { targetMapId: "source-a", targetNodeId: 2 },
+                { targetMapId: "external-map" },
+                { targetMapId: "external-map", targetNodeId: 9 },
+              ],
+            }),
+            createTestNode({ id: 2, parentId: 1, label: "A2" }),
+          ],
+        },
+      },
+      {
+        id: "source-b",
+        name: "二",
+        createdAt: date,
+        updatedAt: date,
+        document: {
+          version: 3,
+          layoutMode: "manual",
+          nodes: [
+            createTestNode({
+              id: 1,
+              parentId: null,
+              label: "B1",
+              mapLinks: [
+                { targetMapId: "source-a" },
+                { targetMapId: "source-a", targetNodeId: 1 },
+              ],
+            }),
+            createTestNode({ id: 2, parentId: 1, label: "B2" }),
+          ],
+        },
+      },
+    ],
+  };
+
+  const planned = planLibraryRestore(f.storage, index, beforeRaw, linkedBackup, ids("new-a", "new-b"));
+  expect(planned.ok).toBe(true);
+  if (!planned.ok) return;
+
+  expect(planned.value.mapIdMapping).toEqual(
+    new Map([
+      ["source-a", "new-a"],
+      ["source-b", "new-b"],
+    ]),
+  );
+
+  const restoredA = JSON.parse(planned.value.journal.bodies[0].json);
+  const restoredB = JSON.parse(planned.value.journal.bodies[1].json);
+  expect(restoredA.nodes[0].mapLinks).toEqual([
+    { targetMapId: "new-b" },
+    { targetMapId: "new-b", targetNodeId: 2 },
+    { targetMapId: "new-a", targetNodeId: 2 },
+    { targetMapId: "external-map" },
+    { targetMapId: "external-map", targetNodeId: 9 },
+  ]);
+  expect(restoredB.nodes[0].mapLinks).toEqual([
+    { targetMapId: "new-a" },
+    { targetMapId: "new-a", targetNodeId: 1 },
+  ]);
+
+  // 元の backup オブジェクトを破壊していないこと
+  expect(linkedBackup.maps[0].document.nodes[0].mapLinks?.[0]).toEqual({ targetMapId: "source-b" });
+
+  // そのまま writeLibraryRestore で永続化できること
+  expect(writeLibraryRestore(f.storage, planned.value)).toEqual({ status: "saved" });
+  expect(JSON.parse(f.entries()[mapBodyKey("new-a")]).nodes[0].mapLinks).toEqual(
+    restoredA.nodes[0].mapLinks,
+  );
+  expect(JSON.parse(f.entries()[mapBodyKey("new-b")]).nodes[0].mapLinks).toEqual(
+    restoredB.nodes[0].mapLinks,
+  );
 });
 
 describe("recoverLibraryRestore", () => {

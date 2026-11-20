@@ -69,13 +69,25 @@ async function renderEditor({
     <MapEditor
       mapId={storage.session.mapId}
       exportButtonRef={{ current: null }}
-      mapMoveTargets={[{ id: storage.session.mapId, name: mapName, updatedAt: "2026-10-31T00:00:00.000Z" }]}
+      mapMoveTargets={[
+        {
+          id: storage.session.mapId,
+          name: mapName,
+          createdAt: "2026-10-31T00:00:00.000Z",
+          updatedAt: "2026-10-31T00:00:00.000Z",
+        },
+      ]}
       onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "移動先がありません。" } })}
       mapName={mapName}
       storageSession={storage.session} storageMode="persistent"
       mapControls={mapControls}
       shortcutsEnabled={shortcutsEnabled}
       dialogMouseClickedAtRef={dialogMouseClickedAtRef}
+      pendingNavigation={null}
+      onConsumePendingNavigation={() => {}}
+      onSwitchToMapTarget={() => {}}
+      brokenLinksDialogRequest={0}
+      onBrokenLinksDialogClosed={() => {}}
     />,
   );
   mockStageBounds(stageContainer());
@@ -124,7 +136,7 @@ async function switchTo(name: string) {
   await userEvent.click(screen.getByRole("button", { name }));
 }
 function searchFor(query: string) {
-  const input = screen.getByRole("combobox");
+  const input = screen.getByRole("combobox", { name: "ノードを検索" });
   fireEvent.change(input, { target: { value: query } });
   fireEvent.focus(input);
   fireEvent.keyDown(input, { key: "Enter" });
@@ -235,7 +247,9 @@ it("dialogとdisabledはoutline操作を止め、共通選択をイラストパ�
   expect(screen.getByRole("button", { name: "階層2・子B" })).not.toBeDisabled();
   rerender(<MapEditor mapId={storage.session.mapId} mapName="別" storageSession={storage.session} storageMode="persistent"
     mapControls={null} exportButtonRef={{ current: null }} mapMoveTargets={[]} onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "なし" } })}
-    shortcutsEnabled={false} dialogMouseClickedAtRef={{ current: null }} />);
+    shortcutsEnabled={false} dialogMouseClickedAtRef={{ current: null }}
+    pendingNavigation={null} onConsumePendingNavigation={() => {}} onSwitchToMapTarget={() => {}}
+    brokenLinksDialogRequest={0} onBrokenLinksDialogClosed={() => {}} />);
   expect(screen.getByRole("button", { name: "階層2・子B" })).toBeDisabled();
 });
 
@@ -261,7 +275,9 @@ it("同じ表示ボタンは要求を再発行せず、map key変更では初期
   await switchTo("アウトライン");
   rerender(<MapEditor key="other-map" mapId="other-map" mapName="別" storageSession={storage.session} storageMode="persistent"
     mapControls={null} exportButtonRef={{ current: null }} mapMoveTargets={[]} onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "なし" } })}
-    shortcutsEnabled={true} dialogMouseClickedAtRef={{ current: null }} />);
+    shortcutsEnabled={true} dialogMouseClickedAtRef={{ current: null }}
+    pendingNavigation={null} onConsumePendingNavigation={() => {}} onSwitchToMapTarget={() => {}}
+    brokenLinksDialogRequest={0} onBrokenLinksDialogClosed={() => {}} />);
   await waitFor(() => expect(document.querySelector("canvas")).toBeInTheDocument());
   expect(screen.getByRole("button", { name: "マップ" })).toHaveAttribute("aria-pressed", "true");
   expect(mockFocusRequests.mock.lastCall?.[0]).toBeNull();

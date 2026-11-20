@@ -1,4 +1,9 @@
+import { parseLibraryBackupJson } from "@/domain/mapLibrary/libraryBackupCodec";
 import { encodeMapIndex, type MapIndexV1 } from "@/domain/mapLibrary/mapIndex";
+import {
+  createEmptyMapLibraryMeta,
+  type MapLibraryMetaV1,
+} from "@/domain/mapLibrary/mapLibraryMeta";
 import { MAP_INDEX_STORAGE_KEY, mapBodyKey, type MapLibraryStorage } from "@/services/persistence/mapLibraryStorage";
 import { BRANCH_MOVE_JOURNAL_KEY } from "@/services/persistence/branchMoveJournal";
 import { LIBRARY_RESTORE_JOURNAL_KEY } from "@/services/persistence/libraryRestoreJournal";
@@ -32,8 +37,13 @@ function fixture(input: Record<string, string> = {}) {
   return { storage, entries, session: testSession.session, setSnapshot: (value: MapBackupSnapshot) => { snapshot = value; } };
 }
 
+const DEFAULT_META_OPTIONS = {
+  libraryMeta: createEmptyMapLibraryMeta(),
+  libraryMetaStatus: "ready" as const,
+};
+
 function preview(f = fixture()) {
-  const result = prepareLibraryBackup(f.storage, index, f.session, now);
+  const result = prepareLibraryBackup(f.storage, index, f.session, now, DEFAULT_META_OPTIONS);
   expect(result.ok).toBe(true);
   if (!result.ok) throw new Error(result.error);
   return result.value;
@@ -54,7 +64,7 @@ it("保存待ち中は保存済み本体より最新 editor snapshot を採り�
 it("初回復元失敗は同一 mount の保存成功前に拒否し、成功後の新しい編集は採る", () => {
   const f = fixture({ [mapBodyKey("b")]: empty });
   f.setSnapshot({ json: empty, hydrated: true, restoreOrigin: "failed", hasSavedBodyThisMount: false });
-  expect(prepareLibraryBackup(f.storage, index, f.session, now).ok).toBe(false);
+  expect(prepareLibraryBackup(f.storage, index, f.session, now, DEFAULT_META_OPTIONS).ok).toBe(false);
   f.setSnapshot({ json: edited, hydrated: true, restoreOrigin: "failed", hasSavedBodyThisMount: true });
   expect(JSON.parse(preview(f).json).maps[0].document).toEqual(JSON.parse(edited));
   f.setSnapshot({ json: empty, hydrated: true, restoreOrigin: "failed", hasSavedBodyThisMount: true });
@@ -69,7 +79,7 @@ it("準備中に初回復元失敗の未保存 snapshot へ変われば書き出
     if (++reads === 2) f.setSnapshot({ json: edited, hydrated: true, restoreOrigin: "failed", hasSavedBodyThisMount: false });
     return read();
   };
-  expect(prepareLibraryBackup(f.storage, index, f.session, now).ok).toBe(false);
+  expect(prepareLibraryBackup(f.storage, index, f.session, now, DEFAULT_META_OPTIONS).ok).toBe(false);
   expect(reads).toBe(2);
 });
 
@@ -80,15 +90,15 @@ it.each([
 ] as const)("%sの snapshot を拒否する", (_label, snapshot) => {
   const f = fixture();
   f.setSnapshot(snapshot);
-  const result = prepareLibraryBackup(f.storage, index, f.session, now);
+  const result = prepareLibraryBackup(f.storage, index, f.session, now, DEFAULT_META_OPTIONS);
   expect(result.ok).toBe(false);
   if (!result.ok) expect(result.error).not.toContain("secret");
 });
 
 it("未登録 session と現在 map ID の違う session を拒否する", () => {
   const f = fixture();
-  expect(prepareLibraryBackup(f.storage, index, createTestStorageSession({ mapId: "a" }).session, now).ok).toBe(false);
-  expect(prepareLibraryBackup(f.storage, index, createTestStorageSession({ mapId: "b" }).session, now).ok).toBe(false);
+  expect(prepareLibraryBackup(f.storage, index, createTestStorageSession({ mapId: "a" }).session, now, DEFAULT_META_OPTIONS).ok).toBe(false);
+  expect(prepareLibraryBackup(f.storage, index, createTestStorageSession({ mapId: "b" }).session, now, DEFAULT_META_OPTIONS).ok).toBe(false);
 });
 
 it("現在本体 null は editor snapshot を採り、別マップ null と孤立本体は件数を示す", () => {
@@ -109,7 +119,7 @@ it("保存済みの別マップ V1 本体は既存 codec で V3 に変換する"
 it.each(["{secret", JSON.stringify({ version: 3, layoutMode: "manual", nodes: "broken" })])(
   "別マップの不正本体を全体拒否し、対象名だけを知らせる", (body) => {
     const f = fixture({ [mapBodyKey("b")]: body });
-    const result = prepareLibraryBackup(f.storage, index, f.session, now);
+    const result = prepareLibraryBackup(f.storage, index, f.session, now, DEFAULT_META_OPTIONS);
     expect(result.ok).toBe(false);
     if (!result.ok) { expect(result.error).toContain("新規マップ"); expect(result.error).not.toContain(body); }
   },
@@ -119,32 +129,32 @@ it("別マップの読取例外とキー列挙例外を拒否する", () => {
   const f = fixture();
   const get = f.storage.getItem;
   f.storage.getItem = (key) => { if (key === mapBodyKey("b")) throw new Error("secret"); return get(key); };
-  const result = prepareLibraryBackup(f.storage, index, f.session, now);
+  const result = prepareLibraryBackup(f.storage, index, f.session, now, DEFAULT_META_OPTIONS);
   expect(result.ok).toBe(false);
   if (!result.ok) { expect(result.error).toContain("新規マップ"); expect(result.error).not.toContain("secret"); }
   f.storage.getItem = get;
   f.storage.key = () => { throw new Error("secret"); };
-  expect(prepareLibraryBackup(f.storage, index, f.session, now).ok).toBe(false);
+  expect(prepareLibraryBackup(f.storage, index, f.session, now, DEFAULT_META_OPTIONS).ok).toBe(false);
 });
 
 it.each([BRANCH_MOVE_JOURNAL_KEY, LIBRARY_RESTORE_JOURNAL_KEY])("%s が残る間は拒否する", (key) => {
   const f = fixture({ [key]: "journal" });
-  expect(prepareLibraryBackup(f.storage, index, f.session, now).ok).toBe(false);
+  expect(prepareLibraryBackup(f.storage, index, f.session, now, DEFAULT_META_OPTIONS).ok).toBe(false);
 });
 
 it("ジャーナル読取例外も拒否する", () => {
   const f = fixture();
   const get = f.storage.getItem;
   f.storage.getItem = (key) => { if (key === LIBRARY_RESTORE_JOURNAL_KEY) throw new Error("secret"); return get(key); };
-  expect(prepareLibraryBackup(f.storage, index, f.session, now).ok).toBe(false);
+  expect(prepareLibraryBackup(f.storage, index, f.session, now, DEFAULT_META_OPTIONS).ok).toBe(false);
 });
 
 it("修復を要する生一覧と現在一覧の不一致を拒否する", () => {
   const f = fixture();
   f.entries.set(MAP_INDEX_STORAGE_KEY, JSON.stringify({ ...index, maps: [...index.maps, { id: "a", name: "重複", createdAt: date, updatedAt: date }] }));
-  expect(prepareLibraryBackup(f.storage, index, f.session, now).ok).toBe(false);
+  expect(prepareLibraryBackup(f.storage, index, f.session, now, DEFAULT_META_OPTIONS).ok).toBe(false);
   f.entries.set(MAP_INDEX_STORAGE_KEY, encodeMapIndex({ ...index, currentMapId: "b" }));
-  expect(prepareLibraryBackup(f.storage, index, f.session, now).ok).toBe(false);
+  expect(prepareLibraryBackup(f.storage, index, f.session, now, DEFAULT_META_OPTIONS).ok).toBe(false);
 });
 
 it("準備中に生一覧が変わったら拒否する", () => {
@@ -155,7 +165,7 @@ it("準備中に生一覧が変わったら拒否する", () => {
     if (key === MAP_INDEX_STORAGE_KEY && ++indexReads === 2) f.entries.set(key, encodeMapIndex({ ...index, legacyCleanupPending: true }));
     return get(key);
   };
-  expect(prepareLibraryBackup(f.storage, index, f.session, now).ok).toBe(false);
+  expect(prepareLibraryBackup(f.storage, index, f.session, now, DEFAULT_META_OPTIONS).ok).toBe(false);
 });
 
 it("確認中に session・一覧・editor 内容・ジャーナルが変わったら preview を無効化する", () => {
@@ -185,17 +195,96 @@ it("1000件までは準備し、1001件を拒否する", () => {
   const largeIndex = { ...index, maps };
   const f = fixture();
   f.entries.set(MAP_INDEX_STORAGE_KEY, encodeMapIndex(largeIndex));
-  expect(prepareLibraryBackup(f.storage, largeIndex, f.session, now).ok).toBe(true);
+  expect(prepareLibraryBackup(f.storage, largeIndex, f.session, now, DEFAULT_META_OPTIONS).ok).toBe(true);
   const overflow = { ...largeIndex, maps: [...maps, { id: "overflow", name: "余分", createdAt: date, updatedAt: date }] };
   f.entries.set(MAP_INDEX_STORAGE_KEY, encodeMapIndex(overflow));
-  expect(prepareLibraryBackup(f.storage, overflow, f.session, now).ok).toBe(false);
+  expect(prepareLibraryBackup(f.storage, overflow, f.session, now, DEFAULT_META_OPTIONS).ok).toBe(false);
 });
 
 it("生成 JSON が32 MiBを超えると個別書き出し経路を示して拒否する", () => {
   const f = fixture({ [mapBodyKey("b")]: JSON.stringify({ version: 3, layoutMode: "manual", nodes: [
     { id: 1, parentId: null, x: 0, y: 0, width: 100, height: 80, label: "あ".repeat(11 * 1024 * 1024), importance: "medium" },
   ] }) });
-  const result = prepareLibraryBackup(f.storage, index, f.session, now);
+  const result = prepareLibraryBackup(f.storage, index, f.session, now, DEFAULT_META_OPTIONS);
   expect(result.ok).toBe(false);
   if (!result.ok) expect(result.error).toContain("個別");
 });
+
+it("libraryMetaStatus が ready のときは空フォルダーを含む全 folders とアクティブマップのみの mapMeta を出力する", () => {
+  const f = fixture({ [mapBodyKey("b")]: empty });
+  const libraryMeta: MapLibraryMetaV1 = {
+    version: 1,
+    folders: [
+      { id: "folder-used", name: "仕事", createdAt: date, updatedAt: date },
+      { id: "folder-empty", name: "空フォルダー", createdAt: date, updatedAt: date },
+    ],
+    mapMeta: {
+      a: { favorite: true, lastOpenedAt: date, folderId: "folder-used" },
+      trashed: { favorite: true, lastOpenedAt: date, folderId: "folder-empty" },
+    },
+  };
+  const result = prepareLibraryBackup(f.storage, index, f.session, now, {
+    libraryMeta,
+    libraryMetaStatus: "ready",
+  });
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  const parsed = parseLibraryBackupJson(result.value.json);
+  expect(parsed.ok).toBe(true);
+  if (!parsed.ok) return;
+  expect(parsed.value.folders).toEqual(libraryMeta.folders);
+  expect(parsed.value.mapMeta).toEqual({
+    a: { favorite: true, lastOpenedAt: date, folderId: "folder-used" },
+  });
+});
+
+it("libraryMetaStatus が ready でも対象が 0 件の folders / mapMeta はキーごと省略する", () => {
+  const f = fixture({ [mapBodyKey("b")]: empty });
+
+  const emptyMetaResult = prepareLibraryBackup(f.storage, index, f.session, now, {
+    libraryMeta: createEmptyMapLibraryMeta(),
+    libraryMetaStatus: "ready",
+  });
+  expect(emptyMetaResult.ok).toBe(true);
+  if (!emptyMetaResult.ok) return;
+  const emptyParsed = JSON.parse(emptyMetaResult.value.json) as Record<string, unknown>;
+  expect(Object.prototype.hasOwnProperty.call(emptyParsed, "folders")).toBe(false);
+  expect(Object.prototype.hasOwnProperty.call(emptyParsed, "mapMeta")).toBe(false);
+
+  const inactiveOnlyResult = prepareLibraryBackup(f.storage, index, f.session, now, {
+    libraryMeta: {
+      version: 1,
+      folders: [{ id: "folder-empty", name: "空フォルダー", createdAt: date, updatedAt: date }],
+      mapMeta: { trashed: { favorite: true, folderId: "folder-empty" } },
+    },
+    libraryMetaStatus: "ready",
+  });
+  expect(inactiveOnlyResult.ok).toBe(true);
+  if (!inactiveOnlyResult.ok) return;
+  const inactiveOnlyParsed = JSON.parse(inactiveOnlyResult.value.json) as Record<string, unknown>;
+  expect(inactiveOnlyParsed.folders).toEqual([
+    { id: "folder-empty", name: "空フォルダー", createdAt: date, updatedAt: date },
+  ]);
+  expect(Object.prototype.hasOwnProperty.call(inactiveOnlyParsed, "mapMeta")).toBe(false);
+});
+
+it.each(["corrupt", "unavailable"] as const)(
+  "libraryMetaStatus が %s のときはメタデータを省略して正常にバックアップを準備する",
+  (status) => {
+    const f = fixture({ [mapBodyKey("b")]: empty });
+    const libraryMeta: MapLibraryMetaV1 = {
+      version: 1,
+      folders: [{ id: "folder-1", name: "仕事", createdAt: date, updatedAt: date }],
+      mapMeta: { a: { favorite: true, folderId: "folder-1" } },
+    };
+    const result = prepareLibraryBackup(f.storage, index, f.session, now, {
+      libraryMeta,
+      libraryMetaStatus: status,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const parsed = JSON.parse(result.value.json) as Record<string, unknown>;
+    expect(Object.prototype.hasOwnProperty.call(parsed, "folders")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(parsed, "mapMeta")).toBe(false);
+  },
+);

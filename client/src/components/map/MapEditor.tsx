@@ -1,10 +1,16 @@
 "use client";
 
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { BrokenMapLinksDialog } from "@/components/layout/BrokenMapLinksDialog";
+import { CrossMapSearchDialog } from "@/components/layout/CrossMapSearchDialog";
 import { EditorViewModeControl, type EditorViewMode } from "@/components/layout/EditorViewModeControl";
 import { OutlineEditor } from "@/components/outline/OutlineEditor";
+import type { MapIndexEntry } from "@/domain/mapLibrary/mapIndex";
 import { summarizeSelectionImportance } from "@/domain/nodes/selectionImportanceSummary";
 import { buildOutlineRows } from "@/domain/outline/outlineRows";
+import { useCrossMapCorpus } from "@/hooks/useCrossMapCorpus";
+import { useCrossMapDialogs } from "@/hooks/useCrossMapDialogs";
+import { useCrossMapNavigation } from "@/hooks/useCrossMapNavigation";
 import { useOutlineEditorActions } from "@/hooks/useOutlineEditorActions";
 import { useOutlineCanvasReturn } from "@/hooks/useOutlineCanvasReturn";
 import { useRevisionScopedNodeRequest } from "@/hooks/useRevisionScopedNodeRequest";
@@ -16,7 +22,6 @@ import { NodeMergeControl } from "@/components/layout/NodeMergeControl";
 import { NodeMergeDialog } from "@/components/layout/NodeMergeDialog";
 import { NodeSplitControl } from "@/components/layout/NodeSplitControl";
 import { NodeSplitDialog } from "@/components/layout/NodeSplitDialog";
-import type { BranchMoveMapTarget } from "@/hooks/branchMoveDialogState";
 import { useBranchMoveDialog } from "@/hooks/useBranchMoveDialog";
 import { useHeaderFocusReturn } from "@/hooks/useHeaderFocusReturn";
 import { useLabelReplaceDialog } from "@/hooks/useLabelReplaceDialog";
@@ -51,6 +56,7 @@ import { NodeSearchBox } from "@/components/layout/NodeSearchBox";
 import { NodeDetailPanel } from "@/components/layout/NodeDetailPanel";
 import { MapStage } from "@/components/map/MapStage";
 import { INITIAL_VIEWPORT } from "@/components/map/mapViewport";
+import { useCrossMapSearchShortcut } from "@/components/map/useCrossMapSearchShortcut";
 import { useIllustrationGeneration } from "@/hooks/useIllustrationGeneration";
 import { useMapHistoryShortcuts } from "@/components/map/useMapHistoryShortcuts";
 import { useMapImageExport } from "@/hooks/useMapImageExport";
@@ -71,6 +77,7 @@ import { useNodeOnlyDeletionAction } from "@/hooks/useNodeOnlyDeletionAction";
 import { useNodeParentInsertionAction } from "@/hooks/useNodeParentInsertionAction";
 import type { MapStorageSession } from "@/types/mapStorageSession";
 import type { OperationNotice } from "@/types/operationNotice";
+import type { PendingMapNodeNavigation } from "@/types/pendingMapNavigation";
 
 const CLIPBOARD_OPERATION_HINT = "枝をコピー: Ctrl/Cmd+C ／ 貼り付け: Ctrl/Cmd+V（新しいルートとして追加）";
 const LAYOUT_FAILED_NOTICE: OperationNotice = {
@@ -86,13 +93,18 @@ type MapEditorProps = {
   mapControls: ReactNode;
   // シェルが保護モードへ移ったときのフォーカスの戻し先。ボタンはこの編集画面が描画する
   exportButtonRef: RefObject<HTMLButtonElement | null>;
-  mapMoveTargets: readonly BranchMoveMapTarget[];
+  mapMoveTargets: readonly MapIndexEntry[];
   onMoveBranchToMap: (rootId: number, targetMapId: string) => MapLibraryOperationResult;
   onSaveCurrentAsNewMap?: (name: string, snapshotJson: string) => MapLibraryOperationResult;
   shortcutsEnabled: boolean;
   // 画面の外のダイアログで最後にマウスでクリックした時刻。ダイアログが1回目のクリックで閉じると、
   // ダブルクリックの2回目と dblclick が MapStage のキャンバスへ届くので、メニューの項目と同じ時間窓で無視する
   dialogMouseClickedAtRef: RefObject<number | null>;
+  pendingNavigation: PendingMapNodeNavigation | null;
+  onConsumePendingNavigation: (token: number) => void;
+  onSwitchToMapTarget: (targetMapId: string, targetNodeId?: number) => void;
+  brokenLinksDialogRequest: number;
+  onBrokenLinksDialogClosed: () => void;
 };
 
 // 1つのマップの編集画面。マップを切り替えるときは親が key を変えて再マウントし、履歴と表示状態を破棄する。
@@ -110,6 +122,11 @@ export function MapEditor({
   onSaveCurrentAsNewMap,
   shortcutsEnabled,
   dialogMouseClickedAtRef,
+  pendingNavigation,
+  onConsumePendingNavigation,
+  onSwitchToMapTarget,
+  brokenLinksDialogRequest,
+  onBrokenLinksDialogClosed,
 }: MapEditorProps) {
   const {
     nodes,
@@ -153,6 +170,8 @@ export function MapEditor({
     removeNodeTag,
     addNodeSource,
     removeNodeSource,
+    addNodeMapLink,
+    removeNodeMapLink,
     beginMoveHistory,
     documentRevision,
     canUndo,
@@ -238,6 +257,52 @@ export function MapEditor({
     publishNotice: publishTreeEditNotice,
     clearNotice: clearTreeEditNotice,
   } = useRevisionScopedNotice(documentRevision);
+  const { corpus, refreshCorpus } = useCrossMapCorpus({
+    maps: mapMoveTargets,
+    currentMapId: mapId,
+    currentMapName: mapName,
+    currentNodes: nodes,
+    storage: storageSession.storage,
+    storageMode,
+  });
+  const { navigationNotice, navigateToMapTarget } = useCrossMapNavigation({
+    mapId,
+    sessionNumber: storageSession.sessionNumber,
+    hydrated: persistence.hydrated,
+    nodes,
+    documentRevision,
+    viewMode,
+    initialViewportScale: INITIAL_VIEWPORT.scale,
+    resolutionMode: resolutionFilter.mode,
+    collapseIndex: branchCollapse.index,
+    collapsedNodeIds: branchCollapse.collapsedNodeIds,
+    expandNodes: branchCollapse.expandNodes,
+    setResolutionMode: resolutionFilter.setMode,
+    resetViewportScale: resolutionFilter.resetViewportScale,
+    setViewportScale,
+    setViewMode,
+    selectNode,
+    issueCanvasFocusRequest: canvasFocus.issueRequest,
+    clearCanvasFocusRequest: canvasFocus.clearRequest,
+    navigateToNodeInMapView: nodeSearchNavigation.navigateToNode,
+    pendingNavigation,
+    onConsumePendingNavigation,
+    onSwitchToMapTarget,
+  });
+  const crossMapSearchButtonRef = useRef<HTMLButtonElement>(null);
+  const crossMapDialogs = useCrossMapDialogs({
+    storageMode,
+    brokenLinksDialogRequest,
+    crossMapSearchButtonRef,
+    refreshCorpus,
+    onNavigateToMapTarget: navigateToMapTarget,
+    onBrokenLinksDialogClosed,
+  });
+  const handleAddMapLink = useCallback(
+    (nodeId: number, input: { targetMapId: string; targetNodeId?: number }) =>
+      addNodeMapLink(nodeId, mapId, input),
+    [addNodeMapLink, mapId],
+  );
   const outlineImport = useOutlineImport({
     selectedNodeId,
     documentRevision,
@@ -368,8 +433,14 @@ export function MapEditor({
     && labelReplace.screen === "closed"
     && nodeSplit.screen === "closed"
     && nodeMerge.screen === "closed"
+    && !crossMapDialogs.crossMapSearchOpen
+    && !crossMapDialogs.brokenLinksDialogOpen
     && !persistence.isConfirmOpen;
   useMapHistoryShortcuts({ undo, redo, enabled: editorShortcutsEnabled });
+  useCrossMapSearchShortcut({
+    enabled: editorShortcutsEnabled,
+    onOpen: crossMapDialogs.openCrossMapSearch,
+  });
   const outlineModel = useMemo(() => buildOutlineRows(nodes), [nodes]);
   const outlineExport = useOutlineExport({ model: outlineModel, mapName });
   const outlineActions = useOutlineEditorActions({
@@ -407,6 +478,7 @@ export function MapEditor({
     duplication.notice,
     clipboardNotice,
     nodeSearchNavigation.notice,
+    navigationNotice,
     outlineImport.notice,
     treeEditNotice,
     persistence.conflictActionNotice,
@@ -429,15 +501,29 @@ export function MapEditor({
           saveStatus={persistence.saveStatus}
           viewControls={<EditorViewModeControl mode={viewMode} onChange={changeViewMode} />}
           showCanvasHints={viewMode === "map"}
-          searchControls={viewMode === "map" && (
-            <NodeSearchBox
-              query={nodeSearch.query}
-              onQueryChange={nodeSearch.setQuery}
-              hasQuery={nodeSearch.hasQuery}
-              matches={nodeSearch.matches}
-              total={nodeSearch.total}
-              onSelectResult={nodeSearchNavigation.navigateToNode}
-            />
+          searchControls={(
+            <div className="flex flex-wrap items-center gap-2">
+              {viewMode === "map" && (
+                <NodeSearchBox
+                  query={nodeSearch.query}
+                  onQueryChange={nodeSearch.setQuery}
+                  hasQuery={nodeSearch.hasQuery}
+                  matches={nodeSearch.matches}
+                  total={nodeSearch.total}
+                  onSelectResult={nodeSearchNavigation.navigateToNode}
+                />
+              )}
+              <button
+                ref={crossMapSearchButtonRef}
+                type="button"
+                aria-haspopup="dialog"
+                aria-expanded={crossMapDialogs.crossMapSearchOpen}
+                onClick={crossMapDialogs.openCrossMapSearch}
+                className="shrink-0 rounded-md bg-zinc-100 px-3 py-1 text-sm text-zinc-700 transition-colors hover:bg-zinc-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:bg-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-600"
+              >
+                全マップ検索
+              </button>
+            </div>
           )}
           importanceControls={(
             <NodeImportanceSelector
@@ -607,6 +693,10 @@ export function MapEditor({
               // アウトライン表示では主選択だけ（キャンバスで残った複数選択の件数を見せない）
               selectionCount={importanceTargetIds.length}
               documentRevision={documentRevision}
+              currentMapId={mapId}
+              maps={mapMoveTargets}
+              corpus={corpus}
+              storageMode={storageMode}
               onPreviewNote={previewNodeNote}
               onBeginNoteEdit={beginMoveHistory}
               onAddTag={addNodeTag}
@@ -615,6 +705,9 @@ export function MapEditor({
               onRemoveLink={removeNodeLink}
               onAddSource={addNodeSource}
               onRemoveSource={removeNodeSource}
+              onAddMapLink={handleAddMapLink}
+              onRemoveMapLink={removeNodeMapLink}
+              onNavigateToMapTarget={navigateToMapTarget}
               generation={generation}
               onGenerate={generateIllustration}
               onAttach={(nodeId, dataUrl) => {
@@ -736,6 +829,28 @@ export function MapEditor({
           onBack={outlineImport.back}
           onTargetChange={outlineImport.setTarget}
           onSubmit={outlineImport.submit}
+          onMouseClick={() => {
+            dialogMouseClickedAtRef.current = Date.now();
+          }}
+        />
+      )}
+      {crossMapDialogs.crossMapSearchOpen && (
+        <CrossMapSearchDialog
+          corpus={corpus}
+          storageMode={storageMode}
+          onSelectMatch={crossMapDialogs.selectCrossMapSearchMatch}
+          onClose={crossMapDialogs.closeCrossMapSearch}
+          onMouseClick={() => {
+            dialogMouseClickedAtRef.current = Date.now();
+          }}
+        />
+      )}
+      {crossMapDialogs.brokenLinksDialogOpen && (
+        <BrokenMapLinksDialog
+          corpus={corpus}
+          onNavigateToSource={crossMapDialogs.navigateToBrokenLinkSource}
+          onRemoveCurrentMapLink={removeNodeMapLink}
+          onClose={crossMapDialogs.closeBrokenLinksDialog}
           onMouseClick={() => {
             dialogMouseClickedAtRef.current = Date.now();
           }}

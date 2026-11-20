@@ -23,6 +23,14 @@ import {
   type MapIndexV1,
 } from "@/domain/mapLibrary/mapIndex";
 import {
+  createEmptyMapLibraryMeta,
+  decodeMapLibraryMeta,
+  encodeMapLibraryMeta,
+  MAX_MAP_FOLDERS,
+  type MapLibraryMetaV1,
+} from "@/domain/mapLibrary/mapLibraryMeta";
+import { parseLibraryBackupJson } from "@/domain/mapLibrary/libraryBackupCodec";
+import {
   decodeMapTrashIndex,
   encodeMapTrashIndex,
   type MapTrashEntry,
@@ -55,6 +63,7 @@ import {
   MAP_INDEX_STORAGE_KEY,
   mapBodyKey,
 } from "@/services/persistence/mapLibraryStorage";
+import { MAP_LIBRARY_META_STORAGE_KEY } from "@/services/persistence/mapLibraryMetaStorage";
 import {
   MAP_TRASH_INDEX_KEY,
   mapTrashBodyKey,
@@ -244,6 +253,14 @@ function storedTrashIndex(entries: Record<string, string>): MapTrashIndexV1 {
   return decoded.index;
 }
 
+function storedLibraryMeta(entries: Record<string, string>): MapLibraryMetaV1 {
+  const decoded = decodeMapLibraryMeta(entries[MAP_LIBRARY_META_STORAGE_KEY] ?? null);
+  if (!decoded.ok) {
+    throw new Error("ライブラリメタデータを読めません。");
+  }
+  return decoded.meta;
+}
+
 function trashEntry(overrides: Partial<MapTrashEntry> = {}): MapTrashEntry {
   return {
     id: "trash-1",
@@ -276,6 +293,7 @@ describe("useMapLibrary", () => {
       expect(view.startupNotice).toBeNull();
       expect(operations).toEqual([
         { type: "setItem", key: MAP_INDEX_STORAGE_KEY, value: expect.any(String) },
+        { type: "setItem", key: MAP_LIBRARY_META_STORAGE_KEY, value: expect.any(String) },
       ]);
     });
 
@@ -289,6 +307,7 @@ describe("useMapLibrary", () => {
       expect(operations.map((operation) => [operation.type, operation.key])).toEqual([
         ["setItem", mapBodyKey("migrated")],
         ["setItem", MAP_INDEX_STORAGE_KEY],
+        ["setItem", MAP_LIBRARY_META_STORAGE_KEY],
       ]);
       expect(operations.some((operation) => operation.type === "removeItem")).toBe(false);
       expect(readyView(result.current.view).startupNotice).toBeNull();
@@ -436,6 +455,7 @@ describe("useMapLibrary", () => {
       });
       expect(operations.slice(before).map((operation) => operation.key)).toEqual([
         MAP_INDEX_STORAGE_KEY,
+        MAP_LIBRARY_META_STORAGE_KEY,
       ]);
       const view = readyView(result.current.view);
       expect(view.currentMap).toEqual({
@@ -475,6 +495,7 @@ describe("useMapLibrary", () => {
         mapBodyKey("map-1"),
         MAP_INDEX_STORAGE_KEY,
         MAP_INDEX_STORAGE_KEY,
+        MAP_LIBRARY_META_STORAGE_KEY,
       ]);
       expect(entries()[mapBodyKey("map-1")]).toBe("edited-1");
       const index = storedIndex(entries());
@@ -600,11 +621,13 @@ describe("useMapLibrary", () => {
         remounted: true,
         notice: mapSwitchedNotice("マップ 2"),
         saveRetryNotice: null,
+        sessionNumber: 1,
       });
       expect(operations.slice(before).map((operation) => operation.key)).toEqual([
         mapBodyKey("map-1"),
         MAP_INDEX_STORAGE_KEY,
         MAP_INDEX_STORAGE_KEY,
+        MAP_LIBRARY_META_STORAGE_KEY,
       ]);
       expect(entries()[mapBodyKey("map-1")]).toBe("edited-1");
       expect(storedIndex(entries()).currentMapId).toBe("map-2");
@@ -750,6 +773,7 @@ describe("useMapLibrary", () => {
       expect(switched).toMatchObject({ ok: true, remounted: true });
       expect(operations.slice(before).map((operation) => operation.key)).toEqual([
         MAP_INDEX_STORAGE_KEY,
+        MAP_LIBRARY_META_STORAGE_KEY,
       ]);
     });
   });
@@ -1225,6 +1249,7 @@ describe("useMapLibrary", () => {
           ["setItem", MAP_TRASH_INDEX_KEY],
           ["setItem", MAP_INDEX_STORAGE_KEY],
           ["removeItem", mapBodyKey("map-a")],
+          ["setItem", MAP_LIBRARY_META_STORAGE_KEY],
         ]);
         expect(entries()[mapBodyKey("map-a")]).toBeUndefined();
         expect(entries()[mapTrashBodyKey("map-a")]).toBe("body-a");
@@ -1343,6 +1368,7 @@ describe("useMapLibrary", () => {
           ["setItem", MAP_TRASH_INDEX_KEY],
           ["setItem", MAP_INDEX_STORAGE_KEY],
           ["removeItem", mapBodyKey("only")],
+          ["setItem", MAP_LIBRARY_META_STORAGE_KEY],
         ]);
         const expected = {
           id: "new-1",
@@ -2386,6 +2412,916 @@ describe("useMapLibrary のライブラリバックアップ境界", () => {
           expect(result.current.permanentlyDeleteFromTrash("t-1").ok).toBe(false);
           expect(result.current.emptyTrash().ok).toBe(false);
         });
+      });
+    });
+  });
+
+  describe("マップライブラリメタデータ統合（お気に入り・最近使用・フォルダー）", () => {
+    describe("起動時のメタデータ読み込み", () => {
+      it("通常起動で初期マップの lastOpenedAt を記録して保存し、libraryMetaStatus を ready にする", () => {
+        const existingMeta: MapLibraryMetaV1 = {
+          version: 1,
+          folders: [{ id: "f-1", name: "仕事", createdAt: SEED_TIMESTAMP, updatedAt: SEED_TIMESTAMP }],
+          mapMeta: {
+            "map-1": { favorite: true, folderId: "f-1" },
+          },
+        };
+        const { result, entries } = setup({
+          initial: twoMapsInitial({
+            [MAP_LIBRARY_META_STORAGE_KEY]: encodeMapLibraryMeta(existingMeta),
+          }),
+        });
+
+        const view = readyView(result.current.view);
+        expect(view.libraryMetaStatus).toBe("ready");
+        expect(view.libraryMeta).toEqual({
+          version: 1,
+          folders: existingMeta.folders,
+          mapMeta: {
+            "map-1": { favorite: true, folderId: "f-1", lastOpenedAt: NOW },
+          },
+        });
+        expect(storedLibraryMeta(entries())).toEqual(view.libraryMeta);
+      });
+
+      it("メタデータ破損時は通常モードで起動し libraryMetaStatus を corrupt にして破損データを自動上書きしない（L-002, L-669）", () => {
+        const { result, entries, operations } = setup({
+          initial: twoMapsInitial({
+            [MAP_LIBRARY_META_STORAGE_KEY]: "{corrupt-meta",
+          }),
+        });
+
+        const view = readyView(result.current.view);
+        expect(view.storageMode).toBe("persistent");
+        expect(view.libraryMetaStatus).toBe("corrupt");
+        expect(view.libraryMeta).toEqual(createEmptyMapLibraryMeta());
+        expect(view.startupNotice).toBeNull();
+        expect(entries()[MAP_LIBRARY_META_STORAGE_KEY]).toBe("{corrupt-meta");
+        expect(operations.some((op) => op.key === MAP_LIBRARY_META_STORAGE_KEY)).toBe(false);
+      });
+
+      it("メタデータ読込例外時は通常モードで起動し libraryMetaStatus を unavailable にして自動上書きしない（L-002, L-669）", () => {
+        const recording = createRecordingStorage({
+          initial: twoMapsInitial({
+            [MAP_LIBRARY_META_STORAGE_KEY]: encodeMapLibraryMeta(createEmptyMapLibraryMeta()),
+          }),
+        });
+        const originalGetItem = recording.storage.getItem.bind(recording.storage);
+        recording.storage.getItem = (key: string) => {
+          if (key === MAP_LIBRARY_META_STORAGE_KEY) {
+            throw new DOMException("blocked", "SecurityError");
+          }
+          return originalGetItem(key);
+        };
+        const { result } = renderHook(() =>
+          useMapLibrary({
+            getStorage: () => recording.storage,
+            now: () => new Date(NOW),
+            generateId: idSequence(["gen-1"]),
+          }),
+        );
+
+        const view = readyView(result.current.view);
+        expect(view.storageMode).toBe("persistent");
+        expect(view.libraryMetaStatus).toBe("unavailable");
+        expect(view.libraryMeta).toEqual(createEmptyMapLibraryMeta());
+        expect(recording.operations.some((op) => op.key === MAP_LIBRARY_META_STORAGE_KEY)).toBe(false);
+      });
+
+      it("保護モード時は libraryMetaStatus を unavailable にし、メタデータキーへ一切アクセスしない（L-002, L-061）", () => {
+        const recording = createRecordingStorage({
+          initial: {
+            [MAP_STORAGE_KEY]: LEGACY_JSON,
+            [MAP_LIBRARY_META_STORAGE_KEY]: "{should-not-read",
+          },
+          failSetItem: (key) => key === mapBodyKey("migrated"),
+          failSetItemError: "SecurityError",
+        });
+        const getSpy = jest.spyOn(recording.storage, "getItem");
+        const { result } = renderHook(() =>
+          useMapLibrary({
+            getStorage: () => recording.storage,
+            now: () => new Date(NOW),
+            generateId: idSequence(["migrated", "memory"]),
+          }),
+        );
+
+        const view = readyView(result.current.view);
+        expect(view.storageMode).toBe("protected");
+        expect(view.libraryMetaStatus).toBe("unavailable");
+        expect(view.libraryMeta).toEqual(createEmptyMapLibraryMeta());
+        expect(getSpy).not.toHaveBeenCalledWith(MAP_LIBRARY_META_STORAGE_KEY);
+        expect(recording.operations.some((op) => op.key === MAP_LIBRARY_META_STORAGE_KEY)).toBe(false);
+      });
+
+      it("起動時の lastOpenedAt 書込失敗時、既存 startupNotice が無ければ警告を出しメモリ状態を変えない（L-001）", () => {
+        const { result } = setup({
+          initial: twoMapsInitial(),
+          failSetItem: (key) => key === MAP_LIBRARY_META_STORAGE_KEY,
+        });
+
+        const view = readyView(result.current.view);
+        expect(view.storageMode).toBe("persistent");
+        expect(view.libraryMetaStatus).toBe("ready");
+        expect(view.libraryMeta.mapMeta["map-1"]).toBeUndefined();
+        expect(view.startupNotice?.kind).toBe("warning");
+      });
+
+      it("起動時の lastOpenedAt 書込失敗時、既存の startupNotice がある場合は上書きしない", () => {
+        const { result } = setup({
+          initial: { [MAP_INDEX_STORAGE_KEY]: "{" },
+          ids: ["rebuilt"],
+          failSetItem: (key) => key === MAP_LIBRARY_META_STORAGE_KEY,
+        });
+
+        const view = readyView(result.current.view);
+        expect(view.startupNotice).toEqual({
+          kind: "warning",
+          message: "マップの一覧を読み取れなかったため、空のマップで開始します。",
+        });
+      });
+    });
+
+    describe("メタデータ操作アクションと鮮度同期", () => {
+      it("お気に入り切替・フォルダー作成/名前変更/割当/削除が保存とメモリ状態へ反映される", () => {
+        const { result, entries } = setup({
+          initial: twoMapsInitial(),
+          ids: ["folder-1"],
+        });
+
+        let favOn: ReturnType<typeof result.current.toggleFavorite> | undefined;
+        act(() => {
+          favOn = result.current.toggleFavorite("map-2");
+        });
+        expect(favOn?.ok).toBe(true);
+        expect(readyView(result.current.view).libraryMeta.mapMeta["map-2"]?.favorite).toBe(true);
+        expect(storedLibraryMeta(entries()).mapMeta["map-2"]?.favorite).toBe(true);
+
+        let created: ReturnType<typeof result.current.createFolder> | undefined;
+        act(() => {
+          created = result.current.createFolder("  仕事  ");
+        });
+        expect(created).toMatchObject({ ok: true, remounted: false, folderId: "folder-1" });
+        expect(readyView(result.current.view).libraryMeta.folders).toEqual([
+          { id: "folder-1", name: "仕事", createdAt: NOW, updatedAt: NOW },
+        ]);
+
+        let assigned: ReturnType<typeof result.current.assignFolder> | undefined;
+        act(() => {
+          assigned = result.current.assignFolder("map-2", "folder-1");
+        });
+        expect(assigned?.ok).toBe(true);
+        expect(readyView(result.current.view).libraryMeta.mapMeta["map-2"]).toEqual({
+          favorite: true,
+          folderId: "folder-1",
+        });
+
+        let renamed: ReturnType<typeof result.current.renameFolder> | undefined;
+        act(() => {
+          renamed = result.current.renameFolder("folder-1", "業務");
+        });
+        expect(renamed?.ok).toBe(true);
+        expect(readyView(result.current.view).libraryMeta.folders[0]?.name).toBe("業務");
+
+        let deleted: ReturnType<typeof result.current.deleteFolder> | undefined;
+        act(() => {
+          deleted = result.current.deleteFolder("folder-1");
+        });
+        expect(deleted?.ok).toBe(true);
+        expect(readyView(result.current.view).libraryMeta.folders).toEqual([]);
+        expect(readyView(result.current.view).libraryMeta.mapMeta["map-2"]).toEqual({
+          favorite: true,
+        });
+        expect(readyView(result.current.view).maps.map((m) => m.id)).toContain("map-2");
+
+        let favOff: ReturnType<typeof result.current.toggleFavorite> | undefined;
+        act(() => {
+          favOff = result.current.toggleFavorite("map-2");
+        });
+        expect(favOff?.ok).toBe(true);
+        expect(readyView(result.current.view).libraryMeta.mapMeta["map-2"]).toBeUndefined();
+      });
+
+      it("メタデータ書込失敗時はメモリ状態を変更せず ok: false を返す（L-001）", () => {
+        let failMetaWrite = false;
+        const { result } = setup({
+          initial: twoMapsInitial(),
+          ids: ["folder-1"],
+          failSetItem: (key) => failMetaWrite && key === MAP_LIBRARY_META_STORAGE_KEY,
+        });
+        act(() => {
+          expect(result.current.createFolder("仕事").ok).toBe(true);
+        });
+        const viewBefore = result.current.view;
+        failMetaWrite = true;
+
+        act(() => {
+          expect(result.current.toggleFavorite("map-1").ok).toBe(false);
+          expect(result.current.assignFolder("map-1", "folder-1").ok).toBe(false);
+          expect(result.current.createFolder("個人").ok).toBe(false);
+          expect(result.current.renameFolder("folder-1", "変更後").ok).toBe(false);
+          expect(result.current.deleteFolder("folder-1").ok).toBe(false);
+        });
+
+        expect(result.current.view).toBe(viewBefore);
+      });
+
+      it("保護モード・corrupt・unavailable 時はメタ書込操作をすべて拒否する（L-061）", () => {
+        // corrupt
+        const corrupt = setup({
+          initial: twoMapsInitial({ [MAP_LIBRARY_META_STORAGE_KEY]: "{corrupt" }),
+        });
+        const corruptBefore = corrupt.operations.length;
+        act(() => {
+          expect(corrupt.result.current.toggleFavorite("map-1").ok).toBe(false);
+          expect(corrupt.result.current.assignFolder("map-1", null).ok).toBe(false);
+          expect(corrupt.result.current.createFolder("仕事").ok).toBe(false);
+          expect(corrupt.result.current.renameFolder("f-1", "業務").ok).toBe(false);
+          expect(corrupt.result.current.deleteFolder("f-1").ok).toBe(false);
+        });
+        expect(corrupt.operations.slice(corruptBefore)).toEqual([]);
+        expect(corrupt.entries()[MAP_LIBRARY_META_STORAGE_KEY]).toBe("{corrupt");
+
+        // unavailable
+        const unavailableRecording = createRecordingStorage({ initial: twoMapsInitial() });
+        const unavailableOrigGet = unavailableRecording.storage.getItem.bind(unavailableRecording.storage);
+        unavailableRecording.storage.getItem = (key: string) => {
+          if (key === MAP_LIBRARY_META_STORAGE_KEY) {
+            throw new DOMException("blocked", "SecurityError");
+          }
+          return unavailableOrigGet(key);
+        };
+        const unavailableHook = renderHook(() =>
+          useMapLibrary({
+            getStorage: () => unavailableRecording.storage,
+            now: () => new Date(NOW),
+            generateId: idSequence(["gen-1"]),
+          }),
+        );
+        const unavailableBefore = unavailableRecording.operations.length;
+        act(() => {
+          expect(unavailableHook.result.current.toggleFavorite("map-1").ok).toBe(false);
+          expect(unavailableHook.result.current.assignFolder("map-1", null).ok).toBe(false);
+          expect(unavailableHook.result.current.createFolder("仕事").ok).toBe(false);
+          expect(unavailableHook.result.current.renameFolder("f-1", "業務").ok).toBe(false);
+          expect(unavailableHook.result.current.deleteFolder("f-1").ok).toBe(false);
+          expect(unavailableHook.result.current.resetLibraryMeta().ok).toBe(false);
+        });
+        expect(unavailableRecording.operations.slice(unavailableBefore)).toEqual([]);
+
+        // protected
+        const protectedHook = renderHook(() =>
+          useMapLibrary({
+            getStorage: () => null,
+            now: () => new Date(NOW),
+            generateId: idSequence(["memory"]),
+          }),
+        );
+        act(() => {
+          expect(protectedHook.result.current.toggleFavorite("memory").ok).toBe(false);
+          expect(protectedHook.result.current.assignFolder("memory", null).ok).toBe(false);
+          expect(protectedHook.result.current.createFolder("仕事").ok).toBe(false);
+          expect(protectedHook.result.current.renameFolder("f-1", "業務").ok).toBe(false);
+          expect(protectedHook.result.current.deleteFolder("f-1").ok).toBe(false);
+          expect(protectedHook.result.current.resetLibraryMeta().ok).toBe(false);
+        });
+      });
+
+      it("assignFolder の未分類戻し・同一値スキップ・renameFolder 同一名スキップ・不正 ID/重複名を検証する", () => {
+        const { result, operations } = setup({
+          initial: twoMapsInitial(),
+          ids: ["folder-1", "folder-2"],
+        });
+
+        act(() => {
+          expect(result.current.createFolder("仕事").ok).toBe(true);
+          expect(result.current.assignFolder("map-2", "folder-1").ok).toBe(true);
+        });
+
+        const beforeUnchanged = operations.length;
+        let sameAssign: ReturnType<typeof result.current.assignFolder> | undefined;
+        let sameRename: ReturnType<typeof result.current.renameFolder> | undefined;
+        act(() => {
+          sameAssign = result.current.assignFolder("map-2", "folder-1");
+          sameRename = result.current.renameFolder("folder-1", "  仕事  ");
+        });
+        expect(sameAssign).toEqual({ ok: true, remounted: false, notice: null, saveRetryNotice: null });
+        expect(sameRename).toEqual({ ok: true, remounted: false, notice: null, saveRetryNotice: null });
+        expect(operations.slice(beforeUnchanged)).toEqual([]);
+
+        // 未分類へ戻す
+        act(() => {
+          expect(result.current.assignFolder("map-2", null).ok).toBe(true);
+        });
+        expect(readyView(result.current.view).libraryMeta.mapMeta["map-2"]).toBeUndefined();
+
+        // 不正入力・存在しない ID・重複名は書き込まず拒否する
+        const beforeInvalid = operations.length;
+        act(() => {
+          expect(result.current.toggleFavorite("missing").ok).toBe(false);
+          expect(result.current.assignFolder("missing", "folder-1").ok).toBe(false);
+          expect(result.current.assignFolder("map-2", "missing-folder").ok).toBe(false);
+          expect(result.current.createFolder("仕事").ok).toBe(false);
+          expect(result.current.renameFolder("missing-folder", "別名").ok).toBe(false);
+          expect(result.current.deleteFolder("missing-folder").ok).toBe(false);
+        });
+        expect(operations.slice(beforeInvalid)).toEqual([]);
+      });
+
+      it("resetLibraryMeta は corrupt 時のみ初期化を許可し、ready / unavailable では拒否する（L-669）", () => {
+        const readyHook = setup({ initial: twoMapsInitial() });
+        const readyBefore = readyHook.operations.length;
+        act(() => {
+          expect(readyHook.result.current.resetLibraryMeta().ok).toBe(false);
+        });
+        expect(readyHook.operations.slice(readyBefore)).toEqual([]);
+
+        const recording = createRecordingStorage({ initial: twoMapsInitial() });
+        const origGet = recording.storage.getItem.bind(recording.storage);
+        recording.storage.getItem = (key: string) => {
+          if (key === MAP_LIBRARY_META_STORAGE_KEY) throw new DOMException("blocked", "SecurityError");
+          return origGet(key);
+        };
+        const unavailableHook = renderHook(() =>
+          useMapLibrary({
+            getStorage: () => recording.storage,
+            now: () => new Date(NOW),
+            generateId: idSequence(["gen-1"]),
+          }),
+        );
+        act(() => {
+          expect(unavailableHook.result.current.resetLibraryMeta().ok).toBe(false);
+        });
+        expect(recording.operations.some((op) => op.key === MAP_LIBRARY_META_STORAGE_KEY)).toBe(false);
+
+        let failReset = true;
+        const corruptHook = setup({
+          initial: twoMapsInitial({ [MAP_LIBRARY_META_STORAGE_KEY]: "{corrupt" }),
+          failSetItem: (key) => failReset && key === MAP_LIBRARY_META_STORAGE_KEY,
+        });
+        act(() => {
+          expect(corruptHook.result.current.resetLibraryMeta().ok).toBe(false);
+        });
+        expect(readyView(corruptHook.result.current.view).libraryMetaStatus).toBe("corrupt");
+
+        failReset = false;
+        act(() => {
+          expect(corruptHook.result.current.resetLibraryMeta().ok).toBe(true);
+        });
+        const recovered = readyView(corruptHook.result.current.view);
+        expect(recovered.libraryMetaStatus).toBe("ready");
+        expect(recovered.libraryMeta).toEqual(createEmptyMapLibraryMeta());
+        expect(storedLibraryMeta(corruptHook.entries())).toEqual(createEmptyMapLibraryMeta());
+      });
+
+      it("メタデータ変更で revisionRef が進み、古いバックアップ・復元プレビューを無効化する（L-036）", async () => {
+        const backupJson = JSON.stringify({
+          format: "draw-my-map-library-backup",
+          version: 1,
+          exportedAt: NOW,
+          currentMapId: "source",
+          maps: [
+            {
+              id: "source",
+              name: "移行元",
+              createdAt: SEED_TIMESTAMP,
+              updatedAt: SEED_TIMESTAMP,
+              document: JSON.parse(EMPTY_V3),
+            },
+          ],
+        });
+        const { result } = setup({ initial: singleMapInitial() });
+        readyView(result.current.view).storageSession.registerBackupSnapshot(() => ({
+          json: EMPTY_V3,
+          hydrated: true,
+          restoreOrigin: "restored",
+          hasSavedBodyThisMount: false,
+        }));
+        const prepared = result.current.prepareBackup();
+        expect(prepared.ok).toBe(true);
+        if (!prepared.ok) return;
+        const restorePreview = await result.current.previewRestore(
+          backupFile(async () => backupJson),
+        );
+        expect(restorePreview.ok).toBe(true);
+        if (!restorePreview.ok) return;
+
+        act(() => {
+          expect(result.current.toggleFavorite("only").ok).toBe(true);
+        });
+
+        expect(result.current.downloadBackup(prepared.value).ok).toBe(false);
+        expect(result.current.confirmRestore(restorePreview.value).ok).toBe(false);
+      });
+
+      it("prepareBackup は libraryMeta と libraryMetaStatus を prepareLibraryBackup へ渡す（corrupt 時はメタ抜き）", () => {
+        const { result } = setup({
+          initial: singleMapInitial(),
+          ids: ["folder-1"],
+        });
+        readyView(result.current.view).storageSession.registerBackupSnapshot(() => ({
+          json: EMPTY_V3,
+          hydrated: true,
+          restoreOrigin: "restored",
+          hasSavedBodyThisMount: false,
+        }));
+        act(() => {
+          expect(result.current.createFolder("仕事").ok).toBe(true);
+          expect(result.current.assignFolder("only", "folder-1").ok).toBe(true);
+          expect(result.current.toggleFavorite("only").ok).toBe(true);
+        });
+
+        const prepared = result.current.prepareBackup();
+        expect(prepared.ok).toBe(true);
+        if (!prepared.ok) return;
+        const parsed = parseLibraryBackupJson(prepared.value.json);
+        expect(parsed.ok).toBe(true);
+        if (!parsed.ok) return;
+        expect(parsed.value.folders).toEqual([
+          { id: "folder-1", name: "仕事", createdAt: NOW, updatedAt: NOW },
+        ]);
+        expect(parsed.value.mapMeta).toEqual({
+          only: { favorite: true, lastOpenedAt: NOW, folderId: "folder-1" },
+        });
+
+        const corrupt = setup({
+          initial: singleMapInitial({ [MAP_LIBRARY_META_STORAGE_KEY]: "{corrupt" }),
+        });
+        readyView(corrupt.result.current.view).storageSession.registerBackupSnapshot(() => ({
+          json: EMPTY_V3,
+          hydrated: true,
+          restoreOrigin: "restored",
+          hasSavedBodyThisMount: false,
+        }));
+        const corruptPrepared = corrupt.result.current.prepareBackup();
+        expect(corruptPrepared.ok).toBe(true);
+        if (!corruptPrepared.ok) return;
+        const corruptParsed = JSON.parse(corruptPrepared.value.json) as Record<string, unknown>;
+        expect("folders" in corruptParsed).toBe(false);
+        expect("mapMeta" in corruptParsed).toBe(false);
+      });
+    });
+
+    describe("既存マップ操作とのメタデータ連動", () => {
+      it("switchMap 成功時は遷移先 sessionNumber を返し、遷移先の lastOpenedAt を更新する", () => {
+        let currentTime = "2026-10-21T03:04:05.000Z";
+        const { result, entries } = setup({
+          initial: twoMapsInitial(),
+          now: () => new Date(currentTime),
+        });
+        const initialSessionNumber = readyView(result.current.view).storageSession.sessionNumber;
+
+        currentTime = "2026-10-21T04:00:00.000Z";
+        let switched: ReturnType<typeof result.current.switchMap> | undefined;
+        act(() => {
+          switched = result.current.switchMap("map-2");
+        });
+
+        const view = readyView(result.current.view);
+        expect(switched).toMatchObject({
+          ok: true,
+          remounted: true,
+          sessionNumber: view.storageSession.sessionNumber,
+        });
+        expect(view.storageSession.sessionNumber).toBeGreaterThan(initialSessionNumber);
+        expect(view.libraryMeta.mapMeta["map-2"]?.lastOpenedAt).toBe(currentTime);
+        expect(storedLibraryMeta(entries()).mapMeta["map-2"]?.lastOpenedAt).toBe(currentTime);
+      });
+
+      it("createMap / saveCurrentAsNewMap / moveBranchToMap 成功時に新・移動先マップの lastOpenedAt を更新する", () => {
+        const bodyWithBranch = JSON.stringify({
+          version: 3,
+          layoutMode: "manual",
+          nodes: [
+            { id: 1, parentId: null, x: 0, y: 0, width: 100, height: 60, label: "親", importance: "medium" },
+            { id: 2, parentId: 1, x: 100, y: 0, width: 100, height: 60, label: "子", importance: "medium" },
+          ],
+        });
+        const { result, entries } = setup({
+          initial: {
+            ...twoMapsInitial(),
+            [mapBodyKey("map-1")]: bodyWithBranch,
+            [mapBodyKey("map-2")]: EMPTY_V3,
+          },
+          ids: ["created-1", "saved-as-1"],
+        });
+
+        act(() => {
+          expect(result.current.createMap("新規").ok).toBe(true);
+        });
+        expect(readyView(result.current.view).libraryMeta.mapMeta["created-1"]?.lastOpenedAt).toBe(NOW);
+
+        act(() => {
+          expect(result.current.saveCurrentAsNewMap("別名保存", EMPTY_V3).ok).toBe(true);
+        });
+        expect(readyView(result.current.view).libraryMeta.mapMeta["saved-as-1"]?.lastOpenedAt).toBe(NOW);
+
+        act(() => {
+          expect(result.current.switchMap("map-1").ok).toBe(true);
+        });
+        const session = readyView(result.current.view).storageSession;
+        act(() => {
+          expect(result.current.moveBranchToMap(session, "map-2", 2).ok).toBe(true);
+        });
+        expect(readyView(result.current.view).libraryMeta.mapMeta["map-2"]?.lastOpenedAt).toBe(NOW);
+        expect(storedLibraryMeta(entries()).mapMeta["map-2"]?.lastOpenedAt).toBe(NOW);
+      });
+
+      it("corrupt 状態のときは switchMap / createMap / saveCurrentAsNewMap / moveBranchToMap / deleteMap でもメタデータを自動上書きしない（L-669）", () => {
+        const bodyWithBranch = JSON.stringify({
+          version: 3,
+          layoutMode: "manual",
+          nodes: [
+            { id: 1, parentId: null, x: 0, y: 0, width: 100, height: 60, label: "親", importance: "medium" },
+            { id: 2, parentId: 1, x: 100, y: 0, width: 100, height: 60, label: "子", importance: "medium" },
+          ],
+        });
+        const { result, entries, operations } = setup({
+          initial: {
+            ...twoMapsInitial({ [MAP_LIBRARY_META_STORAGE_KEY]: "{corrupt" }),
+            [mapBodyKey("map-1")]: bodyWithBranch,
+            [mapBodyKey("map-2")]: EMPTY_V3,
+          },
+          ids: ["created-1", "saved-1"],
+        });
+
+        const session = readyView(result.current.view).storageSession;
+        act(() => {
+          expect(result.current.moveBranchToMap(session, "map-2", 2).ok).toBe(true);
+          expect(result.current.switchMap("map-1").ok).toBe(true);
+          expect(result.current.createMap("新規").ok).toBe(true);
+          expect(result.current.saveCurrentAsNewMap("別名", EMPTY_V3).ok).toBe(true);
+          expect(result.current.deleteMap("saved-1").ok).toBe(true);
+        });
+
+        expect(entries()[MAP_LIBRARY_META_STORAGE_KEY]).toBe("{corrupt");
+        expect(operations.some((op) => op.key === MAP_LIBRARY_META_STORAGE_KEY)).toBe(false);
+      });
+
+      it("switchMap / createMap / saveCurrentAsNewMap / moveBranchToMap / deleteMap で主処理後のメタ書込が失敗しても主処理を巻き戻さず警告通知のみ返す（L-001, L-575）", () => {
+        const bodyWithBranch = JSON.stringify({
+          version: 3,
+          layoutMode: "manual",
+          nodes: [
+            { id: 1, parentId: null, x: 0, y: 0, width: 100, height: 60, label: "親", importance: "medium" },
+            { id: 2, parentId: 1, x: 100, y: 0, width: 100, height: 60, label: "子", importance: "medium" },
+          ],
+        });
+        let failMeta = false;
+        const { result } = setup({
+          initial: {
+            ...twoMapsInitial(),
+            [mapBodyKey("map-1")]: bodyWithBranch,
+            [mapBodyKey("map-2")]: EMPTY_V3,
+          },
+          ids: ["created-1", "saved-1"],
+          failSetItem: (key) => failMeta && key === MAP_LIBRARY_META_STORAGE_KEY,
+        });
+        failMeta = true;
+
+        const initialSession = readyView(result.current.view).storageSession;
+        let moved: ReturnType<typeof result.current.moveBranchToMap> | undefined;
+        act(() => {
+          moved = result.current.moveBranchToMap(initialSession, "map-2", 2);
+        });
+        expect(moved?.ok).toBe(true);
+        if (moved?.ok) expect(moved.notice?.kind).toBe("warning");
+        expect(readyView(result.current.view).currentMap.id).toBe("map-2");
+        expect(readyView(result.current.view).libraryMeta.mapMeta["map-2"]).toBeUndefined();
+
+        let switched: ReturnType<typeof result.current.switchMap> | undefined;
+        act(() => {
+          switched = result.current.switchMap("map-1");
+        });
+        expect(switched?.ok).toBe(true);
+        if (switched?.ok) {
+          expect(switched.notice?.kind).toBe("warning");
+          expect(switched.sessionNumber).toBe(readyView(result.current.view).storageSession.sessionNumber);
+        }
+        expect(readyView(result.current.view).currentMap.id).toBe("map-1");
+
+        let created: ReturnType<typeof result.current.createMap> | undefined;
+        act(() => {
+          created = result.current.createMap("新規");
+        });
+        expect(created?.ok).toBe(true);
+        if (created?.ok) expect(created.notice?.kind).toBe("warning");
+        expect(readyView(result.current.view).currentMap.id).toBe("created-1");
+        expect(readyView(result.current.view).libraryMeta.mapMeta["created-1"]).toBeUndefined();
+
+        let savedAs: ReturnType<typeof result.current.saveCurrentAsNewMap> | undefined;
+        act(() => {
+          savedAs = result.current.saveCurrentAsNewMap("別名保存", EMPTY_V3);
+        });
+        expect(savedAs?.ok).toBe(true);
+        if (savedAs?.ok) expect(savedAs.notice?.kind).toBe("warning");
+        expect(readyView(result.current.view).currentMap.id).toBe("saved-1");
+        expect(readyView(result.current.view).libraryMeta.mapMeta["saved-1"]).toBeUndefined();
+
+        let deleted: ReturnType<typeof result.current.deleteMap> | undefined;
+        act(() => {
+          deleted = result.current.deleteMap("saved-1");
+        });
+        expect(deleted?.ok).toBe(true);
+        if (deleted?.ok) expect(deleted.notice?.kind).toBe("warning");
+        expect(readyView(result.current.view).currentMap.id).not.toBe("saved-1");
+      });
+
+      it("現在マップ削除時は prune と次マップの recordMapOpened を合成して 1 回だけ書き込む（L-453, L-537）", () => {
+        const { result, operations, entries } = setup({
+          initial: threeMapsInitial(),
+          ids: ["folder-1"],
+        });
+        act(() => {
+          expect(result.current.createFolder("仕事").ok).toBe(true);
+          expect(result.current.assignFolder("map-a", "folder-1").ok).toBe(true);
+          expect(result.current.toggleFavorite("map-a").ok).toBe(true);
+        });
+        const before = operations.length;
+
+        act(() => {
+          expect(result.current.deleteMap("map-a").ok).toBe(true);
+        });
+
+        const metaWrites = operations
+          .slice(before)
+          .filter((op) => op.type === "setItem" && op.key === MAP_LIBRARY_META_STORAGE_KEY);
+        expect(metaWrites).toHaveLength(1);
+        const view = readyView(result.current.view);
+        expect(view.currentMap.id).toBe("map-b");
+        expect(view.libraryMeta.mapMeta["map-a"]).toBeUndefined();
+        expect(view.libraryMeta.mapMeta["map-b"]?.lastOpenedAt).toBe(NOW);
+        expect(storedLibraryMeta(entries())).toEqual(view.libraryMeta);
+      });
+
+      it("最後の 1 件の完全削除でも prune と新規マップの recordMapOpened を 1 回だけ書き込む（L-453, L-537）", () => {
+        const { result, operations, entries } = setup({
+          initial: singleMapInitial(),
+          ids: ["fresh-1"],
+        });
+        act(() => {
+          expect(result.current.toggleFavorite("only").ok).toBe(true);
+        });
+        const before = operations.length;
+
+        act(() => {
+          expect(result.current.permanentlyDeleteMap("only").ok).toBe(true);
+        });
+
+        const metaWrites = operations
+          .slice(before)
+          .filter((op) => op.type === "setItem" && op.key === MAP_LIBRARY_META_STORAGE_KEY);
+        expect(metaWrites).toHaveLength(1);
+        const view = readyView(result.current.view);
+        expect(view.currentMap.id).toBe("fresh-1");
+        expect(view.libraryMeta.mapMeta["only"]).toBeUndefined();
+        expect(view.libraryMeta.mapMeta["fresh-1"]?.lastOpenedAt).toBe(NOW);
+        expect(storedLibraryMeta(entries())).toEqual(view.libraryMeta);
+      });
+
+      it("非現在マップ削除時、対象にメタデータがあれば 1 回だけ prune を書き込む", () => {
+        const { result, operations, entries } = setup({
+          initial: threeMapsInitial(),
+        });
+        act(() => {
+          expect(result.current.toggleFavorite("map-b").ok).toBe(true);
+        });
+        const before = operations.length;
+
+        act(() => {
+          expect(result.current.deleteMap("map-b").ok).toBe(true);
+        });
+
+        const metaWrites = operations
+          .slice(before)
+          .filter((op) => op.type === "setItem" && op.key === MAP_LIBRARY_META_STORAGE_KEY);
+        expect(metaWrites).toHaveLength(1);
+        expect(readyView(result.current.view).libraryMeta.mapMeta["map-b"]).toBeUndefined();
+        expect(storedLibraryMeta(entries()).mapMeta["map-b"]).toBeUndefined();
+      });
+    });
+
+    describe("一括復元後のメタデータマージ", () => {
+      it("メタデータ付きバックアップ復元後、ID 付け替えとフォルダー合流を 1 回だけ保存する", async () => {
+        const backupWithMeta = JSON.stringify({
+          format: "draw-my-map-library-backup",
+          version: 1,
+          exportedAt: NOW,
+          currentMapId: "source",
+          maps: [
+            {
+              id: "source",
+              name: "移行元",
+              createdAt: SEED_TIMESTAMP,
+              updatedAt: SEED_TIMESTAMP,
+              document: JSON.parse(EMPTY_V3),
+            },
+          ],
+          folders: [
+            { id: "bf-shared", name: "仕事", createdAt: SEED_TIMESTAMP, updatedAt: SEED_TIMESTAMP },
+            { id: "bf-new", name: "新規フォルダー", createdAt: SEED_TIMESTAMP, updatedAt: SEED_TIMESTAMP },
+          ],
+          mapMeta: {
+            source: { favorite: true, lastOpenedAt: SEED_TIMESTAMP, folderId: "bf-shared" },
+          },
+        });
+        const { result, operations, entries } = setup({
+          initial: singleMapInitial({
+            [MAP_LIBRARY_META_STORAGE_KEY]: encodeMapLibraryMeta({
+              version: 1,
+              folders: [{ id: "existing-f", name: "仕事", createdAt: SEED_TIMESTAMP, updatedAt: SEED_TIMESTAMP }],
+              mapMeta: {},
+            }),
+          }),
+          ids: ["restored-map-1"],
+        });
+        readyView(result.current.view).storageSession.registerBackupSnapshot(() => ({
+          json: EMPTY_V3,
+          hydrated: true,
+          restoreOrigin: "restored",
+          hasSavedBodyThisMount: false,
+        }));
+        const preview = await result.current.previewRestore(backupFile(async () => backupWithMeta));
+        expect(preview.ok).toBe(true);
+        if (!preview.ok) return;
+        const before = operations.length;
+
+        let outcome: ReturnType<typeof result.current.confirmRestore> | undefined;
+        act(() => {
+          outcome = result.current.confirmRestore(preview.value);
+        });
+
+        expect(outcome).toMatchObject({ ok: true, remounted: false });
+        expect(outcome?.notice?.kind).toBe("status");
+        const metaWrites = operations
+          .slice(before)
+          .filter((op) => op.type === "setItem" && op.key === MAP_LIBRARY_META_STORAGE_KEY);
+        expect(metaWrites).toHaveLength(1);
+        const view = readyView(result.current.view);
+        expect(view.libraryMeta.folders.map((f) => f.name)).toEqual(["仕事", "新規フォルダー"]);
+        expect(view.libraryMeta.mapMeta["restored-map-1"]).toEqual({
+          favorite: true,
+          lastOpenedAt: SEED_TIMESTAMP,
+          folderId: "existing-f",
+        });
+        expect(storedLibraryMeta(entries())).toEqual(view.libraryMeta);
+      });
+
+      it("復元時のフォルダー上限超過（droppedFolderCount > 0）はマップ復元を巻き戻さず警告通知を出す（L-575）", async () => {
+        const existingFolders = Array.from({ length: MAX_MAP_FOLDERS }, (_, i) => ({
+          id: `ef-${i}`,
+          name: `既存${i}`,
+          createdAt: SEED_TIMESTAMP,
+          updatedAt: SEED_TIMESTAMP,
+        }));
+        const backupOverflow = JSON.stringify({
+          format: "draw-my-map-library-backup",
+          version: 1,
+          exportedAt: NOW,
+          currentMapId: "source",
+          maps: [
+            {
+              id: "source",
+              name: "移行元",
+              createdAt: SEED_TIMESTAMP,
+              updatedAt: SEED_TIMESTAMP,
+              document: JSON.parse(EMPTY_V3),
+            },
+          ],
+          folders: [
+            { id: "bf-overflow", name: "あふれるフォルダー", createdAt: SEED_TIMESTAMP, updatedAt: SEED_TIMESTAMP },
+          ],
+          mapMeta: {
+            source: { favorite: true, folderId: "bf-overflow" },
+          },
+        });
+        const { result, entries } = setup({
+          initial: singleMapInitial({
+            [MAP_LIBRARY_META_STORAGE_KEY]: encodeMapLibraryMeta({
+              version: 1,
+              folders: existingFolders,
+              mapMeta: {},
+            }),
+          }),
+          ids: ["restored-map-1"],
+        });
+        readyView(result.current.view).storageSession.registerBackupSnapshot(() => ({
+          json: EMPTY_V3,
+          hydrated: true,
+          restoreOrigin: "restored",
+          hasSavedBodyThisMount: false,
+        }));
+        const preview = await result.current.previewRestore(backupFile(async () => backupOverflow));
+        expect(preview.ok).toBe(true);
+        if (!preview.ok) return;
+
+        let outcome: ReturnType<typeof result.current.confirmRestore> | undefined;
+        act(() => {
+          outcome = result.current.confirmRestore(preview.value);
+        });
+
+        expect(outcome?.ok).toBe(true);
+        expect(outcome?.notice?.kind).toBe("warning");
+        expect(storedIndex(entries()).maps.map((m) => m.id)).toContain("restored-map-1");
+        const view = readyView(result.current.view);
+        expect(view.libraryMeta.folders).toHaveLength(MAX_MAP_FOLDERS);
+        expect(view.libraryMeta.mapMeta["restored-map-1"]).toEqual({ favorite: true });
+      });
+
+      it("復元後のメタ書込失敗時はマップ復元を巻き戻さず警告通知を出しメモリ上のメタは維持する（L-001, L-575）", async () => {
+        const backupWithMeta = JSON.stringify({
+          format: "draw-my-map-library-backup",
+          version: 1,
+          exportedAt: NOW,
+          currentMapId: "source",
+          maps: [
+            {
+              id: "source",
+              name: "移行元",
+              createdAt: SEED_TIMESTAMP,
+              updatedAt: SEED_TIMESTAMP,
+              document: JSON.parse(EMPTY_V3),
+            },
+          ],
+          folders: [
+            { id: "bf-1", name: "仕事", createdAt: SEED_TIMESTAMP, updatedAt: SEED_TIMESTAMP },
+          ],
+          mapMeta: {
+            source: { favorite: true, folderId: "bf-1" },
+          },
+        });
+        let failMetaWrite = false;
+        const { result, entries } = setup({
+          initial: singleMapInitial(),
+          ids: ["restored-map-1"],
+          failSetItem: (key) => failMetaWrite && key === MAP_LIBRARY_META_STORAGE_KEY,
+        });
+        readyView(result.current.view).storageSession.registerBackupSnapshot(() => ({
+          json: EMPTY_V3,
+          hydrated: true,
+          restoreOrigin: "restored",
+          hasSavedBodyThisMount: false,
+        }));
+        const preview = await result.current.previewRestore(backupFile(async () => backupWithMeta));
+        expect(preview.ok).toBe(true);
+        if (!preview.ok) return;
+        failMetaWrite = true;
+
+        let outcome: ReturnType<typeof result.current.confirmRestore> | undefined;
+        act(() => {
+          outcome = result.current.confirmRestore(preview.value);
+        });
+
+        expect(outcome?.ok).toBe(true);
+        expect(outcome?.notice?.kind).toBe("warning");
+        expect(storedIndex(entries()).maps.map((m) => m.id)).toContain("restored-map-1");
+        expect(readyView(result.current.view).libraryMeta.folders).toEqual([]);
+        expect(readyView(result.current.view).libraryMeta.mapMeta["restored-map-1"]).toBeUndefined();
+      });
+
+      it("libraryMetaStatus が corrupt のときはメタ付きバックアップ復元でも破損メタを上書きしない（L-669）", async () => {
+        const backupWithMeta = JSON.stringify({
+          format: "draw-my-map-library-backup",
+          version: 1,
+          exportedAt: NOW,
+          currentMapId: "source",
+          maps: [
+            {
+              id: "source",
+              name: "移行元",
+              createdAt: SEED_TIMESTAMP,
+              updatedAt: SEED_TIMESTAMP,
+              document: JSON.parse(EMPTY_V3),
+            },
+          ],
+          folders: [
+            { id: "bf-1", name: "仕事", createdAt: SEED_TIMESTAMP, updatedAt: SEED_TIMESTAMP },
+          ],
+          mapMeta: {
+            source: { favorite: true, folderId: "bf-1" },
+          },
+        });
+        const { result, entries } = setup({
+          initial: singleMapInitial({ [MAP_LIBRARY_META_STORAGE_KEY]: "{corrupt" }),
+          ids: ["restored-map-1"],
+        });
+        readyView(result.current.view).storageSession.registerBackupSnapshot(() => ({
+          json: EMPTY_V3,
+          hydrated: true,
+          restoreOrigin: "restored",
+          hasSavedBodyThisMount: false,
+        }));
+        const preview = await result.current.previewRestore(backupFile(async () => backupWithMeta));
+        expect(preview.ok).toBe(true);
+        if (!preview.ok) return;
+
+        act(() => {
+          expect(result.current.confirmRestore(preview.value).ok).toBe(true);
+        });
+
+        expect(storedIndex(entries()).maps.map((m) => m.id)).toContain("restored-map-1");
+        expect(entries()[MAP_LIBRARY_META_STORAGE_KEY]).toBe("{corrupt");
+        expect(readyView(result.current.view).libraryMetaStatus).toBe("corrupt");
       });
     });
   });

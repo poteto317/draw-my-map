@@ -1,8 +1,13 @@
 import { isValidMapId, type MapIndexEntry } from "@/domain/mapLibrary/mapIndex";
+import {
+  validateBackupLibraryMeta,
+  type MapFolder,
+  type MapUserMeta,
+} from "@/domain/mapLibrary/mapLibraryMeta";
 import { normalizeStoredMapName } from "@/domain/mapLibrary/mapName";
 import { normalizeMapTimestamp } from "@/domain/mapLibrary/mapTimestamp";
 import { parseMapDocumentJsonWithVersion } from "@/domain/persistence/mapDocumentDecoder";
-import { isRecord } from "@/domain/shared/unknownRecord";
+import { hasOnlyKeys, hasOwn, isPlainRecord, isRecord } from "@/domain/shared/unknownRecord";
 import type { MapDocumentResult, MapDocumentV3 } from "@/types/mapDocument";
 
 export const MAX_LIBRARY_BACKUP_BYTES = 32 * 1024 * 1024;
@@ -10,8 +15,22 @@ export const MAX_LIBRARY_BACKUP_MAPS = 1000;
 
 const FORMAT = "draw-my-map-library-backup";
 const TOO_LARGE = "バックアップは32 MiB以下にしてください。大きいマップは個別のJSON書き出しで保存できます。";
+const ALLOWED_TOP_LEVEL_KEYS = new Set([
+  "format",
+  "version",
+  "exportedAt",
+  "currentMapId",
+  "maps",
+  "folders",
+  "mapMeta",
+]);
 
 export type LibraryBackupMap = MapIndexEntry & { document: MapDocumentV3 };
+
+export type LibraryBackupMetaInput = {
+  readonly folders?: readonly MapFolder[];
+  readonly mapMeta?: Readonly<Record<string, MapUserMeta>>;
+};
 
 export type LibraryBackupV1 = {
   format: typeof FORMAT;
@@ -19,6 +38,8 @@ export type LibraryBackupV1 = {
   exportedAt: string;
   currentMapId: string;
   maps: LibraryBackupMap[];
+  folders?: readonly MapFolder[];
+  mapMeta?: Readonly<Record<string, MapUserMeta>>;
 };
 
 function failure(error: string): MapDocumentResult<never> {
@@ -63,7 +84,8 @@ function decodeMap(value: unknown): MapDocumentResult<LibraryBackupMap> {
 }
 
 export function decodeLibraryBackup(value: unknown): MapDocumentResult<LibraryBackupV1> {
-  if (!isRecord(value) || value.format !== FORMAT || value.version !== 1 ||
+  if (!isPlainRecord(value) || !hasOnlyKeys(value, ALLOWED_TOP_LEVEL_KEYS) ||
+    value.format !== FORMAT || value.version !== 1 ||
     !validTimestamp(value.exportedAt) || !isValidMapId(value.currentMapId) ||
     !Array.isArray(value.maps)) {
     return failure("バックアップファイルの形式が不正か、未対応の版です。");
@@ -87,6 +109,13 @@ export function decodeLibraryBackup(value: unknown): MapDocumentResult<LibraryBa
     return failure("現在のマップIDがバックアップ内にありません。");
   }
 
+  const rawFolders = hasOwn(value, "folders") ? value.folders : undefined;
+  const rawMapMeta = hasOwn(value, "mapMeta") ? value.mapMeta : undefined;
+  const validatedMeta = validateBackupLibraryMeta(rawFolders, rawMapMeta, seenIds);
+  if (!validatedMeta.ok) {
+    return failure(validatedMeta.error);
+  }
+
   return {
     ok: true,
     value: {
@@ -95,6 +124,8 @@ export function decodeLibraryBackup(value: unknown): MapDocumentResult<LibraryBa
       exportedAt: value.exportedAt,
       currentMapId: value.currentMapId,
       maps,
+      ...(validatedMeta.folders !== undefined ? { folders: validatedMeta.folders } : {}),
+      ...(validatedMeta.mapMeta !== undefined ? { mapMeta: validatedMeta.mapMeta } : {}),
     },
   };
 }
@@ -114,8 +145,22 @@ export function createLibraryBackup(
   maps: readonly LibraryBackupMap[],
   currentMapId: string,
   exportedAt: string,
+  meta?: LibraryBackupMetaInput,
 ): MapDocumentResult<{ backup: LibraryBackupV1; json: string; byteSize: number }> {
-  const decoded = decodeLibraryBackup({ format: FORMAT, version: 1, exportedAt, currentMapId, maps });
+  const candidate: Record<string, unknown> = {
+    format: FORMAT,
+    version: 1,
+    exportedAt,
+    currentMapId,
+    maps,
+  };
+  if (meta?.folders !== undefined) {
+    candidate.folders = meta.folders;
+  }
+  if (meta?.mapMeta !== undefined) {
+    candidate.mapMeta = meta.mapMeta;
+  }
+  const decoded = decodeLibraryBackup(candidate);
   if (!decoded.ok) return decoded;
   const json = JSON.stringify(decoded.value);
   const byteSize = new Blob([json]).size;

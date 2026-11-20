@@ -39,6 +39,7 @@ export interface UseMapPersistenceResult {
   importJsonFile: (file: File) => Promise<void>;
   notice: OperationNotice | null;
   saveStatus: MapSaveStatus;
+  hydrated: boolean;
   hasPendingEdits: boolean;
   rebaseSnapshot: (snapshotJson: string) => void;
   conflictState: ConflictState;
@@ -168,6 +169,7 @@ export function useMapPersistence({
     importJsonFile,
     notice,
     saveStatus,
+    hydrated,
     hasPendingEdits,
     rebaseSnapshot,
     conflictState: effectiveConflictState,

@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { MapLibraryDialog } from "@/components/layout/MapLibraryDialog";
 import { useMapLibraryDialogState } from "@/hooks/useMapLibraryDialogState";
 import type { MapIndexEntry } from "@/domain/mapLibrary/mapIndex";
+import { createEmptyMapLibraryMeta } from "@/domain/mapLibrary/mapLibraryMeta";
 import type { LibraryBackupPreview } from "@/services/persistence/libraryBackupExport";
 import type { LibraryRestorePreview } from "@/hooks/mapLibraryState";
 
@@ -13,9 +14,14 @@ afterEach(() => jest.restoreAllMocks());
 function props(screenState: Props["screen"]): Props {
   return {
     screen: screenState, maps, currentMapId: "a", trashEntries: [], trashStatus: "ok", storageMode: "persistent",
+    libraryMeta: createEmptyMapLibraryMeta(), libraryMetaStatus: "ready", listTab: "all", folderFilter: { kind: "all" },
+    onChangeListTab: jest.fn(), onChangeFolderFilter: jest.fn(), onOpenFolders: jest.fn(),
+    onOpenFolderRename: jest.fn(), onOpenFolderDelete: jest.fn(), onToggleFavorite: jest.fn(),
+    onAssignFolder: jest.fn(), onCreateFolder: jest.fn(() => true), onSubmitRenameFolder: jest.fn(),
+    onConfirmDeleteFolder: jest.fn(), onResetLibraryMeta: jest.fn(),
     notices: { status: "", alert: "", sequence: 0 }, focusTarget: { kind: "screenDefault" },
     onFocusTargetApplied: jest.fn(), onEscape: jest.fn(), onClose: jest.fn(), onOpenCreate: jest.fn(), onOpenRename: jest.fn(),
-    onOpenDelete: jest.fn(), onOpenTrash: jest.fn(), onSwitch: jest.fn(), onCancel: jest.fn(), onSubmitCreate: jest.fn(), onSubmitRename: jest.fn(),
+    onOpenDelete: jest.fn(), onOpenTrash: jest.fn(), onOpenBrokenLinks: jest.fn(), onSwitch: jest.fn(), onCancel: jest.fn(), onSubmitCreate: jest.fn(), onSubmitRename: jest.fn(),
     onConfirmDelete: jest.fn(), onConfirmPermanentDeleteActive: jest.fn(), onRestoreTrash: jest.fn(),
     onOpenTrashPermanentDelete: jest.fn(), onConfirmTrashPermanentDelete: jest.fn(),
     onOpenEmptyTrash: jest.fn(), onConfirmEmptyTrash: jest.fn(),
@@ -117,18 +123,28 @@ function makeLibrary() {
     downloadBackup: jest.fn(() => ({ ok: true as const, remounted: false, notice: { kind: "status" as const, message: "ダウンロードを開始しました。" }, saveRetryNotice: null })),
     previewRestore: jest.fn(async () => ({ ok: true as const, value: restore })),
     confirmRestore: jest.fn(() => ({ ok: true as const, remounted: false, notice: { kind: "status" as const, message: "追加しました。" }, saveRetryNotice: null })),
+    toggleFavorite: jest.fn(), assignFolder: jest.fn(), createFolder: jest.fn(), renameFolder: jest.fn(), deleteFolder: jest.fn(), resetLibraryMeta: jest.fn(),
   } satisfies Operations;
 }
 
+const EMPTY_META = createEmptyMapLibraryMeta();
+
 function ConnectedDialog({ library }: { library: Operations }) {
-  const state = useMapLibraryDialogState({ library, maps, trashEntries: [], startupNotice: null });
+  const state = useMapLibraryDialogState({ library, maps, trashEntries: [], libraryMeta: EMPTY_META, startupNotice: null });
   return state.screen.kind === "closed"
     ? <button onClick={state.openList}>一覧を開く</button>
     : <MapLibraryDialog
-      screen={state.screen} maps={maps} currentMapId="a" trashEntries={[]} trashStatus="ok" notices={state.notices}
+      screen={state.screen} maps={maps} currentMapId="a" trashEntries={[]} trashStatus="ok"
+      libraryMeta={EMPTY_META} libraryMetaStatus="ready" listTab={state.listTab} folderFilter={state.folderFilter}
+      onChangeListTab={state.setListTab} onChangeFolderFilter={state.setFolderFilter}
+      onOpenFolders={state.openFolders} onOpenFolderRename={state.openFolderRename} onOpenFolderDelete={state.openFolderDelete}
+      onToggleFavorite={state.toggleFavorite} onAssignFolder={state.assignFolder} onCreateFolder={state.submitCreateFolder}
+      onSubmitRenameFolder={state.submitRenameFolder} onConfirmDeleteFolder={state.confirmDeleteFolder}
+      onResetLibraryMeta={state.resetLibraryMeta}
+      notices={state.notices}
       focusTarget={state.focusTarget} onFocusTargetApplied={state.consumeFocusTarget}
       onEscape={state.back} onClose={state.close} onOpenCreate={state.openCreateFromList}
-      onOpenRename={state.openRename} onOpenDelete={state.openDelete} onOpenTrash={state.openTrash} onSwitch={state.switchTo}
+      onOpenRename={state.openRename} onOpenDelete={state.openDelete} onOpenTrash={state.openTrash} onOpenBrokenLinks={() => {}} onSwitch={state.switchTo}
       onCancel={state.back} onSubmitCreate={state.submitCreate} onSubmitRename={state.submitRename}
       onConfirmDelete={state.confirmDelete} onConfirmPermanentDeleteActive={state.confirmPermanentDeleteActive}
       onRestoreTrash={state.restoreTrash} onOpenTrashPermanentDelete={state.openTrashPermanentDelete}

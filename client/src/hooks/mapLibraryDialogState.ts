@@ -1,4 +1,11 @@
 import type { MapIndexEntry } from "@/domain/mapLibrary/mapIndex";
+import {
+  getMapUserMeta,
+  type MapFolder,
+  type MapLibraryMetaV1,
+  type MapListFolderFilter,
+  type MapListTab,
+} from "@/domain/mapLibrary/mapLibraryMeta";
 import type { MapTrashEntry } from "@/domain/mapLibrary/mapTrash";
 import type { MapLibraryOperationResult } from "@/hooks/mapLibraryState";
 import type {
@@ -57,6 +64,47 @@ export function selectFocusAfterTrashRemoval(
     : { kind: "trashRow", trashId: neighbor.id, action: "restore" };
 }
 
+// お気に入りの切り替えで一覧の行が消える（お気に入りタブで解除する）ときの戻し先。
+// visibleMaps は操作前の絞り込み済み表示配列。行が残るなら null（L-460）
+export function selectFocusAfterFavoriteToggle(
+  visibleMaps: readonly MapIndexEntry[],
+  meta: MapLibraryMetaV1,
+  listTab: MapListTab,
+  mapId: string,
+): MapLibraryDialogFocusTarget | null {
+  const willRowDisappear =
+    listTab === "favorites"
+    && getMapUserMeta(meta, mapId)?.favorite === true
+    && visibleMaps.some((map) => map.id === mapId);
+  return willRowDisappear ? selectFocusAfterRemoval(visibleMaps, mapId) : null;
+}
+
+// フォルダーの割り当てで、絞り込み中の一覧から行が消えるときの戻し先。行が残るなら null（L-460）
+export function selectFocusAfterFolderAssign(
+  visibleMaps: readonly MapIndexEntry[],
+  folderFilter: MapListFolderFilter,
+  mapId: string,
+  folderId: string | null,
+): MapLibraryDialogFocusTarget | null {
+  const leavesFilter =
+    (folderFilter.kind === "folder" && folderId !== folderFilter.folderId)
+    || (folderFilter.kind === "unclassified" && folderId !== null);
+  const willRowDisappear = leavesFilter && visibleMaps.some((map) => map.id === mapId);
+  return willRowDisappear ? selectFocusAfterRemoval(visibleMaps, mapId) : null;
+}
+
+// フォルダー削除後のフォーカス先。次行・前行の「名前を変更」、どちらも無ければ新規作成入力欄
+export function selectFocusAfterFolderRemoval(
+  folders: readonly MapFolder[],
+  removedFolderId: string,
+): MapLibraryDialogFocusTarget {
+  const index = folders.findIndex((folder) => folder.id === removedFolderId);
+  const neighbor = index === -1 ? undefined : (folders[index + 1] ?? folders[index - 1]);
+  return neighbor === undefined
+    ? { kind: "folderCreateInput" }
+    : { kind: "folderRow", folderId: neighbor.id, action: "rename" };
+}
+
 // 通知を出すたび（空にするときも）sequence を進め、同じ文言の失敗が続いても読み上げ直させる（L-166）
 export function nextNotices(
   state: DialogState,
@@ -89,13 +137,57 @@ export function closeDialog(state: DialogState, request: HeaderFocusRequest): Di
   };
 }
 
+// 他ダイアログへの遷移時など、ヘッダーへのフォーカス要求を立てずにダイアログを閉じる
+export function closeDialogSilently(state: DialogState): DialogState {
+  return {
+    ...state,
+    screen: { kind: "closed" },
+    notices: nextNotices(state, "", ""),
+    focusTarget: null,
+    headerFocusRequest: null,
+  };
+}
+
 export function nextShellNotice(state: DialogState, notice: OperationNotice): ShellNotice {
   return { sequence: (state.shellNotice?.sequence ?? 0) + 1, notice };
+}
+
+export function publishShellNoticeState(
+  state: DialogState,
+  notice: OperationNotice,
+): DialogState {
+  return { ...state, shellNotice: nextShellNotice(state, notice) };
 }
 
 // 画面とフォーカス先は変えず、文言だけを alert に出す
 export function showFailure(state: DialogState, notice: OperationNotice): DialogState {
   return { ...state, notices: nextNotices(state, "", notice.message) };
+}
+
+// 画面とフォーカス先を維持したまま、結果の通知だけを更新する（お気に入り・フォルダー割当・初期化など）
+export function stayWithResult(
+  state: DialogState,
+  result: MapLibraryOperationResult,
+): DialogState {
+  if (!result.ok) {
+    return showFailure(state, result.notice);
+  }
+  const { notice, saveRetryNotice } = result;
+  if (notice === null && saveRetryNotice === null) {
+    return state;
+  }
+  const alerts = [
+    notice !== null && notice.kind !== "status" ? notice.message : null,
+    saveRetryNotice?.message ?? null,
+  ].filter((message): message is string => message !== null);
+  return {
+    ...state,
+    notices: nextNotices(
+      state,
+      notice?.kind === "status" ? notice.message : "",
+      alerts.join(" "),
+    ),
+  };
 }
 
 // 再マウントを伴う成功はシェルの通知に出し、ダイアログ内には重ねない（L-249）
@@ -164,6 +256,22 @@ export function returnToTrashAfterAction(
   return returnToScreen(state, { kind: "trash" }, result, focusTarget);
 }
 
+export function returnToFoldersAfterAction(
+  state: DialogState,
+  result: MapLibraryOperationResult,
+  focusTarget: MapLibraryDialogFocusTarget,
+): DialogState {
+  if (!result.ok) {
+    return {
+      ...state,
+      screen: { kind: "folders" },
+      notices: nextNotices(state, "", result.notice.message),
+      focusTarget,
+    };
+  }
+  return returnToScreen(state, { kind: "folders" }, result, focusTarget);
+}
+
 /** アクティブマップ削除結果に応じた次の遷移先画面を返す（画面変更なしの場合は null）。 */
 export function nextScreenAfterActiveDeletion(
   result: MapLibraryOperationResult,
@@ -225,6 +333,13 @@ function backToTrash(
   return { ...state, screen: { kind: "trash" }, notices: nextNotices(state, "", ""), focusTarget };
 }
 
+function backToFolders(
+  state: DialogState,
+  focusTarget: MapLibraryDialogFocusTarget,
+): DialogState {
+  return { ...state, screen: { kind: "folders" }, notices: nextNotices(state, "", ""), focusTarget };
+}
+
 export function nextScreenOnBack(screen: MapLibraryDialogScreen): MapLibraryDialogScreen {
   switch (screen.kind) {
     case "closed":
@@ -235,9 +350,13 @@ export function nextScreenOnBack(screen: MapLibraryDialogScreen): MapLibraryDial
     case "trashPermanentDelete":
     case "trashEmptyConfirm":
       return { kind: "trash" };
+    case "folderRename":
+    case "folderDeleteConfirm":
+      return { kind: "folders" };
     case "rename":
     case "delete":
     case "trash":
+    case "folders":
     case "backupConfirm":
     case "restoreReading":
     case "restoreConfirm":
@@ -269,6 +388,20 @@ export function backFrom(state: DialogState): DialogState {
       });
     case "trashEmptyConfirm":
       return backToTrash(state, { kind: "emptyTrashButton" });
+    case "folders":
+      return backToList(state, { kind: "folderButton" });
+    case "folderRename":
+      return backToFolders(state, {
+        kind: "folderRow",
+        folderId: screen.folderId,
+        action: "rename",
+      });
+    case "folderDeleteConfirm":
+      return backToFolders(state, {
+        kind: "folderRow",
+        folderId: screen.folderId,
+        action: "delete",
+      });
     case "backupConfirm":
       return backToList(state, { kind: "backupButton" });
     case "restoreReading":

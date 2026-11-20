@@ -1,5 +1,15 @@
-import { createLibraryBackup, MAX_LIBRARY_BACKUP_MAPS, type LibraryBackupMap } from "@/domain/mapLibrary/libraryBackupCodec";
+import {
+  createLibraryBackup,
+  MAX_LIBRARY_BACKUP_MAPS,
+  type LibraryBackupMap,
+  type LibraryBackupMetaInput,
+} from "@/domain/mapLibrary/libraryBackupCodec";
 import { decodeMapIndex, encodeMapIndex, type MapIndexV1 } from "@/domain/mapLibrary/mapIndex";
+import type {
+  MapLibraryMetaStatus,
+  MapLibraryMetaV1,
+  MapUserMeta,
+} from "@/domain/mapLibrary/mapLibraryMeta";
 import { parseMapDocumentJson } from "@/domain/persistence/mapDocumentDecoder";
 import { isEligibleMapBackupSnapshot } from "@/domain/persistence/mapBackupSnapshot";
 import type { MapDocumentResult, MapDocumentV3 } from "@/types/mapDocument";
@@ -51,11 +61,48 @@ function countOrphanBodies(storage: MapLibraryStorage, index: MapIndexV1): numbe
   return count;
 }
 
+export type PrepareLibraryBackupOptions = {
+  readonly libraryMeta: MapLibraryMetaV1;
+  readonly libraryMetaStatus: MapLibraryMetaStatus;
+};
+
+function buildBackupMeta(
+  index: MapIndexV1,
+  options: PrepareLibraryBackupOptions,
+): LibraryBackupMetaInput | undefined {
+  if (options.libraryMetaStatus !== "ready") {
+    return undefined;
+  }
+  const { libraryMeta } = options;
+  const activeMapIds = new Set(index.maps.map((entry) => entry.id));
+  const filteredMapMeta: Record<string, MapUserMeta> = {};
+  let hasActiveMapMeta = false;
+  for (const mapId of Object.keys(libraryMeta.mapMeta)) {
+    if (!activeMapIds.has(mapId)) continue;
+    Object.defineProperty(filteredMapMeta, mapId, {
+      value: libraryMeta.mapMeta[mapId],
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+    hasActiveMapMeta = true;
+  }
+  const hasFolders = libraryMeta.folders.length > 0;
+  if (!hasFolders && !hasActiveMapMeta) {
+    return undefined;
+  }
+  return {
+    ...(hasFolders ? { folders: libraryMeta.folders } : {}),
+    ...(hasActiveMapMeta ? { mapMeta: filteredMapMeta } : {}),
+  };
+}
+
 export function prepareLibraryBackup(
   storage: MapLibraryStorage,
   index: MapIndexV1,
   session: MapStorageSession,
   now: Date,
+  options: PrepareLibraryBackupOptions,
 ): MapDocumentResult<LibraryBackupPreview> {
   try {
     const indexRaw = readStableIndex(storage, index);
@@ -92,7 +139,8 @@ export function prepareLibraryBackup(
     }
 
     const orphanBodyCount = countOrphanBodies(storage, index);
-    const created = createLibraryBackup(maps, index.currentMapId, now.toISOString());
+    const backupMeta = buildBackupMeta(index, options);
+    const created = createLibraryBackup(maps, index.currentMapId, now.toISOString(), backupMeta);
     if (!created.ok) return failure(created.error);
     if (readStableIndex(storage, index) !== indexRaw || hasJournal(storage)) return failure(RETRY);
     const latest = session.readBackupSnapshot();
