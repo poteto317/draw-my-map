@@ -103,6 +103,21 @@ function startupMetaWriteWarningNotice(
   };
 }
 
+type LatestLibraryMeta =
+  | { readonly ok: true; readonly meta: MapLibraryMetaV1 }
+  | { readonly ok: false; readonly status: Exclude<MapLibraryMetaStatus, "ready"> };
+
+// 書き込みの直前に、ストレージ上の最新のメタデータを 1 回だけ読んで解析する。
+// 起動時に読んだメモリ上の値を基に全体を書き直すと、別タブで付けたお気に入りやフォルダーを黙って消してしまうため、
+// 変更は必ずこの最新の値に当てる（同じ項目を同時に変えたときは後勝ち）。読めない・壊れているときは書き込まない（L-669）。
+function readLatestLibraryMeta(current: PersistentLibraryState): LatestLibraryMeta {
+  const read = readMapLibraryMeta(current.storage);
+  if (!read.ok) {
+    return { ok: false, status: read.reason === "corrupt" ? "corrupt" : "unavailable" };
+  }
+  return { ok: true, meta: read.meta };
+}
+
 // 起動時のメタデータ読み込みと初期マップの最終閲覧日時記録。
 // 破損・読込不能時は自動上書きせず、書込失敗時は既存の起動通知を優先する（L-001, L-002, L-669）。
 export function loadStartupLibraryMeta(
@@ -147,11 +162,12 @@ export function persistMapOpenedMeta(
   if (current.libraryMetaStatus !== "ready") {
     return { libraryMeta: current.libraryMeta, notice: successNotice };
   }
-  const candidate = recordMapOpened(current.libraryMeta, mapId, nowIso);
-  const written = writeMapLibraryMeta(current.storage, candidate);
-  if (!written.ok) {
+  const latest = readLatestLibraryMeta(current);
+  const candidate = latest.ok ? recordMapOpened(latest.meta, mapId, nowIso) : null;
+  const written = candidate === null ? null : writeMapLibraryMeta(current.storage, candidate);
+  if (candidate === null || written === null || !written.ok) {
     return {
-      libraryMeta: current.libraryMeta,
+      libraryMeta: latest.ok ? latest.meta : current.libraryMeta,
       notice: {
         kind: "warning",
         message: `${warningPrefix}が、最近使用したマップの記録を保存できませんでした。`,
@@ -172,20 +188,25 @@ export function persistDeletionMeta(
   if (current.libraryMetaStatus !== "ready") {
     return { libraryMeta: current.libraryMeta, notice: baseNotice };
   }
-  const pruned = pruneMapMetaForRemovedMap(current.libraryMeta, removedMapId);
+  const deletionMetaWarning: OperationNotice = {
+    kind: "warning",
+    message: `${baseNotice.message}ただし、お気に入り・フォルダー情報の更新を保存できませんでした。`,
+  };
+  const latest = readLatestLibraryMeta(current);
+  if (!latest.ok) {
+    return { libraryMeta: current.libraryMeta, notice: deletionMetaWarning };
+  }
+  const pruned = pruneMapMetaForRemovedMap(latest.meta, removedMapId);
   const candidate =
     nextCurrentMapId !== null ? recordMapOpened(pruned, nextCurrentMapId, nowIso) : pruned;
-  if (candidate === current.libraryMeta) {
-    return { libraryMeta: current.libraryMeta, notice: baseNotice };
+  if (candidate === latest.meta) {
+    return { libraryMeta: latest.meta, notice: baseNotice };
   }
   const written = writeMapLibraryMeta(current.storage, candidate);
   if (!written.ok) {
     return {
-      libraryMeta: current.libraryMeta,
-      notice: {
-        kind: "warning",
-        message: `${baseNotice.message}ただし、お気に入り・フォルダー情報の更新を保存できませんでした。`,
-      },
+      libraryMeta: latest.meta,
+      notice: deletionMetaWarning,
     };
   }
   return { libraryMeta: candidate, notice: baseNotice };
@@ -205,21 +226,23 @@ export function persistRestoredMeta(
   if (backup.folders === undefined && backup.mapMeta === undefined) {
     return { libraryMeta: current.libraryMeta, notice: defaultSuccessNotice };
   }
+  // 破損・読込不可のメタは上書きしない（L-669）。バックアップのお気に入り・フォルダーを反映しなかったことは伝える（L-001）
+  const skippedNotice = (status: Exclude<MapLibraryMetaStatus, "ready">): OperationNotice => ({
+    kind: "warning",
+    message:
+      status === "corrupt"
+        ? "バックアップのマップを追加しましたが、お気に入り・フォルダー情報が破損しているため、バックアップのお気に入り・フォルダーは復元していません。"
+        : "バックアップのマップを追加しましたが、お気に入り・フォルダー情報を読み込めなかったため、バックアップのお気に入り・フォルダーは復元していません。",
+  });
   if (current.libraryMetaStatus !== "ready") {
-    // 破損・読込不可のメタは上書きしない（L-669）。バックアップのお気に入り・フォルダーを反映しなかったことは伝える（L-001）
-    return {
-      libraryMeta: current.libraryMeta,
-      notice: {
-        kind: "warning",
-        message:
-          current.libraryMetaStatus === "corrupt"
-            ? "バックアップのマップを追加しましたが、お気に入り・フォルダー情報が破損しているため、バックアップのお気に入り・フォルダーは復元していません。"
-            : "バックアップのマップを追加しましたが、お気に入り・フォルダー情報を読み込めなかったため、バックアップのお気に入り・フォルダーは復元していません。",
-      },
-    };
+    return { libraryMeta: current.libraryMeta, notice: skippedNotice(current.libraryMetaStatus) };
+  }
+  const latest = readLatestLibraryMeta(current);
+  if (!latest.ok) {
+    return { libraryMeta: current.libraryMeta, notice: skippedNotice(latest.status) };
   }
   const merged = mergeLibraryMetaForRestore(
-    current.libraryMeta,
+    latest.meta,
     backup.folders,
     backup.mapMeta,
     mapIdMapping,
@@ -228,7 +251,7 @@ export function persistRestoredMeta(
   const written = writeMapLibraryMeta(current.storage, merged.meta);
   if (!written.ok) {
     return {
-      libraryMeta: current.libraryMeta,
+      libraryMeta: latest.meta,
       notice: {
         kind: "warning",
         message:
@@ -250,30 +273,44 @@ export function persistRestoredMeta(
   return { libraryMeta: merged.meta, notice: defaultSuccessNotice };
 }
 
-function guardReadyMeta(
+// メタデータを変更する操作の入口。ready でなければ拒否し、ready ならストレージ上の最新を返す。
+// 最新が読めない・壊れているときは書き込まず、その状態を画面へ反映して拒否する（起動時の読み込み失敗と同じ扱い）
+function resolveReadyMeta(
   current: PersistentLibraryState,
-): LibraryMetaActionOutcome | null {
+): { readonly ok: true; readonly meta: MapLibraryMetaV1 } | { readonly ok: false; readonly outcome: LibraryMetaActionOutcome } {
   if (current.libraryMetaStatus !== "ready") {
     return {
-      result: failedOperation(metaStatusBlockedNotice(current.libraryMetaStatus)),
+      ok: false,
+      outcome: { result: failedOperation(metaStatusBlockedNotice(current.libraryMetaStatus)) },
     };
   }
-  return null;
+  const latest = readLatestLibraryMeta(current);
+  if (!latest.ok) {
+    return {
+      ok: false,
+      outcome: {
+        nextState: { libraryMeta: current.libraryMeta, libraryMetaStatus: latest.status },
+        result: failedOperation(metaStatusBlockedNotice(latest.status)),
+      },
+    };
+  }
+  return { ok: true, meta: latest.meta };
 }
 
 export function runToggleFavorite(
   current: PersistentLibraryState,
   mapId: string,
 ): LibraryMetaActionOutcome {
-  const blocked = guardReadyMeta(current);
-  if (blocked !== null) return blocked;
+  const resolved = resolveReadyMeta(current);
+  if (!resolved.ok) return resolved.outcome;
+  const latestMeta = resolved.meta;
   const target = findMapEntry(current.index, mapId);
   if (target === null) {
     return {
       result: failedOperation({ kind: "error", message: "対象のマップが見つかりませんでした。" }),
     };
   }
-  const nextMeta = toggleMapFavorite(current.libraryMeta, mapId);
+  const nextMeta = toggleMapFavorite(latestMeta, mapId);
   const written = writeMapLibraryMeta(current.storage, nextMeta);
   if (!written.ok) {
     return { result: failedOperation(metaWriteFailedNotice(written.reason)) };
@@ -298,21 +335,22 @@ export function runAssignFolder(
   mapId: string,
   folderId: string | null,
 ): LibraryMetaActionOutcome {
-  const blocked = guardReadyMeta(current);
-  if (blocked !== null) return blocked;
+  const resolved = resolveReadyMeta(current);
+  if (!resolved.ok) return resolved.outcome;
+  const latestMeta = resolved.meta;
   const target = findMapEntry(current.index, mapId);
   if (target === null) {
     return {
       result: failedOperation({ kind: "error", message: "対象のマップが見つかりませんでした。" }),
     };
   }
-  const assigned = assignMapFolder(current.libraryMeta, mapId, folderId);
+  const assigned = assignMapFolder(latestMeta, mapId, folderId);
   if (!assigned.ok) {
     return {
       result: failedOperation({ kind: "error", message: formatMapFolderFailure(assigned.reason) }),
     };
   }
-  const currentFolderId = getMapUserMeta(current.libraryMeta, mapId)?.folderId ?? null;
+  const currentFolderId = getMapUserMeta(latestMeta, mapId)?.folderId ?? null;
   if (currentFolderId === folderId) {
     return { result: UNCHANGED_OPERATION_RESULT };
   }
@@ -323,7 +361,7 @@ export function runAssignFolder(
   const folder =
     folderId === null
       ? undefined
-      : current.libraryMeta.folders.find((item) => item.id === folderId);
+      : latestMeta.folders.find((item) => item.id === folderId);
   return {
     nextState: { libraryMeta: assigned.meta, libraryMetaStatus: "ready" },
     result: succeededOperation(
@@ -345,15 +383,16 @@ export function runCreateFolder(
   nowIso: string,
   generateId: () => string,
 ): LibraryMetaActionOutcome {
-  const blocked = guardReadyMeta(current);
-  if (blocked !== null) return blocked;
-  const validated = validateCreateMapFolderName(current.libraryMeta.folders, rawName);
+  const resolved = resolveReadyMeta(current);
+  if (!resolved.ok) return resolved.outcome;
+  const latestMeta = resolved.meta;
+  const validated = validateCreateMapFolderName(latestMeta.folders, rawName);
   if (!validated.ok) {
     return {
       result: failedOperation({ kind: "error", message: formatMapFolderFailure(validated.reason) }),
     };
   }
-  const usedIds = new Set(current.libraryMeta.folders.map((folder) => folder.id));
+  const usedIds = new Set(latestMeta.folders.map((folder) => folder.id));
   const id = pickUnusedMapFolderId(usedIds, generateId);
   if (id === null) {
     return {
@@ -363,7 +402,7 @@ export function runCreateFolder(
       }),
     };
   }
-  const created = createMapFolder(current.libraryMeta, id, validated.name, nowIso);
+  const created = createMapFolder(latestMeta, id, validated.name, nowIso);
   if (!created.ok) {
     return {
       result: failedOperation({ kind: "error", message: formatMapFolderFailure(created.reason) }),
@@ -389,10 +428,11 @@ export function runRenameFolder(
   rawName: string,
   nowIso: string,
 ): LibraryMetaActionOutcome {
-  const blocked = guardReadyMeta(current);
-  if (blocked !== null) return blocked;
-  const existing = current.libraryMeta.folders.find((folder) => folder.id === folderId);
-  const renamed = renameMapFolder(current.libraryMeta, folderId, rawName, nowIso);
+  const resolved = resolveReadyMeta(current);
+  if (!resolved.ok) return resolved.outcome;
+  const latestMeta = resolved.meta;
+  const existing = latestMeta.folders.find((folder) => folder.id === folderId);
+  const renamed = renameMapFolder(latestMeta, folderId, rawName, nowIso);
   if (!renamed.ok) {
     return {
       result: failedOperation({ kind: "error", message: formatMapFolderFailure(renamed.reason) }),
@@ -418,10 +458,11 @@ export function runDeleteFolder(
   current: PersistentLibraryState,
   folderId: string,
 ): LibraryMetaActionOutcome {
-  const blocked = guardReadyMeta(current);
-  if (blocked !== null) return blocked;
-  const target = current.libraryMeta.folders.find((folder) => folder.id === folderId);
-  const deleted = deleteMapFolder(current.libraryMeta, folderId);
+  const resolved = resolveReadyMeta(current);
+  if (!resolved.ok) return resolved.outcome;
+  const latestMeta = resolved.meta;
+  const target = latestMeta.folders.find((folder) => folder.id === folderId);
+  const deleted = deleteMapFolder(latestMeta, folderId);
   if (!deleted.ok) {
     return {
       result: failedOperation({ kind: "error", message: formatMapFolderFailure(deleted.reason) }),

@@ -3422,3 +3422,271 @@ describe("useMapLibrary のライブラリバックアップ境界", () => {
     });
   });
 });
+
+describe("useMapLibrary のメタデータの複数タブ（別タブの更新を次の書き込みで消さない）", () => {
+  const OTHER_TAB_FOLDER = {
+    id: "other-folder",
+    name: "別タブのフォルダー",
+    createdAt: SEED_TIMESTAMP,
+    updatedAt: SEED_TIMESTAMP,
+  };
+
+  // 別タブの書き込みを模す。ストレージ上の最新を読み、変更を当てて書き戻す（こちらのタブのメモリは古いまま）
+  function writeFromOtherTab(
+    storage: Storage,
+    entries: () => Record<string, string>,
+    update: (meta: MapLibraryMetaV1) => MapLibraryMetaV1,
+  ) {
+    storage.setItem(MAP_LIBRARY_META_STORAGE_KEY, encodeMapLibraryMeta(update(storedLibraryMeta(entries()))));
+  }
+
+  function favoriteMap2FromOtherTab(meta: MapLibraryMetaV1): MapLibraryMetaV1 {
+    return { ...meta, mapMeta: { ...meta.mapMeta, "map-2": { ...meta.mapMeta["map-2"], favorite: true } } };
+  }
+
+  function folderWithMap2FromOtherTab(meta: MapLibraryMetaV1): MapLibraryMetaV1 {
+    return {
+      ...meta,
+      folders: [...meta.folders, OTHER_TAB_FOLDER],
+      mapMeta: { ...meta.mapMeta, "map-2": { ...meta.mapMeta["map-2"], folderId: OTHER_TAB_FOLDER.id } },
+    };
+  }
+
+  function threeMapsWithBodies(): Record<string, string> {
+    const index: MapIndexV1 = {
+      version: 1,
+      currentMapId: "map-1",
+      maps: [entry("map-1", "マップ 1"), entry("map-2", "マップ 2"), entry("map-3", "マップ 3")],
+      legacyCleanupPending: false,
+    };
+    return {
+      [MAP_INDEX_STORAGE_KEY]: encodeMapIndex(index),
+      [mapBodyKey("map-1")]: EMPTY_V3,
+      [mapBodyKey("map-2")]: EMPTY_V3,
+      [mapBodyKey("map-3")]: EMPTY_V3,
+    };
+  }
+
+  it.each<[string, (hook: ReturnType<typeof setup>) => void]>([
+    ["マップの切り替え", (hook) => {
+      act(() => {
+        expect(hook.result.current.switchMap("map-3").ok).toBe(true);
+      });
+    }],
+    ["マップの作成", (hook) => {
+      act(() => {
+        expect(hook.result.current.createMap("新しいマップ").ok).toBe(true);
+      });
+    }],
+    ["別のマップの削除（ゴミ箱へ移動）", (hook) => {
+      act(() => {
+        expect(hook.result.current.deleteMap("map-3").ok).toBe(true);
+      });
+    }],
+    ["開いているマップの削除", (hook) => {
+      act(() => {
+        expect(hook.result.current.deleteMap("map-1").ok).toBe(true);
+      });
+    }],
+    ["マップの名前変更", (hook) => {
+      act(() => {
+        expect(hook.result.current.renameMap("map-1", "改名").ok).toBe(true);
+      });
+    }],
+  ])("別タブで付けたお気に入り・フォルダーの所属が、こちらの%sの後も残る", (_name, operate) => {
+    const hook = setup({ initial: threeMapsWithBodies(), ids: ["new-map", "trash-id"] });
+    writeFromOtherTab(hook.storage, hook.entries, (meta) =>
+      folderWithMap2FromOtherTab(favoriteMap2FromOtherTab(meta)),
+    );
+
+    operate(hook);
+
+    const stored = storedLibraryMeta(hook.entries());
+    expect(stored.mapMeta["map-2"]).toMatchObject({ favorite: true, folderId: OTHER_TAB_FOLDER.id });
+    expect(stored.folders).toEqual([OTHER_TAB_FOLDER]);
+  });
+
+  it("書き込みの後は、画面のメタデータも別タブの更新を含む最新になる", () => {
+    const hook = setup({ initial: threeMapsWithBodies() });
+    writeFromOtherTab(hook.storage, hook.entries, favoriteMap2FromOtherTab);
+
+    act(() => {
+      expect(hook.result.current.switchMap("map-3").ok).toBe(true);
+    });
+
+    const view = readyView(hook.result.current.view);
+    expect(view.libraryMeta.mapMeta["map-2"]?.favorite).toBe(true);
+    expect(view.libraryMeta.mapMeta["map-3"]?.lastOpenedAt).toBe(NOW);
+  });
+
+  it("別タブで付けたお気に入りが、こちらの一括バックアップの追加復元の後も残る", async () => {
+    const hook = setup({ initial: threeMapsWithBodies(), ids: ["restored-map-1", "restored-folder"] });
+    readyView(hook.result.current.view).storageSession.registerBackupSnapshot(() => ({
+      json: EMPTY_V3,
+      hydrated: true,
+      restoreOrigin: "restored",
+      hasSavedBodyThisMount: false,
+    }));
+    const backupJson = JSON.stringify({
+      format: "draw-my-map-library-backup",
+      version: 1,
+      exportedAt: NOW,
+      currentMapId: "source",
+      maps: [
+        { id: "source", name: "移行元", createdAt: SEED_TIMESTAMP, updatedAt: SEED_TIMESTAMP, document: JSON.parse(EMPTY_V3) },
+      ],
+      folders: [{ id: "bf-1", name: "仕事", createdAt: SEED_TIMESTAMP, updatedAt: SEED_TIMESTAMP }],
+      mapMeta: { source: { favorite: true, folderId: "bf-1" } },
+    });
+    const preview = await hook.result.current.previewRestore(backupFile(async () => backupJson));
+    expect(preview.ok).toBe(true);
+    if (!preview.ok) return;
+    writeFromOtherTab(hook.storage, hook.entries, (meta) =>
+      folderWithMap2FromOtherTab(favoriteMap2FromOtherTab(meta)),
+    );
+
+    act(() => {
+      expect(hook.result.current.confirmRestore(preview.value).ok).toBe(true);
+    });
+
+    const stored = storedLibraryMeta(hook.entries());
+    expect(stored.mapMeta["map-2"]).toMatchObject({ favorite: true, folderId: OTHER_TAB_FOLDER.id });
+    expect(stored.folders.map((folder) => folder.name)).toEqual(["別タブのフォルダー", "仕事"]);
+    expect(stored.mapMeta["restored-map-1"]).toMatchObject({ favorite: true });
+  });
+
+  it.each<[string, (hook: ReturnType<typeof setup>) => void]>([
+    ["お気に入りの切り替え", (hook) => {
+      act(() => {
+        expect(hook.result.current.toggleFavorite("map-1").ok).toBe(true);
+      });
+    }],
+    ["フォルダーの作成", (hook) => {
+      act(() => {
+        expect(hook.result.current.createFolder("こちらのフォルダー").ok).toBe(true);
+      });
+    }],
+    ["フォルダーの割り当て", (hook) => {
+      act(() => {
+        expect(hook.result.current.assignFolder("map-1", OTHER_TAB_FOLDER.id).ok).toBe(true);
+      });
+    }],
+    ["フォルダー名の変更", (hook) => {
+      act(() => {
+        expect(hook.result.current.renameFolder(OTHER_TAB_FOLDER.id, "改名したフォルダー").ok).toBe(true);
+      });
+    }],
+  ])("別タブで作ったフォルダー・所属とお気に入りが、こちらの%sの後も残る", (_name, operate) => {
+    const hook = setup({ initial: threeMapsWithBodies(), ids: ["here-folder"] });
+    writeFromOtherTab(hook.storage, hook.entries, (meta) =>
+      folderWithMap2FromOtherTab(favoriteMap2FromOtherTab(meta)),
+    );
+
+    operate(hook);
+
+    const stored = storedLibraryMeta(hook.entries());
+    expect(stored.mapMeta["map-2"]).toMatchObject({ favorite: true, folderId: OTHER_TAB_FOLDER.id });
+    expect(stored.folders.map((folder) => folder.id)).toContain(OTHER_TAB_FOLDER.id);
+    expect(readyView(hook.result.current.view).libraryMeta).toEqual(stored);
+  });
+
+  it("別タブで作ったフォルダーを、こちらで削除できる（最新を基に判定する）", () => {
+    const hook = setup({ initial: threeMapsWithBodies() });
+    writeFromOtherTab(hook.storage, hook.entries, folderWithMap2FromOtherTab);
+
+    act(() => {
+      expect(hook.result.current.deleteFolder(OTHER_TAB_FOLDER.id).ok).toBe(true);
+    });
+
+    const stored = storedLibraryMeta(hook.entries());
+    expect(stored.folders).toEqual([]);
+    expect(stored.mapMeta["map-2"]?.folderId).toBeUndefined();
+  });
+
+  it("フォルダーの上限は最新の件数で判定する（別タブで 50 件に達していたら作成しない）", () => {
+    const hook = setup({ initial: threeMapsWithBodies(), ids: ["here-folder"] });
+    writeFromOtherTab(hook.storage, hook.entries, (meta) => ({
+      ...meta,
+      folders: Array.from({ length: MAX_MAP_FOLDERS }, (_, index) => ({
+        id: `full-${index}`,
+        name: `満杯${index}`,
+        createdAt: SEED_TIMESTAMP,
+        updatedAt: SEED_TIMESTAMP,
+      })),
+    }));
+    const before = hook.entries()[MAP_LIBRARY_META_STORAGE_KEY];
+
+    let outcome: ReturnType<typeof hook.result.current.createFolder> | undefined;
+    act(() => {
+      outcome = hook.result.current.createFolder("こちらのフォルダー");
+    });
+
+    expect(outcome?.ok).toBe(false);
+    expect(hook.entries()[MAP_LIBRARY_META_STORAGE_KEY]).toBe(before);
+  });
+
+  it("別タブでメタデータが壊れていたら、こちらの操作は上書きせず、お気に入り操作は破損の扱いにする", () => {
+    const hook = setup({ initial: threeMapsWithBodies() });
+    hook.storage.setItem(MAP_LIBRARY_META_STORAGE_KEY, "{corrupt");
+
+    let toggled: ReturnType<typeof hook.result.current.toggleFavorite> | undefined;
+    act(() => {
+      toggled = hook.result.current.toggleFavorite("map-1");
+    });
+    expect(toggled?.ok).toBe(false);
+    expect(toggled?.notice?.message).toBe(
+      "お気に入り・フォルダー情報が破損しているため操作できません。メタデータを初期化してから再試行してください。",
+    );
+    expect(readyView(hook.result.current.view).libraryMetaStatus).toBe("corrupt");
+    expect(hook.entries()[MAP_LIBRARY_META_STORAGE_KEY]).toBe("{corrupt");
+  });
+
+  it("別タブでメタデータが壊れていたら、マップの切り替えは成功させ、メタデータは上書きせず warning で伝える", () => {
+    const hook = setup({ initial: threeMapsWithBodies() });
+    hook.storage.setItem(MAP_LIBRARY_META_STORAGE_KEY, "{corrupt");
+
+    let switched: ReturnType<typeof hook.result.current.switchMap> | undefined;
+    act(() => {
+      switched = hook.result.current.switchMap("map-3");
+    });
+
+    expect(switched?.ok).toBe(true);
+    expect(switched?.notice?.kind).toBe("warning");
+    expect(readyView(hook.result.current.view).currentMap.id).toBe("map-3");
+    expect(hook.entries()[MAP_LIBRARY_META_STORAGE_KEY]).toBe("{corrupt");
+  });
+
+  it("書き込みの直前の読み取りに失敗したら、メタデータを上書きしない（お気に入り操作は失敗、切り替えは warning）", () => {
+    let blockMetaRead = false;
+    const hook = setup({
+      initial: threeMapsWithBodies(),
+      throwOnGetItem: (key) => blockMetaRead && key === MAP_LIBRARY_META_STORAGE_KEY,
+    });
+    const before = hook.entries()[MAP_LIBRARY_META_STORAGE_KEY];
+    blockMetaRead = true;
+    const writesBefore = hook.operations.filter(
+      (op) => op.key === MAP_LIBRARY_META_STORAGE_KEY,
+    ).length;
+
+    let toggled: ReturnType<typeof hook.result.current.toggleFavorite> | undefined;
+    let switched: ReturnType<typeof hook.result.current.switchMap> | undefined;
+    // 切り替えは主処理を優先して成功させ、メタデータは書かずに warning（状態は ready のまま）
+    act(() => {
+      switched = hook.result.current.switchMap("map-3");
+    });
+    // お気に入り操作は拒否し、読めない状態（unavailable）を画面へ反映する
+    act(() => {
+      toggled = hook.result.current.toggleFavorite("map-1");
+    });
+    expect(readyView(hook.result.current.view).libraryMetaStatus).toBe("unavailable");
+
+    expect(toggled?.ok).toBe(false);
+    expect(toggled?.notice?.message).toBe("お気に入り・フォルダー情報を読み込めなかったため操作できません。");
+    expect(switched?.ok).toBe(true);
+    expect(switched?.notice?.kind).toBe("warning");
+    expect(hook.entries()[MAP_LIBRARY_META_STORAGE_KEY]).toBe(before);
+    expect(
+      hook.operations.filter((op) => op.key === MAP_LIBRARY_META_STORAGE_KEY),
+    ).toHaveLength(writesBefore);
+  });
+});
