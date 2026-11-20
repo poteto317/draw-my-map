@@ -80,3 +80,24 @@ it("clearは要求だけ破棄し同一イベントとrevision変更後も単調
   act(() => result.current.issueRequest(4));
   expect(result.current.request).toEqual({ nodeId: 4, sequence: 4, documentRevision: 1 });
 });
+
+it("isCurrentRequest は sequence と revision の一致で判定し、finishRequest 後は false になる", () => {
+  const { result, rerender } = renderRequest(0);
+  let first = { nodeId: 0, sequence: 0, documentRevision: 0 };
+  act(() => { first = result.current.issueRequest(5); });
+  expect(result.current.isCurrentRequest(first)).toBe(true);
+
+  act(() => result.current.issueRequest(6));
+  expect(result.current.isCurrentRequest(first)).toBe(false);
+
+  let current = { nodeId: 0, sequence: 0, documentRevision: 0 };
+  act(() => { current = result.current.issueRequest(7); });
+  expect(result.current.isCurrentRequest(current)).toBe(true);
+  act(() => result.current.finishRequest(current));
+  expect(result.current.isCurrentRequest(current)).toBe(false);
+
+  act(() => { current = result.current.issueRequest(8); });
+  expect(result.current.isCurrentRequest(current)).toBe(true);
+  rerender({ revision: 1 });
+  expect(result.current.isCurrentRequest(current)).toBe(false);
+});
