@@ -48,6 +48,7 @@ import {
   persistDeletionMeta,
   persistMapOpenedMeta,
   persistRestoredMeta,
+  resolveBackupLibraryMeta,
   runAssignFolder,
   runCreateFolder,
   runDeleteFolder,
@@ -660,10 +661,8 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
       current.index,
       current.session,
       depsRef.current.now(),
-      {
-        libraryMeta: current.libraryMeta,
-        libraryMetaStatus: current.libraryMetaStatus,
-      },
+      // 画面の状態へは反映しない。反映すると revisionRef が進み、開いている復元のプレビューまで古い扱いになるため
+      resolveBackupLibraryMeta(current),
     );
     if (prepared.ok) backupPreviewsRef.current.set(prepared.value, revisionRef.current);
     return prepared;

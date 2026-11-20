@@ -3723,6 +3723,101 @@ describe("useMapLibrary のメタデータの複数タブ（別タブの更新�
     expect(readyView(hook.result.current.view).libraryMetaStatus).toBe("unavailable");
   });
 
+  function registerEmptySnapshot(hook: ReturnType<typeof setup>) {
+    readyView(hook.result.current.view).storageSession.registerBackupSnapshot(() => ({
+      json: EMPTY_V3,
+      hydrated: true,
+      restoreOrigin: "restored",
+      hasSavedBodyThisMount: false,
+    }));
+  }
+
+  function parsedBackup(hook: ReturnType<typeof setup>) {
+    const prepared = hook.result.current.prepareBackup();
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) throw new Error(prepared.error);
+    const parsed = parseLibraryBackupJson(prepared.value.json);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) throw new Error("backup parse failed");
+    return { preview: prepared.value, backup: parsed.value };
+  }
+
+  it("一括バックアップの書き出しは、別タブで付けたお気に入り・フォルダーを含む最新のメタデータを使う（画面の状態は変えない）", async () => {
+    const hook = setup({ initial: threeMapsWithBodies(), ids: ["restored-map-1"] });
+    registerEmptySnapshot(hook);
+    // 書き出しの前に開いた復元のプレビュー（書き出しで古い扱いにならないことを確かめる）
+    const restorePreview = await hook.result.current.previewRestore(
+      backupFile(async () =>
+        JSON.stringify({
+          format: "draw-my-map-library-backup",
+          version: 1,
+          exportedAt: NOW,
+          currentMapId: "source",
+          maps: [
+            { id: "source", name: "移行元", createdAt: SEED_TIMESTAMP, updatedAt: SEED_TIMESTAMP, document: JSON.parse(EMPTY_V3) },
+          ],
+        }),
+      ),
+    );
+    expect(restorePreview.ok).toBe(true);
+    if (!restorePreview.ok) return;
+    writeFromOtherTab(hook.storage, hook.entries, (meta) =>
+      folderWithMap2FromOtherTab(favoriteMap2FromOtherTab(meta)),
+    );
+    const viewMetaBefore = readyView(hook.result.current.view).libraryMeta;
+
+    const { backup } = parsedBackup(hook);
+
+    expect(backup.folders).toEqual([OTHER_TAB_FOLDER]);
+    expect(backup.mapMeta?.["map-2"]).toMatchObject({ favorite: true, folderId: OTHER_TAB_FOLDER.id });
+    expect(backup.mapMeta?.["map-1"]).toMatchObject({ lastOpenedAt: NOW });
+    // 読むだけで画面の状態は変えない（開いている復元のプレビューを古い扱いにしない）
+    expect(readyView(hook.result.current.view).libraryMeta).toBe(viewMetaBefore);
+    act(() => {
+      expect(hook.result.current.confirmRestore(restorePreview.value).ok).toBe(true);
+    });
+  });
+
+  it("一括バックアップの書き出しは、メタデータに変化が無ければ従来どおりの内容になる", () => {
+    const hook = setup({ initial: threeMapsWithBodies() });
+    registerEmptySnapshot(hook);
+
+    const { backup } = parsedBackup(hook);
+
+    expect(backup.folders).toBeUndefined();
+    expect(backup.mapMeta).toEqual({ "map-1": { lastOpenedAt: NOW } });
+  });
+
+  it("一括バックアップの書き出しは、別タブでメタデータが壊れていたらメタデータ抜きで書き出し、上書きしない", () => {
+    const hook = setup({ initial: threeMapsWithBodies() });
+    registerEmptySnapshot(hook);
+    hook.storage.setItem(MAP_LIBRARY_META_STORAGE_KEY, "{corrupt");
+
+    const { backup } = parsedBackup(hook);
+
+    expect(backup.folders).toBeUndefined();
+    expect(backup.mapMeta).toBeUndefined();
+    expect(backup.maps.map((map) => map.id)).toEqual(["map-1", "map-2", "map-3"]);
+    expect(hook.entries()[MAP_LIBRARY_META_STORAGE_KEY]).toBe("{corrupt");
+  });
+
+  it("一括バックアップの書き出しは、メタデータの読み取りに失敗したらメタデータ抜きで書き出し、何も書かない", () => {
+    let blockMetaRead = false;
+    const hook = setup({
+      initial: threeMapsWithBodies(),
+      throwOnGetItem: (key) => blockMetaRead && key === MAP_LIBRARY_META_STORAGE_KEY,
+    });
+    registerEmptySnapshot(hook);
+    blockMetaRead = true;
+    const writesBefore = hook.operations.filter((op) => op.key === MAP_LIBRARY_META_STORAGE_KEY).length;
+
+    const { backup } = parsedBackup(hook);
+
+    expect(backup.folders).toBeUndefined();
+    expect(backup.mapMeta).toBeUndefined();
+    expect(hook.operations.filter((op) => op.key === MAP_LIBRARY_META_STORAGE_KEY)).toHaveLength(writesBefore);
+  });
+
   it("書き込みの直前の読み取りに失敗したら、メタデータを上書きしない（お気に入り操作は失敗、切り替えは warning）", () => {
     let blockMetaRead = false;
     const hook = setup({
