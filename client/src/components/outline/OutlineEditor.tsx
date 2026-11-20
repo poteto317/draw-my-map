@@ -1,8 +1,8 @@
-import { useEffect, useRef, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { Node } from "@/types/node";
 import type { OutlineRows } from "@/domain/outline/outlineRows";
 import { getNodeDisplayLabel } from "@/domain/nodes/nodeDisplayLabel";
-import type { OutlineEditorActions } from "@/hooks/useOutlineEditorActions";
+import type { OutlineEditorUiActions } from "@/hooks/useOutlineEditorActions";
 import { OutlineToolbar } from "./OutlineToolbar";
 
 export type OutlineEditorProps = {
@@ -11,11 +11,20 @@ export type OutlineEditorProps = {
   selectedNodeId: number | null;
   documentRevision: number;
   enabled: boolean;
-  actions: OutlineEditorActions;
+  actions: OutlineEditorUiActions;
 };
 
 function isComposing(event: KeyboardEvent) {
   return event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229;
+}
+
+function formatSelectionStatus(model: OutlineRows, nodeId: number): string | null {
+  const index = model.rows.findIndex(row => row.nodeId === nodeId);
+  if (index < 0) return null;
+  const row = model.rows[index];
+  const node = model.nodesById.get(nodeId);
+  if (!node) return null;
+  return `全${model.rows.length}件中${index + 1}件目、階層${row.depth}、${getNodeDisplayLabel(node.label)}`;
 }
 
 export function OutlineEditor({ model, selectedNodeId, documentRevision, enabled, actions }: OutlineEditorProps) {
@@ -25,10 +34,22 @@ export function OutlineEditor({ model, selectedNodeId, documentRevision, enabled
   const lastScrolledSelection = useRef<number | null | undefined>(undefined);
   // 再表示時に残っている要求では表示切替ボタンからfocusを奪わない。
   const consumedSequence = useRef(actions.focusRequest?.sequence ?? 0);
+  const [selectionStatus, setSelectionStatus] = useState<{ id: number | null; text: string }>({
+    id: null,
+    text: "",
+  });
   const interactive = enabled && !model.duplicateIds;
   const draft = interactive && actions.draft?.documentRevision === documentRevision ? actions.draft : null;
   const draftNodeId = draft?.nodeId;
   const entryId = selectedNodeId !== null && model.allNodeIds.has(selectedNodeId) ? selectedNodeId : model.rows[0]?.nodeId;
+
+  // 選択 ID 変化のみ live 文言を更新（同一 ID 再選択・空マップは据え置き）
+  if (selectedNodeId !== null && selectedNodeId !== selectionStatus.id) {
+    const next = formatSelectionStatus(model, selectedNodeId);
+    if (next !== null) {
+      setSelectionStatus({ id: selectedNodeId, text: next });
+    }
+  }
 
   useEffect(() => {
     if (!enabled || lastScrolledSelection.current === selectedNodeId) return;
@@ -78,8 +99,9 @@ export function OutlineEditor({ model, selectedNodeId, documentRevision, enabled
     else if (event.key === "Escape") { event.preventDefault(); actions.cancelEdit(); }
   }
 
-  return <section aria-label="アウトライン" className="flex h-full min-h-0 min-w-0 flex-col gap-3 p-4">
+  return <section aria-label="アウトライン" data-outline-root className="flex h-full min-h-0 min-w-0 flex-col gap-3 p-4">
     <OutlineToolbar actions={actions} enabled={interactive} selectedNodeId={selectedNodeId} rootAddButtonRef={rootAddButtonRef} />
+    <p role="status" aria-live="polite" className="sr-only">{selectionStatus.text}</p>
     <p className="text-sm text-slate-600">折りたたみや表示の細かさに関係なく、すべてのノードを表示します。兄弟追加は末尾に追加します。</p>
     <p id="outline-delete-description" className="text-sm text-slate-600">「ノードだけ削除」は子孫を残します。</p>
     {model.invalidStructure && <p role="alert" className="text-sm text-red-700">{model.duplicateIds ? "IDが重複しているため、選択と編集はできません。" : "親子関係に不正があるため、構造の変更はできません。ラベルは編集できます。"}</p>}

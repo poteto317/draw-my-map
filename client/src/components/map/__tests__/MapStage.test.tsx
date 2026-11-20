@@ -331,6 +331,14 @@ describe("MapStage boundary", () => {
     expect(document.querySelector(".cursor-crosshair")).toBeInTheDocument();
   });
 
+  it("キャンバスコンテナに aria-label=マップキャンバス を付け、tree 役割は付けない", async () => {
+    await renderReady(<MapStage {...defaultProps} />);
+    const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+    expect(container).toHaveAttribute("aria-label", "マップキャンバス");
+    expect(container).not.toHaveAttribute("role", "tree");
+    expect(container.querySelector('[role="tree"], [role="treeitem"]')).toBeNull();
+  });
+
   it("unmount時に共有runtimeへ登録したstage listenerを解除する", async () => {
     const { unmount } = await renderReady(<MapStage {...defaultProps} />);
     const registeredHandlers = Object.entries(mockStageHandlers);
