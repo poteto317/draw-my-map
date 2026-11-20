@@ -64,6 +64,10 @@ export function trashRestoredCleanupFailedNotice(
   );
 }
 
+export function trashRestoredBookmarkMigrationFailedNotice(name: string): OperationNotice {
+  return warning(`マップ「${name}」をマップ一覧に復元しましたが、表示ブックマークを移行できませんでした。`);
+}
+
 export function trashEntryNotFoundNotice(): OperationNotice {
   return error("対象のマップはゴミ箱に見つかりませんでした。");
 }

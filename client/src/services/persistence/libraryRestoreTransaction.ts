@@ -10,6 +10,7 @@ import { BRANCH_MOVE_JOURNAL_KEY } from "./branchMoveJournal";
 import { decodeLibraryRestoreJournal, encodeLibraryRestoreJournal,
   LIBRARY_RESTORE_JOURNAL_KEY, type LibraryRestoreJournal } from "./libraryRestoreJournal";
 import { isQuotaExceededError, MAP_INDEX_STORAGE_KEY, mapBodyKey, type MapLibraryStorage } from "./mapLibraryStorage";
+import { hasStoredMapViewBookmarks } from "./mapViewBookmarkStorage";
 import { parseMapDocumentJsonWithVersion } from "@/domain/persistence/mapDocumentCodec";
 import { DEFAULT_MAP_NAME } from "@/domain/mapLibrary/mapName";
 
@@ -54,10 +55,12 @@ function validBefore(raw: string, index: MapIndexV1): boolean {
 }
 
 function prerequisitesUnchanged(storage: MapLibraryStorage, plan: RestoreWritePlan): boolean {
+  const newIds = new Set(plan.journal.bodies.map(({ id }) => id));
   return storage.getItem(MAP_INDEX_STORAGE_KEY) === plan.indexBeforeRaw &&
     storage.getItem(LIBRARY_RESTORE_JOURNAL_KEY) === null &&
     storage.getItem(BRANCH_MOVE_JOURNAL_KEY) === null &&
-    plan.journal.bodies.every(body => storage.getItem(mapBodyKey(body.id)) === null);
+    plan.journal.bodies.every(body => storage.getItem(mapBodyKey(body.id)) === null) &&
+    !plan.indexAfter.maps.some(map => newIds.has(map.id) && hasStoredMapViewBookmarks(storage, map));
 }
 
 export function planLibraryRestore(
@@ -81,7 +84,8 @@ export function planLibraryRestore(
     const plannedMaps: { id: string; document: LibraryBackupMap["document"] }[] = [];
     for (const map of decoded.value.maps) {
       const id = pickUnusedMapId(generateId, candidate =>
-        used.has(candidate) || storage.getItem(mapBodyKey(candidate)) !== null);
+        used.has(candidate) || storage.getItem(mapBodyKey(candidate)) !== null ||
+        hasStoredMapViewBookmarks(storage, { id: candidate, createdAt: map.createdAt }));
       if (id === null) return failure(NO_ID);
       used.add(id);
       mapIdMapping.set(map.id, id);

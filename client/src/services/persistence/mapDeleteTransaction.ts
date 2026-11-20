@@ -59,6 +59,7 @@ import {
   writeTrashBody,
 } from "./mapTrashStorage";
 import type { TrashTransactionFailure } from "./mapTrashTransaction";
+import { hasStoredMapViewBookmarks, removeMapViewBookmarks } from "./mapViewBookmarkStorage";
 
 export type DeleteNotices = {
   removed: OperationNotice;
@@ -193,14 +194,16 @@ function planActiveMapDeletion(
     };
   }
   // 最後の1つは、新しい「無題のマップ」に置き換えて常に1つ以上残す。本体は書かない
-  const newId = pickNewMapId(storage, index, deps.generateId);
+  const createdAt = deps.now.toISOString();
+  const newId = pickNewMapId(storage, index, deps.generateId, (candidate) =>
+    hasStoredMapViewBookmarks(storage, { id: candidate, createdAt }));
   if (newId === null) {
     return { ok: false, notice: mapIdUnavailableNotice() };
   }
   const next = replaceLastMapEntry(
     index,
     id,
-    createMapIndexEntry(newId, DEFAULT_MAP_NAME, deps.now.toISOString()),
+    createMapIndexEntry(newId, DEFAULT_MAP_NAME, createdAt),
   );
   if (next === null) {
     return { ok: false, notice: indexWriteFailedNotice("マップを削除") };
@@ -371,14 +374,9 @@ export function permanentlyDeleteActiveMapIndex(
   if (!writeMapIndex(storage, plan.nextIndex).ok) {
     return { ok: false, notice: indexWriteFailedNotice("マップを削除") };
   }
-  return {
-    ok: true,
-    plan,
-    notices: buildDeleteNotices(
-      "permanent",
-      plan.target.name,
-      plan.isCurrent,
-      plan.nextMapName,
-    ),
-  };
+  const notices = buildDeleteNotices(
+    "permanent", plan.target.name, plan.isCurrent, plan.nextMapName,
+  );
+  if (!removeMapViewBookmarks(storage, plan.target)) notices.removed = notices.bodyRemains;
+  return { ok: true, plan, notices };
 }

@@ -659,10 +659,14 @@ describe("mapDeleteTransaction", () => {
   describe("permanentlyDeleteActiveMapIndex", () => {
     it("ゴミ箱に触れずアクティブ一覧だけを更新し、最後1件の置換や通知を組み立てる", () => {
       const two = twoMapsIndex();
+      const bookmarkKey = `draw-my-map:view-bookmarks:map-2:2026-09-01T00:00:00.000Z`;
+      const keptKey = `draw-my-map:view-bookmarks:map-1:2026-09-01T00:00:00.000Z`;
       const s1 = createRecordingStorage({
         initial: {
           [MAP_INDEX_STORAGE_KEY]: encodeMapIndex(two),
           [MAP_TRASH_INDEX_KEY]: "{corrupt",
+          [bookmarkKey]: "bookmark-map-2",
+          [keptKey]: "bookmark-map-1",
         },
       });
       const r1 = permanentlyDeleteActiveMapIndex({
@@ -681,6 +685,8 @@ describe("mapDeleteTransaction", () => {
         expect(r1.plan.nextIndex.maps.map((m) => m.id)).toEqual(["map-1"]);
       }
       expect(s1.entries()[MAP_TRASH_INDEX_KEY]).toBe("{corrupt");
+      expect(s1.entries()[bookmarkKey]).toBeUndefined();
+      expect(s1.entries()[keptKey]).toBe("bookmark-map-1");
 
       const rCurrent = permanentlyDeleteActiveMapIndex({
         storage: createRecordingStorage({ initial: { [MAP_INDEX_STORAGE_KEY]: encodeMapIndex(two) } }).storage,

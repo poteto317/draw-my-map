@@ -25,6 +25,7 @@ import {
   trashRestoreBodyMissingNotice,
   trashRestoreBodyReadFailedNotice,
   trashRestoredCleanupFailedNotice,
+  trashRestoredBookmarkMigrationFailedNotice,
   trashRestoredNotice,
   trashRestoreIndexChangedNotice,
   trashRestoreRollbackFailedNotice,
@@ -55,6 +56,12 @@ import {
   removeTrashBody,
   writeMapTrashIndex,
 } from "./mapTrashStorage";
+
+import {
+  cleanupTrashedMapViewBookmarks,
+  hasStoredMapViewBookmarks,
+  migrateMapViewBookmarks,
+} from "./mapViewBookmarkStorage";
 
 export type TrashTransactionFailure = {
   ok: false;
@@ -226,7 +233,8 @@ function planTrashRestore(
     !hasMapBody(storage, entry.originalMapId);
   const restoredId = canReuseOriginalId
     ? entry.originalMapId
-    : pickNewMapId(storage, index, generateId);
+    : pickNewMapId(storage, index, generateId, (candidate) =>
+      hasStoredMapViewBookmarks(storage, { id: candidate, createdAt: entry.createdAt }));
   if (restoredId === null) {
     return {
       ok: false,
@@ -294,6 +302,12 @@ function commitTrashRestore(
   const trashIndexCleaned = persistRemainingTrashIndex(storage, remainingTrash);
   const trashBodyCleaned = entry.hasBody ? removeTrashBody(storage, entry.id) : true;
 
+  const sourceOwnedByActiveMap = activeIndexNext.maps.some((map) =>
+    map.id !== restoredId && map.id === entry.originalMapId && map.createdAt === entry.createdAt);
+  const bookmarksMigrated = sourceOwnedByActiveMap
+    ? !hasStoredMapViewBookmarks(storage, { id: entry.originalMapId, createdAt: entry.createdAt })
+    : migrateMapViewBookmarks(storage, entry, restoredId);
+
   if (trashIndexCleaned && trashBodyCleaned) {
     return {
       ok: true,
@@ -302,7 +316,7 @@ function commitTrashRestore(
         status: "ok",
         entries: sortMapTrashEntriesForDisplay(remainingTrash.items),
       },
-      notice: trashRestoredNotice(entry.name),
+      notice: bookmarksMigrated ? trashRestoredNotice(entry.name) : trashRestoredBookmarkMigrationFailedNotice(entry.name),
     };
   }
 
@@ -350,13 +364,14 @@ export function permanentlyDeleteTrashEntry(
   }
 
   const bodyRemoved = entry.hasBody ? removeTrashBody(storage, trashId) : true;
+  const bookmarksRemoved = cleanupTrashedMapViewBookmarks(storage, [entry], nextIndex.items);
   return {
     ok: true,
     nextTrash: {
       status: "ok",
       entries: sortMapTrashEntriesForDisplay(nextIndex.items),
     },
-    notice: bodyRemoved
+    notice: bodyRemoved && bookmarksRemoved
       ? trashEntryPermanentlyDeletedNotice(entry.name)
       : trashEntryPermanentlyDeletedBodyWarningNotice(entry.name),
   };
@@ -426,8 +441,11 @@ function emptyNormalTrashStorage(
     }
   }
 
+  const remainingIds = new Set(remaining.map((item) => item.id));
+  const deleted = items.filter((item) => !remainingIds.has(item.id));
   if (remaining.length === 0) {
     const indexRemoved = hasIndexKey ? removeMapTrashIndex(storage) : true;
+    if (indexRemoved && !cleanupTrashedMapViewBookmarks(storage, deleted, [])) anyBodyFailed = true;
     if (!indexRemoved || collectedKeys === null) {
       return {
         ok: false,
@@ -443,6 +461,7 @@ function emptyNormalTrashStorage(
   }
 
   const indexWritten = writeMapTrashIndex(storage, { version: 1, items: remaining }).ok;
+  if (indexWritten) cleanupTrashedMapViewBookmarks(storage, deleted, remaining);
   const deletedPartially =
     removedAnyBody || (indexWritten && remaining.length < items.length);
   return {
