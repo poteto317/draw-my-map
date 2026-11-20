@@ -15,10 +15,16 @@ export function useMapViewport() {
   const [viewport, setViewportState] = useState<Viewport>(INITIAL_VIEWPORT);
   const viewportRef = useRef<Viewport>(INITIAL_VIEWPORT);
 
-  const setViewport = useCallback((next: Viewport) => {
-    if (!isValidViewport(next)) return;
+  const setViewport = useCallback((next: Viewport, beforeChange?: () => void): boolean => {
+    if (!isValidViewport(next)) return false;
+    const current = viewportRef.current;
+    if (current.offsetX === next.offsetX && current.offsetY === next.offsetY && current.scale === next.scale) {
+      return false;
+    }
+    beforeChange?.();
     viewportRef.current = next;
     setViewportState(next);
+    return true;
   }, []);
 
   // 同期 Ref の最新の viewport から次の値を求め、計算関数が同じ参照を返した（変化なし）ときは設定しない
@@ -35,9 +41,9 @@ export function useMapViewport() {
     updateViewport((current) => zoomViewportAt(current, anchor, requestedScale));
   }, [updateViewport]);
 
-  const focusNode = useCallback((node: Node, screen: ScreenSize) => {
-    updateViewport((current) => focusViewportOnNode(current, node, screen));
-  }, [updateViewport]);
+  const focusNode = useCallback((node: Node, screen: ScreenSize, beforeChange?: () => void) => (
+    setViewport(focusViewportOnNode(viewportRef.current, node, screen), beforeChange)
+  ), [setViewport]);
 
   return { viewport, viewportRef, setViewport, panBy, zoomAt, focusNode };
 }

@@ -40,7 +40,7 @@ describe("useNodeFocusRequest", () => {
       screen,
     });
 
-    expect(onFocusNode).toHaveBeenCalledWith(firstNode, screen);
+    expect(onFocusNode).toHaveBeenCalledWith(firstNode, screen, request);
     rerender({ request, documentRevision: 4, nodes: [{ ...firstNode, x: 200 }], screen });
     expect(onFocusNode).toHaveBeenCalledTimes(1);
 
@@ -51,7 +51,7 @@ describe("useNodeFocusRequest", () => {
       nodes: [latestNode],
       screen,
     });
-    expect(onFocusNode).toHaveBeenLastCalledWith(latestNode, screen);
+    expect(onFocusNode).toHaveBeenLastCalledWith(latestNode, screen, { ...request, sequence: 2 });
     expect(onFocusNode).toHaveBeenCalledTimes(2);
   });
 
@@ -67,7 +67,7 @@ describe("useNodeFocusRequest", () => {
     expect(onFocusNode).not.toHaveBeenCalled();
     const latestNode = { ...firstNode, x: 240 };
     rerender({ request, documentRevision: 0, nodes: [latestNode], screen });
-    expect(onFocusNode).toHaveBeenCalledWith(latestNode, screen);
+    expect(onFocusNode).toHaveBeenCalledWith(latestNode, screen, request);
     rerender({ request, documentRevision: 0, nodes: [latestNode], screen });
     expect(onFocusNode).toHaveBeenCalledTimes(1);
   });
