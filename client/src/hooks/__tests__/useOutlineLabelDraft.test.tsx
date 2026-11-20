@@ -61,3 +61,23 @@ it("新IDが次の正本に存在しなければ失効する", () => {
     expect(h.result.current.draft).toBeNull();
     expect(h.props.publishNotice).toHaveBeenCalledTimes(1);
 });
+it("retainWhileDisabled なら enabled=false のまま保持し、enabled 復帰後は通常判定へ戻る", () => {
+    const h = setup();
+    h.rerender({ ...h.props, enabled: false });
+    act(() => h.result.current.begin(1, undefined, { retainWhileDisabled: true }));
+    expect(h.result.current.draft?.nodeId).toBe(1);
+    expect(h.result.current.draft?.retainWhileDisabled).toBe(true);
+    // enabled が偽のまま nodes が触られても retain により消えない
+    h.rerender({ ...h.props, enabled: false, nodes: [...h.props.nodes] });
+    expect(h.result.current.draft?.nodeId).toBe(1);
+    h.rerender({ ...h.props, enabled: true });
+    expect(h.result.current.draft?.nodeId).toBe(1);
+    expect(h.result.current.draft?.retainWhileDisabled).toBeUndefined();
+});
+it("retainWhileDisabled なしで enabled=false になると draft を消す", () => {
+    const h = setup();
+    act(() => h.result.current.begin(1));
+    h.rerender({ ...h.props, enabled: false });
+    expect(h.result.current.draft).toBeNull();
+    expect(h.props.publishNotice).not.toHaveBeenCalled();
+});

@@ -8,6 +8,11 @@ export type OutlineLabelDraft = {
     documentRevision: number;
     originalLabel: string;
     text: string;
+    /**
+     * パレット Core 開始時。enabled が偽でも draft を保持する（スケジューラ詳細に依存しない）。
+     * enabled が真に戻ったら通常の可否判定へ戻す。
+     */
+    retainWhileDisabled?: boolean;
 };
 type Options = {
     nodes: readonly Node[];
@@ -17,13 +22,20 @@ type Options = {
     updateNodeLabel: NodesApi["updateNodeLabel"];
     publishNotice: (notice: OperationNotice) => void;
 };
+export type BeginOutlineLabelDraftOptions = {
+    retainWhileDisabled?: boolean;
+};
 const STALE_DRAFT: OperationNotice = {
     kind: "warning", message: "マップが変更されたため、編集中の内容を破棄しました。",
 };
-function isValid(draft: OutlineLabelDraft, options: Options): boolean {
-    return options.enabled && !options.duplicateIds
+function isDataValid(draft: OutlineLabelDraft, options: Options): boolean {
+    return !options.duplicateIds
         && draft.documentRevision === options.documentRevision
         && options.nodes.some((node) => node.id === draft.nodeId && node.label === draft.originalLabel);
+}
+function isValid(draft: OutlineLabelDraft, options: Options): boolean {
+    const enabledOk = options.enabled || draft.retainWhileDisabled === true;
+    return enabledOk && isDataValid(draft, options);
 }
 export function useOutlineLabelDraft(options: Options) {
     const [draft, setDraft] = useState<OutlineLabelDraft | null>(null);
@@ -39,7 +51,20 @@ export function useOutlineLabelDraft(options: Options) {
     const { nodes, documentRevision, enabled, duplicateIds } = options;
     useLayoutEffect(() => {
         const current = latest.current;
-        if (active.current && !isValid(active.current, current)) {
+        let pending = active.current;
+        if (!pending)
+            return;
+        if (current.enabled && pending.retainWhileDisabled) {
+            pending = {
+                nodeId: pending.nodeId,
+                documentRevision: pending.documentRevision,
+                originalLabel: pending.originalLabel,
+                text: pending.text,
+            };
+            active.current = pending;
+            setDraft(pending);
+        }
+        if (!isValid(pending, current)) {
             // 外部の正本変更で入力を同期失効させ、後着blurによる書き戻しを防ぐ。
             clear();
             if (current.enabled && !current.duplicateIds)
@@ -50,14 +75,21 @@ export function useOutlineLabelDraft(options: Options) {
         mounted.current = true;
         return () => { mounted.current = false; active.current = null; };
     }, []);
-    const begin = useCallback((nodeId: number, initialLabel?: string) => {
+    // enabled は UI 入口（beginEdit）側で見る。パレット Core は retainWhileDisabled で明示する。
+    const begin = useCallback((nodeId: number, initialLabel?: string, beginOptions?: BeginOutlineLabelDraftOptions) => {
         const current = latest.current;
-        if (!mounted.current || !current.enabled || current.duplicateIds)
+        if (!mounted.current || current.duplicateIds)
             return;
         const node = current.nodes.find((candidate) => candidate.id === nodeId);
         if (!node && initialLabel === undefined)
             return;
-        const next = { nodeId, documentRevision: current.documentRevision, originalLabel: node?.label ?? initialLabel!, text: node?.label ?? initialLabel! };
+        const next: OutlineLabelDraft = {
+            nodeId,
+            documentRevision: current.documentRevision,
+            originalLabel: node?.label ?? initialLabel!,
+            text: node?.label ?? initialLabel!,
+            ...(beginOptions?.retainWhileDisabled ? { retainWhileDisabled: true } : {}),
+        };
         active.current = next;
         setDraft(next);
     }, []);
