@@ -29,6 +29,7 @@ export function useMapViewBookmarks(
   const [state, setState] = useState<BookmarkState | null>(null);
   const current = state !== null && state.storage === storage && state.key === key ? state : null;
 
+  /* eslint-disable react-hooks/set-state-in-effect -- 同期ストレージ読込は useMapStorageRestoration と同型 */
   useEffect(() => {
     if (key === null) return;
     const result = readMapViewBookmarks(storage, { id, createdAt });
@@ -38,6 +39,7 @@ export function useMapViewBookmarks(
       notice: result.ok ? null : mapViewBookmarkReadFailedNotice(),
     });
   }, [key, storage, id, createdAt]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   function update(change: { kind: "save"; name: string; snapshot: MapViewSnapshot } | { kind: "delete"; name: string }) {
     if (key === null || current === null) return false;
