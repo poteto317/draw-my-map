@@ -10,7 +10,7 @@ import type { MapViewSnapshot } from "@/types/mapViewSnapshot";
 export function useMapViewHistory(
   mapId: string,
   resetRevision: number,
-  captureView: () => MapViewSnapshot,
+  captureBeforeNavigation: () => MapViewSnapshot,
   applyView: (snapshot: MapViewSnapshot) => boolean,
 ) {
   const [stored, setStored] = useState({
@@ -39,11 +39,11 @@ export function useMapViewHistory(
   const travel = useCallback((direction: "back" | "forward") => {
     const current = historyRef.current;
     if (!current[direction].at(-1)) return false;
-    const planned = travelMapViewHistory(current, direction, captureView());
+    const planned = travelMapViewHistory(current, direction, captureBeforeNavigation());
     if (!planned || !applyView(planned.destination)) return false;
     update(planned.next);
     return true;
-  }, [applyView, captureView, update]);
+  }, [applyView, captureBeforeNavigation, update]);
 
   return {
     canGoBack: history.back.length > 0,
