@@ -27,6 +27,28 @@ it("手動highで隠れた選択は必要なallへ切替える", () => {
   expect(h.publishNotice.mock.lastCall?.[0].message).toContain("すべて");
   expect(h.publishNotice.mock.lastCall?.[0].message).not.toContain("検索");
 });
+it("集中先の選択では解像度切替を行わない", () => {
+  const expandNodes = jest.fn();
+  const setResolutionMode = jest.fn();
+  const publishNotice = jest.fn();
+  const issueFocusRequest = jest.fn();
+  const { result } = renderHook(() => useOutlineCanvasReturn({
+    nodes,
+    selectedNodeId: 2,
+    documentRevision: 4,
+    collapseIndex: createNodeCollapseIndex(nodes),
+    collapsedNodeIds: new Set([1]),
+    resolutionMode: "high",
+    expandNodes,
+    setResolutionMode,
+    publishNotice,
+    issueFocusRequest,
+    focusRootId: 2,
+  }));
+  act(() => result.current.returnToCanvas());
+  expect(setResolutionMode).not.toHaveBeenCalled();
+  expect(issueFocusRequest).toHaveBeenCalledWith(2);
+});
 it.each([null, 99])("選択%sはfocus要求を発行しない", id => {
   const h = setup(id); act(() => h.result.current.returnToCanvas());
   expect(h.expandNodes).not.toHaveBeenCalled(); expect(h.setResolutionMode).not.toHaveBeenCalled();

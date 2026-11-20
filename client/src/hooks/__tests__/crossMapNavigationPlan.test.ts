@@ -59,6 +59,24 @@ describe("planOutlineNodeJump", () => {
     });
   });
 
+  it("集中先では解像度切替を免除する", () => {
+    const plan = planOutlineNodeJump({
+      nodes,
+      nodeId: 3,
+      resolutionMode: "auto",
+      initialViewportScale: 0.5,
+      collapseIndex: createNodeCollapseIndex(nodes),
+      collapsedNodeIds: new Set(),
+      focusRootId: 3,
+    });
+
+    expect(plan).toEqual({
+      ancestorIdsToExpand: [],
+      resolutionLevel: null,
+      notice: null,
+    });
+  });
+
   it("展開と解像度切替が両方必要なら、通知の文言を空白で連結する", () => {
     const plan = planOutlineNodeJump({
       nodes,

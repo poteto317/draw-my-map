@@ -72,6 +72,40 @@ describe("useNodeSearchNavigation", () => {
     });
   });
 
+  it("集中先ノードでは解像度切替を行わず選択と移動要求だけ進める", () => {
+    const node = createTestNode({ id: 8, importance: "low" });
+    const setResolutionMode = jest.fn();
+    const selectNode = jest.fn();
+    const expandNodes = jest.fn();
+    const { result } = renderHook(() => {
+      const issuer = useRevisionScopedNodeRequest(0);
+      return {
+        ...useNodeSearchNavigation({
+          nodes: [node],
+          resolutionVisibleNodeIds: new Set(),
+          collapseIndex: createNodeCollapseIndex([node]),
+          collapsedNodeIds: new Set(),
+          expandNodes,
+          documentRevision: 0,
+          setResolutionMode,
+          selectNode,
+          issueFocusRequest: issuer.issueRequest,
+          focusRootId: 8,
+        }),
+        focusRequest: issuer.request,
+      };
+    });
+
+    let navigationResult: string | undefined;
+    act(() => { navigationResult = result.current.navigateToNode(8); });
+
+    expect(navigationResult).toBe("navigated");
+    expect(setResolutionMode).not.toHaveBeenCalled();
+    expect(selectNode).toHaveBeenCalledWith(8);
+    expect(result.current.focusRequest).toEqual({ nodeId: 8, sequence: 1, documentRevision: 0 });
+    expect(result.current.notice).toBeNull();
+  });
+
   it("存在しないIDでは状態を変えずエラーを通知する", () => {
     const node = createTestNode({ id: 1 });
     const { result, selectNode, setResolutionMode } = renderNavigation({
