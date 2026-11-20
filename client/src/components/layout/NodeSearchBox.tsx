@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import type { KeyboardEvent, MouseEvent } from "react";
+import type { KeyboardEvent, MouseEvent, RefObject } from "react";
 import { resolveNodeSearchKeyAction } from "@/components/layout/nodeSearchKeyAction";
 import type { NodeSearchListItem } from "@/types/nodeSearch";
 
@@ -12,6 +12,8 @@ type NodeSearchBoxProps = {
   matches: readonly NodeSearchListItem[];
   total: number;
   onSelectResult: (nodeId: number) => void;
+  /** マップ内検索フォーカス用（コマンドパレット search.focus-in-map）。未指定時は内部 ref */
+  inputRef?: RefObject<HTMLInputElement | null>;
 };
 
 // 候補のアクセシブルネーム。「ラベル（親: X、非表示、URL 一致）」の形で、該当するものだけを並べる
@@ -31,10 +33,12 @@ export function NodeSearchBox({
   matches,
   total,
   onSelectResult,
+  inputRef: inputRefProp,
 }: NodeSearchBoxProps) {
   const idPrefix = useId();
   const listboxId = `${idPrefix}-node-search-results`;
-  const inputRef = useRef<HTMLInputElement>(null);
+  const internalInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = inputRefProp ?? internalInputRef;
   const [isOpen, setIsOpen] = useState(hasQuery);
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
   const selectedMatch = matches.find((match) => match.nodeId === selectedNodeId) ?? matches[0];

@@ -16,6 +16,8 @@ import { useOutlineCanvasReturn } from "@/hooks/useOutlineCanvasReturn";
 import { useRevisionScopedNodeRequest } from "@/hooks/useRevisionScopedNodeRequest";
 import { BranchMoveControl } from "@/components/layout/BranchMoveControl";
 import { BranchNavigationControls } from "@/components/layout/BranchNavigationControls";
+import { CommandPaletteControl } from "@/components/layout/CommandPaletteControl";
+import { CommandPaletteDialog } from "@/components/layout/CommandPaletteDialog";
 import { MapViewBookmarkControls } from "@/components/layout/MapViewBookmarkControls";
 import { BranchMoveDialog } from "@/components/layout/BranchMoveDialog";
 import { LabelReplaceControl } from "@/components/layout/LabelReplaceControl";
@@ -25,10 +27,12 @@ import { NodeMergeDialog } from "@/components/layout/NodeMergeDialog";
 import { NodeSplitControl } from "@/components/layout/NodeSplitControl";
 import { NodeSplitDialog } from "@/components/layout/NodeSplitDialog";
 import { useBranchMoveDialog } from "@/hooks/useBranchMoveDialog";
+import { useCommandPalette } from "@/hooks/useCommandPalette";
 import { useHeaderFocusReturn } from "@/hooks/useHeaderFocusReturn";
 import { useLabelReplaceDialog } from "@/hooks/useLabelReplaceDialog";
 import { useNodeMergeDialog } from "@/hooks/useNodeMergeDialog";
 import { useNodeSplitDialog } from "@/hooks/useNodeSplitDialog";
+import { useLatestRef } from "@/hooks/useLatestRef";
 import type { MapLibraryOperationResult } from "@/hooks/useMapLibrary";
 import { useNodes } from "@/hooks/useNodes";
 import { AppHeader } from "@/components/layout/AppHeader";
@@ -56,9 +60,20 @@ import { OutlineImportDialog } from "@/components/layout/OutlineImportDialog";
 import { resolveOutlineParentCandidate } from "@/components/layout/outlineParentCandidate";
 import { NodeSearchBox } from "@/components/layout/NodeSearchBox";
 import { NodeDetailPanel } from "@/components/layout/NodeDetailPanel";
+import { executeCommandPaletteActive } from "@/components/map/commandPaletteExecution";
+import {
+  openCommandPaletteDialog,
+  runCommandPaletteImmediateCore,
+} from "@/components/map/commandPaletteCoreDispatch";
+import { isRestorableFocusTarget } from "@/components/map/isRestorableFocusTarget";
+import { resolveOutlineInitialFocusTarget } from "@/components/map/resolveOutlineInitialFocusTarget";
 import { MapStage, type MapStageViewportHandle } from "@/components/map/MapStage";
 import { INITIAL_VIEWPORT } from "@/components/map/mapViewport";
+import { useCommandPaletteShortcut } from "@/components/map/useCommandPaletteShortcut";
 import { useCrossMapSearchShortcut } from "@/components/map/useCrossMapSearchShortcut";
+import { buildCommandAvailabilityContext } from "@/domain/commands/buildCommandAvailabilityContext";
+import { filterCommandCatalog } from "@/domain/commands/filterCommandCatalog";
+import type { CommandId } from "@/domain/commands/commandTypes";
 import { useIllustrationGeneration } from "@/hooks/useIllustrationGeneration";
 import { useMapHistoryShortcuts } from "@/components/map/useMapHistoryShortcuts";
 import { useMapImageExport } from "@/hooks/useMapImageExport";
@@ -494,8 +509,17 @@ export function MapEditor({
   // 下の effect の依存配列に入れるため、値と関数を取り出しておく
   const { focusRequest: outlineFocusRequest, consumeFocusRequest: consumeOutlineFocusRequest } = outlineImport;
   const outlineImportButtonRef = useRef<HTMLButtonElement>(null);
-  // 入口をすべて同じ値で止める（L-061）
+  const commandPalette = useCommandPalette({ mapId, documentRevision });
+  const commandPaletteButtonRef = useRef<HTMLButtonElement>(null);
+  const commandPaletteOpenerRef = useRef<HTMLElement | null>(null);
+  const nodeSearchInputRef = useRef<HTMLInputElement>(null);
+  const {
+    notice: commandPaletteNotice,
+    publishNotice: publishCommandPaletteNotice,
+  } = useRevisionScopedNotice(documentRevision);
+  // 入口をすべて同じ値で止める（L-061）。commandPalette.screen === "closed" を積に含める
   const editorShortcutsEnabled = shortcutsEnabled
+    && commandPalette.screen === "closed"
     && outlineImport.screen === "closed"
     && branchMove.screen === "closed"
     && labelReplace.screen === "closed"
@@ -528,8 +552,12 @@ export function MapEditor({
     focusRootId,
     onValidTarget: clearFocusOutsideBranch,
   });
-  function changeViewMode(nextMode: EditorViewMode) {
-    if (!editorShortcutsEnabled || nextMode === viewMode) return;
+  // パレット実行用コア（editorShortcutsEnabled ガードなし）
+  const viewModeRef = useLatestRef(viewMode);
+  const pendingViewModeFocusRef = useRef<EditorViewMode | null>(null);
+  const pendingMapSearchFocusRef = useRef(false);
+  const applyViewMode = useCallback((nextMode: EditorViewMode) => {
+    if (nextMode === viewModeRef.current) return;
     viewNavigation.clearCanvasFocus();
     if (nextMode === "outline") viewNavigation.rememberOutlineViewport();
     if (nextMode === "map") {
@@ -537,8 +565,210 @@ export function MapEditor({
       resolutionFilter.resetViewportScale(INITIAL_VIEWPORT.scale);
       returnToCanvas();
     }
+    pendingViewModeFocusRef.current = nextMode;
     setViewMode(nextMode);
+  }, [viewModeRef, viewNavigation, resolutionFilter, returnToCanvas]);
+  function changeViewMode(nextMode: EditorViewMode) {
+    if (!editorShortcutsEnabled) return;
+    applyViewMode(nextMode);
   }
+  useLayoutEffect(() => {
+    const pending = pendingViewModeFocusRef.current;
+    if (pending === null || pending !== viewMode) return;
+    pendingViewModeFocusRef.current = null;
+    if (pending === "map") {
+      canvasContainerRef.current?.focus();
+      return;
+    }
+    resolveOutlineInitialFocusTarget()?.focus();
+  }, [viewMode]);
+  // search.focus-in-map: パレット閉鎖前は根が inert のため、閉鎖後にフォーカスする
+  useLayoutEffect(() => {
+    if (!pendingMapSearchFocusRef.current) return;
+    if (commandPalette.screen !== "closed") return;
+    pendingMapSearchFocusRef.current = false;
+    nodeSearchInputRef.current?.focus();
+  }, [commandPalette.screen]);
+  const openPalette = commandPalette.open;
+  const openCommandPalette = useCallback(() => {
+    if (!editorShortcutsEnabled) return;
+    const active = document.activeElement;
+    commandPaletteOpenerRef.current = active instanceof HTMLElement ? active : null;
+    openPalette();
+  }, [editorShortcutsEnabled, openPalette]);
+  useCommandPaletteShortcut({
+    enabled: editorShortcutsEnabled,
+    onOpen: openCommandPalette,
+  });
+  const commandAvailabilityContext = useMemo(
+    () =>
+      buildCommandAvailabilityContext({
+        viewMode,
+        selectedNodeId,
+        focusing: focusRootId !== null,
+        isProtectedMode: storageMode === "protected",
+        hasConflict: persistence.conflictState === "conflict",
+        isExternallyDeleted: persistence.conflictState === "externallyDeleted",
+        canUndo,
+        canRedo,
+        canFitAll: displayState.fitNodes.length > 0,
+        canFitSelection: selectedFitNodes.length > 0,
+        canFocusBranch: selectedBranchIds !== null,
+        canExpandSubtree: canExpandSelectedBranch,
+        canCollapseSubtree: canCollapseSelectedBranch,
+        canDuplicate: selectedNode !== null,
+        // アウトライン時は allNodeIds 基準（マップの visibleNodeIds と不一致になりうる）
+        canDeleteNodeOnly:
+          viewMode === "outline" ? outlineActions.structureCanDelete : nodeOnlyDeletion.canDelete,
+        canInsertParent: nodeParentInsertion.canInsert,
+        canMoveSiblingUp:
+          viewMode === "outline" ? outlineActions.structureCanMoveUp : siblingReorder.canMoveUp,
+        canMoveSiblingDown:
+          viewMode === "outline" ? outlineActions.structureCanMoveDown : siblingReorder.canMoveDown,
+        canIndent: viewMode === "outline" ? outlineActions.structureCanIndent : nodeIndent.canIndent,
+        canOutdent:
+          viewMode === "outline" ? outlineActions.structureCanOutdent : nodeIndent.canOutdent,
+        canOpenLabelReplace: nodes.length > 0,
+        canOpenBranchMove: selectedNode !== null,
+        canOpenNodeSplit: nodeSplit.canOpen,
+        nodeSplitDisabledReason: nodeSplit.disabledReason,
+        canOpenNodeMerge: nodeMerge.canOpen,
+        nodeMergeDisabledReason: nodeMerge.disabledReason,
+        canFocusInMapSearch: viewMode === "map",
+        canOpenCrossMapSearch: true,
+        outlineDuplicateIds: outlineModel.duplicateIds,
+        outlineInvalidStructure: outlineModel.invalidStructure,
+        outlineSelectedVisible: selectedNodeId !== null && outlineModel.allNodeIds.has(selectedNodeId),
+      }),
+    [
+      viewMode, selectedNodeId, focusRootId, storageMode, persistence.conflictState,
+      canUndo, canRedo, displayState.fitNodes.length, selectedFitNodes.length, selectedBranchIds,
+      canExpandSelectedBranch, canCollapseSelectedBranch, selectedNode, nodeOnlyDeletion.canDelete,
+      nodeParentInsertion.canInsert, siblingReorder.canMoveUp, siblingReorder.canMoveDown,
+      nodeIndent.canIndent, nodeIndent.canOutdent, outlineActions.structureCanDelete,
+      outlineActions.structureCanMoveUp, outlineActions.structureCanMoveDown,
+      outlineActions.structureCanIndent, outlineActions.structureCanOutdent, nodes.length,
+      nodeSplit.canOpen, nodeSplit.disabledReason, nodeMerge.canOpen, nodeMerge.disabledReason,
+      outlineModel.duplicateIds, outlineModel.invalidStructure, outlineModel.allNodeIds,
+    ],
+  );
+  const filteredPalette = useMemo(
+    () => filterCommandCatalog(commandPalette.query, commandAvailabilityContext),
+    [commandPalette.query, commandAvailabilityContext],
+  );
+  const availabilityContextRef = useLatestRef(commandAvailabilityContext);
+  const runImmediateCore = useCallback((id: CommandId) => {
+    return runCommandPaletteImmediateCore(id, {
+      applyViewMode,
+      fitAll: () => {
+        viewportHandleRef.current?.fitNodes(displayState.fitNodes, recordBeforeViewportChange);
+      },
+      fitSelection: () => {
+        viewportHandleRef.current?.fitNodes(selectedFitNodes, recordBeforeViewportChange);
+      },
+      focusBranch: () => {
+        if (selectedNodeId === null) return false;
+        recordBeforeViewportChange();
+        setFocusRootId(selectedNodeId);
+        return true;
+      },
+      clearFocus: () => {
+        recordBeforeViewportChange();
+        setFocusRootId(null);
+      },
+      expandSubtree: () => {
+        if (selectedNodeId === null) return false;
+        branchCollapse.setSubtreeCollapsed(selectedNodeId, false);
+        return true;
+      },
+      collapseSubtree: () => {
+        if (selectedNodeId === null) return false;
+        branchCollapse.setSubtreeCollapsed(selectedNodeId, true);
+        return true;
+      },
+      undo,
+      redo,
+      duplicateBranch: () => {
+        duplication.duplicateSelected();
+      },
+      deleteNodeOnly: () => {
+        if (viewMode === "outline") outlineActions.deleteSelectedCore();
+        else nodeOnlyDeletion.deleteSelected();
+      },
+      insertParent: () => {
+        nodeParentInsertion.insertSelected();
+      },
+      moveSibling: (direction) => {
+        if (viewMode === "outline") outlineActions.moveCore(direction);
+        else if (direction === "up") moveSelectedSiblingUp();
+        else moveSelectedSiblingDown();
+      },
+      changeIndent: (direction) => {
+        if (viewMode === "outline") outlineActions.changeIndentCore(direction);
+        else if (direction === "indent") indentSelected();
+        else outdentSelected();
+      },
+      focusInMapSearch: () => {
+        pendingMapSearchFocusRef.current = true;
+      },
+      addOutlineRoot: () => {
+        outlineActions.addRootCore();
+      },
+      addOutlineChild: () => {
+        outlineActions.addChildCore();
+      },
+      addOutlineSibling: () => {
+        outlineActions.addSiblingCore();
+      },
+      beginOutlineEdit: () => {
+        if (selectedNodeId === null) return false;
+        outlineActions.beginEditCore(selectedNodeId);
+        return true;
+      },
+    });
+  }, [
+    viewMode, selectedNodeId, displayState.fitNodes, selectedFitNodes, recordBeforeViewportChange,
+    setFocusRootId, branchCollapse, undo, redo, duplication, outlineActions, nodeOnlyDeletion,
+    nodeParentInsertion, moveSelectedSiblingUp, moveSelectedSiblingDown, indentSelected, outdentSelected,
+    applyViewMode,
+  ]);
+  const openDialogCommand = useCallback((id: CommandId) => {
+    openCommandPaletteDialog(id, {
+      openLabelReplace: labelReplace.open,
+      openBranchMove: branchMove.open,
+      openNodeSplit: nodeSplit.open,
+      openNodeMerge: nodeMerge.open,
+      openCrossMapSearch: crossMapDialogs.openCrossMapSearch,
+    });
+  }, [labelReplace, branchMove, nodeSplit, nodeMerge, crossMapDialogs]);
+  const handleExecutePaletteActive = useCallback(() => {
+    const item = filteredPalette.items[commandPalette.activeIndex];
+    if (!item) return;
+    // 可否拒否の setReject は executeCommandPaletteActive に一本化（live context で再評価）
+    executeCommandPaletteActive(item.definition.id, {
+      closePalette: commandPalette.close,
+      setReject: commandPalette.setReject,
+      publishSuccessNotice: publishCommandPaletteNotice,
+      getAvailabilityContext: () => availabilityContextRef.current,
+      runImmediateCore,
+      openDialogCommand,
+    });
+  }, [
+    filteredPalette.items, commandPalette, publishCommandPaletteNotice,
+    availabilityContextRef, runImmediateCore, openDialogCommand,
+  ]);
+  const commandPaletteFocusRequest = commandPalette.focusRequest;
+  const consumeCommandPaletteFocusRequest = commandPalette.consumeFocusRequest;
+  useLayoutEffect(() => {
+    if (commandPaletteFocusRequest?.kind !== "restore-opener") return;
+    const candidates: Array<HTMLElement | null> = [
+      commandPaletteOpenerRef.current,
+      commandPaletteButtonRef.current,
+      viewMode === "map" ? canvasContainerRef.current : resolveOutlineInitialFocusTarget(),
+    ];
+    candidates.find((candidate) => isRestorableFocusTarget(candidate))?.focus();
+    consumeCommandPaletteFocusRequest();
+  }, [commandPaletteFocusRequest, consumeCommandPaletteFocusRequest, viewMode]);
 
   // 操作通知バーの並び（上から表示する順）。位置ごとに系統が決まっている
   const bookmarks = useMapViewBookmarks(
@@ -557,6 +787,7 @@ export function MapEditor({
     navigationNotice,
     outlineImport.notice,
     treeEditNotice,
+    commandPaletteNotice,
     persistence.conflictActionNotice,
   ];
 
@@ -587,6 +818,7 @@ export function MapEditor({
                   matches={nodeSearch.matches}
                   total={nodeSearch.total}
                   onSelectResult={navigateToNode}
+                  inputRef={nodeSearchInputRef}
                 />
               )}
               <button
@@ -621,6 +853,11 @@ export function MapEditor({
           )}
           operationControls={(
             <>
+              <CommandPaletteControl
+                expanded={commandPalette.screen === "open"}
+                onOpen={openCommandPalette}
+                buttonRef={commandPaletteButtonRef}
+              />
               <MapHistoryControls
                 canUndo={canUndo}
                 canRedo={canRedo}
@@ -931,6 +1168,26 @@ export function MapEditor({
         />
       )}
       {/* data-map-id を付けず、根の inert の外に置く */}
+      {commandPalette.screen === "open" && (
+        <CommandPaletteDialog
+          open
+          query={commandPalette.query}
+          items={filteredPalette.items}
+          overflowCount={filteredPalette.overflowCount}
+          activeIndex={commandPalette.activeIndex}
+          rejectMessage={commandPalette.rejectMessage}
+          rejectSequence={commandPalette.rejectSequence}
+          onQueryChange={commandPalette.setQuery}
+          onMoveHighlight={(action) => {
+            commandPalette.moveHighlight(action, filteredPalette.items.length);
+          }}
+          onExecuteActive={handleExecutePaletteActive}
+          onDismiss={() => commandPalette.close("dismiss")}
+          onMouseClick={() => {
+            dialogMouseClickedAtRef.current = Date.now();
+          }}
+        />
+      )}
       {outlineImport.screen !== "closed" && (
         <OutlineImportDialog
           screen={outlineImport.screen}

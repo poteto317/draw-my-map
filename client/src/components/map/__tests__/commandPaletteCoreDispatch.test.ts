@@ -1,0 +1,80 @@
+import {
+  openCommandPaletteDialog,
+  runCommandPaletteImmediateCore,
+  type CommandPaletteDialogHandlers,
+  type CommandPaletteImmediateCoreHandlers,
+} from "@/components/map/commandPaletteCoreDispatch";
+
+function immediateHandlers(
+  overrides: Partial<CommandPaletteImmediateCoreHandlers> = {},
+): CommandPaletteImmediateCoreHandlers {
+  return {
+    applyViewMode: jest.fn(),
+    fitAll: jest.fn(),
+    fitSelection: jest.fn(),
+    focusBranch: jest.fn(() => true),
+    clearFocus: jest.fn(),
+    expandSubtree: jest.fn(() => true),
+    collapseSubtree: jest.fn(() => true),
+    undo: jest.fn(),
+    redo: jest.fn(),
+    duplicateBranch: jest.fn(),
+    deleteNodeOnly: jest.fn(),
+    insertParent: jest.fn(),
+    moveSibling: jest.fn(),
+    changeIndent: jest.fn(),
+    focusInMapSearch: jest.fn(),
+    addOutlineRoot: jest.fn(),
+    addOutlineChild: jest.fn(),
+    addOutlineSibling: jest.fn(),
+    beginOutlineEdit: jest.fn(() => true),
+    ...overrides,
+  };
+}
+
+function dialogHandlers(
+  overrides: Partial<CommandPaletteDialogHandlers> = {},
+): CommandPaletteDialogHandlers {
+  return {
+    openLabelReplace: jest.fn(),
+    openBranchMove: jest.fn(),
+    openNodeSplit: jest.fn(),
+    openNodeMerge: jest.fn(),
+    openCrossMapSearch: jest.fn(),
+    ...overrides,
+  };
+}
+
+describe("runCommandPaletteImmediateCore", () => {
+  it("既知 ID を対応ハンドラへ委譲し true を返す", () => {
+    const handlers = immediateHandlers();
+    expect(runCommandPaletteImmediateCore("view.map", handlers)).toBe(true);
+    expect(handlers.applyViewMode).toHaveBeenCalledWith("map");
+    expect(runCommandPaletteImmediateCore("edit.move-sibling-up", handlers)).toBe(true);
+    expect(handlers.moveSibling).toHaveBeenCalledWith("up");
+  });
+
+  it("ガード失敗・未知 ID は false", () => {
+    const handlers = immediateHandlers({
+      focusBranch: () => false,
+      beginOutlineEdit: () => false,
+    });
+    expect(runCommandPaletteImmediateCore("view.focus-branch", handlers)).toBe(false);
+    expect(runCommandPaletteImmediateCore("outline.begin-edit", handlers)).toBe(false);
+    expect(runCommandPaletteImmediateCore("unknown.id", handlers)).toBe(false);
+  });
+});
+
+describe("openCommandPaletteDialog", () => {
+  it("opensDialog ID を open* へ委譲する", () => {
+    const handlers = dialogHandlers();
+    expect(openCommandPaletteDialog("edit.open-label-replace", handlers)).toBe(true);
+    expect(handlers.openLabelReplace).toHaveBeenCalledTimes(1);
+    expect(openCommandPaletteDialog("search.open-cross-map", handlers)).toBe(true);
+    expect(handlers.openCrossMapSearch).toHaveBeenCalledTimes(1);
+  });
+
+  it("未知 ID は false", () => {
+    expect(openCommandPaletteDialog("view.map", dialogHandlers())).toBe(false);
+  });
+});
