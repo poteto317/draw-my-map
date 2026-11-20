@@ -12,6 +12,7 @@ export type ResolutionFilterState = {
 export type ResolutionFilterAction =
   | { type: "setMode"; mode: ResolutionFilterMode }
   | { type: "setPreviousAutoLevel"; level: ResolutionLevel }
+  | { type: "restore"; mode: ResolutionFilterMode; level: ResolutionLevel; pendingScale: number | null }
   | { type: "resetViewport"; level: ResolutionLevel; pendingScale: number | null }
   | { type: "reset"; level: ResolutionLevel; pendingScale: number | null }
   | { type: "completePendingReset" };
@@ -50,7 +51,8 @@ export function reduceResolutionFilterState(
       : { ...state, pendingResetScale: null };
   }
 
-  const nextMode = action.type === "resetViewport" ? state.mode : "auto";
+  const nextMode = action.type === "restore" ? action.mode
+    : action.type === "resetViewport" ? state.mode : "auto";
   return state.mode === nextMode
     && state.previousAutoLevel === action.level
     && state.pendingResetScale === action.pendingScale

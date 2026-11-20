@@ -121,6 +121,7 @@ type UseNodesReturn = {
   addChildNode: (parentId: number) => number | null;
   addSiblingNode: (nodeId: number) => number | null;
   selectNode: (id: number | null) => void;
+  restoreSelection: (selection: NodeSelectionState) => void;
   toggleNodeSelection: (id: number) => void;
   /** Shift範囲選択: アンカー〜target を現在の集合へ加算する（置換ではない。domain の `addRange`）。 */
   selectNodeRange: (targetId: number, visibleNodeIdsOrdered: readonly number[]) => void;
@@ -654,6 +655,7 @@ export function useNodes(): UseNodesReturn {
     addChildNode,
     addSiblingNode,
     selectNode,
+    restoreSelection: setSelection,
     toggleNodeSelection,
     selectNodeRange,
     setSelectionFromMarquee,

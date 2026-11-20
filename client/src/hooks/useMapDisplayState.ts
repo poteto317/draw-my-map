@@ -9,11 +9,14 @@ type UseMapDisplayStateOptions = {
   layoutMode: NodeLayoutMode;
   collapseVisibleNodeIds: ReadonlySet<number>;
   resolutionVisibleNodeIds: ReadonlySet<number>;
+  focusVisibleNodeIds?: ReadonlySet<number> | null;
+  focusRootId?: number | null;
 };
 
 type MapDisplayState = {
   displayNodes: readonly Node[];
   visibleNodeIds: ReadonlySet<number>;
+  fitNodes: readonly Node[];
   layoutFailed: boolean;
 };
 
@@ -22,24 +25,30 @@ export function useMapDisplayState({
   layoutMode,
   collapseVisibleNodeIds,
   resolutionVisibleNodeIds,
+  focusVisibleNodeIds,
+  focusRootId,
 }: UseMapDisplayStateOptions): MapDisplayState {
   const projection = useMemo(
     () => projectCollapsedLayout(nodes, layoutMode, collapseVisibleNodeIds),
     [collapseVisibleNodeIds, layoutMode, nodes],
   );
+  const fitNodes = useMemo(() => projection.nodes.filter(({ id }) =>
+    collapseVisibleNodeIds.has(id) && (focusVisibleNodeIds?.has(id) ?? true),
+  ), [collapseVisibleNodeIds, focusVisibleNodeIds, projection.nodes]);
   const visibleNodeIds = useMemo(() => {
     const visible = new Set<number>();
-    for (const node of nodes) {
-      if (collapseVisibleNodeIds.has(node.id) && resolutionVisibleNodeIds.has(node.id)) {
+    for (const node of fitNodes) {
+      if (node.id === focusRootId || resolutionVisibleNodeIds.has(node.id)) {
         visible.add(node.id);
       }
     }
     return visible;
-  }, [collapseVisibleNodeIds, nodes, resolutionVisibleNodeIds]);
+  }, [fitNodes, focusRootId, resolutionVisibleNodeIds]);
 
   return {
     displayNodes: projection.nodes,
     visibleNodeIds,
+    fitNodes,
     layoutFailed: projection.layoutFailed,
   };
 }
