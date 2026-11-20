@@ -1519,10 +1519,13 @@ type LibraryBackupV1 = {
 追加復元は V3 の一括ファイルだけを受け付けます。個別 V1/V2 JSON の救出はヘッダーの「JSON読み込み」で行います。各マップへ未使用の**新しい** ID を与え（`mapIdMapping: Map<oldMapId, newMapId>`）、元のノード ID、名前、日時を維持して一覧の末尾に加えます。全マップの新 ID 採番後に各ドキュメントの `nodes` へ `remapNodeMapLinks(nodes, mapIdMapping)` を適用し、バックアップ内のマップ同士を指す `mapLinks.targetMapId` を新規採番された `mapId` へ自動リマップします（バックアップ外を指す ID はそのまま保持）。既存の ID・本体・現在のマップと、現在の editor/session は維持します。確認前のファイル読込中や確認後に session・一覧が変われば再試行を求めます。現在マップの保存待ちは `flush` し、失敗なら追加しません。
 
 メイン一覧とマップ本体の書き込みが確定した**後**、`libraryMetaStatus === "ready"` かつバックアップに `folders` または `mapMeta` が含まれる場合、`mergeLibraryMetaForRestore` で既存メタデータと統合して `draw-my-map.library-meta.v1` を 1 回だけ保存します：
+
 1. バックアップの各フォルダーについて、既存フォルダーに同じ `mapFolderNameKey` があればそこへ合流します（`folderIdMapping` に既存 ID を記録）。
 2. 無ければ、合計フォルダー数が 50 件（`MAX_MAP_FOLDERS`）未満のときだけ追加します（ID が既存フォルダーと衝突する場合は新 ID を採番）。
 3. 50 件上限に達していた場合は追加せず `droppedFolderCount` として数え、そのフォルダーに属していた復元マップは `folderId` を外して未分類化します（完了後に警告通知）。
 4. 各 `mapMeta[oldMapId]` を `newMapId` へ付け替え、`folderId` は `folderIdMapping` で変換します。メタデータの保存失敗や上限超過があっても、確定済みのマップ本体復元は巻き戻さず警告通知に留めます。
+
+`libraryMetaStatus` が `corrupt` / `unavailable` のときは、バックアップに `folders` / `mapMeta` があってもメタデータを上書きせず、warning の通知でバックアップのお気に入り・フォルダーを復元しなかったことを伝えます（`folders` / `mapMeta` の無いバックアップは通常の成功通知）。
 
 `libraryRestoreJournal.ts` の専用ジャーナルは `format: "draw-my-map-library-restore"`, `version: 1`, 操作前後の一覧原文 `indexBefore` / `indexAfter`, 新規本体の `{ id, json }[]` を持ちます。`libraryRestoreTransaction.ts` は **ジャーナル → 新規本体全件 → 最終一覧1回 → ジャーナル削除** の順に同期書込し、最後の削除を確定点にします。途中失敗では一覧原文と書込済み新規本体を戻します。戻せなければ `recoveryRequired` として保護モードへ移し、書込直前に取得した有効な現在 document JSON を `initialJson` に渡します。再マウントで選択・履歴・viewport はリセットされますが、nodes・layoutMode・illustration は保持します。
 
@@ -1763,6 +1766,7 @@ export type MapLibraryMetaStatus = "ready" | "corrupt" | "unavailable";
 | `"unavailable"` | `getItem` 例外（`read-error`）、または保護モード | 保護モード以外は通常モードで編集継続 | 初期化ボタンは出さない（データ保護のため）。非保護モード時は再読み込みを案内し、メタ書込操作を `disabled`／フック側拒否 |
 
 - マップ切替・作成・別名保存・枝移動の成功時は `lastOpenedAt` を保存し、マップ削除（ゴミ箱移動・完全削除）時は削除マップの `pruneMapMetaForRemovedMap` と次に開くマップの `recordMapOpened` をメモリ上で 1 つの `nextMeta` に合成して 1 回だけ書き込みます。メタデータ書込失敗でも主処理の成功は巻き戻さず警告通知に留めます。
+- メタデータはアクティブなマップだけを対象にし、ゴミ箱の項目（`MapTrashItem`）はお気に入り・最終閲覧日時・フォルダーの所属を持ちません。このため、ゴミ箱へ移したマップをゴミ箱から戻しても、お気に入り・最終閲覧日時・フォルダーの所属は戻りません（「未分類」・お気に入りなしで戻る。フォルダー自体は残る）。
 
 ## 6. Markdown・箇条書き書き出しと保存形式（Phase 15）
 
