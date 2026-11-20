@@ -2,11 +2,13 @@ import { useCallback, useMemo, useState } from "react";
 
 import {
   canCollapse,
+  collectSubtreeIds,
   createNodeCollapseIndex,
   deriveNodeCollapse,
   expandCollapsedNodes,
   normalizeCollapsedNodeIds,
   toggleCollapsedNode,
+  updateSubtreeCollapsedIds,
   type NodeCollapseIndex,
 } from "@/domain/nodes/nodeCollapse";
 import type { Node } from "@/types/node";
@@ -29,6 +31,8 @@ type UseBranchCollapseResult = {
   canToggle: (nodeId: number) => boolean;
   toggle: (nodeId: number) => void;
   expandNodes: (nodeIds: readonly number[]) => void;
+  setCollapsedNodeIds: (ids: ReadonlySet<number>) => void;
+  setSubtreeCollapsed: (nodeId: number, collapsed: boolean) => void;
 };
 
 function normalizeState(
@@ -105,6 +109,21 @@ export function useBranchCollapse({
     [documentRevision, index],
   );
 
+  const setCollapsedNodeIds = useCallback((ids: ReadonlySet<number>) => {
+    if (!index) return;
+    const nextIds = normalizeCollapsedNodeIds(index, new Set(ids));
+    setState((current) => transitionState(current, documentRevision, index, () => nextIds));
+  }, [documentRevision, index]);
+
+  const setSubtreeCollapsed = useCallback((nodeId: number, collapsed: boolean) => {
+    if (!index) return;
+    const subtreeIds = collectSubtreeIds(index, nodeId);
+    if (!subtreeIds) return;
+    setState((current) => transitionState(current, documentRevision, index, (ids) =>
+      updateSubtreeCollapsedIds(index, ids, subtreeIds, collapsed),
+    ));
+  }, [documentRevision, index]);
+
   return {
     index,
     collapsedNodeIds: derived.collapsedNodeIds,
@@ -113,5 +132,7 @@ export function useBranchCollapse({
     canToggle,
     toggle,
     expandNodes,
+    setCollapsedNodeIds,
+    setSubtreeCollapsed,
   };
 }
