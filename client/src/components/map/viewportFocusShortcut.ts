@@ -1,5 +1,5 @@
 import { isEditableTarget } from "@/components/map/editableTarget";
-import type { ScreenSize } from "@/components/map/mapViewport";
+import { isValidScreenSize, type ScreenSize } from "@/components/map/mapViewport";
 import type { Node } from "@/types/node";
 
 export type ViewportFocusRequest = {
@@ -49,6 +49,7 @@ export function resolveViewportFocusRequest({
     || isEditableTarget(target)
     || hasActiveGesture
     || !screen
+    || !isValidScreenSize(screen)
     || selectedNodeId === null) return null;
 
   const node = nodes.find((candidate) => candidate.id === selectedNodeId);

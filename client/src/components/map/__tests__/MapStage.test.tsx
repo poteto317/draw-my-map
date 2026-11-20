@@ -7,8 +7,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { Graphics } from "pixi.js";
-import { MapStage } from "@/components/map/MapStage";
+import { Application, Graphics } from "pixi.js";
+import { MapStage, type MapStageViewportHandle } from "@/components/map/MapStage";
 import {
   lastWorldContainer,
   mockContainers,
@@ -622,6 +622,103 @@ describe("MapStage boundary", () => {
     rerender(<MapStage {...defaultProps} nodes={[...sampleNodes]} focusRequest={request} />);
 
     expect(worldContainer?.position.set).toHaveBeenLastCalledWith(320, 250);
+  });
+
+  it("画面準備後に変換を適用し、直前と直後のビューポートを同期的に取得する", async () => {
+    const viewportRef = { current: null as MapStageViewportHandle | null };
+    const next = { offsetX: 120, offsetY: 260, scale: 2 };
+    const before = jest.fn();
+    await renderReady(<MapStage {...defaultProps} viewportHandleRef={viewportRef} />);
+    const handle = viewportRef.current!;
+
+    expect(handle.getScreenSize()).toEqual({ width: 800, height: 600 });
+    act(() => {
+      expect(handle.applyViewport(next, () => before(handle.getViewport()))).toBe(true);
+      expect(handle.getViewport()).toEqual(next);
+      expect(handle.applyViewport({ ...next }, before)).toBe(false);
+      expect(handle.applyViewport({ ...next, scale: 0 }, before)).toBe(false);
+    });
+    expect(before).toHaveBeenCalledTimes(1);
+    expect(before).toHaveBeenCalledWith({ offsetX: 0, offsetY: 0, scale: 1 });
+    expect(lastWorldContainer()?.position.set.mock.lastCall).toEqual([120, 260]);
+    expect(lastWorldContainer()?.scale.set.mock.lastCall).toEqual([2]);
+  });
+
+  it("同じ文書内で新しい要求が発行済みなら観測済みの旧要求を適用せず、完了したIDだけ通知する", async () => {
+    const oldRequest = { nodeId: 1, sequence: 1, documentRevision: 0 };
+    const nextRequest = { ...oldRequest, sequence: 2 };
+    const onFocusRequestApplied = jest.fn();
+    const props = {
+      ...defaultProps,
+      nodes: sampleNodes,
+      isCurrentFocusRequest: (request: typeof oldRequest) => request.sequence === nextRequest.sequence,
+      onFocusRequestApplied,
+    };
+    const { rerender } = await renderReady(<MapStage {...props} focusRequest={oldRequest} />);
+
+    expect(lastWorldContainer()?.position.set.mock.lastCall).toEqual([0, 0]);
+    expect(onFocusRequestApplied).not.toHaveBeenCalled();
+    rerender(<MapStage {...props} focusRequest={nextRequest} />);
+    expect(lastWorldContainer()?.position.set.mock.lastCall).toEqual([300, 240]);
+    expect(onFocusRequestApplied.mock.calls).toEqual([[nextRequest]]);
+  });
+
+  it("旧文書の中央移動要求を適用しない", async () => {
+    const before = jest.fn();
+    await renderReady(<MapStage {...defaultProps} nodes={sampleNodes} documentRevision={1}
+      focusRequest={{ nodeId: 1, sequence: 1, documentRevision: 0 }}
+      onBeforeCenterNode={before} />);
+    expect(before).not.toHaveBeenCalled();
+    expect(lastWorldContainer()?.position.set.mock.lastCall).toEqual([0, 0]);
+  });
+
+  it("Pixiの画面計測が完了すると保留した中央移動を一度だけ再開する", async () => {
+    const beforeCenter = jest.fn();
+    const props = { ...defaultProps, nodes: sampleNodes, onBeforeCenterNode: beforeCenter };
+    const { rerender, unmount } = await renderReady(<MapStage {...props} />);
+    const { renderer } = jest.mocked(Application).mock.results.at(-1)!.value;
+    act(() => renderer.resize(0, 600));
+    const request = { nodeId: 1, sequence: 1, documentRevision: 0 };
+    rerender(<MapStage {...props} focusRequest={request} />);
+    expect(beforeCenter).not.toHaveBeenCalled();
+
+    act(() => renderer.resize(800, 600));
+    expect(lastWorldContainer()?.position.set.mock.lastCall).toEqual([300, 240]);
+    expect(beforeCenter).toHaveBeenCalledTimes(1);
+    expect(beforeCenter).toHaveBeenCalledWith(request);
+
+    act(() => renderer.resize(900, 600));
+    expect(lastWorldContainer()?.position.set.mock.lastCall).toEqual([300, 240]);
+    expect(beforeCenter).toHaveBeenCalledTimes(1);
+    unmount();
+    expect(renderer.off).toHaveBeenCalledWith("resize", renderer.on.mock.calls[0][1]);
+  });
+
+  it("未計測ではフィットせず、計測後のフィットで保留中の中央移動を失効させる", async () => {
+    const viewportRef = { current: null as MapStageViewportHandle | null };
+    const beforeCenter = jest.fn();
+    const beforeFit = jest.fn();
+    const props = { ...defaultProps, nodes: sampleNodes, viewportHandleRef: viewportRef, onBeforeCenterNode: beforeCenter };
+    const { rerender } = await renderReady(<MapStage {...props} />);
+    const { screen: pixiScreen, renderer } = jest.mocked(Application).mock.results.at(-1)!.value;
+    act(() => renderer.resize(0, 600));
+    const request = { nodeId: 1, sequence: 1, documentRevision: 0 };
+    rerender(<MapStage {...props} focusRequest={request} />);
+
+    expect(viewportRef.current?.getScreenSize()).toBeNull();
+    expect(viewportRef.current?.fitNodes(sampleNodes, beforeFit)).toBe(false);
+    expect(beforeFit).not.toHaveBeenCalled();
+    expect(beforeCenter).not.toHaveBeenCalled();
+
+    pixiScreen.width = 800;
+    act(() => {
+      expect(viewportRef.current?.fitNodes(sampleNodes, beforeFit)).toBe(true);
+    });
+    const positionAfterFit = lastWorldContainer()?.position.set.mock.lastCall;
+    rerender(<MapStage {...props} nodes={[...sampleNodes]} focusRequest={request} />);
+    expect(beforeFit).toHaveBeenCalledTimes(1);
+    expect(beforeCenter).not.toHaveBeenCalled();
+    expect(lastWorldContainer()?.position.set.mock.lastCall).toEqual(positionAfterFit);
   });
 
   it("gesture中のFキーではviewportを変更しない", async () => {

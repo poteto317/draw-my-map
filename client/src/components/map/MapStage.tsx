@@ -1,6 +1,7 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef, type MouseEvent, type RefObject } from "react";
+import { useCallback, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type RefObject } from "react";
+import { fitViewportToNodes, isValidScreenSize, type ScreenSize, type Viewport } from "@/components/map/mapViewport";
 import { NodeContextMenu } from "@/components/map/NodeContextMenu";
 import {
   resolveMapContextMenuAction,
@@ -48,9 +49,22 @@ import type { NodeLabelEditRequest } from "@/types/nodeLabelEditRequest";
 
 const EMPTY_SELECTED_NODE_IDS: readonly number[] = [];
 
+export type MapStageViewportHandle = {
+  getViewport: () => Viewport;
+  getScreenSize: () => ScreenSize | null;
+  applyViewport: (next: Viewport, beforeChange?: () => void) => boolean;
+  fitNodes: (nodes: readonly Node[], beforeChange?: () => void) => boolean;
+};
+
 type MapStageProps = {
   nodes: readonly Node[];
   focusRequest: NodeFocusRequest | null;
+  canvasContainerRef?: RefObject<HTMLDivElement | null>;
+  viewportHandleRef?: RefObject<MapStageViewportHandle | null>;
+  onBeforeCenterNode?: (request: NodeFocusRequest | null) => void;
+  isCurrentFocusRequest?: (request: NodeFocusRequest) => boolean;
+  onFocusRequestApplied?: (request: NodeFocusRequest) => void;
+  onFocusRequestDiscarded?: (request: NodeFocusRequest) => void;
   visibleNodeIds?: ReadonlySet<number>;
   onViewportScaleChange?: (scale: number) => void;
   resetRevision?: number;
@@ -98,6 +112,12 @@ type MapStageProps = {
 export function MapStage({
   nodes,
   focusRequest,
+  canvasContainerRef,
+  viewportHandleRef,
+  onBeforeCenterNode,
+  isCurrentFocusRequest,
+  onFocusRequestApplied,
+  onFocusRequestDiscarded,
   visibleNodeIds,
   onViewportScaleChange,
   resetRevision = 0,
@@ -138,9 +158,11 @@ export function MapStage({
     () => nodes.filter((node) => effectiveVisibleNodeIds.has(node.id)),
     [nodes, effectiveVisibleNodeIds],
   );
-  const containerRef = useRef<HTMLDivElement>(null);
+  const localContainerRef = useRef<HTMLDivElement>(null);
+  const containerRef = canvasContainerRef ?? localContainerRef;
   const menuActivatedAtRef = useRef<number | null>(null);
-  const runtime = usePixiApplication(containerRef);
+  const [screenSize, setScreenSize] = useState<ScreenSize | null>(null);
+  const runtime = usePixiApplication(containerRef, setScreenSize);
   // The 2nd press of a double-click on a menu item or a dialog button lands on the canvas after
   // the overlay closed. Date.now() is read only after such an activation so normal clicks stay clock-neutral.
   const isOverlayFollowUpClick = () => {
@@ -194,6 +216,36 @@ export function MapStage({
     onReorderSibling,
     shouldIgnorePointerDown: isOverlayFollowUpClick,
   });
+
+  const supersededFocusSequence = useRef<number | null>(null);
+  const supersedePendingFocus = useCallback(() => {
+    if (focusRequest !== null) {
+      supersededFocusSequence.current = Math.max(supersededFocusSequence.current ?? 0, focusRequest.sequence);
+    }
+  }, [focusRequest]);
+  const getScreenSize = useCallback((): ScreenSize | null => {
+    if (!runtime || !isValidScreenSize(runtime.app.screen)) return null;
+    const { width, height } = runtime.app.screen;
+    return { width, height };
+  }, [runtime]);
+  const applyViewport = useCallback((next: Viewport, beforeChange?: () => void) => (
+    getScreenSize() !== null && setViewport(next, () => {
+      beforeChange?.();
+      supersedePendingFocus();
+      if (hasActiveGesture()) cancelActiveGesture();
+    })
+  ), [getScreenSize, setViewport, supersedePendingFocus, hasActiveGesture, cancelActiveGesture]);
+
+  useImperativeHandle(viewportHandleRef, () => ({
+    getViewport: () => viewportRef.current,
+    getScreenSize,
+    applyViewport,
+    fitNodes: (targetNodes, beforeChange) => {
+      const screen = getScreenSize();
+      const next = screen === null ? null : fitViewportToNodes(targetNodes, screen);
+      return next !== null && applyViewport(next, beforeChange);
+    },
+  }), [viewportRef, getScreenSize, applyViewport]);
 
   const resolvedSelectedNodeIds = useMemo(() => {
     if (selectedNodeIds !== undefined) return selectedNodeIds;
@@ -279,17 +331,28 @@ export function MapStage({
     enabled: shortcutsEnabled,
     screen: runtime ? runtime.app.screen : null,
     hasActiveGesture,
-    onFocusNode: focusNode,
+    onFocusNode: (node, screen) => focusNode(node, screen, () => {
+      onBeforeCenterNode?.(null);
+      supersedePendingFocus();
+    }),
   });
 
   useNodeFocusRequest({
     request: focusRequest,
     documentRevision,
     nodes,
-    screen: runtime ? runtime.app.screen : null,
+    screen: screenSize,
     hasActiveGesture,
     cancelActiveGesture,
-    onFocusNode: focusNode,
+    isSuperseded: (sequence) => supersededFocusSequence.current !== null
+      && sequence <= supersededFocusSequence.current,
+    isCurrentRequest: isCurrentFocusRequest,
+    onDiscard: onFocusRequestDiscarded,
+    onFocusNode: (node, screen, request) => {
+      if (isCurrentFocusRequest?.(request) === false) return;
+      focusNode(node, screen, () => onBeforeCenterNode?.(request));
+      onFocusRequestApplied?.(request);
+    },
   });
 
   useNodeLabelEditRequest({
@@ -407,6 +470,7 @@ export function MapStage({
   return (
     <div
       ref={containerRef}
+      tabIndex={-1}
       className="relative h-full w-full cursor-crosshair"
       onMouseDown={handleMouseDown}
       onDoubleClick={handleDoubleClick}

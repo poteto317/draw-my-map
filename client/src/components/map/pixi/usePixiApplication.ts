@@ -2,12 +2,14 @@
 
 import { useEffect, useState, type RefObject } from "react";
 import type { Application } from "pixi.js";
+import type { ScreenSize } from "@/components/map/mapViewport";
 import type { PixiRuntime } from "./pixiTypes";
 
 export type { PixiRuntime } from "./pixiTypes";
 
 export function usePixiApplication(
   containerRef: RefObject<HTMLDivElement | null>,
+  onScreenResize?: (screen: ScreenSize) => void,
 ): PixiRuntime | null {
   const [runtime, setRuntime] = useState<PixiRuntime | null>(null);
 
@@ -19,6 +21,7 @@ export function usePixiApplication(
     let initialized = false;
     let destroyed = false;
     let app: Application | null = null;
+    const notifyScreenResize = (width: number, height: number) => onScreenResize?.({ width, height });
     const destroy = () => {
       if (app && !destroyed) {
         destroyed = true;
@@ -50,6 +53,10 @@ export function usePixiApplication(
       createdApp.canvas.style.inset = "0px";
       createdApp.canvas.style.touchAction = "none";
       container.appendChild(createdApp.canvas);
+      if (onScreenResize) {
+        createdApp.renderer.on("resize", notifyScreenResize);
+        notifyScreenResize(createdApp.screen.width, createdApp.screen.height);
+      }
       setRuntime({
         app: createdApp,
         constructors: {
@@ -64,9 +71,12 @@ export function usePixiApplication(
 
     return () => {
       cancelled = true;
-      if (initialized) destroy();
+      if (initialized && app && !destroyed) {
+        if (onScreenResize) app.renderer.off("resize", notifyScreenResize);
+        destroy();
+      }
     };
-  }, [containerRef]);
+  }, [containerRef, onScreenResize]);
 
   return runtime;
 }

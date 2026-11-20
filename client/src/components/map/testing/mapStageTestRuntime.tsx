@@ -26,6 +26,7 @@ export type StageEvent =
 
 export type MockContainer = {
   addChild: jest.Mock;
+  on: jest.Mock<void, [event: "pointerdown", handler: MockPointerHandler]>;
   position: { set: jest.Mock };
   scale: { set: jest.Mock };
   alpha?: number;
@@ -53,15 +54,27 @@ export const mockStage = {
   hitArea: null as unknown,
 };
 
-export function createMockPixiModule() {
+export function createMockPixiModule({ init }: { init?: () => Promise<void> } = {}) {
   return {
-    Application: jest.fn().mockImplementation(() => ({
-      init: jest.fn().mockResolvedValue(undefined),
-      destroy: jest.fn(),
-      canvas: document.createElement("canvas"),
-      stage: mockStage,
-      screen: { x: 0, y: 0, width: 800, height: 600 },
-    })),
+    Application: jest.fn().mockImplementation(() => {
+      const screen = { x: 0, y: 0, width: 800, height: 600 };
+      const resizeHandlers = new Set<(width: number, height: number) => void>();
+      return {
+        init: init ?? jest.fn().mockResolvedValue(undefined),
+        destroy: jest.fn(),
+        canvas: document.createElement("canvas"),
+        stage: mockStage,
+        screen,
+        renderer: {
+          on: jest.fn((_event, listener) => resizeHandlers.add(listener)),
+          off: jest.fn((_event, listener) => resizeHandlers.delete(listener)),
+          resize(width: number, height: number) {
+            Object.assign(screen, { width, height });
+            resizeHandlers.forEach((listener) => listener(width, height));
+          },
+        },
+      };
+    }),
     Graphics: jest.fn().mockImplementation(() => ({
       rect: jest.fn().mockReturnThis(),
       circle: jest.fn().mockReturnThis(),
