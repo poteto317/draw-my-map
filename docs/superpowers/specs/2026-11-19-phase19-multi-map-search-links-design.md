@@ -168,10 +168,11 @@
     - `version !== 3 || value === undefined` → `{ ok: true, value: undefined }`（V1/V2 互換維持）。
     - 配列でない・件数 > 10・要素がプレーンオブジェクトでない・`targetMapId` / `targetNodeId` 以外の未知キーあり・正規化失敗は文書全体失敗（L-044, L-443, L-470）。
     - 成功時は `uniqueNodeMapLinks` 適用、空配列なら `undefined`。
+    - JSON 読み込み（置き換え）では、自分自身を指すリンク（`targetMapId` が読み込んだマップで `targetNodeId` が同じノード）を検査しません（割り切り。手で作った・ほかのマップから持ってきたファイルでしか起きず、害はリンクを押すと自分のノードへ移動するだけのため。リンクの追加では `self-node` で拒否し、統合では除きます）。
   - `mapDocumentNodeProjection.ts`, `mapDocumentNode.ts` に `mapLinks` を追加。
 - 構造操作・同値比較・属性ポリシー:
   - `NODE_ATTRIBUTE_POLICY.mapLinks = { split: "original-only", merge: "union", parentInsert: "none" }`。
-  - `nodeMerge.ts`: `mapLinks` の union・`map-links-too-many`・`mapLinkSourceCount` / `mapLinkDuplicateCount`（既存 `linkSourceCount`/`tagSourceCount`/`sourceSourceCount` の命名規則に統一）・`isSameNodeMergePlan` を追加。`planNodeMerge`・`mergeNodes`（ドメインと `useNodes`）は末尾の引数に現在マップの ID（`currentMapId`）を受け取り、残すノード自身を指すリンク（`isSelfNodeMapLink`。追加時の `self-node` と同じ判定）を重複除去の前に除いて `mapLinkSelfCount` に数える（`isSameNodeMergePlan` の比較対象。上限判定は除いた後の件数）。`useNodeMergeDialog` は `mapId` を渡す。`nodeMergePreview.ts` にプレビュー文言「マップ間リンク: N 件（重複 M 件を除く）」（重複 0 件時は括弧なし。自己リンクを除いたときは「N 件（重複 M 件、自分自身へのリンク K 件を除く）」のように 0 件の項目を省いて添え、残りが 0 件でも行を出す）を追加。
+  - `nodeMerge.ts`: `mapLinks` の union・`map-links-too-many`・`mapLinkSourceCount` / `mapLinkDuplicateCount`（既存 `linkSourceCount`/`tagSourceCount`/`sourceSourceCount` の命名規則に統一）・`isSameNodeMergePlan` を追加。`planNodeMerge`・`mergeNodes`（ドメインと `useNodes`）は末尾の引数に現在マップの ID（`currentMapId`）を受け取り、統合するノード（残すノード・吸収されるノード）を指すリンク（`isSelfNodeMapLink` を選んだ各ノードに当てる。追加時の `self-node` と同じ判定。吸収されるノードを指すものは統合の直後にリンク切れになるため）を重複除去の前に除いて `mapLinkSelectedTargetCount` に数える（`isSameNodeMergePlan` の比較対象。上限判定は除いた後の件数）。`useNodeMergeDialog` は `mapId` を渡す。`nodeMergePreview.ts` にプレビュー文言「マップ間リンク: N 件（重複 M 件を除く）」（重複 0 件時は括弧なし。統合するノードを指すリンクを除いたときは「N 件（重複 M 件、統合するノードを指すリンク K 件を除く）」のように 0 件の項目を省いて添え、残りが 0 件でも行を出す）を追加。
   - `mapHistory.ts`: `areNodesEqual` の `mapLinks` キーで `areNodeMapLinksEqual` を使用。
   - `mapConflict.ts`: `areNodesEqual` に `areNodeMapLinksEqual` を追加。
   - `nodeAttributePolicy.test.ts`: `SAMPLE`・`DIFFERENT`・キー一覧へ `mapLinks` を追加。
@@ -471,7 +472,7 @@
 | 保存・JSON・localStorage（マップ本体） | V3 任意項目 `mapLinks` を往復（V1/V2 互換維持） |
 | 保存・localStorage（メタデータ） | 独立キー `draw-my-map.library-meta.v1` に `folders`・`mapMeta` を保存（`PersistentLibraryState` に統合して `revisionRef` と同期） |
 | Undo / Redo | `mapLinks` の追加・削除は 1 操作で履歴記録。お気に入り・最近使用・フォルダー操作はマップ編集履歴の対象外 |
-| 複製・コピー＆貼り付け・枝の他マップ移動 | `mapLinks` を値コピーで引き継ぐ |
+| 複製・コピー＆貼り付け・枝の他マップ移動 | `mapLinks` を値コピーで引き継ぐ。別マップへの枝の移動では、移動先でノード ID を振り直すので、枝の中のノードを指していたリンク（`targetMapId` が移動元マップで `targetNodeId` が枝の中の旧 ID）は、移動先マップ・新しい ID へ付け替えます（付け替えて重複したら 1 件にまとめます。`remapMovedBranchMapLinks`）。枝の外のノード・マップ全体・ほかのマップを指すリンクは値のまま写します。枝の外（移動元マップのほかのノードや、ほかのマップ）から枝の中を指していたリンクは書き換えません（割り切り。移動の後は「リンク切れを確認」で「ノードなし」として見つかり、利用者が直します）（`transferNodeBranch` は移動元・移動先のマップ ID を受け取る） |
 | 分割・統合・親挿入 | 分割は元ノードのみ保持、統合は union（10件超過は拒否）、親挿入は持たない |
 | 競合検出（複数タブ） | `mapConflict.ts` で `mapLinks` 差分を検出。競合中は他マップジャンプ・一括復元を拒否（`flushCurrentSession` 経路） |
 | 保護モード | マップ一覧・フォルダー管理・メタデータ書込・リンク切れ一括ダイアログ・他マップ移動を無効化。現在マップの横断検索・右パネル閲覧編集は利用可能（他マップ向けリンクは `protected-unavailable` としてリンク切れ誤判定を防ぐ） |

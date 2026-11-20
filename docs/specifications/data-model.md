@@ -201,7 +201,7 @@ export type NodeMapLink = {
 };
 ```
 
-- **任意属性ポリシー（`client/src/domain/nodes/nodeAttributePolicy.ts`）**: `NODE_ATTRIBUTE_POLICY.mapLinks` は `{ split: "original-only", merge: "union", parentInsert: "none" }` です。ノード分割では元のノードにのみ残し、ノード統合では選択ノード群の `mapLinks` を配列順に連結し、現在マップの残すノード自身を指すリンク（`targetMapId` が現在マップで `targetNodeId` が残すノードの ID。追加時の `self-node` と同じ判定 `isSelfNodeMapLink`）を除いてから `nodeMapLinkKey` で重複除去します（除いた後で 10 件超過時は `map-links-too-many` で拒否）。親の挿入では新しい親へ引き継ぎません。枝の複製・コピー＆ペースト・別マップへの枝移動では値コピーでそのまま引き継ぎます。削除は配列添字ではなく `nodeMapLinkKey` による値一致で行い、最後の 1 件削除時に `mapLinks` キーごと外します。履歴（`mapHistory.ts`）と複数タブ競合判定（`mapConflict.ts`）の同値比較でも `areNodeMapLinksEqual` で検証します。
+- **任意属性ポリシー（`client/src/domain/nodes/nodeAttributePolicy.ts`）**: `NODE_ATTRIBUTE_POLICY.mapLinks` は `{ split: "original-only", merge: "union", parentInsert: "none" }` です。ノード分割では元のノードにのみ残し、ノード統合では選択ノード群の `mapLinks` を配列順に連結し、現在マップの統合するノードを指すリンク（`targetMapId` が現在マップで `targetNodeId` が残すノードまたは吸収されるノードの ID。追加時の `self-node` と同じ判定 `isSelfNodeMapLink` を選んだ各ノードに当てる。除いた件数は `mapLinkSelectedTargetCount`）を除いてから `nodeMapLinkKey` で重複除去します（除いた後で 10 件超過時は `map-links-too-many` で拒否）。親の挿入では新しい親へ引き継ぎません。枝の複製・コピー＆ペーストでは値コピーでそのまま引き継ぎます。別マップへの枝の移動では、移動先でノード ID を振り直すので、枝の中のノードを指していたリンク（`targetMapId` が移動元マップで `targetNodeId` が枝の中の旧 ID）は、移動先マップ・新しい ID へ付け替えます（付け替えて重複したら 1 件にまとめます。`remapMovedBranchMapLinks`）。枝の外のノード・マップ全体・ほかのマップを指すリンクは値のまま写します。枝の外（移動元マップのほかのノードや、ほかのマップ）から枝の中を指していたリンクは書き換えません（割り切り。移動の後は「リンク切れを確認」で「ノードなし」として見つかり、利用者が直します）。削除は配列添字ではなく `nodeMapLinkKey` による値一致で行い、最後の 1 件削除時に `mapLinks` キーごと外します。履歴（`mapHistory.ts`）と複数タブ競合判定（`mapConflict.ts`）の同値比較でも `areNodeMapLinksEqual` で検証します。
 
 - 兄弟とルートの順は `nodes` 配列の相対順です（同じ `parentId` を持つノード同士の、配列の中の前後）。並べ替えは根ノード1つの配列内の位置を変え、子孫の位置は変えません。順序のフィールド（`order` など）は持ちません。親子は `parentId` で表すので、子が親より前にあってもかまいません（[features.md の 14 章](./features.md#14-兄弟ノードの順序変更)）。
 - `parentId` は接続（`Shift` + ドラッグ）に加えて、階層の上げ下げ（[features.md の 15 章](./features.md#15-階層の上げ下げ)）でも変わります。上げ下げは、上げ下げする枝の根 T の `parentId` と、T の根ノード1つの配列内の位置を変え、子孫の `parentId` と位置は変えません（下げて新しい親に子が無いときは T の位置も変えません）。
@@ -948,6 +948,7 @@ export function parseMapDocumentJsonWithVersion(
    - 条件: 配列で、件数が 10 以下（`NODE_MAP_LINKS_MAX_COUNT`）、各要素がプレーンオブジェクトで既知キー（`targetMapId`・`targetNodeId`）のみ、必須の `targetMapId` が文字列かつ `isValidMapId`（`MAP_ID_PATTERN`）を満たし、任意の `targetNodeId` があるときは 1 以上の安全な整数（`isValidTargetNodeId`）。件数・プレーンオブジェクト型・未知キー・各フィールド型は正規化より先に判定する。
    - 通った要素は `normalizeNodeMapLink` で正規化し（`targetNodeId` 未指定時はキー省略）、`nodeMapLinkKey` が同じものは後のものを捨てる。空になれば `undefined`（項目ごと持たない）。
    - エラー: `"node[${index}].mapLinksは、有効なマップ ID と任意のノード ID（1以上の安全な整数）からなるマップ間リンクの配列（最大10件）である必要があります。"`
+   - JSON 読み込み（置き換え）では、自分自身を指すリンク（`targetMapId` が読み込んだマップで `targetNodeId` が同じノード）を検査しません（割り切り。手で作った・ほかのマップから持ってきたファイルでしか起きず、害はリンクを押すと自分のノードへ移動するだけのため。リンクの追加では `self-node` で拒否し、統合では除きます）。
 
 ### 4.4 イラスト画像・Data URL バリデーション仕様
 
