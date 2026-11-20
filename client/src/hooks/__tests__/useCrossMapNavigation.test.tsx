@@ -103,4 +103,47 @@ describe("useCrossMapNavigation", () => {
     rerender({ hydrated: true });
     expect(navigateToNodeInMapView).toHaveBeenCalledTimes(1);
   });
+
+  it("pending 到着時は navigateToArrivalInMapView だけを呼び通常ナビは呼ばない", () => {
+    const nodes = [createTestNode({ id: 10, parentId: null, label: "対象" })];
+    const navigateToNodeInMapView = jest.fn();
+    const navigateToArrivalInMapView = jest.fn();
+    const onConsumePendingNavigation = jest.fn();
+
+    const { rerender } = renderHook(
+      ({ hydrated }: { hydrated: boolean }) =>
+        useCrossMapNavigation({
+          mapId: "map-2",
+          sessionNumber: 3,
+          hydrated,
+          nodes,
+          documentRevision: 1,
+          viewMode: "map",
+          initialViewportScale: 1,
+          resolutionMode: "all",
+          collapseIndex: createNodeCollapseIndex(nodes),
+          collapsedNodeIds: new Set(),
+          expandNodes: jest.fn(),
+          setResolutionMode: jest.fn(),
+          resetViewportScale: jest.fn(),
+          setViewportScale: jest.fn(),
+          setViewMode: jest.fn(),
+          selectNode: jest.fn(),
+          issueCanvasFocusRequest: jest.fn(),
+          clearCanvasFocusRequest: jest.fn(),
+          navigateToNodeInMapView,
+          navigateToArrivalInMapView,
+          pendingNavigation: { mapId: "map-2", sessionNumber: 3, nodeId: 10, token: 11 },
+          onConsumePendingNavigation,
+          onSwitchToMapTarget: jest.fn(),
+        }),
+      { initialProps: { hydrated: false } },
+    );
+
+    rerender({ hydrated: true });
+    expect(navigateToArrivalInMapView).toHaveBeenCalledTimes(1);
+    expect(navigateToArrivalInMapView).toHaveBeenCalledWith(10);
+    expect(navigateToNodeInMapView).not.toHaveBeenCalled();
+    expect(onConsumePendingNavigation).toHaveBeenCalledWith(11);
+  });
 });
