@@ -291,16 +291,25 @@ describe("buildNodeMergePreview", () => {
       ];
 
       expect(buildNodeMergePreview(nodes, okPlan(nodes, [1, 2], 1))?.mapLinkText)
-        .toBe("1 件（重複 1 件、自分自身へのリンク 1 件を除く）");
+        .toBe("1 件（重複 1 件、統合するノードを指すリンク 1 件を除く）");
       const selfOnly = [node(1, "a", { mapLinks: [{ targetMapId: "map-a" }] }), node(2, "b", { mapLinks: [self] })];
       expect(buildNodeMergePreview(selfOnly, okPlan(selfOnly, [1, 2], 1))?.mapLinkText)
-        .toBe("1 件（自分自身へのリンク 1 件を除く）");
+        .toBe("1 件（統合するノードを指すリンク 1 件を除く）");
     });
 
-    it("自己リンクだけで残るリンクが無くても、除いたことが分かるよう 0 件の行を出す", () => {
+    it("吸収されるノードを指すリンクも「統合するノードを指すリンク」として件数に含める", () => {
+      const nodes = [
+        node(1, "a", { mapLinks: [{ targetMapId: CURRENT_MAP_ID, targetNodeId: 2 }, { targetMapId: "map-a" }] }),
+        node(2, "b"),
+      ];
+
+      expect(buildNodeMergePreview(nodes, okPlan(nodes, [1, 2], 1))?.mapLinkText).toBe("1 件（統合するノードを指すリンク 1 件を除く）");
+    });
+
+    it("統合するノードを指すリンクだけで残るリンクが無くても、除いたことが分かるよう 0 件の行を出す", () => {
       const nodes = [node(1, "a"), node(2, "b", { mapLinks: [{ targetMapId: CURRENT_MAP_ID, targetNodeId: 1 }] })];
 
-      expect(buildNodeMergePreview(nodes, okPlan(nodes, [1, 2], 1))?.mapLinkText).toBe("0 件（自分自身へのリンク 1 件を除く）");
+      expect(buildNodeMergePreview(nodes, okPlan(nodes, [1, 2], 1))?.mapLinkText).toBe("0 件（統合するノードを指すリンク 1 件を除く）");
     });
   });
 

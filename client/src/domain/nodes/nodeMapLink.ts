@@ -183,6 +183,31 @@ export function remapNodeMapLinks(
   });
 }
 
+// 別マップへ移した枝の中で、枝の中のノードを指していたリンク（移動元マップ・旧 ID）を、移動先マップ・新しい ID へ付け替え、
+// 重複を除く。枝の外のノード・マップ全体・ほかのマップを指すリンクは値のまま。枝の外から枝を指していたリンクは
+// 書き換えない（呼び出し側は枝のノードだけを渡す。残ったリンクはリンク切れの確認で利用者が直す）
+export function remapMovedBranchMapLinks(
+  nodes: readonly Node[],
+  sourceMapId: string,
+  targetMapId: string,
+  nodeIdMapping: ReadonlyMap<number, number>,
+): Node[] {
+  return nodes.map((node) => {
+    const current = node.mapLinks;
+    if (current === undefined || current.length === 0) return node;
+    let changed = false;
+    const mapped = current.map((link) => {
+      if (link.targetMapId !== sourceMapId || link.targetNodeId === undefined) return link;
+      const nextNodeId = nodeIdMapping.get(link.targetNodeId);
+      if (nextNodeId === undefined) return link;
+      changed = true;
+      return buildNodeMapLink(targetMapId, nextNodeId);
+    });
+    if (!changed) return node;
+    return withNodeMapLinks(node, uniqueNodeMapLinks(mapped));
+  });
+}
+
 // 利用者向けの失敗文言
 export function formatNodeMapLinkFailure(reason: NodeMapLinkFailureReason): string {
   switch (reason) {

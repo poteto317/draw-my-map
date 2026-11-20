@@ -1,6 +1,7 @@
 import { layoutNodeForest } from "@/domain/nodes/nodeAutoLayout";
 import { calculateIndentTranslation, translateBranch, type BranchTranslation } from "@/domain/nodes/nodeIndentPlacement";
 import { calculateManualOffsetY } from "@/domain/nodes/nodeManualPlacement";
+import { remapMovedBranchMapLinks } from "@/domain/nodes/nodeMapLink";
 import { insertNodeSubtree, type AllocateNodeIds } from "@/domain/nodes/nodeSubtreeInsertion";
 import { collectSubtreeIds } from "@/domain/nodes/nodeTree";
 import type { Node } from "@/types/node";
@@ -147,11 +148,18 @@ export function moveNodeBranch(
     : { ok: true, nodes: placed, rootId };
 }
 
+export type BranchTransferMapIds = {
+  readonly sourceMapId: string;
+  readonly targetMapId: string;
+};
+
+// 枝を別マップへ移す。移動先で ID を振り直すので、枝の中のノード同士を指すマップ間リンクは移動先マップ・新しい ID へ付け替える
 export function transferNodeBranch(
   source: NodeMapState,
   target: NodeMapState,
   rootId: number,
   allocateIds: AllocateNodeIds,
+  mapIds: BranchTransferMapIds,
 ): BranchTransferResult {
   const root = source.nodes.find((node) => node.id === rootId);
   if (root === undefined) return { ok: false, reason: "missing-node" };
@@ -171,7 +179,14 @@ export function transferNodeBranch(
     "paste",
   );
   if (inserted === null) return { ok: false, reason: "placement-failed" };
-  const nextTargetNodes = layoutForMode(inserted.nodes, target.layoutMode);
+  // 写した枝は配列の末尾に、元の枝と同じ順で並ぶ
+  const copies = inserted.nodes.slice(target.nodes.length);
+  const nodeIdMapping = new Map(split.branch.map((item, index) => [item.id, copies[index].id] as const));
+  const remappedCopies = remapMovedBranchMapLinks(copies, mapIds.sourceMapId, mapIds.targetMapId, nodeIdMapping);
+  const nextTargetNodes = layoutForMode(
+    [...inserted.nodes.slice(0, target.nodes.length), ...remappedCopies],
+    target.layoutMode,
+  );
   if (nextTargetNodes === null) return { ok: false, reason: "placement-failed" };
 
   return {

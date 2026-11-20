@@ -66,7 +66,13 @@ export function transferStoredBranch(
   const documents = readTransferDocuments(storage, sourceId, targetId);
   if (!documents.ok) return failed(documents.sourceJson);
   const { sourceJson, targetJson } = documents;
-  const moved = transferNodeBranch(documents.source, documents.target, rootId, createNodeIdAllocator().nextAvailableIds);
+  const moved = transferNodeBranch(
+    documents.source,
+    documents.target,
+    rootId,
+    createNodeIdAllocator().nextAvailableIds,
+    { sourceMapId: sourceId, targetMapId: targetId },
+  );
   if (!moved.ok) return failed(sourceJson);
 
   const next = openMapAfterBranchTransfer(index, sourceId, targetId, now.toISOString());

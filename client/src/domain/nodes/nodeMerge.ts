@@ -90,10 +90,11 @@ export type NodeMergePlan =
     mapLinks: readonly NodeMapLink[] | undefined;
     // マップ間リンクを持つノードの件数
     mapLinkSourceCount: number;
-    // 重複して捨てるマップ間リンクの件数（プレビューで見せる）。残すノード自身を指すものは除いた後で数える
+    // 重複して捨てるマップ間リンクの件数（プレビューで見せる）。統合するノードを指すものは除いた後で数える
     mapLinkDuplicateCount: number;
-    // 現在マップの残すノード自身を指すために捨てるマップ間リンクの件数（プレビューで見せる）
-    mapLinkSelfCount: number;
+    // 現在マップの統合するノード（残すノード・吸収されるノード）を指すために捨てるマップ間リンクの件数（プレビューで見せる）。
+    // 残すノードを指すものは統合後に自分自身へのリンクになり、吸収されるノードを指すものは統合の直後にリンク切れになる
+    mapLinkSelectedTargetCount: number;
   }
   | { ok: false; reason: NodeMergeFailureReason };
 
@@ -161,7 +162,7 @@ function chooseMergeIllustration(
 }
 
 // 対象を検査して統合の計画を作る（配列は変えない）。並びは配列順で、ids の順序には依存しない。
-// currentMapId は統合するマップの ID で、残すノード自身を指すマップ間リンクを除くために使う
+// currentMapId は統合するマップの ID で、統合するノードを指すマップ間リンクを除くために使う
 export function planNodeMerge(
   nodes: readonly Node[],
   ids: readonly number[],
@@ -200,9 +201,12 @@ export function planNodeMerge(
     (node.mapLinks === undefined || node.mapLinks.length === 0 ? [] : [node.mapLinks]),
   );
   const allMapLinks = mapLinkLists.flat();
-  // 吸収されるノードが残すノードを指していたリンクは、統合後に自分自身へのリンクになるので除く（追加の self-node と揃える）
-  const nonSelfMapLinks = allMapLinks.filter((link) => !isSelfNodeMapLink(link, currentMapId, survivor.id));
-  const mapLinks = uniqueNodeMapLinks(nonSelfMapLinks);
+  // 統合するノードを指すリンクは除く。残すノードを指すものは統合後に自分自身へのリンクになり（追加の self-node と揃える）、
+  // 吸収されるノードを指すものは統合の直後にリンク切れになるため
+  const mapLinksOutsideSelection = allMapLinks.filter(
+    (link) => !selected.some((item) => isSelfNodeMapLink(link, currentMapId, item.id)),
+  );
+  const mapLinks = uniqueNodeMapLinks(mapLinksOutsideSelection);
   // 検査の順の最後（sources-too-many の後）
   if (mapLinks.length > NODE_MAP_LINKS_MAX_COUNT) return failed("map-links-too-many");
 
@@ -229,15 +233,15 @@ export function planNodeMerge(
     sourceDuplicateCount: allSources.length - sources.length,
     mapLinks: mapLinks.length === 0 ? undefined : mapLinks,
     mapLinkSourceCount: mapLinkLists.length,
-    mapLinkDuplicateCount: nonSelfMapLinks.length - mapLinks.length,
-    mapLinkSelfCount: allMapLinks.length - nonSelfMapLinks.length,
+    mapLinkDuplicateCount: mapLinksOutsideSelection.length - mapLinks.length,
+    mapLinkSelectedTargetCount: allMapLinks.length - mapLinksOutsideSelection.length,
   };
 }
 
 // 確定時の再計画とプレビューの計画が同じか。プレビューで見せた内容（残すノード・吸収されるノードの順・ラベル・重要度・
 // イラストの扱いと引き継ぎ元・失われるイラストの件数・付け替える子の件数・連結したメモとその件数・連結した URL と
 // その元の件数・重複で捨てる件数・連結したタグとその元の件数・重複で捨てる件数・連結した出典とその元の件数・
-// 重複で捨てる件数・連結したマップ間リンクとその元の件数・重複で捨てる件数・自分自身を指すため捨てる件数）で比べる（L-036）。URL・タグ・出典・
+// 重複で捨てる件数・連結したマップ間リンクとその元の件数・重複で捨てる件数・統合するノードを指すため捨てる件数）で比べる（L-036）。URL・タグ・出典・
 // マップ間リンクは要素ごとに比べる（別の配列でも内容が同じなら同じ）。
 // 引き継ぐイラスト本体は illustrationFrom と引き継ぎ元で決まるので比べない。失敗した計画は同じとみなさない
 export function isSameNodeMergePlan(a: NodeMergePlan, b: NodeMergePlan): boolean {
@@ -263,7 +267,7 @@ export function isSameNodeMergePlan(a: NodeMergePlan, b: NodeMergePlan): boolean
     && areNodeMapLinksEqual(a.mapLinks, b.mapLinks)
     && a.mapLinkSourceCount === b.mapLinkSourceCount
     && a.mapLinkDuplicateCount === b.mapLinkDuplicateCount
-    && a.mapLinkSelfCount === b.mapLinkSelfCount
+    && a.mapLinkSelectedTargetCount === b.mapLinkSelectedTargetCount
     && a.absorbedIds.length === b.absorbedIds.length
     && a.absorbedIds.every((id, index) => id === b.absorbedIds[index]);
 }
