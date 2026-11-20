@@ -9,7 +9,7 @@ import type { NodeImportance } from "@/types/nodeImportance";
 // 保存形式の書き出しと検証（domain/persistence/mapDocumentNodeProjection.ts・mapDocumentNode.ts。
 // コピー＆ペーストのクリップボードの形式も mapDocumentNode.ts を使う）、マップの競合判定（domain/mapLibrary/mapConflict.ts の
 // areNodesEqual。項目を並べて比べている）、編集履歴の同値判定（domain/history/mapHistory.ts の areNodesEqual。links・tags は
-// 要素ごと ===、sources はオブジェクト要素なので areNodeSourcesEqual）、親の挿入（domain/nodes/nodePlacement.ts の
+// 要素ごと ===、sources はオブジェクト要素なので areNodeSourcesEqual、mapLinks は areNodeMapLinksEqual）、親の挿入（domain/nodes/nodePlacement.ts の
 // createParentNode）、検索（domain/search/nodeLabelSearch.ts）、
 // キャンバスの描画（components/map/pixi/renderMapNodes.ts）、アウトライン書き出し・画像書き出し
 export type Node = {
@@ -49,6 +49,13 @@ export type Node = {
   // 今は検索（domain/search/nodeLabelSearch.ts）・キャンバスの描画（components/map/pixi/renderMapNodes.ts）・アウトライン書き出し・画像書き出しに
   // 使っていない。使うときは、それらと nodeSourceKey の規則をそろえる
   sources?: readonly NodeSource[];
+  // マップ間リンク（targetMapId 必須・targetNodeId 任意。domain/nodes/nodeMapLink.ts の normalizeNodeMapLink で正規化。
+  // 最大 NODE_MAP_LINKS_MAX_COUNT 件。nodeMapLinkKey が同じものは持たない）。
+  // 読み取り専用の配列で、書き換えずに作り直す。無いノードでは、項目ごと持たない（空配列も持たない）。
+  // 更新は domain/nodes/nodeMapLink.ts の addNodeMapLink・removeNodeMapLink（削除は値一致）。分割では元のノードにだけ残し、統合では選択中のマップ間リンクを
+  // 配列順に同じリンクとみなすものを除いて連結し、複製・貼り付け・別マップへの移動では写し、親の挿入では新しい親に持たせない。
+  // 履歴の同値判定（domain/history/mapHistory.ts）は要素がオブジェクトなので areNodeMapLinksEqual で比べる
+  mapLinks?: readonly NodeMapLink[];
 };
 
 // 出典 1 件。任意の page / url は無いときキーごと持たない。規則は domain/nodes/nodeSource.ts
@@ -56,4 +63,10 @@ export type NodeSource = {
   title: string;
   page?: string;
   url?: string;
+};
+
+// マップ間リンク 1 件。任意の targetNodeId は無いときキーごと持たない。規則は domain/nodes/nodeMapLink.ts
+export type NodeMapLink = {
+  readonly targetMapId: string;
+  readonly targetNodeId?: number;
 };

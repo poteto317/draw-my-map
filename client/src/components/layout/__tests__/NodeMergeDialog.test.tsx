@@ -20,6 +20,7 @@ function preview(overrides: Partial<NodeMergePreview> = {}): NodeMergePreview {
     linkText: null,
     tagText: null,
     sourceText: null,
+    mapLinkText: null,
     ...overrides,
   };
 }
@@ -156,6 +157,22 @@ describe("NodeMergeDialog", () => {
       renderDialog({ preview: preview({ sourceText: null }) });
 
       expect(screen.queryByText("出典")).toBeNull();
+    });
+
+    it("マップ間リンクを連結するときは、出典の行の後の「マップ間リンク」の行に件数を出す。見出しは縮まない", () => {
+      renderDialog({ preview: preview({ sourceText: "1 件", mapLinkText: "3 件（重複 1 件を除く）" }) });
+
+      const term = screen.getByText("マップ間リンク");
+      expect(term.tagName).toBe("DT");
+      expect(term).toHaveClass("shrink-0");
+      expect(term.nextElementSibling).toHaveTextContent("3 件（重複 1 件を除く）");
+      expect(screen.getByText("出典").parentElement?.nextElementSibling).toBe(term.parentElement);
+    });
+
+    it("マップ間リンクが無いときは「マップ間リンク」の行を出さない", () => {
+      renderDialog({ preview: preview({ mapLinkText: null }) });
+
+      expect(screen.queryByText("マップ間リンク")).toBeNull();
     });
 
     it("残すノードのラベルを出し、空のラベルは「（空）」、空白だけなら「（空白のみ）」にする", () => {

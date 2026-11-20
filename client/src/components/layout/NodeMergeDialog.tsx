@@ -136,6 +136,12 @@ export function NodeMergeDialog({
                   <dd>{preview.sourceText}</dd>
                 </div>
               )}
+              {preview.mapLinkText !== null && (
+                <div className="flex gap-2">
+                  <dt className="shrink-0 font-medium">マップ間リンク</dt>
+                  <dd>{preview.mapLinkText}</dd>
+                </div>
+              )}
               <div className="flex gap-2">
                 <dt className="shrink-0 font-medium">付け替える子</dt>
                 <dd>{`${preview.movedChildCount}件`}</dd>

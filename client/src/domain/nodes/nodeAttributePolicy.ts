@@ -1,6 +1,6 @@
 import type { Node } from "@/types/node";
 
-// Node の任意の属性（値の無いノードでは項目ごと持たない属性）のキー。illustration・note・links・tags・sources
+// Node の任意の属性（値の無いノードでは項目ごと持たない属性）のキー。illustration・note・links・tags・sources・mapLinks
 export type OptionalNodeKey = {
   [K in keyof Node]-?: undefined extends Node[K] ? K : never;
 }[keyof Node];
@@ -25,4 +25,5 @@ export const NODE_ATTRIBUTE_POLICY = {
   links: { split: "original-only", merge: "union", parentInsert: "none" },
   tags: { split: "original-only", merge: "union", parentInsert: "none" },
   sources: { split: "original-only", merge: "union", parentInsert: "none" },
+  mapLinks: { split: "original-only", merge: "union", parentInsert: "none" },
 } satisfies Record<OptionalNodeKey, NodeAttributePolicy>;

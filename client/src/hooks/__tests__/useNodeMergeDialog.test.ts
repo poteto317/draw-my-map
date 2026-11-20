@@ -6,6 +6,8 @@ import { createTestNode } from "@/testing/createTestNode";
 import { createJpegDataUrl } from "@/testing/jpegFixture";
 import type { Node } from "@/types/node";
 
+const CURRENT_MAP_ID = "a";
+
 type Props = {
   mapId?: string;
   nodes?: readonly Node[];
@@ -28,13 +30,13 @@ const baseNodes = [
 const baseVisible: ReadonlySet<number> = new Set([1, 2, 3, 4, 5, 6]);
 
 function setup(initial: Props = {}) {
-  const mergeNodes = jest.fn<MergeNodesResult, [readonly number[], number | null, string, ReadonlySet<number>, NodeMergePlan]>(
+  const mergeNodes = jest.fn<MergeNodesResult, [readonly number[], number | null, string, ReadonlySet<number>, NodeMergePlan, string]>(
     () => ({ ok: true, survivorId: 3, absorbedCount: 1 }),
   );
   const publishNotice = jest.fn();
   const view = renderHook(
     (props: Props) => useNodeMergeDialog({
-      mapId: props.mapId ?? "a",
+      mapId: props.mapId ?? CURRENT_MAP_ID,
       nodes: props.nodes ?? baseNodes,
       selectedNodeId: props.selectedNodeId === undefined ? 3 : props.selectedNodeId,
       selectedNodeIds: props.selectedNodeIds ?? [2, 3],
@@ -74,6 +76,7 @@ describe("useNodeMergeDialog", () => {
       linkText: null,
       tagText: null,
       sourceText: null,
+      mapLinkText: null,
     });
   });
 
@@ -158,7 +161,7 @@ describe("useNodeMergeDialog", () => {
     const [ids, primaryId, , , expected] = view.mergeNodes.mock.calls[0];
     expect(ids).toEqual([2, 3]);
     expect(primaryId).toBe(3);
-    expect(expected).toEqual(planNodeMerge(baseNodes, [2, 3], 3, " ", baseVisible));
+    expect(expected).toEqual(planNodeMerge(baseNodes, [2, 3], 3, " ", baseVisible, CURRENT_MAP_ID));
   });
 
   it("プレビューは最新の nodes から作る（開いた後にラベルが変わると、連結後のラベルも変わる）", () => {
@@ -203,12 +206,13 @@ describe("useNodeMergeDialog", () => {
       act(() => { view.result.current.submit(); });
 
       expect(view.mergeNodes).toHaveBeenCalledTimes(1);
-      const [ids, primaryId, joiner, visibleNodeIds, expected] = view.mergeNodes.mock.calls[0];
+      const [ids, primaryId, joiner, visibleNodeIds, expected, currentMapId] = view.mergeNodes.mock.calls[0];
+      expect(currentMapId).toBe(CURRENT_MAP_ID);
       expect(ids).toEqual([2, 3]);
       expect(primaryId).toBe(3);
       expect(joiner).toBe(" ");
       expect(visibleNodeIds).toBe(baseVisible);
-      expect(expected).toEqual(planNodeMerge(baseNodes, [2, 3], 3, " ", baseVisible));
+      expect(expected).toEqual(planNodeMerge(baseNodes, [2, 3], 3, " ", baseVisible, CURRENT_MAP_ID));
       expect(view.publishNotice).toHaveBeenCalledWith({ kind: "status", message: "2 件のノードを 1 件に統合しました。" });
       expect(view.result.current.screen).toBe("closed");
       expect(view.result.current.focusRequest).toBe("header");

@@ -2,7 +2,13 @@ import { startTransition } from "react";
 import { flushSync } from "react-dom";
 import { renderHook, act } from "@testing-library/react";
 import { useNodes } from "@/hooks/useNodes";
+import {
+  NODE_MAP_LINKS_MAX_COUNT,
+  type AddNodeMapLinkOutcome,
+  type NodeMapLinkFailureReason,
+} from "@/domain/nodes/nodeMapLink";
 import { ILLUSTRATED_NODE_HEIGHT, RECT_HEIGHT, RECT_WIDTH } from "@/config/shapes";
+import type { NodeMapLink } from "@/types/node";
 import type { NodeMapState } from "@/types/nodeMapState";
 import { createTestNode } from "@/testing/createTestNode";
 
@@ -945,5 +951,176 @@ describe("useNodes の removeIllustration", () => {
     expect(result.current.nodes.find((n) => n.id === b)!.y).toBeGreaterThan(yBefore);
     act(() => { result.current.removeIllustration(a); });
     expect(result.current.nodes.find((n) => n.id === b)!.y).toBe(yBefore);
+  });
+});
+
+describe("useNodes の addNodeMapLink / removeNodeMapLink", () => {
+  const CURRENT_MAP_ID = "current-map";
+
+  function mapWithLinks(): NodeMapState {
+    return {
+      layoutMode: "manual",
+      nodes: [
+        createTestNode({ id: 1, label: "根" }),
+        createTestNode({
+          id: 2,
+          parentId: 1,
+          label: "リンクあり",
+          x: 220,
+          mapLinks: [{ targetMapId: "other-map", targetNodeId: 10 }],
+        }),
+        createTestNode({ id: 3, parentId: 1, label: "リンクなし", x: 220, y: 100 }),
+      ],
+    };
+  }
+
+  function renderNodes(initial: NodeMapState = mapWithLinks()) {
+    const view = renderHook(() => useNodes());
+    act(() => view.result.current.replaceMap(initial));
+    return view;
+  }
+
+  it("addNodeMapLink はリンクを末尾に追加して { ok: true } を返し、1 回の Undo/Redo で往復し、documentRevision は進めない", () => {
+    const { result } = renderNodes();
+    const revision = result.current.documentRevision;
+    let outcome!: AddNodeMapLinkOutcome;
+
+    act(() => {
+      outcome = result.current.addNodeMapLink(2, CURRENT_MAP_ID, { targetMapId: "map-2", targetNodeId: 5 });
+    });
+
+    expect(outcome).toEqual({ ok: true });
+    expect(result.current.nodes.find((n) => n.id === 2)?.mapLinks).toEqual([
+      { targetMapId: "other-map", targetNodeId: 10 },
+      { targetMapId: "map-2", targetNodeId: 5 },
+    ]);
+    expect(result.current.canUndo).toBe(true);
+    expect(result.current.documentRevision).toBe(revision);
+
+    act(() => { result.current.undo(); });
+    expect(result.current.nodes.find((n) => n.id === 2)?.mapLinks).toEqual([
+      { targetMapId: "other-map", targetNodeId: 10 },
+    ]);
+    expect(result.current.canUndo).toBe(false);
+    expect(result.current.canRedo).toBe(true);
+
+    act(() => { result.current.redo(); });
+    expect(result.current.nodes.find((n) => n.id === 2)?.mapLinks).toEqual([
+      { targetMapId: "other-map", targetNodeId: 10 },
+      { targetMapId: "map-2", targetNodeId: 5 },
+    ]);
+  });
+
+  it("同じイベント内の連続 2 回の addNodeMapLink は最新 ref から判定する（L-453）", () => {
+    const { result } = renderNodes();
+    const outcomes: AddNodeMapLinkOutcome[] = [];
+
+    act(() => {
+      outcomes.push(result.current.addNodeMapLink(3, CURRENT_MAP_ID, { targetMapId: "map-a" }));
+      outcomes.push(result.current.addNodeMapLink(3, CURRENT_MAP_ID, { targetMapId: "map-a" }));
+      outcomes.push(result.current.addNodeMapLink(3, CURRENT_MAP_ID, { targetMapId: "map-b", targetNodeId: 2 }));
+    });
+
+    expect(outcomes).toEqual([{ ok: true }, { ok: false, reason: "duplicate" }, { ok: true }]);
+    expect(result.current.nodes.find((n) => n.id === 3)?.mapLinks).toEqual([
+      { targetMapId: "map-a" },
+      { targetMapId: "map-b", targetNodeId: 2 },
+    ]);
+  });
+
+  it.each<[string, number, { targetMapId: string; targetNodeId?: number }, NodeMapLinkFailureReason]>([
+    ["対象ノード不在", 99, { targetMapId: "map-a" }, "node-missing"],
+    ["不正なマップ ID", 3, { targetMapId: "" }, "invalid-map-id"],
+    ["不正なノード ID", 3, { targetMapId: "map-a", targetNodeId: 0 }, "invalid-node-id"],
+    ["自己ノード", 3, { targetMapId: CURRENT_MAP_ID, targetNodeId: 3 }, "self-node"],
+    ["重複", 2, { targetMapId: "other-map", targetNodeId: 10 }, "duplicate"],
+  ])("addNodeMapLink が %s で失敗したときは何も変えず履歴も積まない", (_name, nodeId, input, reason) => {
+    const { result } = renderNodes();
+    const before = result.current.nodes;
+    let outcome!: AddNodeMapLinkOutcome;
+
+    act(() => { outcome = result.current.addNodeMapLink(nodeId, CURRENT_MAP_ID, input); });
+
+    expect(outcome).toEqual({ ok: false, reason });
+    expect(result.current.nodes).toBe(before);
+    expect(result.current.canUndo).toBe(false);
+  });
+
+  it("addNodeMapLink は上限 10 件に達していると too-many で何も変えない", () => {
+    const full: NodeMapState = {
+      layoutMode: "manual",
+      nodes: [
+        createTestNode({
+          id: 1,
+          label: "上限",
+          mapLinks: Array.from({ length: NODE_MAP_LINKS_MAX_COUNT }, (_, i) => ({ targetMapId: `map-${i}` })),
+        }),
+      ],
+    };
+    const { result } = renderNodes(full);
+    const before = result.current.nodes;
+    let outcome!: AddNodeMapLinkOutcome;
+
+    act(() => { outcome = result.current.addNodeMapLink(1, CURRENT_MAP_ID, { targetMapId: "map-extra" }); });
+
+    expect(outcome).toEqual({ ok: false, reason: "too-many" });
+    expect(result.current.nodes).toBe(before);
+  });
+
+  it("removeNodeMapLink は値一致で削除して true を返し、1 回の Undo/Redo で往復し、documentRevision は進めない（L-035）", () => {
+    const twoLinks: NodeMapState = {
+      layoutMode: "manual",
+      nodes: [
+        createTestNode({
+          id: 1,
+          label: "2件",
+          mapLinks: [{ targetMapId: "map-a" }, { targetMapId: "map-b", targetNodeId: 2 }],
+        }),
+      ],
+    };
+    const { result } = renderNodes(twoLinks);
+    const revision = result.current.documentRevision;
+    let removed!: boolean;
+
+    act(() => { removed = result.current.removeNodeMapLink(1, { targetMapId: "map-a" }); });
+
+    expect(removed).toBe(true);
+    expect(result.current.nodes[0].mapLinks).toEqual([{ targetMapId: "map-b", targetNodeId: 2 }]);
+    expect(result.current.documentRevision).toBe(revision);
+    expect(result.current.canUndo).toBe(true);
+
+    act(() => { result.current.undo(); });
+    expect(result.current.nodes[0].mapLinks).toEqual([
+      { targetMapId: "map-a" },
+      { targetMapId: "map-b", targetNodeId: 2 },
+    ]);
+
+    act(() => { result.current.redo(); });
+    expect(result.current.nodes[0].mapLinks).toEqual([{ targetMapId: "map-b", targetNodeId: 2 }]);
+  });
+
+  it("removeNodeMapLink で最後の 1 件を消すと mapLinks キーごと外す", () => {
+    const { result } = renderNodes();
+
+    act(() => { result.current.removeNodeMapLink(2, { targetMapId: "other-map", targetNodeId: 10 }); });
+
+    const node = result.current.nodes.find((n) => n.id === 2)!;
+    expect("mapLinks" in node).toBe(false);
+  });
+
+  it.each<[string, number, NodeMapLink]>([
+    ["対象ノード不在", 99, { targetMapId: "other-map", targetNodeId: 10 }],
+    ["リンクなしノード", 3, { targetMapId: "other-map" }],
+    ["一致リンク不在", 2, { targetMapId: "missing-map" }],
+  ])("removeNodeMapLink が %s のときは false を返し何も変えず履歴も積まない", (_name, nodeId, target) => {
+    const { result } = renderNodes();
+    const before = result.current.nodes;
+    let removed!: boolean;
+
+    act(() => { removed = result.current.removeNodeMapLink(nodeId, target); });
+
+    expect(removed).toBe(false);
+    expect(result.current.nodes).toBe(before);
+    expect(result.current.canUndo).toBe(false);
   });
 });

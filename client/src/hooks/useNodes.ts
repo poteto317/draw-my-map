@@ -76,6 +76,12 @@ import {
   type AddNodeSourceOutcome,
   type NodeSourceInput,
 } from "@/domain/nodes/nodeSource";
+import {
+  addNodeMapLink as computeNodeMapLinkAddition,
+  removeNodeMapLink as computeNodeMapLinkRemoval,
+  type AddNodeMapLinkOutcome,
+  type NodeMapLinkInput,
+} from "@/domain/nodes/nodeMapLink";
 import { clearNodeIllustration, replaceNodeIllustration } from "@/domain/nodes/nodeIllustrationUpdate";
 import {
   moveNodeBranch,
@@ -83,7 +89,7 @@ import {
 } from "@/domain/nodes/nodeBranchMove";
 import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
 import { useNodeLayoutState } from "@/hooks/useNodeLayoutState";
-import type { Node } from "@/types/node";
+import type { Node, NodeMapLink } from "@/types/node";
 import type { NodeImportance } from "@/types/nodeImportance";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 import type { NodeMapState } from "@/types/nodeMapState";
@@ -145,6 +151,11 @@ type UseNodesReturn = {
   addNodeSource: (id: number, input: NodeSourceInput) => AddNodeSourceOutcome;
   // 出典の削除。指定 index の出典だけを消し、1操作として確定する。受理したかを返す
   removeNodeSource: (id: number, index: number) => boolean;
+  // マップ間リンクの追加（右パネルの「マップ間リンク」節）。最新の状態から判定し、成功なら1操作として確定する。
+  // 失敗は理由を返し、何も変えない。documentRevision は変えない
+  addNodeMapLink: (nodeId: number, currentMapId: string, input: NodeMapLinkInput) => AddNodeMapLinkOutcome;
+  // マップ間リンクの削除。値一致（nodeMapLinkKey）するリンクだけを消し、1操作として確定する。受理したかを返す
+  removeNodeMapLink: (nodeId: number, target: NodeMapLink) => boolean;
   moveNode: (id: number, x: number, y: number) => void;
   connectNodes: (parentId: number, childId: number) => boolean;
   // 成功時は複製根のIDを返して選択する。対象不在・配置不能・自動配置失敗ではnullを返し何も変えない
@@ -183,13 +194,15 @@ type UseNodesReturn = {
     expected: NodeSplitPlan,
   ) => SplitNodeResult;
   // 最新の状態から計画を作り直し、expected と違えば何も変えず plan-changed を返す。
-  // 成功時は applyTreeChange を1回だけ呼び、残したノードだけを選択する。documentRevision は変えない
+  // 成功時は applyTreeChange を1回だけ呼び、残したノードだけを選択する。documentRevision は変えない。
+  // currentMapId は残すノード自身を指すマップ間リンクを除くために使う（expected と同じ ID で計画する）
   mergeNodes: (
     ids: readonly number[],
     primaryId: number | null,
     joiner: string,
     visibleNodeIds: ReadonlySet<number>,
     expected: NodeMergePlan,
+    currentMapId: string,
   ) => MergeNodesResult;
   moveBranch: (rootId: number, parentId: number | null) => MoveBranchResult;
   deleteNode: (id: number) => void;
@@ -404,6 +417,21 @@ export function useNodes(): UseNodesReturn {
     applyNonStructuralChange((currentNodes) => computeNodeSourceRemoval(currentNodes, id, index))
   ), [applyNonStructuralChange]);
 
+  // 判定と確定は同じ最新の状態で行う（addNodeSource と同じ。L-001・L-453）
+  const addNodeMapLink = useCallback(
+    (nodeId: number, currentMapId: string, input: NodeMapLinkInput): AddNodeMapLinkOutcome => {
+      const result = computeNodeMapLinkAddition(getCurrentState().nodes, nodeId, currentMapId, input);
+      if (!result.ok) return { ok: false, reason: result.reason };
+      applyNonStructuralChange(() => result.nodes);
+      return { ok: true };
+    },
+    [getCurrentState, applyNonStructuralChange],
+  );
+
+  const removeNodeMapLink = useCallback((nodeId: number, target: NodeMapLink) => (
+    applyNonStructuralChange((currentNodes) => computeNodeMapLinkRemoval(currentNodes, nodeId, target))
+  ), [applyNonStructuralChange]);
+
   const moveNode = useCallback((id: number, x: number, y: number) => {
     applyManualMove((currentNodes) => (
       moveNodeSubtree(currentNodes, id, x, y)
@@ -556,13 +584,14 @@ export function useNodes(): UseNodesReturn {
     joiner: string,
     visibleNodeIds: ReadonlySet<number>,
     expected: NodeMergePlan,
+    currentMapId: string,
   ): MergeNodesResult => {
     const settled = applyTreeChangeWithOutcome<MergeNodesResult>(applyTreeChange, (currentNodes, mode) => {
-      const fresh = planNodeMerge(currentNodes, ids, primaryId, joiner, visibleNodeIds);
+      const fresh = planNodeMerge(currentNodes, ids, primaryId, joiner, visibleNodeIds, currentMapId);
       if (!fresh.ok) return { nodes: null, outcome: fresh };
       if (!isSameNodeMergePlan(fresh, expected)) return { nodes: null, outcome: { ok: false, reason: "plan-changed" } };
 
-      const merged = computeNodeMerge(currentNodes, ids, primaryId, joiner, visibleNodeIds, mode);
+      const merged = computeNodeMerge(currentNodes, ids, primaryId, joiner, visibleNodeIds, mode, currentMapId);
       if (!merged.ok) return { nodes: null, outcome: merged };
       return {
         nodes: merged.nodes,
@@ -643,6 +672,8 @@ export function useNodes(): UseNodesReturn {
     removeNodeTag,
     addNodeSource,
     removeNodeSource,
+    addNodeMapLink,
+    removeNodeMapLink,
     moveNode,
     connectNodes,
     duplicateSubtree,

@@ -36,6 +36,8 @@ export type NodeMergePreview = {
   // 出典の連結の説明（「N 件」、同じ出典とみなして除くものがあれば「N 件（重複 M 件を除く）」。本文は出さない）。
   // 出典が無ければ null
   sourceText: string | null;
+  // マップ間リンクの連結の説明（「N 件」、重複があれば「N 件（重複 M 件を除く）」）。マップ間リンクが無ければ null
+  mapLinkText: string | null;
 };
 
 // 統合ダイアログの状態文言。stale を最優先し、失敗の計画はその reason の文言にする
@@ -76,6 +78,17 @@ function describeSources(plan: Extract<NodeMergePlan, { ok: true }>): string | n
   return `${plan.sources.length} 件${duplicate}`;
 }
 
+// 残すノード自身を指すリンクだけを除いて 0 件になったときも、除いたことが分かるよう行を出す
+function describeMapLinks(plan: Extract<NodeMergePlan, { ok: true }>): string | null {
+  if (plan.mapLinks === undefined && plan.mapLinkSelfCount === 0) return null;
+  const excluded = [
+    ...(plan.mapLinkDuplicateCount > 0 ? [`重複 ${plan.mapLinkDuplicateCount} 件`] : []),
+    ...(plan.mapLinkSelfCount > 0 ? [`自分自身へのリンク ${plan.mapLinkSelfCount} 件`] : []),
+  ];
+  const suffix = excluded.length > 0 ? `（${excluded.join("、")}を除く）` : "";
+  return `${plan.mapLinks?.length ?? 0} 件${suffix}`;
+}
+
 // 統合の計画をプレビューの表示用にまとめる。失敗の計画（見せるものが無い）は null
 export function buildNodeMergePreview(nodes: readonly Node[], plan: NodeMergePlan): NodeMergePreview | null {
   if (!plan.ok) return null;
@@ -94,5 +107,6 @@ export function buildNodeMergePreview(nodes: readonly Node[], plan: NodeMergePla
     linkText: describeLinks(plan),
     tagText: describeTags(plan),
     sourceText: describeSources(plan),
+    mapLinkText: describeMapLinks(plan),
   };
 }

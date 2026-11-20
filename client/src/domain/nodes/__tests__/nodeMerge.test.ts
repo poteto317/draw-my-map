@@ -7,6 +7,7 @@ import {
   type NodeMergePlan,
 } from "@/domain/nodes/nodeMerge";
 import { NODE_LINKS_MAX_COUNT } from "@/domain/nodes/nodeLink";
+import { NODE_MAP_LINKS_MAX_COUNT } from "@/domain/nodes/nodeMapLink";
 import { NODE_NOTE_MAX_LENGTH } from "@/domain/nodes/nodeNote";
 import { NODE_SOURCES_MAX_COUNT } from "@/domain/nodes/nodeSource";
 import { NODE_TAGS_MAX_COUNT } from "@/domain/nodes/nodeTag";
@@ -14,8 +15,10 @@ import { createMapDocument, serializeMapDocument } from "@/domain/persistence/ma
 import { parseMapDocumentJson } from "@/domain/persistence/mapDocumentDecoder";
 import { createTestNode } from "@/testing/createTestNode";
 import { createJpegDataUrl } from "@/testing/jpegFixture";
-import type { Node, NodeSource } from "@/types/node";
+import type { Node, NodeMapLink, NodeSource } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
+
+const CURRENT_MAP_ID = "map-current";
 
 function node(id: number, parentId: number | null, label: string, overrides: Partial<Node> = {}): Node {
   return createTestNode({ id, parentId, label, x: id * 10, y: id * 20, ...overrides });
@@ -44,6 +47,15 @@ const SOURCE_A: NodeSource = { title: "Book A", page: "12" };
 const SOURCE_B: NodeSource = { title: "Book B", url: "https://example.com/b" };
 const SOURCE_C: NodeSource = { title: "Book C" };
 
+// マップ間リンクを count 件（targetMapId: {prefix}0 …）
+function mapLinkItems(prefix: string, count: number): NodeMapLink[] {
+  return Array.from({ length: count }, (_, index) => ({ targetMapId: `${prefix}-${index}` }));
+}
+
+const MAP_LINK_A: NodeMapLink = { targetMapId: "map-a", targetNodeId: 1 };
+const MAP_LINK_B: NodeMapLink = { targetMapId: "map-b" };
+const MAP_LINK_C: NodeMapLink = { targetMapId: "map-c", targetNodeId: 2 };
+
 function visibleOf(nodes: readonly Node[]): Set<number> {
   return new Set(nodes.map((item) => item.id));
 }
@@ -64,14 +76,14 @@ function merged(
   mode: NodeLayoutMode = "manual",
   visible: ReadonlySet<number> = visibleOf(nodes),
 ) {
-  const result = mergeNodes(nodes, selectedIds, primaryId, joiner, visible, mode);
+  const result = mergeNodes(nodes, selectedIds, primaryId, joiner, visible, mode, CURRENT_MAP_ID);
   expect(result.ok).toBe(true);
   if (!result.ok) throw new Error(result.reason);
   return result;
 }
 
 function okPlan(nodes: readonly Node[], selectedIds: readonly number[], primaryId: number | null, joiner = " ") {
-  const plan = planNodeMerge(nodes, selectedIds, primaryId, joiner, visibleOf(nodes));
+  const plan = planNodeMerge(nodes, selectedIds, primaryId, joiner, visibleOf(nodes), CURRENT_MAP_ID);
   expect(plan.ok).toBe(true);
   if (!plan.ok) throw new Error(plan.reason);
   return plan;
@@ -115,6 +127,10 @@ describe("planNodeMerge", () => {
       sources: undefined,
       sourceSourceCount: 0,
       sourceDuplicateCount: 0,
+      mapLinks: undefined,
+      mapLinkSourceCount: 0,
+      mapLinkDuplicateCount: 0,
+      mapLinkSelfCount: 0,
     });
   });
 
@@ -209,14 +225,14 @@ describe("planNodeMerge", () => {
     const visible = new Set([1, 2, 3, 4, 6, 7, 8]);
 
     expect(okPlan(family, [2, 3], 3).movedChildCount).toBe(1);
-    const plan = planNodeMerge(family, [2, 3], 3, " ", visible);
+    const plan = planNodeMerge(family, [2, 3], 3, " ", visible, CURRENT_MAP_ID);
     expect(plan.ok && plan.movedChildCount).toBe(1);
   });
 
   it("配列を変えない", () => {
     const frozen = Object.freeze(family.map((item) => Object.freeze({ ...item })));
 
-    expect(planNodeMerge(frozen, [2, 3], 3, " ", visibleOf(frozen)).ok).toBe(true);
+    expect(planNodeMerge(frozen, [2, 3], 3, " ", visibleOf(frozen), CURRENT_MAP_ID).ok).toBe(true);
   });
 
   describe("メモの連結", () => {
@@ -262,7 +278,7 @@ describe("planNodeMerge", () => {
         node(3, 1, "b", { note: "b".repeat(NODE_NOTE_MAX_LENGTH - 5000 - 1) }),
       ];
 
-      expect(planNodeMerge(nodes, [2, 3], 2, " ", visibleOf(nodes))).toEqual({ ok: false, reason: "note-too-long" });
+      expect(planNodeMerge(nodes, [2, 3], 2, " ", visibleOf(nodes), CURRENT_MAP_ID)).toEqual({ ok: false, reason: "note-too-long" });
     });
 
     it("メモの長さの検査は different-parents の後（親が違えば、メモが長くても different-parents）", () => {
@@ -272,7 +288,7 @@ describe("planNodeMerge", () => {
         node(3, null, "b", { note: "b".repeat(NODE_NOTE_MAX_LENGTH) }),
       ];
 
-      expect(planNodeMerge(nodes, [2, 3], 2, " ", visibleOf(nodes))).toEqual({ ok: false, reason: "different-parents" });
+      expect(planNodeMerge(nodes, [2, 3], 2, " ", visibleOf(nodes), CURRENT_MAP_ID)).toEqual({ ok: false, reason: "different-parents" });
     });
   });
 
@@ -330,7 +346,7 @@ describe("planNodeMerge", () => {
         node(3, 1, "b", { links: urls("b", 5) }),
       ];
 
-      expect(planNodeMerge(nodes, [2, 3], 2, " ", visibleOf(nodes))).toEqual({ ok: false, reason: "links-too-many" });
+      expect(planNodeMerge(nodes, [2, 3], 2, " ", visibleOf(nodes), CURRENT_MAP_ID)).toEqual({ ok: false, reason: "links-too-many" });
     });
 
     it("URL の件数の検査は note-too-long の後（メモも長ければ note-too-long）", () => {
@@ -340,7 +356,7 @@ describe("planNodeMerge", () => {
         node(3, 1, "b", { links: urls("b", 5), note: "b" }),
       ];
 
-      expect(planNodeMerge(nodes, [2, 3], 2, " ", visibleOf(nodes))).toEqual({ ok: false, reason: "note-too-long" });
+      expect(planNodeMerge(nodes, [2, 3], 2, " ", visibleOf(nodes), CURRENT_MAP_ID)).toEqual({ ok: false, reason: "note-too-long" });
     });
   });
 
@@ -438,7 +454,7 @@ describe("planNodeMerge", () => {
         node(3, 1, "b", { tags: tagNames("b", 5) }),
       ];
 
-      expect(planNodeMerge(nodes, [2, 3], 2, " ", visibleOf(nodes))).toEqual({ ok: false, reason: "tags-too-many" });
+      expect(planNodeMerge(nodes, [2, 3], 2, " ", visibleOf(nodes), CURRENT_MAP_ID)).toEqual({ ok: false, reason: "tags-too-many" });
     });
 
     it("タグの件数の検査は links-too-many の後（URL も多ければ links-too-many）", () => {
@@ -448,7 +464,7 @@ describe("planNodeMerge", () => {
         node(3, 1, "b", { tags: tagNames("b", 5), links: urls("b", 5) }),
       ];
 
-      expect(planNodeMerge(nodes, [2, 3], 2, " ", visibleOf(nodes))).toEqual({ ok: false, reason: "links-too-many" });
+      expect(planNodeMerge(nodes, [2, 3], 2, " ", visibleOf(nodes), CURRENT_MAP_ID)).toEqual({ ok: false, reason: "links-too-many" });
     });
   });
 
@@ -514,7 +530,7 @@ describe("planNodeMerge", () => {
         node(3, 1, "b", { sources: sourceItems("b", 5) }),
       ];
 
-      expect(planNodeMerge(nodes, [2, 3], 2, " ", visibleOf(nodes))).toEqual({
+      expect(planNodeMerge(nodes, [2, 3], 2, " ", visibleOf(nodes), CURRENT_MAP_ID)).toEqual({
         ok: false,
         reason: "sources-too-many",
       });
@@ -527,9 +543,170 @@ describe("planNodeMerge", () => {
         node(3, 1, "b", { sources: sourceItems("b", 5), tags: tagNames("b", 5) }),
       ];
 
-      expect(planNodeMerge(nodes, [2, 3], 2, " ", visibleOf(nodes))).toEqual({
+      expect(planNodeMerge(nodes, [2, 3], 2, " ", visibleOf(nodes), CURRENT_MAP_ID)).toEqual({
         ok: false,
         reason: "tags-too-many",
+      });
+    });
+  });
+
+  describe("マップ間リンクの連結", () => {
+    const withMapLinks = [
+      node(1, null, "親"),
+      node(2, 1, "a", { mapLinks: [MAP_LINK_A, MAP_LINK_B] }),
+      node(3, 1, "b"),
+      node(4, 1, "c", { mapLinks: [{ targetMapId: "map-a", targetNodeId: 1 }, MAP_LINK_C] }),
+      node(5, 1, "d", { mapLinks: [{ targetMapId: "map-b" }, MAP_LINK_C] }),
+    ];
+
+    it("選択中のマップ間リンクを配列順に並べ、同じリンク（nodeMapLinkKey）は最初を残して除く（ids の順序に依存しない）", () => {
+      expect(okPlan(withMapLinks, [5, 4, 3, 2], 3)).toMatchObject({
+        mapLinks: [MAP_LINK_A, MAP_LINK_B, MAP_LINK_C],
+        mapLinkSourceCount: 3,
+        mapLinkDuplicateCount: 3,
+      });
+    });
+
+    it("主選択のマップ間リンクも、配列上の位置に入る", () => {
+      expect(okPlan(withMapLinks, [2, 4], 4)).toMatchObject({
+        mapLinks: [MAP_LINK_A, MAP_LINK_B, MAP_LINK_C],
+        mapLinkSourceCount: 2,
+        mapLinkDuplicateCount: 1,
+      });
+    });
+
+    it("マップ間リンクを持つノードが 1 つだけなら、そのまま（重複 0 件）", () => {
+      expect(okPlan(withMapLinks, [3, 2], 3)).toMatchObject({
+        mapLinks: [MAP_LINK_A, MAP_LINK_B],
+        mapLinkSourceCount: 1,
+        mapLinkDuplicateCount: 0,
+      });
+    });
+
+    it("誰もマップ間リンクを持たなければ undefined と 0 件", () => {
+      const plain = [node(1, null, "親"), node(2, 1, "a"), node(3, 1, "b")];
+
+      expect(okPlan(plain, [2, 3], 2)).toMatchObject({
+        mapLinks: undefined,
+        mapLinkSourceCount: 0,
+        mapLinkDuplicateCount: 0,
+      });
+    });
+
+    it("重複を除いてちょうど上限（10 件）なら統合できる", () => {
+      const nodes = [
+        node(1, null, "親"),
+        node(2, 1, "a", { mapLinks: mapLinkItems("a", 6) }),
+        node(3, 1, "b", { mapLinks: [...mapLinkItems("a", 2), ...mapLinkItems("b", 4)] }),
+      ];
+
+      expect(okPlan(nodes, [2, 3], 2)).toMatchObject({ mapLinkSourceCount: 2, mapLinkDuplicateCount: 2 });
+      expect(okPlan(nodes, [2, 3], 2).mapLinks).toHaveLength(NODE_MAP_LINKS_MAX_COUNT);
+    });
+
+    it("重複を除いて上限を 1 超えると map-links-too-many（黙って切り詰めない）", () => {
+      const nodes = [
+        node(1, null, "親"),
+        node(2, 1, "a", { mapLinks: mapLinkItems("a", 6) }),
+        node(3, 1, "b", { mapLinks: mapLinkItems("b", 5) }),
+      ];
+
+      expect(planNodeMerge(nodes, [2, 3], 2, " ", visibleOf(nodes), CURRENT_MAP_ID)).toEqual({
+        ok: false,
+        reason: "map-links-too-many",
+      });
+    });
+
+    it("マップ間リンクの件数の検査は sources-too-many の後（出典も多ければ sources-too-many）", () => {
+      const nodes = [
+        node(1, null, "親"),
+        node(2, 1, "a", { mapLinks: mapLinkItems("a", 6), sources: sourceItems("a", 6) }),
+        node(3, 1, "b", { mapLinks: mapLinkItems("b", 5), sources: sourceItems("b", 5) }),
+      ];
+
+      expect(planNodeMerge(nodes, [2, 3], 2, " ", visibleOf(nodes), CURRENT_MAP_ID)).toEqual({
+        ok: false,
+        reason: "sources-too-many",
+      });
+    });
+
+    describe("残すノード自身を指すリンク（現在マップの残すノード）", () => {
+      const SELF_TO_3: NodeMapLink = { targetMapId: CURRENT_MAP_ID, targetNodeId: 3 };
+
+      it("残すノード自身を指すリンクは除き、除いた件数を mapLinkSelfCount に出す（重複には数えない）", () => {
+        const nodes = [
+          node(1, null, "親"),
+          node(2, 1, "a", { mapLinks: [SELF_TO_3, MAP_LINK_A] }),
+          node(3, 1, "b", { mapLinks: [MAP_LINK_A, SELF_TO_3] }),
+        ];
+
+        expect(okPlan(nodes, [2, 3], 3)).toMatchObject({
+          mapLinks: [MAP_LINK_A],
+          mapLinkSourceCount: 2,
+          mapLinkDuplicateCount: 1,
+          mapLinkSelfCount: 2,
+        });
+      });
+
+      it("別マップの同じ targetNodeId や、現在マップの吸収されるノードを指すリンクは除かない", () => {
+        const otherMapSameNode: NodeMapLink = { targetMapId: "map-other", targetNodeId: 3 };
+        const toAbsorbed: NodeMapLink = { targetMapId: CURRENT_MAP_ID, targetNodeId: 2 };
+        const toCurrentMap: NodeMapLink = { targetMapId: CURRENT_MAP_ID };
+        const nodes = [
+          node(1, null, "親"),
+          node(2, 1, "a", { mapLinks: [otherMapSameNode, toAbsorbed, toCurrentMap] }),
+          node(3, 1, "b"),
+        ];
+
+        expect(okPlan(nodes, [2, 3], 3)).toMatchObject({
+          mapLinks: [otherMapSameNode, toAbsorbed, toCurrentMap],
+          mapLinkSelfCount: 0,
+        });
+      });
+
+      it("自己リンクしか無ければ mapLinks は undefined で、除いた件数だけを出す", () => {
+        const nodes = [node(1, null, "親"), node(2, 1, "a", { mapLinks: [SELF_TO_3] }), node(3, 1, "b")];
+
+        expect(okPlan(nodes, [2, 3], 3)).toMatchObject({
+          mapLinks: undefined,
+          mapLinkSourceCount: 1,
+          mapLinkDuplicateCount: 0,
+          mapLinkSelfCount: 1,
+        });
+      });
+
+      it("自己リンクを除いてちょうど上限（10 件）なら統合でき、統合後の残すノードに自己リンクが残らない", () => {
+        const nodes = [
+          node(1, null, "親"),
+          node(2, 1, "a", { mapLinks: [...mapLinkItems("a", 6), SELF_TO_3] }),
+          node(3, 1, "b", { mapLinks: mapLinkItems("b", 4) }),
+        ];
+
+        const plan = okPlan(nodes, [2, 3], 3);
+        expect(plan.mapLinks).toHaveLength(NODE_MAP_LINKS_MAX_COUNT);
+        expect(plan.mapLinkSelfCount).toBe(1);
+        const result = merged(nodes, [2, 3], 3);
+        expect(byId(result.nodes, 3).mapLinks).toEqual([...mapLinkItems("a", 6), ...mapLinkItems("b", 4)]);
+      });
+
+      it("自己リンクを除いても上限を 1 超えれば map-links-too-many", () => {
+        const nodes = [
+          node(1, null, "親"),
+          node(2, 1, "a", { mapLinks: [...mapLinkItems("a", 6), SELF_TO_3] }),
+          node(3, 1, "b", { mapLinks: mapLinkItems("b", 5) }),
+        ];
+
+        expect(planNodeMerge(nodes, [2, 3], 3, " ", visibleOf(nodes), CURRENT_MAP_ID)).toEqual({
+          ok: false,
+          reason: "map-links-too-many",
+        });
+      });
+
+      it("現在マップの ID が違えば、同じ targetNodeId のリンクも除かない", () => {
+        const nodes = [node(1, null, "親"), node(2, 1, "a", { mapLinks: [SELF_TO_3] }), node(3, 1, "b")];
+
+        const plan = planNodeMerge(nodes, [2, 3], 3, " ", visibleOf(nodes), "map-elsewhere");
+        expect(plan).toMatchObject({ ok: true, mapLinks: [SELF_TO_3], mapLinkSelfCount: 0 });
       });
     });
   });
@@ -540,7 +717,7 @@ describe("planNodeMerge", () => {
       selectedIds: readonly number[],
       primaryId: number | null,
       visible: ReadonlySet<number> = visibleOf(nodes),
-    ) => planNodeMerge(nodes, selectedIds, primaryId, " ", visible);
+    ) => planNodeMerge(nodes, selectedIds, primaryId, " ", visible, CURRENT_MAP_ID);
 
     it("重複を除いて 2 件未満なら too-few-nodes（存在しない ID でもそちらが先）", () => {
       expect(failure(family, [], null)).toEqual({ ok: false, reason: "too-few-nodes" });
@@ -694,6 +871,22 @@ describe("isSameNodeMergePlan", () => {
     expect(isSameNodeMergePlan(withSources, { ...base, sources: [{ ...SOURCE_A }, { ...SOURCE_B }] })).toBe(true);
     expect(isSameNodeMergePlan(withSources, { ...base, sources: [SOURCE_B, SOURCE_A] })).toBe(false);
     expect(isSameNodeMergePlan(withSources, { ...base, sources: [{ title: "book a", page: "12" }, SOURCE_B] })).toBe(false);
+  });
+
+  it("連結したマップ間リンク・件数・重複の件数・自己リンクとして除いた件数が違えば偽（L-036）", () => {
+    expect(isSameNodeMergePlan(base, { ...base, mapLinks: [MAP_LINK_A] })).toBe(false);
+    expect(isSameNodeMergePlan(base, { ...base, mapLinkSourceCount: base.mapLinkSourceCount + 1 })).toBe(false);
+    expect(isSameNodeMergePlan(base, { ...base, mapLinkDuplicateCount: base.mapLinkDuplicateCount + 1 })).toBe(false);
+    expect(isSameNodeMergePlan(base, { ...base, mapLinkSelfCount: base.mapLinkSelfCount + 1 })).toBe(false);
+  });
+
+  it("連結したマップ間リンクは要素ごとに比べる（別の配列でも内容が同じなら真、順や値が違えば偽）", () => {
+    const withMapLinks = { ...base, mapLinks: [MAP_LINK_A, MAP_LINK_B] };
+
+    expect(isSameNodeMergePlan(withMapLinks, { ...base, mapLinks: [MAP_LINK_A, MAP_LINK_B] })).toBe(true);
+    expect(isSameNodeMergePlan(withMapLinks, { ...base, mapLinks: [{ ...MAP_LINK_A }, { ...MAP_LINK_B }] })).toBe(true);
+    expect(isSameNodeMergePlan(withMapLinks, { ...base, mapLinks: [MAP_LINK_B, MAP_LINK_A] })).toBe(false);
+    expect(isSameNodeMergePlan(withMapLinks, { ...base, mapLinks: [{ targetMapId: "map-a", targetNodeId: 99 }, MAP_LINK_B] })).toBe(false);
   });
 
   it("吸収されるノードの順が違えば偽", () => {
@@ -895,7 +1088,7 @@ describe("mergeNodes", () => {
         node(3, 1, "b", { note: "b".repeat(4000) }),
       ];
 
-      expect(mergeNodes(long, [2, 3], 2, " ", visibleOf(long), "manual")).toEqual({ ok: false, reason: "note-too-long" });
+      expect(mergeNodes(long, [2, 3], 2, " ", visibleOf(long), "manual", CURRENT_MAP_ID)).toEqual({ ok: false, reason: "note-too-long" });
     });
 
     it("連結したメモは保存と読み込みで往復する", () => {
@@ -935,7 +1128,7 @@ describe("mergeNodes", () => {
         node(3, 1, "b", { links: urls("b", 5) }),
       ];
 
-      expect(mergeNodes(many, [2, 3], 2, " ", visibleOf(many), "manual")).toEqual({ ok: false, reason: "links-too-many" });
+      expect(mergeNodes(many, [2, 3], 2, " ", visibleOf(many), "manual", CURRENT_MAP_ID)).toEqual({ ok: false, reason: "links-too-many" });
     });
 
     it("連結した URL は保存と読み込みで往復する", () => {
@@ -975,7 +1168,7 @@ describe("mergeNodes", () => {
         node(3, 1, "b", { tags: tagNames("b", 5) }),
       ];
 
-      expect(mergeNodes(many, [2, 3], 2, " ", visibleOf(many), "manual")).toEqual({ ok: false, reason: "tags-too-many" });
+      expect(mergeNodes(many, [2, 3], 2, " ", visibleOf(many), "manual", CURRENT_MAP_ID)).toEqual({ ok: false, reason: "tags-too-many" });
     });
 
     it("連結したタグは保存と読み込みで往復する", () => {
@@ -1015,7 +1208,7 @@ describe("mergeNodes", () => {
         node(3, 1, "b", { sources: sourceItems("b", 5) }),
       ];
 
-      expect(mergeNodes(many, [2, 3], 2, " ", visibleOf(many), "manual")).toEqual({
+      expect(mergeNodes(many, [2, 3], 2, " ", visibleOf(many), "manual", CURRENT_MAP_ID)).toEqual({
         ok: false,
         reason: "sources-too-many",
       });
@@ -1029,6 +1222,57 @@ describe("mergeNodes", () => {
         SOURCE_A,
         SOURCE_B,
         SOURCE_C,
+      ]);
+    });
+  });
+
+  describe("マップ間リンク", () => {
+    const withMapLinks = [
+      node(1, null, "親"),
+      node(2, 1, "a", { mapLinks: [MAP_LINK_A, MAP_LINK_B] }),
+      node(3, 1, "b"),
+      node(4, 1, "c", { mapLinks: [{ targetMapId: "map-a", targetNodeId: 1 }, MAP_LINK_C] }),
+    ];
+
+    it("残すノードのマップ間リンクは、選択中のリンクを配列順に重複を除いて並べたもの（残すノードが持たなくても付く）", () => {
+      expect(byId(merged(withMapLinks, [2, 3, 4], 3).nodes, 3).mapLinks).toEqual([
+        MAP_LINK_A,
+        MAP_LINK_B,
+        MAP_LINK_C,
+      ]);
+    });
+
+    it("残すノードだけがマップ間リンクを持つときは、そのまま", () => {
+      expect(byId(merged(withMapLinks, [2, 3], 2).nodes, 2).mapLinks).toEqual([MAP_LINK_A, MAP_LINK_B]);
+    });
+
+    it("誰もマップ間リンクを持たなければ mapLinks のキーを持たない", () => {
+      const plain = [node(1, null, "親"), node(2, 1, "a"), node(3, 1, "b")];
+
+      expect("mapLinks" in byId(merged(plain, [2, 3], 2).nodes, 2)).toBe(false);
+    });
+
+    it("重複を除いて上限を超えるときは map-links-too-many を返し、統合しない", () => {
+      const many = [
+        node(1, null, "親"),
+        node(2, 1, "a", { mapLinks: mapLinkItems("a", 6) }),
+        node(3, 1, "b", { mapLinks: mapLinkItems("b", 5) }),
+      ];
+
+      expect(mergeNodes(many, [2, 3], 2, " ", visibleOf(many), "manual", CURRENT_MAP_ID)).toEqual({
+        ok: false,
+        reason: "map-links-too-many",
+      });
+    });
+
+    it("連結したマップ間リンクは保存と読み込みで往復する", () => {
+      const result = merged(withMapLinks, [2, 3, 4], 3);
+      const parsed = parseMapDocumentJson(serializeMapDocument(createMapDocument(result.nodes, "manual")));
+
+      expect(parsed.ok && parsed.value.nodes.find((item) => item.id === 3)?.mapLinks).toEqual([
+        MAP_LINK_A,
+        MAP_LINK_B,
+        MAP_LINK_C,
       ]);
     });
   });
@@ -1107,10 +1351,10 @@ describe("mergeNodes", () => {
   });
 
   it("計画の失敗は、その reason をそのまま返す（兄弟でない選択・祖先と子孫の選択を拒否する）", () => {
-    expect(mergeNodes(family, [2, 5], 2, " ", visibleOf(family), "manual")).toEqual({ ok: false, reason: "different-parents" });
-    expect(mergeNodes(family, [1, 2], 1, " ", visibleOf(family), "manual")).toEqual({ ok: false, reason: "different-parents" });
-    expect(mergeNodes(family, [2], 2, " ", visibleOf(family), "manual")).toEqual({ ok: false, reason: "too-few-nodes" });
-    expect(mergeNodes(family, [2, 3], 2, " ", new Set([1, 2]), "manual")).toEqual({ ok: false, reason: "node-hidden" });
+    expect(mergeNodes(family, [2, 5], 2, " ", visibleOf(family), "manual", CURRENT_MAP_ID)).toEqual({ ok: false, reason: "different-parents" });
+    expect(mergeNodes(family, [1, 2], 1, " ", visibleOf(family), "manual", CURRENT_MAP_ID)).toEqual({ ok: false, reason: "different-parents" });
+    expect(mergeNodes(family, [2], 2, " ", visibleOf(family), "manual", CURRENT_MAP_ID)).toEqual({ ok: false, reason: "too-few-nodes" });
+    expect(mergeNodes(family, [2, 3], 2, " ", new Set([1, 2]), "manual", CURRENT_MAP_ID)).toEqual({ ok: false, reason: "node-hidden" });
   });
 
   describe("折りたたみ状態の違う親へ子を付け替えたときの見え方", () => {
