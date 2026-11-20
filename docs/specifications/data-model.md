@@ -1,6 +1,6 @@
 # Draw My Map データモデル・永続化仕様書
 
-本書は、**Draw My Map** におけるデータモデル、TypeScript 型定義、JSON 永続化スキーマ（Version 1 〜 Version 3）、デコード・マイグレーション・バリデーション、枝のクリップボード形式（5.10）、箇条書きからの追加で受け渡す型（2.6。保存形式は変えない）、およびブラウザ `localStorage` 永続化アーキテクチャ（複数マップのインデックスと本体、起動時の移行、ゴミ箱。5.1〜5.14）の完全な技術仕様書です。
+本書は、**Draw My Map** におけるデータモデル、TypeScript 型定義、JSON 永続化スキーマ（Version 1 〜 Version 3）、デコード・マイグレーション・バリデーション、枝のクリップボード形式（5.10）、箇条書きからの追加で受け渡す型（2.6。保存形式は変えない）、およびブラウザ `localStorage` 永続化アーキテクチャ（複数マップのインデックスと本体、起動時の移行、ゴミ箱、マップライブラリメタデータ。5.1〜5.15）の完全な技術仕様書です。
 
 ---
 
@@ -47,6 +47,7 @@
    - 5.12 [全マップの一括バックアップと追加復元（Phase 16・候補007）](#512-全マップの一括バックアップと追加復元phase-16候補007)
    - 5.13 [複数タブの編集競合検出（Phase 16・候補008）](#513-複数タブの編集競合検出phase-16候補008)
    - 5.14 [削除マップのゴミ箱（Phase 16・候補015）](#514-削除マップのゴミ箱phase-16候補015)
+   - 5.15 [マップライブラリメタデータ（Phase 19・候補031・032）](#515-マップライブラリメタデータphase-19候補031032)
 6. [Markdown・箇条書き書き出しと保存形式（Phase 15）](#6-markdown箇条書き書き出しと保存形式phase-15)
 
 ---
@@ -101,11 +102,11 @@ Root Node B (id: 5, parentId: null)
 
 ## 2. TypeScript 型定義リファレンス
 
-システムの中核を構成する共有型定義は `client/src/types/` 配下の全 15 ファイルに集約されています。
+システムの中核を構成する共有型定義は `client/src/types/` 配下の全 16 ファイルに集約されています。
 
 | ファイルパス | エクスポートされる型名 | 役割・用途 |
 | :--- | :--- | :--- |
-| `client/src/types/node.ts` | `Node` | マインドマップのノードエンティティ型 |
+| `client/src/types/node.ts` | `Node`, `NodeSource`, `NodeMapLink` | マインドマップのノードエンティティ型、出典型、マップ間リンク型 |
 | `client/src/types/nodeImportance.ts` | `NodeImportance` | ノード重要度レベル（`"high" \| "medium" \| "low"`） |
 | `client/src/types/nodeLayout.ts` | `NodeLayoutMode` | レイアウト配置モード（`"manual" \| "auto"`） |
 | `client/src/types/nodeMapState.ts` | `NodeMapState` | マップ全体のインメモリ状態（`layoutMode`, `nodes`） |
@@ -119,7 +120,8 @@ Root Node B (id: 5, parentId: null)
 | `client/src/types/nodeLabelEditRequest.ts` | `NodeLabelEditRequest` | 親の挿入の後のラベルの編集の開始要求（`nodeId`, `sequence`, `documentRevision`。2.9 節） |
 | `client/src/types/revisionScopedNodeRequest.ts` | `RevisionScopedNodeRequest` | ノードへの要求（中央移動・ラベルの編集）の共通の形（`nodeId`, `sequence`, `documentRevision`）。発行側の `useRevisionScopedNodeRequest` と振り分け側の `classifyNodeRequest` が共有する |
 | `client/src/types/mapStorageSession.ts` | `MapStorageSession`, `MapBackupSnapshot`, `MapBodyWriteResult`, `MapFlushResult` | 開いているマップの本体の読み書き、flush とバックアップ snapshot の登録（5.5 節） |
-| `client/src/types/mapLibraryDialog.ts` | `MapLibraryDialogScreen`, `OpenMapLibraryDialogScreen`, `MapLibraryRowAction`, `MapLibraryDialogFocusTarget`, `MapLibraryDialogNotices` | マップのダイアログの画面、行の操作、フォーカス先、ダイアログ内の通知 |
+| `client/src/types/mapLibraryDialog.ts` | `MapLibraryDialogScreen`, `OpenMapLibraryDialogScreen`, `MapLibraryRowAction`, `MapLibraryTrashRowAction`, `MapLibraryFolderRowAction`, `MapLibraryDialogFocusTarget`, `MapLibraryDialogNotices` | マップ管理ダイアログの画面（一覧・ゴミ箱・フォルダー管理・バックアップ/復元確認等）、行操作、フォーカス先、ダイアログ内通知 |
+| `client/src/types/pendingMapNavigation.ts` | `PendingMapNodeNavigation` | 他マップの特定ノードへジャンプする際の遷移完了待ち要求（`mapId`, `sessionNumber`, `nodeId`, `token`） |
 
 ### 2.1 ノード・キャンバス状態型
 
@@ -173,6 +175,12 @@ export type Node = {
    * 各要素の任意の `page` / `url` も無いときキーごと持たない
    */
   sources?: readonly NodeSource[];
+  /**
+   * マップ間リンク（Phase 19 以降）。`targetMapId` 必須・`targetNodeId` 任意の読み取り専用の配列。
+   * 最大 10 件（`NODE_MAP_LINKS_MAX_COUNT`）。`nodeMapLinkKey`（`targetNodeId` なしは `${targetMapId}:map`、ありは `${targetMapId}:node:${targetNodeId}`）が同じものは持たない。
+   * リンクが無いノードではプロパティ自体が存在しない（空配列も持たない）。任意の `targetNodeId` も無いときキーごと持たない
+   */
+  mapLinks?: readonly NodeMapLink[];
 };
 
 /**
@@ -183,7 +191,17 @@ export type NodeSource = {
   page?: string;
   url?: string;
 };
+
+/**
+ * マップ間リンク 1 件（Phase 19 以降）。任意の targetNodeId は無いときキーごと持たない
+ */
+export type NodeMapLink = {
+  readonly targetMapId: string;
+  readonly targetNodeId?: number;
+};
 ```
+
+- **任意属性ポリシー（`client/src/domain/nodes/nodeAttributePolicy.ts`）**: `NODE_ATTRIBUTE_POLICY.mapLinks` は `{ split: "original-only", merge: "union", parentInsert: "none" }` です。ノード分割では元のノードにのみ残し、ノード統合では選択ノード群の `mapLinks` を配列順に連結し、現在マップの残すノード自身を指すリンク（`targetMapId` が現在マップで `targetNodeId` が残すノードの ID。追加時の `self-node` と同じ判定 `isSelfNodeMapLink`）を除いてから `nodeMapLinkKey` で重複除去します（除いた後で 10 件超過時は `map-links-too-many` で拒否）。親の挿入では新しい親へ引き継ぎません。枝の複製・コピー＆ペースト・別マップへの枝移動では値コピーでそのまま引き継ぎます。削除は配列添字ではなく `nodeMapLinkKey` による値一致で行い、最後の 1 件削除時に `mapLinks` キーごと外します。履歴（`mapHistory.ts`）と複数タブ競合判定（`mapConflict.ts`）の同値比較でも `areNodeMapLinksEqual` で検証します。
 
 - 兄弟とルートの順は `nodes` 配列の相対順です（同じ `parentId` を持つノード同士の、配列の中の前後）。並べ替えは根ノード1つの配列内の位置を変え、子孫の位置は変えません。順序のフィールド（`order` など）は持ちません。親子は `parentId` で表すので、子が親より前にあってもかまいません（[features.md の 14 章](./features.md#14-兄弟ノードの順序変更)）。
 - `parentId` は接続（`Shift` + ドラッグ）に加えて、階層の上げ下げ（[features.md の 15 章](./features.md#15-階層の上げ下げ)）でも変わります。上げ下げは、上げ下げする枝の根 T の `parentId` と、T の根ノード1つの配列内の位置を変え、子孫の `parentId` と位置は変えません（下げて新しい親に子が無いときは T の位置も変えません）。
@@ -749,6 +767,7 @@ Phase 18 では、Version 3 のまま（版は上げません）、詳細メモ�
 同じく Phase 18 で、URL を保存する任意項目 `links`（http / https の URL の配列、最大 10 件、各 2,048 文字以内）がノードに追加されました。URL が無いノードは項目ごと持ちません。古いアプリで開いて保存し直すと URL は失われます。
 同じく Phase 18 で、タグを保存する任意項目 `tags`（文字列の配列、最大 10 件、各 30 文字以内）がノードに追加されました。タグが無いノードは項目ごと持ちません。古いアプリで開いて保存し直すとタグは失われます。
 同じく Phase 18 で、出典を保存する任意項目 `sources`（オブジェクトの配列、最大 10 件。各要素は `title` 必須・`page` / `url` 任意）がノードに追加されました。出典が無いノードは項目ごと持ちません。古いアプリで開いて保存し直すと出典は失われます。
+Phase 19 では、Version 3 のまま（版は上げません）、別マップや特定ノードへの参照を保存する任意項目 `mapLinks`（オブジェクトの配列、最大 10 件。各要素は `targetMapId` 必須・`targetNodeId` 任意）がノードに追加されました。マップ間リンクが無いノードは項目ごと持ちません。古いアプリで開いて保存し直すとマップ間リンクは失われます。
 
 #### JSON サンプル (Version 3)
 ```json
@@ -791,6 +810,7 @@ Phase 18 では、Version 3 のまま（版は上げません）、詳細メモ�
 | `nodes[].links` | `string[]` | △ (任意) | 添付した URL（http / https、最大 10 件、各 2,048 文字以内）。読み込みでは各要素を `URL.href` に正規化し、重複は後のものを捨て、空なら項目ごと持たない。無い場合はキー自体を含めない。V1/V2 では存在しても無視する |
 | `nodes[].tags` | `string[]` | △ (任意) | タグ（最大 10 件、各 30 文字以内）。読み込みでは各要素の前後の空白を削って連続する空白を 1 個にまとめ、`nodeTagKey`（`U+200D`・`U+FE0E`・`U+FE0F` の除去 → NFKC → 空白のまとめと trim → 小文字化 → NFKC）で同じになるものは後のものを捨て、空なら項目ごと持たない。無い場合はキー自体を含めない。V1/V2 では存在しても無視する |
 | `nodes[].sources` | `object[]` | △ (任意) | 出典（最大 10 件。各要素は `title`（必須）と任意の `page`・`url`）。読み込みでは件数・未知キー・各文字列の長さを正規化より先に判定し、タイトル・ページ・URL を正規化し、`nodeSourceKey` が同じものは後のものを捨て、空なら項目ごと持たない。無い場合はキー自体を含めない。V1/V2 では存在しても無視する |
+| `nodes[].mapLinks` | `object[]` | △ (任意) | マップ間リンク（最大 10 件。各要素は `targetMapId`（必須・`MAP_ID_PATTERN`）と任意の `targetNodeId`（1 以上の安全な整数））。読み込みでは件数・要素のプレーンオブジェクト型・未知キー・各フィールド型を正規化より先に判定し、`normalizeNodeMapLink` を通して `nodeMapLinkKey` が同じものは後のものを捨て、空なら項目ごと持たない。無い場合はキー自体を含めない。V1/V2 では存在しても無視する |
 
 ---
 
@@ -806,6 +826,7 @@ Phase 18 では、Version 3 のまま（版は上げません）、詳細メモ�
 | **`nodes[].links`** | 未対応（存在しても破棄） | 未対応（存在しても破棄） | **対応** (http/https の URL の配列、最大 10 件、省略可能) |
 | **`nodes[].tags`** | 未対応（存在しても破棄） | 未対応（存在しても破棄） | **対応** (タグ名の配列、最大 10 件、省略可能) |
 | **`nodes[].sources`** | 未対応（存在しても破棄） | 未対応（存在しても破棄） | **対応** (出典オブジェクトの配列、最大 10 件、省略可能) |
+| **`nodes[].mapLinks`** | 未対応（存在しても破棄） | 未対応（存在しても破棄） | **対応** (マップ間リンクオブジェクトの配列、最大 10 件、省略可能) |
 | **最小ノード高制約** | 0 超の有限数値 | 0 超の有限数値 | イラスト有りの場合 最低 116px |
 | **保存時出力形式** | — | — | **常に Version 3 形式で出力** |
 
@@ -835,7 +856,8 @@ Phase 18 では、Version 3 のまま（版は上げません）、詳細メモ�
     ├─ note 検証（V3 のみ。V1/V2 は無視）
     ├─ links 検証（V3 のみ。V1/V2 は無視）
     ├─ tags 検証（V3 のみ。V1/V2 は無視）
-    └─ sources 検証（V3 のみ。V1/V2 は無視）
+    ├─ sources 検証（V3 のみ。V1/V2 は無視）
+    └─ mapLinks 検証（V3 のみ。V1/V2 は無視）
       │ 不正あり ──────────────────────────────► エラー: "node[i].xxxは..."
       ▼ 全ノード正常
  4. グラフ構造整合性検証 (validateMapDocumentGraph)
@@ -864,7 +886,7 @@ export function parseMapDocumentJsonWithVersion(
 
 ### 4.2 バージョンマイグレーション規則
 
-| 入力バージョン | `importance` の処理 | `illustration` の処理（`note`・`links`・`tags`・`sources` も同様に、V1 / V2 では無視し、V3 では検証して保持） | 出力バージョン |
+| 入力バージョン | `importance` の処理 | `illustration` の処理（`note`・`links`・`tags`・`sources`・`mapLinks` も同様に、V1 / V2 では無視し、V3 では検証して保持） | 出力バージョン |
 | :--- | :--- | :--- | :--- |
 | **Version 1** | デフォルト値 `"medium"`（`DEFAULT_NODE_IMPORTANCE`）を自動補完。もし入力中に `importance` フィールドが存在しても無視・上書きされる。 | 存在しても完全に無視され、`undefined`（項目なし）へ正規化される。 | **Version 3** |
 | **Version 2** | 入力値の検証を厳格に実施（`"high"`, `"medium"`, `"low"` 以外はエラー）。 | 存在しても完全に無視され、`undefined`（項目なし）へ正規化される。 | **Version 3** |
@@ -921,6 +943,11 @@ export function parseMapDocumentJsonWithVersion(
    - 条件: 配列で、件数が 10 以下、各要素がオブジェクトで既知キー（`title`・`page`・`url`）のみ、`title` が必須の文字列、任意の `page` / `url` があるときは文字列。件数と各文字列の `length`（タイトル・ページは入力先行 256、URL はリンクと同じ）は正規化より先に判定する。各要素が `normalizeNodeSource`（タイトル必須・ページ任意・URL は `normalizeNodeLinkUrl`）を通る。
    - 通った要素は正規化し、`nodeSourceKey` が同じものは後のものを捨てる。空になれば `undefined`（項目ごと持たない）。
    - エラー: `"node[${index}].sourcesは、タイトル（200文字以内）・ページ（80文字以内）・http/https の URL からなる出典の配列（最大10件）である必要があります。"`
+13. **`mapLinks`**（`mapDocumentNodeMapLinks.ts`）:
+   - Version 3 のみ検証。V1 / V2 では存在しても無視（`undefined`）。`undefined` は項目なし。
+   - 条件: 配列で、件数が 10 以下（`NODE_MAP_LINKS_MAX_COUNT`）、各要素がプレーンオブジェクトで既知キー（`targetMapId`・`targetNodeId`）のみ、必須の `targetMapId` が文字列かつ `isValidMapId`（`MAP_ID_PATTERN`）を満たし、任意の `targetNodeId` があるときは 1 以上の安全な整数（`isValidTargetNodeId`）。件数・プレーンオブジェクト型・未知キー・各フィールド型は正規化より先に判定する。
+   - 通った要素は `normalizeNodeMapLink` で正規化し（`targetNodeId` 未指定時はキー省略）、`nodeMapLinkKey` が同じものは後のものを捨てる。空になれば `undefined`（項目ごと持たない）。
+   - エラー: `"node[${index}].mapLinksは、有効なマップ ID と任意のノード ID（1以上の安全な整数）からなるマップ間リンクの配列（最大10件）である必要があります。"`
 
 ### 4.4 イラスト画像・Data URL バリデーション仕様
 
@@ -997,6 +1024,7 @@ graph TD
 | **ノード単体** | `node[${i}].linksは、http または https の URL（2048文字以内）の配列（最大10件）である必要があります。` | V3 で `links` が配列でない、11 件以上、文字列でない要素、2,048 文字超過の要素、http / https 以外・資格情報つき・URL として不正な要素 |
 | **ノード単体** | `node[${i}].tagsは、30文字以内のタグ名の配列（最大10件）である必要があります。` | V3 で `tags` が配列でない、11 件以上、文字列でない要素、256 文字超過の要素、空・使えない文字を含む・まとめて 30 文字を超える要素 |
 | **ノード単体** | `node[${i}].sourcesは、タイトル（200文字以内）・ページ（80文字以内）・http/https の URL からなる出典の配列（最大10件）である必要があります。` | V3 で `sources` が配列でない、11 件以上、要素がオブジェクトでない、未知キーあり、必須 `title` 欠落、各フィールドの型不正、入力長の先行超過、正規化失敗 |
+| **ノード単体** | `node[${i}].mapLinksは、有効なマップ ID と任意のノード ID（1以上の安全な整数）からなるマップ間リンクの配列（最大10件）である必要があります。` | V3 で `mapLinks` が配列でない、11 件以上、要素がプレーンオブジェクトでない、未知キーあり、必須 `targetMapId` 欠落・形式不正、任意 `targetNodeId` が 1 以上の安全な整数でない |
 | **グラフ整合性**| `ノードID ${id} が重複しています。` | 同一 ID を持つノードが複数存在 |
 | **グラフ整合性**| `親ノード ${parentId} が存在しません。` | `parentId` がノードリスト内に存在しない |
 | **グラフ整合性**| `親子関係が循環しています。` | 自己ループまたは循環参照が存在 |
@@ -1021,6 +1049,7 @@ Phase 12 から、名前を付けた複数のマップを保存します。マ�
 | 一括追加復元のジャーナル | `draw-my-map.library-restore.v1` | `LIBRARY_RESTORE_JOURNAL_KEY`（`libraryRestoreJournal.ts`） | 追加復元の途中で一覧と新規本体を戻すための JSON（5.12 節） |
 | ゴミ箱インデックス | `draw-my-map.trash.v1` | `MAP_TRASH_INDEX_KEY`（`mapTrashStorage.ts`） | `MapTrashIndexV1` の JSON（`encodeMapTrashIndex`。5.14 節） |
 | ゴミ箱本体 | `draw-my-map.trash.v1.doc.<id>` | `mapTrashBodyKey(trashId)`（接頭辞 `MAP_TRASH_BODY_KEY_PREFIX`） | 削除時点のマップ本体 JSON（`hasBody: false` の空マップは作成しない。5.14 節） |
+| マップライブラリメタデータ | `draw-my-map.library-meta.v1` | `MAP_LIBRARY_META_STORAGE_KEY`（`mapLibraryMetaStorage.ts`） | `MapLibraryMetaV1` の JSON（`encodeMapLibraryMeta`。お気に入り・最終閲覧日時・フォルダー。5.15 節） |
 
 - 本体のキーは `mapBodyKey(id)` の1か所だけで作ります。id は `MAP_ID_PATTERN`（`/^[A-Za-z0-9_-]{1,64}$/`）に合う文字列で、区切りの `.` を含みません。
 - 一覧と本体のキーはすべて `draw-my-map.maps.v1` で始まり、旧キー `draw-my-map.map.v1` やゴミ箱キー（`draw-my-map.trash.v1` / `draw-my-map.trash.v1.doc.*`）とは前方一致で重なりません。アクティブ本体を列挙するときは接頭辞 `draw-my-map.maps.v1.doc.` で探し、残りが id の形式に合うものだけを本体とみなすため、旧キー・退避キー・ゴミ箱キーをアクティブ本体や一括バックアップの孤立本体と取り違えません。また、ゴミ箱データは既存の `MapIndexV1`・`draw-my-map.maps.v1.doc.*`・一括バックアップ形式 v1（`LibraryBackupV1`）には含めません。
@@ -1392,12 +1421,12 @@ sequenceDiagram
 | :--- | :--- |
 | `type` | 文字列 `"draw-my-map/subtree"` のみ受け付ける |
 | `version` | 数値 `1` のみ受け付ける |
-| `nodes` | 空でない配列。各要素は V3 のノード（`id`, `parentId`, `x`, `y`, `width`, `height`, `label`, `importance`, 任意の `illustration`・`note`・`links`・`tags`・`sources`）。配列の順序を保つ |
+| `nodes` | 空でない配列。各要素は V3 のノード（`id`, `parentId`, `x`, `y`, `width`, `height`, `label`, `importance`, 任意の `illustration`・`note`・`links`・`tags`・`sources`・`mapLinks`）。配列の順序を保つ |
 | 根 | `parentId: null` のノードがちょうど 1 つ。`rootId` は形式に含めず、読み取り時にこのノードから求める。コピー時は選択ノードの `parentId` を `null` にして書き出す |
 | 保存しないもの | 元のマップの配置モード、枝の折りたたみ指定、生成中の画像、プレビュー、選択、viewport |
 | 上限 | 文字数 5,000,000（UTF-16 コード単位。`string.length`）、ノード数 10,000。コピーと貼り付けに同じ上限を適用する。文字数は `JSON.parse` の前に、ノード数は各ノードの検証の前に判定する |
 
-- **検証**: 貼り付けの入力は信用せず、`type` / `version`、非空の `nodes`、単一の根を確認します。各ノードは V3 の `normalizeMapDocumentNode(..., 3)` で検証し、既知の項目だけで作り直します（イラストは Data URL・寸法の検証と高さ補正を V3 と同じ規則で適用。詳細メモ `note`・URL `links`・タグ `tags`・出典 `sources` も V3 と同じ規則で検証し、規則に合わない値は拒否）。グラフは `validateMapDocumentGraph` で検証し、重複 ID・循環・存在しない親・複数の根を拒否します。普通のテキストや `MapDocument` の JSON は枝形式として受け付けません。
+- **検証**: 貼り付けの入力は信用せず、`type` / `version`、非空の `nodes`、単一の根を確認します。各ノードは V3 の `normalizeMapDocumentNode(..., 3)` で検証し、既知の項目だけで作り直します（イラストは Data URL・寸法の検証と高さ補正を V3 と同じ規則で適用。詳細メモ `note`・URL `links`・タグ `tags`・出典 `sources`・マップ間リンク `mapLinks` も V3 と同じ規則で検証し、規則に合わない値は拒否）。グラフは `validateMapDocumentGraph` で検証し、重複 ID・循環・存在しない親・複数の根を拒否します。普通のテキストや `MapDocument` の JSON は枝形式として受け付けません。
 - **計算量**: デコードと単一の根の判定は、10,000 ノードに対して線形で終わります（逆順に並んだ深い鎖や、全件が衝突する ID でも、配列要素と `id` の読み取り回数がノード数の定数倍以内）。
 - **貼り付け時の ID**: 形式の中の ID は貼り付け先の ID と対応付けるための仮のものです。貼り付けでは全ノードに未使用の新しい ID を一括で発行し（`nextAvailableIds`）、根の `parentId` は `null`、子孫の `parentId` は新しい ID へ付け替えます。元の ID は引き継ぎません。コピーは折りたたみで隠れた子孫も含み、貼り付けた枝は折りたたみ指定を持たないため、展開した状態で追加されます。
 
@@ -1478,14 +1507,22 @@ type LibraryBackupV1 = {
   exportedAt: string; // 有効な日時
   currentMapId: string; // maps 内にある元 ID
   maps: Array<{ id: string; name: string; createdAt: string; updatedAt: string; document: MapDocumentV3 }>;
+  folders?: readonly MapFolder[]; // 任意（Phase 19 以降、0 件時はキー省略）
+  mapMeta?: Readonly<Record<string, MapUserMeta>>; // 任意（Phase 19 以降、アクティブマップ分のみ。0 件時はキー省略）
 };
 ```
 
-マップは1〜1000件、ID は `[A-Za-z0-9_-]{1,64}` で重複不可、名前は最大50コードポイント、日時は有効値、document は V3 に限ります。ファイルは UTF-8 で32 MiB以下です。書き出し時は生成後のバイト数、読込時は `File.text()` 前の `File.size` と解析後のバイト数を検査します。超過時は個別 JSON 書き出しを案内します。ファイル名は `draw-my-map-library-backup-YYYYMMDD-HHMMSS.json` で、マップ名を含みません。通知はダウンロード開始までで、保存完了を意味しません。
+マップは1〜1000件、ID は `[A-Za-z0-9_-]{1,64}` で重複不可、名前は最大50コードポイント、日時は有効値、document は V3 に限ります。トップレベルキーは許可リスト（`format`・`version`・`exportedAt`・`currentMapId`・`maps`・`folders`・`mapMeta`）のみ許可し、未知キーは拒否します。`folders` / `mapMeta` が省略された旧 V1 バックアップは後方互換でそのまま読み込めます。`folders` / `mapMeta` が存在する場合は厳格検証を行い（`mapMeta` は走査前に `Object.keys(mapMeta).length > maps.length` を先行拒否、`folders` は最大 50 件・正規化済み名前・重複禁止・厳密 ISO 日時、`mapMeta` のキーは `maps` 内の ID のみ、`folderId` は同バックアップ内の `folders` に存在する ID のみ許可）、違反があればバックアップ全体を拒否します。ファイルは UTF-8 で32 MiB以下です。書き出し時は生成後のバイト数、読込時は `File.text()` 前の `File.size` と解析後のバイト数を検査します。超過時は個別 JSON 書き出しを案内します。ファイル名は `draw-my-map-library-backup-YYYYMMDD-HHMMSS.json` で、マップ名を含みません。通知はダウンロード開始までで、保存完了を意味しません。
 
-書き出しは、保存中の一覧が現在の一覧と一致し、ジャーナルがなく、現在の session の editor snapshot が復元済みである場合だけ用意します。現在のマップには最新 snapshot を採り、別マップには保存本体を読みます。別マップの本体が `null` なら名前と件数を確認画面で示して空の V3 として含めます。読取例外や不正本体では全体を中止し、V1/V2 の保存本体はデコードして V3 として出力しますが、保存本体自体は暗黙に書き換えません。孤立本体は含めず件数を示します。確認後にも session・一覧・snapshot・ジャーナルを再検査します。
+書き出しは、保存中の一覧が現在の一覧と一致し、ジャーナルがなく、現在の session の editor snapshot が復元済みである場合だけ用意します。現在のマップには最新 snapshot を採り、別マップには保存本体を読みます。別マップの本体が `null` なら名前と件数を確認画面で示して空の V3 として含めます。読取例外や不正本体では全体を中止し、V1/V2 の保存本体はデコードして V3 として出力しますが、保存本体自体は暗黙に書き換えません。孤立本体は含めず件数を示します。`libraryMetaStatus === "ready"` のときは `folders`（空フォルダー含む）とアクティブマップ分の `mapMeta` を含め、`corrupt` / `unavailable` のときは救出を優先して `folders` / `mapMeta` を省略しマップ本体のみ出力します。確認後にも session・一覧・snapshot・ジャーナルを再検査します。
 
-追加復元は V3 の一括ファイルだけを受け付けます。個別 V1/V2 JSON の救出はヘッダーの「JSON読み込み」で行います。各マップへ未使用の**新しい** ID を与え、元のノード ID、名前、日時を維持して一覧の末尾に加えます。既存の ID・本体・現在のマップと、現在の editor/session は維持します。確認前のファイル読込中や確認後に session・一覧が変われば再試行を求めます。現在マップの保存待ちは `flush` し、失敗なら追加しません。
+追加復元は V3 の一括ファイルだけを受け付けます。個別 V1/V2 JSON の救出はヘッダーの「JSON読み込み」で行います。各マップへ未使用の**新しい** ID を与え（`mapIdMapping: Map<oldMapId, newMapId>`）、元のノード ID、名前、日時を維持して一覧の末尾に加えます。全マップの新 ID 採番後に各ドキュメントの `nodes` へ `remapNodeMapLinks(nodes, mapIdMapping)` を適用し、バックアップ内のマップ同士を指す `mapLinks.targetMapId` を新規採番された `mapId` へ自動リマップします（バックアップ外を指す ID はそのまま保持）。既存の ID・本体・現在のマップと、現在の editor/session は維持します。確認前のファイル読込中や確認後に session・一覧が変われば再試行を求めます。現在マップの保存待ちは `flush` し、失敗なら追加しません。
+
+メイン一覧とマップ本体の書き込みが確定した**後**、`libraryMetaStatus === "ready"` かつバックアップに `folders` または `mapMeta` が含まれる場合、`mergeLibraryMetaForRestore` で既存メタデータと統合して `draw-my-map.library-meta.v1` を 1 回だけ保存します：
+1. バックアップの各フォルダーについて、既存フォルダーに同じ `mapFolderNameKey` があればそこへ合流します（`folderIdMapping` に既存 ID を記録）。
+2. 無ければ、合計フォルダー数が 50 件（`MAX_MAP_FOLDERS`）未満のときだけ追加します（ID が既存フォルダーと衝突する場合は新 ID を採番）。
+3. 50 件上限に達していた場合は追加せず `droppedFolderCount` として数え、そのフォルダーに属していた復元マップは `folderId` を外して未分類化します（完了後に警告通知）。
+4. 各 `mapMeta[oldMapId]` を `newMapId` へ付け替え、`folderId` は `folderIdMapping` で変換します。メタデータの保存失敗や上限超過があっても、確定済みのマップ本体復元は巻き戻さず警告通知に留めます。
 
 `libraryRestoreJournal.ts` の専用ジャーナルは `format: "draw-my-map-library-restore"`, `version: 1`, 操作前後の一覧原文 `indexBefore` / `indexAfter`, 新規本体の `{ id, json }[]` を持ちます。`libraryRestoreTransaction.ts` は **ジャーナル → 新規本体全件 → 最終一覧1回 → ジャーナル削除** の順に同期書込し、最後の削除を確定点にします。途中失敗では一覧原文と書込済み新規本体を戻します。戻せなければ `recoveryRequired` として保護モードへ移し、書込直前に取得した有効な現在 document JSON を `initialJson` に渡します。再マウントで選択・履歴・viewport はリセットされますが、nodes・layoutMode・illustration は保持します。
 
@@ -1660,6 +1697,72 @@ export type MapTrashDecodeResult =
 | ゴミ箱を空にする成功 / 一部失敗警告 / 失敗 | `trashEmptiedNotice` / `trashEmptyPartialWarningNotice` / `trashEmptyFailedNotice` | `status` / `warning` / `error` | `ゴミ箱を空にしました。` 等 |
 | 破損ゴミ箱の初期化成功 / 失敗 | `trashCorruptClearedNotice` / `trashCorruptClearFailedNotice` | `status` / `error` | `壊れたゴミ箱のデータを初期化しました。` / `ゴミ箱のデータを初期化できませんでした。` |
 | フォールバック完全削除（通常 / 現在 / 最後） | `mapPermanentlyDeletedNotice` / `currentMapPermanentlyDeletedNotice` / `lastMapPermanentlyDeletedNotice`（本体残存警告は `permanentBodyRemovalFailedNotice` 等） | `status`（`warning`） | `マップ「<名前>」を完全に削除しました。` 等 |
+
+### 5.15 マップライブラリメタデータ（Phase 19・候補031・032）
+
+お気に入り・最終閲覧日時・1 階層フォルダー情報を、`MapIndexV1`（`draw-my-map.maps.v1`）を変更せずに独立したストレージキーで管理する永続化仕様です。既存の `libraryRestoreJournal.ts` の厳格キー検査および複数タブ競合検出（`MAP_INDEX_STORAGE_KEY` 監視）への影響を分離します。マップ編集の Undo / Redo 履歴には含めません。
+
+#### 1. ストレージキー・定数・型定義（`mapLibraryMeta.ts`, `mapLibraryMetaStorage.ts`）
+
+- **ストレージキー** (`client/src/services/persistence/mapLibraryMetaStorage.ts`):
+  - `MAP_LIBRARY_META_STORAGE_KEY = "draw-my-map.library-meta.v1"`
+- **上限・パターン定数** (`client/src/domain/mapLibrary/mapLibraryMeta.ts`):
+  - `MAX_MAP_FOLDERS = 50`（フォルダー最大件数）
+  - `MAX_MAP_FOLDER_NAME_LENGTH = 50`（正規化後のコードポイント数上限）
+  - `MAX_MAP_FOLDER_NAME_INPUT_LENGTH = 256`（正規化前の入力先行上限）
+  - `MAX_RECENT_MAPS = 20`（最近使用タブの表示上限）
+  - `MAP_FOLDER_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/`
+
+```typescript
+export type MapFolder = {
+  readonly id: string;
+  readonly name: string;      // 正規化済み、1〜50 コードポイント
+  readonly createdAt: string; // 厳密 ISO 8601（UTC）
+  readonly updatedAt: string; // 厳密 ISO 8601（UTC）
+};
+
+export type MapUserMeta = {
+  readonly favorite?: boolean;     // true のみ保持（false はキー省略）
+  readonly lastOpenedAt?: string;  // 厳密 ISO 8601（UTC）
+  readonly folderId?: string;      // 所属フォルダー ID（未分類はキー省略）
+};
+
+export type MapLibraryMetaV1 = {
+  readonly version: 1;
+  readonly folders: readonly MapFolder[];
+  readonly mapMeta: Readonly<Record<string, MapUserMeta>>;
+};
+
+export type MapLibraryMetaStatus = "ready" | "corrupt" | "unavailable";
+```
+
+- 空既定値は呼び出しごとに新しいオブジェクトを返す `createEmptyMapLibraryMeta()` を使います。
+- `MapLibraryView`（`status: "ready"` 時）は `libraryMeta: MapLibraryMetaV1` と `libraryMetaStatus: MapLibraryMetaStatus` を公開します（保護モード時は `libraryMeta: createEmptyMapLibraryMeta()`, `libraryMetaStatus: "unavailable"`）。
+
+#### 2. フォルダー名正規化・デコード・修復規則
+
+- **フォルダー名正規化（`normalizeMapFolderName` / `mapFolderNameKey`）**:
+  1. 前後の空白を削り、空なら `empty`、256 文字超過なら `too-long`。
+  2. 連続する空白（`\s+`）を半角スペース 1 個へまとめる。
+  3. 制御文字および不可視書式文字（`\p{Default_Ignorable_Code_Point}` と `U+FFF9`〜`U+FFFB`。絵文字結合子 `U+200D`・異体字セレクタ `U+FE0E`・`U+FE0F` のみ例外許可）を含む場合は `invalid`。
+  4. 重複判定鍵 `mapFolderNameKey`: `U+200D` / `U+FE0E` / `U+FE0F` を除去 → `NFKC` → 連続空白まとめ・`trim` → `toLowerCase` → `NFKC`。鍵が空文字列なら `invalid`。
+  5. 正規化後のコードポイント数（`Array.from(collapsed).length`）が 50 を超える場合は `too-long`。
+- **デコード（`decodeMapLibraryMeta(raw)`）**:
+  - `raw === null`（初回未作成）: `{ ok: true, meta: createEmptyMapLibraryMeta(), repaired: false }`。
+  - JSON 構文不正、トップレベルがプレーンオブジェクトでない・未知キーあり・`version !== 1`、`folders` が配列でないまたは 50 件超過、`folders` 要素の未知キー・`id` 不正・重複 `id`・未正規化または不正な `name`・重複 `mapFolderNameKey`・厳密 ISO 8601 でない日時、`mapMeta` がプレーンオブジェクトでない・キーが `isValidMapId` 違反・要素の未知キー・型不正（`favorite` が boolean でない、`lastOpenedAt` が厳密 ISO 8601 でない、`folderId` が `MAP_FOLDER_ID_PATTERN` 違反）のいずれかに該当すると `{ ok: false, reason: "corrupt" }` を返します。
+  - 孤立フォルダー参照（`mapMeta[mapId].folderId` が `folders` に存在しない ID）と `favorite: false` だけは安全に取り除いて `repaired: true` とし、全フィールドが空になった `mapMeta` エントリも除外します。
+- **一覧の絞り込み・並び順（`filterAndSortMapsForList`）**:
+  - ①先に `folderFilter`（`all` / `unclassified` / `folder`）で絞り込み、②次に `tab` を適用します：`all` と `favorites` は `sortMapEntriesForDisplay` 順、`recent` は `lastOpenedAt` が記録済みのマップのみを `lastOpenedAt` 降順 → `id` 昇順で最大 20 件抽出します（未閲覧マップは混ぜません）。
+
+#### 3. 破損・読込不可・保護モード時の挙動
+
+| 状態（`libraryMetaStatus`） | 原因 | マップ本体への影響 | UI・操作の扱い |
+| :--- | :--- | :--- | :--- |
+| `"ready"` | 通常読込成功（未作成含む） | 通常モード | お気に入り・最近使用記録・フォルダー操作・一括バックアップ出力がすべて有効 |
+| `"corrupt"` | `decodeMapLibraryMeta` が `corrupt` | **保護モードへ落とさず**通常モードで編集継続 | 自動上書きしない。マップ一覧に `role="alert"` と「メタデータを初期化」ボタンを表示し、明示操作（`resetMapLibraryMeta`）でのみ空状態へ回復。回復まではメタ書込操作を `disabled`／フック側拒否 |
+| `"unavailable"` | `getItem` 例外（`read-error`）、または保護モード | 保護モード以外は通常モードで編集継続 | 初期化ボタンは出さない（データ保護のため）。非保護モード時は再読み込みを案内し、メタ書込操作を `disabled`／フック側拒否 |
+
+- マップ切替・作成・別名保存・枝移動の成功時は `lastOpenedAt` を保存し、マップ削除（ゴミ箱移動・完全削除）時は削除マップの `pruneMapMetaForRemovedMap` と次に開くマップの `recordMapOpened` をメモリ上で 1 つの `nextMeta` に合成して 1 回だけ書き込みます。メタデータ書込失敗でも主処理の成功は巻き戻さず警告通知に留めます。
 
 ## 6. Markdown・箇条書き書き出しと保存形式（Phase 15）
 

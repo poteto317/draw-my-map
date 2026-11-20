@@ -29,11 +29,12 @@ Draw My Map の設計・仕様・環境構築・テスト・開発運用に関�
   - 親の挿入の流れ（`nodeParentInsertion.ts`・`nodeParentInsertionMessages.ts`・`nodePlacement.ts` の `createParentNode`、`useNodeParentInsertionAction`、`useNodes.insertParentNode` の1回の commit と新しいノードの選択、成功したときの `clearNotice` とラベルの編集の要求（`useNodeLabelEditRequest`）、失敗の通知、並べ替え・上げ下げと共有する枝の構造の変更の通知）。
   - 一括バックアップ・追加復元の流れ（ファイル形式、editor snapshot、専用ジャーナル、起動復旧と保護モード、ダイアログの画面遷移）。
   - 枝の移動の流れ（`nodeBranchMove.ts`、`useBranchMoveDialog`、`useNodes.moveBranch` の1回の commit、`useMapLibrary.moveBranchToMap` のセッションの調整、`branchMoveTransaction.ts` のジャーナル、再マウントの後の通知とフォーカス）。
+  - 複数マップの検索とリンクの流れ（共通横断コーパス `crossMapCorpus.ts` / `mapLibraryCorpusReader.ts` / `useCrossMapCorpus.ts`、横断検索 `crossMapSearch.ts`、リンク解決・被リンク・リンク切れ `mapLinkGraph.ts`、独立メタデータ `mapLibraryMeta.ts` / `mapLibraryMetaStorage.ts` / `mapLibraryMetaActions.ts`、他マップ遷移 `PendingMapNodeNavigation`）。
 
 ### 2. 仕様書・マニュアル
 
 - **[機能仕様・操作マニュアル](specifications/features.md)** (`docs/specifications/features.md`)
-  - Phase 0〜18（Phase 16 の全4項目、Phase 17 の複数ノード選択・選択ノードの一括編集・一括置換・ノードの分割・統合、Phase 18 の詳細メモ・Markdownメモ・URLの添付・タグ・出典情報を含む）で実装された機能の詳細仕様。一括置換は22章、ノードの分割・統合は23章、詳細メモ（Markdownプレビュー対応）は24章、URLの添付は25章、タグは26章、出典情報は27章。Phase 14 の構造編集は14〜18章（兄弟順序・階層・親挿入・枝移動・ノードだけ削除）。
+  - Phase 0〜19（Phase 16 の全4項目、Phase 17 の複数ノード選択・選択ノードの一括編集・一括置換・ノードの分割・統合、Phase 18 の詳細メモ・Markdownメモ・URLの添付・タグ・出典情報、Phase 19 の全マップ横断検索・マップ間リンク・お気に入り／最近使用・フォルダー管理・被リンク一覧・リンク切れの検出を含む）で実装された機能の詳細仕様。一括置換は22章、ノードの分割・統合は23章、詳細メモ（Markdownプレビュー対応）は24章、URLの添付は25章、タグは26章、出典情報は27章、複数マップの検索とリンクは28章。Phase 14 の構造編集は14〜18章（兄弟順序・階層・親挿入・枝移動・ノードだけ削除）。
   - キャンバス操作（パン、ズーム、フォーカス）、ノード操作（作成、編集、削除、子孫連動移動、ドラッグ接続）。
   - 自動レイアウトアルゴリズム、解像度フィルタリング（重要度とヒステリシス制御）。
   - AIイラスト生成（プロンプト生成、ノード紐付け、縮小、再生成、削除）。
@@ -63,7 +64,8 @@ Draw My Map の設計・仕様・環境構築・テスト・開発運用に関�
   - 階層の上げ下げの型（2.8。親子は `parentId`、兄弟の順は `nodes` 配列の相対順で表し、保存形式は変えない）。
   - 途中への親ノード挿入の型（2.9。`NodeParentInsertionResult`・`InsertParentNodeResult`・`NodeLabelEditRequest`。親子は `parentId` で表し、保存形式は変えない）。
   - 枝の移動の型（2.10）とジャーナル（5.11。キー `draw-my-map.branch-move.v1`）。
-  - 一括バックアップ形式と専用ジャーナル（5.12。キー `draw-my-map.library-restore.v1`）、保存成功証拠を持つ `MapStorageSession`（5.5）。
+  - 一括バックアップ形式と専用ジャーナル（5.12。キー `draw-my-map.library-restore.v1`、任意項目 `folders` / `mapMeta`、追加復元時の `mapLinks.targetMapId` リマップとフォルダーマージ）、保存成功証拠を持つ `MapStorageSession`（5.5）。
+  - 削除マップのゴミ箱（5.14。キー `draw-my-map.trash.v1` / `draw-my-map.trash.v1.doc.<id>`）およびマップライブラリメタデータ（5.15。独立キー `draw-my-map.library-meta.v1`、お気に入り・最近使用・1階層フォルダー、破損時非保護モード維持と明示初期化）。
   - 枝の折りたたみなど表示専用の状態を保存形式・編集履歴に含めない方針（1.2）。
 
 - **[API 仕様](specifications/api.md)** (`docs/specifications/api.md`)
@@ -84,13 +86,13 @@ Draw My Map の設計・仕様・環境構築・テスト・開発運用に関�
 ### 4. テスト・品質保証
 
 - **[実ブラウザテストケース](testing/browser-test-cases.md)** (`docs/testing/browser-test-cases.md`)
-  - 自動テスト（Jest + jsdom）では検証が難しいキャンバス描画・インタラクション・実ブラウザ固有挙動の確認テスト項目（Phase 0〜18。Phase 14 は Q〜U 節、Phase 15 候補004は V 節、候補005は W 節、保存状態は X 節、一括バックアップ・追加復元は Y 節、複数タブの編集競合検出は Z 節、削除マップのゴミ箱は AA 節、Phase 17 の複数ノード選択は AB 節・選択ノードの一括編集は AC 節・一括置換は AD 節・ノードの分割・統合は AE 節、Phase 18 の詳細メモは AF 節・URLの添付は AG 節・タグは AH 節・Markdownメモは AI 節・出典情報は AJ 節）。
-  - 優先度別テストケース（起動、操作、フィルタリング、イラスト生成、エクスポート、編集履歴、枝の複製、枝のコピー＆ペースト、ノード検索、枝の折りたたみ、複数マップの保存・切り替え、箇条書きからの追加、兄弟ノードの順序変更、階層の上げ下げ、途中への親ノード挿入等）。
+  - 自動テスト（Jest + jsdom）では検証が難しいキャンバス描画・インタラクション・実ブラウザ固有挙動の確認テスト項目（Phase 0〜19。Phase 14 は Q〜U 節、Phase 15 候補004は V 節、候補005は W 節、保存状態は X 節、一括バックアップ・追加復元は Y 節、複数タブの編集競合検出は Z 節、削除マップのゴミ箱は AA 節、Phase 17 の複数ノード選択は AB 節・選択ノードの一括編集は AC 節・一括置換は AD 節・ノードの分割・統合は AE 節、Phase 18 の詳細メモは AF 節・URLの添付は AG 節・タグは AH 節・Markdownメモは AI 節・出典情報は AJ 節、Phase 19 の複数マップの検索とリンクは AK 節）。
+  - 優先度別テストケース（起動、操作、フィルタリング、イラスト生成、エクスポート、編集履歴、枝の複製、枝のコピー＆ペースト、ノード検索、枝の折りたたみ、複数マップの保存・切り替え、箇条書きからの追加、兄弟ノードの順序変更、階層の上げ下げ、途中への親ノード挿入、全マップ横断検索・マップ間リンク・お気に入り／最近使用・フォルダー管理・被リンク・リンク切れ検出等）。
 
 ### 5. プロジェクト管理・開発履歴
 
 - **[開発ロードマップ](../ROADMAP.md)** (`ROADMAP.md`)
-  - プロジェクトのビジョン、差別化ポイント、各フェーズ（Phase 0〜17 は完了、Phase 18 は完了（詳細メモ・URLの添付・タグ・Markdownメモ・出典情報）、Phase 19〜39 は未着手。次の未完了項目は Phase 19 の「全マップ横断検索」）の実装完了状況。
+  - プロジェクトのビジョン、差別化ポイント、各フェーズ（Phase 0〜18 は完了、Phase 19 は完了（全マップ横断検索・マップ間リンク・お気に入り／最近使用・フォルダー管理・被リンク一覧・リンク切れの検出）、Phase 20〜39 は未着手。次の未完了項目は Phase 20 の「名前付きスナップショット」）の実装完了状況。
 - **[エージェント・開発ルール](../AGENTS.md)** (`AGENTS.md`)
   - サブエージェント駆動開発（Subagent-Driven Development）、二段階レビュー運用、PR運用ルール。
 - **[レビュー指摘の記録](review-findings/)** (`docs/review-findings/`)
