@@ -378,3 +378,12 @@ describe("recoverLibraryRestore", () => {
     expect(retry.entries()).toEqual(initial);
   });
 });
+
+it("バックアップ追加では同じ作成日時の孤立した表示ブックマークキーを避ける", () => {
+  const bookmarkKey = `draw-my-map:view-bookmarks:source-a:${date}`;
+  const f = createRecordingStorage({ initial: { ...initial, [bookmarkKey]: "元の表示ブックマーク" } });
+  const plan = makePlan(f.storage, ids("source-a", "new-a", "new-b"));
+  expect(plan.journal.bodies.map(({ id }) => id)).toEqual(["new-a", "new-b"]);
+  expect(writeLibraryRestore(f.storage, plan)).toEqual({ status: "saved" });
+  expect(f.entries()[bookmarkKey]).toBe("元の表示ブックマーク");
+});

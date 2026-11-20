@@ -16,6 +16,8 @@ import {
   type MapLibraryStorage,
 } from "./mapLibraryStorage";
 
+import { cleanupTrashedMapViewBookmarks } from "./mapViewBookmarkStorage";
+
 export const MAP_TRASH_INDEX_KEY = "draw-my-map.trash.v1";
 export const MAP_TRASH_BODY_KEY_PREFIX = "draw-my-map.trash.v1.doc.";
 
@@ -222,6 +224,7 @@ export function purgeExpiredTrashWithIndex(
 
   if (active.length === 0) {
     const removed = removeMapTrashIndex(storage);
+    if (removed) cleanupTrashedMapViewBookmarks(storage, expired, []);
     return {
       status: "ok",
       state: { status: "ok", entries: [] },
@@ -232,6 +235,7 @@ export function purgeExpiredTrashWithIndex(
 
   const nextIndex: MapTrashIndexV1 = { version: 1, items: active };
   const written = writeMapTrashIndex(storage, nextIndex).ok;
+  if (written) cleanupTrashedMapViewBookmarks(storage, expired, active);
   return {
     status: "ok",
     state: {

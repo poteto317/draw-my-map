@@ -3852,3 +3852,20 @@ describe("useMapLibrary のメタデータの複数タブ（別タブの更新�
     ).toHaveLength(writesBefore);
   });
 });
+
+it("別名保存では元と孤立した他マップの表示ブックマークを引き継がない", () => {
+  const originalKey = `draw-my-map:view-bookmarks:map-1:${SEED_TIMESTAMP}`;
+  const orphanKey = `draw-my-map:view-bookmarks:orphan:${NOW}`;
+  const { result, storage } = setup({
+    initial: twoMapsInitial({ [originalKey]: "元のブックマーク", [orphanKey]: "別のブックマーク" }),
+    ids: ["orphan", "copy"],
+  });
+  act(() => {
+    expect(result.current.saveCurrentAsNewMap("コピー", EMPTY_V3).ok).toBe(true);
+  });
+  const { currentMap } = readyView(result.current.view);
+  expect(currentMap.id).toBe("copy");
+  expect(storage.getItem(`draw-my-map:view-bookmarks:copy:${currentMap.createdAt}`)).toBeNull();
+  expect(storage.getItem(originalKey)).toBe("元のブックマーク");
+  expect(storage.getItem(orphanKey)).toBe("別のブックマーク");
+});

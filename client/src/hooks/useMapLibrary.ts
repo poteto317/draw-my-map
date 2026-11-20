@@ -108,6 +108,7 @@ import {
   type LibraryBackupPreview,
 } from "@/services/persistence/libraryBackupExport";
 import { planLibraryRestore, writeLibraryRestore } from "@/services/persistence/libraryRestoreTransaction";
+import { hasStoredMapViewBookmarks } from "@/services/persistence/mapViewBookmarkStorage";
 import { parseMapDocumentJson } from "@/domain/persistence/mapDocumentDecoder";
 import { isEligibleMapBackupSnapshot } from "@/domain/persistence/mapBackupSnapshot";
 import {
@@ -357,11 +358,12 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
         }
         const { storage, index } = current;
         const { generateId, now } = depsRef.current;
-        const id = pickNewMapId(storage, index, generateId);
+        const nowIso = now().toISOString();
+        const id = pickNewMapId(storage, index, generateId, (candidate) =>
+          hasStoredMapViewBookmarks(storage, { id: candidate, createdAt: nowIso }));
         if (id === null) {
           return failedOperation(mapIdUnavailableNotice());
         }
-        const nowIso = now().toISOString();
         const next = addMapEntry(
           index,
           createMapIndexEntry(id, validation.name, nowIso),
@@ -783,7 +785,9 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
         // 旧マップへの flush は完全にバイパス（知見 L-061）
         const { storage, index } = current;
         const { generateId, now } = depsRef.current;
-        const id = pickNewMapId(storage, index, generateId);
+        const nowIso = now().toISOString();
+        const id = pickNewMapId(storage, index, generateId, (candidate) =>
+          hasStoredMapViewBookmarks(storage, { id: candidate, createdAt: nowIso }));
         if (id === null) {
           return failedOperation(mapIdUnavailableNotice());
         }
@@ -793,7 +797,6 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
           return failedOperation(indexWriteFailedNotice("マップを作成"));
         }
 
-        const nowIso = now().toISOString();
         const entry = createMapIndexEntry(id, validation.name, nowIso);
         const withEntry = addMapEntry(index, entry);
         const next = setCurrentMap(withEntry, id);

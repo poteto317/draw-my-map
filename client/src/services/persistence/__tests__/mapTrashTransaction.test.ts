@@ -717,3 +717,90 @@ describe("mapTrashTransaction", () => {
     });
   });
 });
+
+describe("ゴミ箱と表示ブックマーク", () => {
+  const backupRaw = JSON.stringify({ version: 1, bookmarks: [{
+    name: "遠景",
+    snapshot: {
+      viewport: { offsetX: 10, offsetY: 20, scale: 1 },
+      selectedNodeId: null, selectedNodeIds: [], collapsedNodeIds: [], focusRootId: null,
+      resolutionMode: "auto", autoResolutionLevel: "all",
+    },
+  }] });
+  const occupiedRaw = backupRaw.replace("遠景", "別のマップの表示");
+  const bookmarkKey = (id: string) => `draw-my-map:view-bookmarks:${id}:2026-09-01T00:00:00.000Z`;
+
+  it.each(["same", "different", "occupied", "write-failure"])("復元時に帰属を維持する (%s)", (mode) => {
+    const originalId = mode === "same" ? "original" : "only";
+    const item = trashEntry({ id: "deleted", originalMapId: originalId, hasBody: false });
+    const index = singleMapIndex();
+    index.maps[0].createdAt = "2026-01-01T00:00:00.000Z";
+    const source = bookmarkKey(originalId);
+    const target = bookmarkKey("restored");
+    const { storage } = createRecordingStorage({
+      initial: {
+        [MAP_INDEX_STORAGE_KEY]: encodeMapIndex(index),
+        [MAP_TRASH_INDEX_KEY]: encodeMapTrashIndex({ version: 1, items: [item] }),
+        [source]: backupRaw,
+        ...(mode === "occupied" ? { [target]: occupiedRaw } : {}),
+      },
+      failSetItem: (key) => mode === "write-failure" && key === target,
+    });
+    const result = restoreMapFromTrash({
+      storage, index, trashId: item.id, now: NOW, generateId: idSequence(["restored", "next-candidate"]),
+    });
+    expect(result.ok).toBe(true);
+    expect(storage.getItem(source)).toBe(mode === "different" || mode === "occupied" ? null : backupRaw);
+    expect(storage.getItem(target)).toBe(mode === "different" ? backupRaw : mode === "occupied" ? occupiedRaw : null);
+    expect(result.notice.kind).toBe(mode === "write-failure" ? "warning" : "status");
+    if (mode === "occupied" && result.ok) {
+      expect(result.nextIndex.maps.map(({ id }) => id)).toEqual(["only", "next-candidate"]);
+      expect(storage.getItem(bookmarkKey("next-candidate"))).toBe(backupRaw);
+    }
+  });
+
+  it.each(["individual", "empty", "expired", "expired-index-failure", "corrupt"])(
+    "削除が確定した既知のブックマークだけ片付ける (%s)", (mode) => {
+      const item = trashEntry({ id: "deleted", hasBody: false, expiresAt: "2026-11-12T00:00:00.000Z" });
+      const key = bookmarkKey(item.originalMapId);
+      const unrelated = bookmarkKey("unrelated");
+      const { storage } = createRecordingStorage({
+        initial: {
+          [MAP_TRASH_INDEX_KEY]: mode === "corrupt" ? "broken" : encodeMapTrashIndex({ version: 1, items: [item] }),
+          [key]: backupRaw,
+          [unrelated]: backupRaw,
+        },
+        failRemoveItem: (candidate) => mode === "expired-index-failure" && candidate === MAP_TRASH_INDEX_KEY,
+      });
+      if (mode === "individual") {
+        expect(permanentlyDeleteTrashEntry({ storage, trashId: item.id, now: new Date("2026-11-11") }).ok).toBe(true);
+      } else if (mode === "empty" || mode === "corrupt") {
+        expect(emptyTrashStorage(storage, mode === "corrupt" ? "corrupt" : "ok").ok).toBe(true);
+      } else {
+        refreshTrashState(storage, NOW);
+      }
+      expect(storage.getItem(key)).toBe(mode === "expired-index-failure" || mode === "corrupt" ? backupRaw : null);
+      expect(storage.getItem(unrelated)).toBe(backupRaw);
+    },
+  );
+});
+
+it("期限切れの残存一覧を書けないときや、アクティブな同じマップがあるときはブックマークを保持する", () => {
+  const item = trashEntry({ id: "expired", originalMapId: "only", hasBody: false, expiresAt: "2026-11-12T00:00:00.000Z" });
+  const active = trashEntry({ id: "later", hasBody: false });
+  const key = `draw-my-map:view-bookmarks:only:${item.createdAt}`;
+  const initial = {
+    [MAP_TRASH_INDEX_KEY]: encodeMapTrashIndex({ version: 1, items: [item, active] }),
+    [key]: "bookmark data",
+  };
+  const prevented = createRecordingStorage({ initial, failSetItem: (candidate) => candidate === MAP_TRASH_INDEX_KEY });
+  const restored = createRecordingStorage({ initial: {
+    ...initial, [MAP_INDEX_STORAGE_KEY]: encodeMapIndex(singleMapIndex()),
+  } });
+  refreshTrashState(prevented.storage, NOW);
+  refreshTrashState(restored.storage, NOW);
+  expect(prevented.storage.getItem(MAP_TRASH_INDEX_KEY)).toBe(initial[MAP_TRASH_INDEX_KEY]);
+  expect(restored.storage.getItem(MAP_TRASH_INDEX_KEY)).toBe(encodeMapTrashIndex({ version: 1, items: [active] }));
+  expect(prevented.storage.getItem(key)).toBe("bookmark data");
+  expect(restored.storage.getItem(key)).toBe("bookmark data");
+});

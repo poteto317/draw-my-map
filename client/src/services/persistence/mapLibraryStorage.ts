@@ -223,10 +223,12 @@ export function pickNewMapId(
   storage: MapLibraryStorage,
   index: MapIndexV1,
   generateId: () => string,
+  isReserved: (candidate: string) => boolean = () => false,
 ): string | null {
   return pickUnusedMapId(
     generateId,
-    (candidate) => findMapEntry(index, candidate) !== null || hasMapBody(storage, candidate),
+    (candidate) => findMapEntry(index, candidate) !== null
+      || hasMapBody(storage, candidate) || isReserved(candidate),
   );
 }
 
