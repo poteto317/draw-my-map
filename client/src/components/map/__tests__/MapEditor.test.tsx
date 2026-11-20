@@ -1400,6 +1400,17 @@ it("ブックマークを保存し、再読込後は明示的な適用で閲覧�
   const first = await renderEditor({ storage, mapCreatedAt });
   await navigateBySearch(user, "集中する枝");
   await user.click(screen.getByRole("button", { name: "枝に集中" }));
+  selectCanvasNodeByLabel("内部ノード", true);
+  expect(screen.getByRole("group", { name: /重要度（2件選択中/ })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "枝を折りたたむ" }));
+  const primary = screen.getByRole("navigation", { name: "パンくず" }).querySelector('[aria-current="location"]')?.textContent;
+  act(() => {
+    stageContainer().querySelector("canvas")!.dispatchEvent(new WheelEvent("wheel", {
+      deltaY: -100, clientX: 120, clientY: 130, cancelable: true,
+    }));
+  });
+  const position = lastWorldContainer()?.position.set.mock.lastCall;
+  const scale = lastWorldContainer()?.scale.set.mock.lastCall;
   await user.type(screen.getByRole("textbox", { name: "表示ブックマーク名" }), "集中");
   await user.click(screen.getByRole("button", { name: "現在の表示を保存" }));
   first.unmount();
@@ -1411,6 +1422,11 @@ it("ブックマークを保存し、再読込後は明示的な適用で閲覧�
   act(() => apply.focus());
   await user.keyboard("{Enter}");
   expect(screen.getByRole("button", { name: "集中表示を終了" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "枝を展開" })).toBeInTheDocument();
+  expect(screen.getByRole("group", { name: /重要度（2件選択中/ })).toBeInTheDocument();
+  expect(screen.getByRole("navigation", { name: "パンくず" }).querySelector('[aria-current="location"]')?.textContent).toBe(primary);
+  expect(lastWorldContainer()?.position.set.mock.lastCall).toEqual(position);
+  expect(lastWorldContainer()?.scale.set.mock.lastCall).toEqual(scale);
   expect(stageContainer()).toHaveFocus();
   await user.click(screen.getByRole("button", { name: "閲覧を戻る" }));
   expect(screen.queryByRole("button", { name: "集中表示を終了" })).not.toBeInTheDocument();
