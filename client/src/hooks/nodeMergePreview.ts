@@ -78,12 +78,12 @@ function describeSources(plan: Extract<NodeMergePlan, { ok: true }>): string | n
   return `${plan.sources.length} 件${duplicate}`;
 }
 
-// 残すノード自身を指すリンクだけを除いて 0 件になったときも、除いたことが分かるよう行を出す
+// 統合するノードを指すリンクだけを除いて 0 件になったときも、除いたことが分かるよう行を出す
 function describeMapLinks(plan: Extract<NodeMergePlan, { ok: true }>): string | null {
-  if (plan.mapLinks === undefined && plan.mapLinkSelfCount === 0) return null;
+  if (plan.mapLinks === undefined && plan.mapLinkSelectedTargetCount === 0) return null;
   const excluded = [
     ...(plan.mapLinkDuplicateCount > 0 ? [`重複 ${plan.mapLinkDuplicateCount} 件`] : []),
-    ...(plan.mapLinkSelfCount > 0 ? [`自分自身へのリンク ${plan.mapLinkSelfCount} 件`] : []),
+    ...(plan.mapLinkSelectedTargetCount > 0 ? [`統合するノードを指すリンク ${plan.mapLinkSelectedTargetCount} 件`] : []),
   ];
   const suffix = excluded.length > 0 ? `（${excluded.join("、")}を除く）` : "";
   return `${plan.mapLinks?.length ?? 0} 件${suffix}`;

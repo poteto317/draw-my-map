@@ -50,6 +50,28 @@ describe("readBranchMoveIndex", () => {
 });
 
 describe("transferStoredBranch", () => {
+  it("枝の中のノード同士を指すマップ間リンクを、移動先のマップ ID と新しいノード ID へ付け替えて保存する", () => {
+    const linked = serializeMapDocument(createMapDocument([
+      createTestNode({ id: 1, parentId: null, label: "残す" }),
+      createTestNode({ id: 2, parentId: 1, label: "枝", mapLinks: [{ targetMapId: "a", targetNodeId: 3 }, { targetMapId: "a", targetNodeId: 1 }] }),
+      createTestNode({ id: 3, parentId: 2, label: "孫" }),
+    ], "manual"));
+    const recording = createRecordingStorage();
+    const index = seedMapLibrary(recording.storage, [{ id: "a", json: linked }, { id: "b", json: null }]);
+
+    const result = transferStoredBranch(recording.storage, index, "a", "b", 2, now);
+
+    expect(result.ok).toBe(true);
+    const moved = parseMapDocumentJson(recording.storage.getItem(mapBodyKey("b"))!);
+    expect(moved.ok).toBe(true);
+    if (!moved.ok) return;
+    const grandchild = moved.value.nodes.find((item) => item.label === "孫")!;
+    expect(moved.value.nodes.find((item) => item.label === "枝")?.mapLinks).toEqual([
+      { targetMapId: "b", targetNodeId: grandchild.id },
+      { targetMapId: "a", targetNodeId: 1 },
+    ]);
+  });
+
   it("未作成本体を空として扱い、枝の全子孫を移し両更新日時とcurrentMapIdを更新する", () => {
     const { storage, index } = setup();
     const result = transferStoredBranch(storage, index, "a", "b", 2, now);

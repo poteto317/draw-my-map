@@ -130,7 +130,7 @@ describe("planNodeMerge", () => {
       mapLinks: undefined,
       mapLinkSourceCount: 0,
       mapLinkDuplicateCount: 0,
-      mapLinkSelfCount: 0,
+      mapLinkSelectedTargetCount: 0,
     });
   });
 
@@ -630,10 +630,10 @@ describe("planNodeMerge", () => {
       });
     });
 
-    describe("残すノード自身を指すリンク（現在マップの残すノード）", () => {
+    describe("統合するノード（残すノード・吸収されるノード）を指すリンク", () => {
       const SELF_TO_3: NodeMapLink = { targetMapId: CURRENT_MAP_ID, targetNodeId: 3 };
 
-      it("残すノード自身を指すリンクは除き、除いた件数を mapLinkSelfCount に出す（重複には数えない）", () => {
+      it("残すノード自身を指すリンクは除き、除いた件数を mapLinkSelectedTargetCount に出す（重複には数えない）", () => {
         const nodes = [
           node(1, null, "親"),
           node(2, 1, "a", { mapLinks: [SELF_TO_3, MAP_LINK_A] }),
@@ -644,52 +644,81 @@ describe("planNodeMerge", () => {
           mapLinks: [MAP_LINK_A],
           mapLinkSourceCount: 2,
           mapLinkDuplicateCount: 1,
-          mapLinkSelfCount: 2,
+          mapLinkSelectedTargetCount: 2,
         });
       });
 
-      it("別マップの同じ targetNodeId や、現在マップの吸収されるノードを指すリンクは除かない", () => {
-        const otherMapSameNode: NodeMapLink = { targetMapId: "map-other", targetNodeId: 3 };
+      it("吸収されるノードを指すリンクも除く（統合後に消えるノードを指して、直後にリンク切れになるため）", () => {
         const toAbsorbed: NodeMapLink = { targetMapId: CURRENT_MAP_ID, targetNodeId: 2 };
+        const nodes = [
+          node(1, null, "親"),
+          node(2, 1, "a", { mapLinks: [MAP_LINK_A] }),
+          node(3, 1, "b", { mapLinks: [toAbsorbed, SELF_TO_3, MAP_LINK_B] }),
+        ];
+
+        expect(okPlan(nodes, [2, 3], 3)).toMatchObject({
+          mapLinks: [MAP_LINK_A, MAP_LINK_B],
+          mapLinkSourceCount: 2,
+          mapLinkDuplicateCount: 0,
+          mapLinkSelectedTargetCount: 2,
+        });
+        expect(byId(merged(nodes, [2, 3], 3).nodes, 3).mapLinks).toEqual([MAP_LINK_A, MAP_LINK_B]);
+      });
+
+      it("3 件以上を統合するときも、選んだどのノードを指すリンクも除く", () => {
+        const nodes = [
+          node(1, null, "親"),
+          node(2, 1, "a", { mapLinks: [{ targetMapId: CURRENT_MAP_ID, targetNodeId: 4 }] }),
+          node(3, 1, "b", { mapLinks: [{ targetMapId: CURRENT_MAP_ID, targetNodeId: 2 }] }),
+          node(4, 1, "c"),
+        ];
+
+        expect(okPlan(nodes, [2, 3, 4], 3)).toMatchObject({ mapLinks: undefined, mapLinkSelectedTargetCount: 2 });
+      });
+
+      it("選んでいないノード・マップ全体・別マップの同じ targetNodeId を指すリンクは除かない", () => {
+        const otherMapSameNode: NodeMapLink = { targetMapId: "map-other", targetNodeId: 3 };
+        const otherMapAbsorbedId: NodeMapLink = { targetMapId: "map-other", targetNodeId: 2 };
+        const toUnselected: NodeMapLink = { targetMapId: CURRENT_MAP_ID, targetNodeId: 1 };
         const toCurrentMap: NodeMapLink = { targetMapId: CURRENT_MAP_ID };
         const nodes = [
           node(1, null, "親"),
-          node(2, 1, "a", { mapLinks: [otherMapSameNode, toAbsorbed, toCurrentMap] }),
+          node(2, 1, "a", { mapLinks: [otherMapSameNode, otherMapAbsorbedId, toUnselected, toCurrentMap] }),
           node(3, 1, "b"),
         ];
 
         expect(okPlan(nodes, [2, 3], 3)).toMatchObject({
-          mapLinks: [otherMapSameNode, toAbsorbed, toCurrentMap],
-          mapLinkSelfCount: 0,
+          mapLinks: [otherMapSameNode, otherMapAbsorbedId, toUnselected, toCurrentMap],
+          mapLinkSelectedTargetCount: 0,
         });
       });
 
-      it("自己リンクしか無ければ mapLinks は undefined で、除いた件数だけを出す", () => {
+      it("統合するノードを指すリンクしか無ければ mapLinks は undefined で、除いた件数だけを出す", () => {
         const nodes = [node(1, null, "親"), node(2, 1, "a", { mapLinks: [SELF_TO_3] }), node(3, 1, "b")];
 
         expect(okPlan(nodes, [2, 3], 3)).toMatchObject({
           mapLinks: undefined,
           mapLinkSourceCount: 1,
           mapLinkDuplicateCount: 0,
-          mapLinkSelfCount: 1,
+          mapLinkSelectedTargetCount: 1,
         });
       });
 
-      it("自己リンクを除いてちょうど上限（10 件）なら統合でき、統合後の残すノードに自己リンクが残らない", () => {
+      it("統合するノードを指すリンクを除いてちょうど上限（10 件）なら統合でき、統合後の残すノードに残らない", () => {
         const nodes = [
           node(1, null, "親"),
           node(2, 1, "a", { mapLinks: [...mapLinkItems("a", 6), SELF_TO_3] }),
-          node(3, 1, "b", { mapLinks: mapLinkItems("b", 4) }),
+          node(3, 1, "b", { mapLinks: [...mapLinkItems("b", 4), { targetMapId: CURRENT_MAP_ID, targetNodeId: 2 }] }),
         ];
 
         const plan = okPlan(nodes, [2, 3], 3);
         expect(plan.mapLinks).toHaveLength(NODE_MAP_LINKS_MAX_COUNT);
-        expect(plan.mapLinkSelfCount).toBe(1);
+        expect(plan.mapLinkSelectedTargetCount).toBe(2);
         const result = merged(nodes, [2, 3], 3);
         expect(byId(result.nodes, 3).mapLinks).toEqual([...mapLinkItems("a", 6), ...mapLinkItems("b", 4)]);
       });
 
-      it("自己リンクを除いても上限を 1 超えれば map-links-too-many", () => {
+      it("統合するノードを指すリンクを除いても上限を 1 超えれば map-links-too-many", () => {
         const nodes = [
           node(1, null, "親"),
           node(2, 1, "a", { mapLinks: [...mapLinkItems("a", 6), SELF_TO_3] }),
@@ -706,7 +735,7 @@ describe("planNodeMerge", () => {
         const nodes = [node(1, null, "親"), node(2, 1, "a", { mapLinks: [SELF_TO_3] }), node(3, 1, "b")];
 
         const plan = planNodeMerge(nodes, [2, 3], 3, " ", visibleOf(nodes), "map-elsewhere");
-        expect(plan).toMatchObject({ ok: true, mapLinks: [SELF_TO_3], mapLinkSelfCount: 0 });
+        expect(plan).toMatchObject({ ok: true, mapLinks: [SELF_TO_3], mapLinkSelectedTargetCount: 0 });
       });
     });
   });
@@ -873,11 +902,11 @@ describe("isSameNodeMergePlan", () => {
     expect(isSameNodeMergePlan(withSources, { ...base, sources: [{ title: "book a", page: "12" }, SOURCE_B] })).toBe(false);
   });
 
-  it("連結したマップ間リンク・件数・重複の件数・自己リンクとして除いた件数が違えば偽（L-036）", () => {
+  it("連結したマップ間リンク・件数・重複の件数・統合するノードを指すため除いた件数が違えば偽（L-036）", () => {
     expect(isSameNodeMergePlan(base, { ...base, mapLinks: [MAP_LINK_A] })).toBe(false);
     expect(isSameNodeMergePlan(base, { ...base, mapLinkSourceCount: base.mapLinkSourceCount + 1 })).toBe(false);
     expect(isSameNodeMergePlan(base, { ...base, mapLinkDuplicateCount: base.mapLinkDuplicateCount + 1 })).toBe(false);
-    expect(isSameNodeMergePlan(base, { ...base, mapLinkSelfCount: base.mapLinkSelfCount + 1 })).toBe(false);
+    expect(isSameNodeMergePlan(base, { ...base, mapLinkSelectedTargetCount: base.mapLinkSelectedTargetCount + 1 })).toBe(false);
   });
 
   it("連結したマップ間リンクは要素ごとに比べる（別の配列でも内容が同じなら真、順や値が違えば偽）", () => {

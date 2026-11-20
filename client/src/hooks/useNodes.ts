@@ -195,7 +195,7 @@ type UseNodesReturn = {
   ) => SplitNodeResult;
   // 最新の状態から計画を作り直し、expected と違えば何も変えず plan-changed を返す。
   // 成功時は applyTreeChange を1回だけ呼び、残したノードだけを選択する。documentRevision は変えない。
-  // currentMapId は残すノード自身を指すマップ間リンクを除くために使う（expected と同じ ID で計画する）
+  // currentMapId は統合するノード（残すノード・吸収されるノード）を指すマップ間リンクを除くために使う（expected と同じ ID で計画する）
   mergeNodes: (
     ids: readonly number[],
     primaryId: number | null,

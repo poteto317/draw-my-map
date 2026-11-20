@@ -102,6 +102,8 @@ describe("moveNodeBranch", () => {
   });
 });
 
+const MAP_IDS = { sourceMapId: "map-src", targetMapId: "map-dst" };
+
 describe("transferNodeBranch", () => {
   const allocateIds: AllocateNodeIds = (occupied, count) => {
     let nextId = 100;
@@ -120,7 +122,7 @@ describe("transferNodeBranch", () => {
     const target = { layoutMode: "manual" as const, nodes: [node(100, null, 0, 0)] };
     const nowSpy = jest.spyOn(Date, "now");
 
-    const result = transferNodeBranch(source, target, 1, allocateIds);
+    const result = transferNodeBranch(source, target, 1, allocateIds, MAP_IDS);
 
     expect(nowSpy).not.toHaveBeenCalled();
     nowSpy.mockRestore();
@@ -134,7 +136,7 @@ describe("transferNodeBranch", () => {
     const source = { layoutMode: "manual" as const, nodes: [node(1, null, 0, 0), node(2, 1, 300, 0, { links })] };
     const target = { layoutMode: "manual" as const, nodes: [node(1, null, 10, 10)] };
 
-    const result = transferNodeBranch(source, target, 1, allocateIds);
+    const result = transferNodeBranch(source, target, 1, allocateIds, MAP_IDS);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -146,11 +148,82 @@ describe("transferNodeBranch", () => {
     const source = { layoutMode: "manual" as const, nodes: [node(1, null, 0, 0), node(2, 1, 300, 0, { tags })] };
     const target = { layoutMode: "manual" as const, nodes: [node(1, null, 10, 10)] };
 
-    const result = transferNodeBranch(source, target, 1, allocateIds);
+    const result = transferNodeBranch(source, target, 1, allocateIds, MAP_IDS);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.target.nodes.find((item) => item.label === "ノード2")?.tags).toEqual(tags);
+  });
+
+  describe("マップ間リンクの付け替え", () => {
+    // 枝: 1（根）→ 2、3。枝の外: 9（移動元に残る）
+    function sourceWithLinks(links: Partial<Record<number, Node["mapLinks"]>>) {
+      return {
+        layoutMode: "manual" as const,
+        nodes: [
+          node(1, null, 0, 0, { mapLinks: links[1] }),
+          node(2, 1, 300, 0, { mapLinks: links[2] }),
+          node(3, 1, 300, 100, { mapLinks: links[3] }),
+          node(9, null, 0, 400, { mapLinks: links[9] }),
+        ],
+      };
+    }
+    const target = { layoutMode: "manual" as const, nodes: [node(100, null, 0, 0)] };
+    const byLabel = (nodes: readonly Node[], label: string) => nodes.find((item) => item.label === label)!;
+
+    it("枝の中のノードを指すリンクは、移動先のマップと振り直した新しい ID へ付け替える", () => {
+      const source = sourceWithLinks({ 2: [{ targetMapId: "map-src", targetNodeId: 3 }, { targetMapId: "map-src", targetNodeId: 1 }] });
+
+      const result = transferNodeBranch(source, target, 1, allocateIds, MAP_IDS);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const moved = result.target.nodes;
+      expect(byLabel(moved, "ノード2").mapLinks).toEqual([
+        { targetMapId: "map-dst", targetNodeId: byLabel(moved, "ノード3").id },
+        { targetMapId: "map-dst", targetNodeId: byLabel(moved, "ノード1").id },
+      ]);
+    });
+
+    it("枝の外のノード・マップ全体・ほかのマップを指すリンクは値のまま写す", () => {
+      const keep = [
+        { targetMapId: "map-src", targetNodeId: 9 },
+        { targetMapId: "map-src" },
+        { targetMapId: "map-other", targetNodeId: 3 },
+        { targetMapId: "map-dst", targetNodeId: 100 },
+      ];
+      const source = sourceWithLinks({ 3: keep });
+
+      const result = transferNodeBranch(source, target, 1, allocateIds, MAP_IDS);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(byLabel(result.target.nodes, "ノード3").mapLinks).toEqual(keep);
+    });
+
+    it("付け替えた結果が既存のリンクと重複したら 1 件にまとめる", () => {
+      // 新しい ID は 101（根 1）。移動先マップの 101 を指すリンクを先に持っていると、付け替え後に重複する
+      const source = sourceWithLinks({
+        2: [{ targetMapId: "map-dst", targetNodeId: 101 }, { targetMapId: "map-src", targetNodeId: 1 }],
+      });
+
+      const result = transferNodeBranch(source, target, 1, allocateIds, MAP_IDS);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(byLabel(result.target.nodes, "ノード1").id).toBe(101);
+      expect(byLabel(result.target.nodes, "ノード2").mapLinks).toEqual([{ targetMapId: "map-dst", targetNodeId: 101 }]);
+    });
+
+    it("枝の外から枝を指すリンクは書き換えない（リンク切れの確認で利用者が直す）", () => {
+      const source = sourceWithLinks({ 9: [{ targetMapId: "map-src", targetNodeId: 2 }] });
+
+      const result = transferNodeBranch(source, target, 1, allocateIds, MAP_IDS);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(byLabel(result.source.nodes, "ノード9").mapLinks).toEqual([{ targetMapId: "map-src", targetNodeId: 2 }]);
+    });
   });
 
   it("別マップへ移した枝の出典も写る", () => {
@@ -158,7 +231,7 @@ describe("transferNodeBranch", () => {
     const source = { layoutMode: "manual" as const, nodes: [node(1, null, 0, 0), node(2, 1, 300, 0, { sources })] };
     const target = { layoutMode: "manual" as const, nodes: [node(1, null, 10, 10)] };
 
-    const result = transferNodeBranch(source, target, 1, allocateIds);
+    const result = transferNodeBranch(source, target, 1, allocateIds, MAP_IDS);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -168,7 +241,7 @@ describe("transferNodeBranch", () => {
   it("衝突IDを再採番して全属性を保ち、移動先layoutを使う", () => {
     const source = { layoutMode: "manual" as const, nodes: [node(1, null, 0, 0), node(2, 1, 300, 0, { illustration: "img" })] };
     const target = { layoutMode: "auto" as const, nodes: [node(1, null, 10, 10)] };
-    const result = transferNodeBranch(source, target, 1, allocateIds);
+    const result = transferNodeBranch(source, target, 1, allocateIds, MAP_IDS);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.source.nodes).toEqual([]);
@@ -183,7 +256,7 @@ describe("transferNodeBranch", () => {
   it("最後の枝を空に移し、targetのmanual layoutを保持する", () => {
     const source = { layoutMode: "auto" as const, nodes: layoutNodeForest([node(7, null, 0, 0)])! };
     const target = { layoutMode: "manual" as const, nodes: [] as Node[] };
-    const result = transferNodeBranch(source, target, 7, allocateIds);
+    const result = transferNodeBranch(source, target, 7, allocateIds, MAP_IDS);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.source.nodes).toEqual([]);
@@ -199,7 +272,7 @@ describe("transferNodeBranch", () => {
     const target = { layoutMode: "manual" as const, nodes: [] as Node[] };
     const expectedRemainder = layoutNodeForest(source.nodes.filter(({ id }) => id === 3 || id === 4))!;
 
-    const result = transferNodeBranch(source, target, 1, allocateIds);
+    const result = transferNodeBranch(source, target, 1, allocateIds, MAP_IDS);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -213,7 +286,7 @@ describe("transferNodeBranch", () => {
     const sourceBefore = source.nodes;
     const targetBefore = target.nodes;
 
-    expect(transferNodeBranch(source, target, 1, allocateIds)).toEqual({ ok: false, reason: "placement-failed" });
+    expect(transferNodeBranch(source, target, 1, allocateIds, MAP_IDS)).toEqual({ ok: false, reason: "placement-failed" });
     expect(source.nodes).toBe(sourceBefore);
     expect(target.nodes).toBe(targetBefore);
     expect(source.nodes).toEqual([node(1, null, 0, 0)]);
@@ -229,7 +302,7 @@ describe("transferNodeBranch", () => {
     const targetSnapshot = target.nodes.map((item) => ({ ...item }));
     jest.mocked(layoutNodeForest).mockReturnValueOnce(null);
 
-    expect(transferNodeBranch(source, target, 1, allocateIds)).toEqual({ ok: false, reason: "placement-failed" });
+    expect(transferNodeBranch(source, target, 1, allocateIds, MAP_IDS)).toEqual({ ok: false, reason: "placement-failed" });
     expect(source.nodes).toBe(sourceBefore);
     expect(target.nodes).toBe(targetBefore);
     expect(source.nodes).toEqual(sourceSnapshot);
@@ -245,7 +318,7 @@ describe("transferNodeBranch", () => {
     const targetSnapshot = target.nodes.map((item) => ({ ...item }));
     jest.mocked(layoutNodeForest).mockReturnValueOnce(null);
 
-    expect(transferNodeBranch(source, target, 1, allocateIds)).toEqual({ ok: false, reason: "placement-failed" });
+    expect(transferNodeBranch(source, target, 1, allocateIds, MAP_IDS)).toEqual({ ok: false, reason: "placement-failed" });
     expect(layoutNodeForest).toHaveBeenCalledTimes(1);
     expect(source.nodes).toBe(sourceBefore);
     expect(target.nodes).toBe(targetBefore);
