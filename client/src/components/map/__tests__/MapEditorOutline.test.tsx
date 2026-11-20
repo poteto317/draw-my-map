@@ -283,15 +283,50 @@ it("同じ表示ボタンは要求を再発行せず、map key変更では初期
   expect(mockFocusRequests.mock.lastCall?.[0]).toBeNull();
 });
 
-it("再表示時の既存outline focus要求は消費済みとして切替ボタンにfocusを保つ", async () => {
+it("再表示時の既存outline focus要求は消費済みとして切替列（選択行）へフォーカスする", async () => {
   await renderOutlineEditor(); await switchTo("アウトライン");
-  expect(screen.getByRole("button", { name: "アウトライン" })).toHaveFocus();
+  expect(screen.getByRole("button", { name: "階層1・親A" })).toHaveFocus();
   await userEvent.dblClick(screen.getByRole("button", { name: "階層2・子B" }));
   await userEvent.keyboard("{Enter}");
   expect(screen.getByRole("button", { name: "階層2・子B" })).toHaveFocus();
   await switchTo("マップ");
   await switchTo("アウトライン");
-  expect(screen.getByRole("button", { name: "アウトライン" })).toHaveFocus();
+  expect(screen.getByRole("button", { name: "階層2・子B" })).toHaveFocus();
+});
+
+it("表示切替後のフォーカス列は選択行→先頭行、マップへはキャンバスコンテナ", async () => {
+  await renderOutlineEditor();
+  await switchTo("アウトライン");
+  expect(screen.getByRole("button", { name: "階層1・親A" })).toHaveFocus();
+
+  await userEvent.click(screen.getByRole("button", { name: "階層2・子B" }));
+  await switchTo("マップ");
+  await waitFor(() => expect(stageContainer()).toHaveFocus());
+  expect(stageContainer()).toHaveAttribute("aria-label", "マップキャンバス");
+
+  await switchTo("アウトライン");
+  expect(screen.getByRole("button", { name: "階層2・子B" })).toHaveFocus();
+});
+
+it("空マップをアウトラインへ切替するとルート追加へフォーカスする", async () => {
+  await renderEditor({
+    storage: createTestStorageSession({
+      initialJson: JSON.stringify({ version: 3, layoutMode: "manual", nodes: [] }),
+    }),
+  });
+  await switchTo("アウトライン");
+  expect(screen.getByText("ノードがありません")).toBeVisible();
+  expect(screen.getByRole("button", { name: "ルート追加" })).toHaveFocus();
+});
+
+it("アウトライン行から Shift+Tab でツールバーへ到達できる", async () => {
+  const user = userEvent.setup();
+  await renderOutlineEditor();
+  await switchTo("アウトライン");
+  const selected = screen.getByRole("button", { name: "階層1・親A" });
+  selected.focus();
+  await user.tab({ shift: true });
+  expect(document.activeElement?.closest('[aria-label="アウトライン操作"]')).not.toBeNull();
 });
 
 it("保存session失敗でもoutline編集を保持し、同じpersistenceから失敗通知とJSON救出を使う", async () => {
