@@ -45,6 +45,7 @@ it("適用が失敗した場合は履歴を変更せず、本文置換の世代�
   );
   act(() => result.current.recordNavigation(view(0)));
   act(() => expect(result.current.travel("back")).toBe(false));
+  expect(applyView).toHaveBeenCalledWith(view(0));
   expect(result.current.canGoBack).toBe(true);
   expect(result.current.canGoForward).toBe(false);
 
