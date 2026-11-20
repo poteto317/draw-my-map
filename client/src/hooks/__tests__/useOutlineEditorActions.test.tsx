@@ -22,6 +22,44 @@ it.each(["addRoot", "addChild", "addSibling"] as const)("%s成功の新IDを編�
 it("追加失敗はdraftとfocusを変更しない", () => { const h = setup(); jest.mocked(h.props.api.addChildNode).mockReturnValue(null); act(() => h.result.current.addChild()); expect(h.result.current.draft).toBeNull(); expect(h.result.current.focusRequest).toBeNull(); expect(h.props.publishNotice).toHaveBeenCalledTimes(1); });
 it("削除成功は全件集合を渡し、選択せず残った先頭へfocus", () => { const h = setup(); act(() => h.result.current.deleteSelected()); expect(h.props.api.deleteNodeOnly).toHaveBeenCalledWith(2, h.props.model.allNodeIds); expect(h.props.api.selectNode).not.toHaveBeenCalled(); expect(h.result.current.focusRequest?.target).toEqual({ kind: "row", nodeId: 1 }); });
 it("disabled後は古いcallbackでも操作しない", () => { const h = setup(); const add = h.result.current.addRoot; h.rerender({ ...h.props, enabled: false }); act(() => add()); expect(h.props.api.insertForest).not.toHaveBeenCalled(); });
+it("structureCan* は enabled=false でも allNodeIds 基準の可否を返す", () => {
+    const h = setup();
+    expect(h.result.current.structureCanMoveUp).toBe(true);
+    expect(h.result.current.structureCanDelete).toBe(true);
+    h.rerender({ ...h.props, enabled: false });
+    expect(h.result.current.canMoveUp).toBe(false);
+    expect(h.result.current.canDelete).toBe(false);
+    expect(h.result.current.structureCanMoveUp).toBe(true);
+    expect(h.result.current.structureCanDelete).toBe(true);
+});
+it("Core系は enabled=false でも構造操作とラベル編集を開始する", () => {
+    const h = setup();
+    h.rerender({ ...h.props, enabled: false });
+    act(() => h.result.current.beginEditCore(2));
+    expect(h.props.api.selectNode).toHaveBeenCalledWith(2);
+    expect(h.result.current.draft?.nodeId).toBe(2);
+
+    act(() => h.result.current.addRootCore());
+    expect(h.props.api.insertForest).toHaveBeenCalledTimes(1);
+    expect(h.result.current.draft?.nodeId).toBe(3);
+    // Core は retainWhileDisabled で enabled=false 中も draft を保持し、復帰後は通常判定へ戻る
+    h.rerender({
+        ...h.props,
+        enabled: true,
+        nodes: [...h.props.nodes, createTestNode({ id: 3 })],
+        model: buildOutlineRows([...h.props.nodes, createTestNode({ id: 3 })]),
+    });
+    expect(h.result.current.draft?.nodeId).toBe(3);
+    expect(h.result.current.draft?.retainWhileDisabled).toBeUndefined();
+
+    h.rerender({ ...h.props, enabled: false, selectedNodeId: 2 });
+    jest.mocked(h.props.api.reorderSibling).mockReturnValue({
+        ok: true, direction: "up", visibleIndex: 1, visibleCount: 2, isRoot: false,
+    });
+    act(() => h.result.current.moveCore("up"));
+    expect(h.props.api.reorderSibling).toHaveBeenCalled();
+    expect(h.props.publishNotice).toHaveBeenCalled();
+});
 it("ルート追加失敗も元のdraftとfocusを保持する", () => {
     const h = setup();
     act(() => h.result.current.beginEdit(2));
