@@ -401,6 +401,48 @@ describe("mapConflict", () => {
       expect(isDocumentContentEqual(baseDoc, explicitUndefined)).toBe(true);
     });
 
+    it("マップ間リンクだけが違う 2 文書は別物と判定する（リンク先・ノード指定・順の違いも別物。別タブで変えたリンクの競合を見逃さない）", () => {
+      const withMapLinks = (mapLinks: { targetMapId: string; targetNodeId?: number }[]): MapDocumentV3 => ({
+        ...baseDoc,
+        nodes: [baseDoc.nodes[0], { ...baseDoc.nodes[1], mapLinks }],
+      });
+
+      expect(isDocumentContentEqual(baseDoc, withMapLinks([{ targetMapId: "map-b" }]))).toBe(false);
+      expect(
+        isDocumentContentEqual(withMapLinks([{ targetMapId: "map-b" }]), withMapLinks([{ targetMapId: "map-c" }])),
+      ).toBe(false);
+      expect(
+        isDocumentContentEqual(
+          withMapLinks([{ targetMapId: "map-b" }]),
+          withMapLinks([{ targetMapId: "map-b", targetNodeId: 3 }]),
+        ),
+      ).toBe(false);
+      expect(
+        isDocumentContentEqual(
+          withMapLinks([{ targetMapId: "map-b", targetNodeId: 3 }, { targetMapId: "map-c" }]),
+          withMapLinks([{ targetMapId: "map-c" }, { targetMapId: "map-b", targetNodeId: 3 }]),
+        ),
+      ).toBe(false);
+    });
+
+    it("mapLinks は要素ごとに比べ、別の配列・別オブジェクトでも内容が同じなら等価。未定義とオプショナル未定義も等価", () => {
+      const left: MapDocumentV3 = {
+        ...baseDoc,
+        nodes: [baseDoc.nodes[0], { ...baseDoc.nodes[1], mapLinks: [{ targetMapId: "map-b", targetNodeId: 3 }] }],
+      };
+      const right: MapDocumentV3 = {
+        ...baseDoc,
+        nodes: [baseDoc.nodes[0], { ...baseDoc.nodes[1], mapLinks: [{ targetMapId: "map-b", targetNodeId: 3 }] }],
+      };
+      const explicitUndefined: MapDocumentV3 = {
+        ...baseDoc,
+        nodes: [{ ...baseDoc.nodes[0], mapLinks: undefined }, baseDoc.nodes[1]],
+      };
+
+      expect(isDocumentContentEqual(left, right)).toBe(true);
+      expect(isDocumentContentEqual(baseDoc, explicitUndefined)).toBe(true);
+    });
+
     it("出典だけが違う 2 文書は別物と判定する（表記・順・ページの違いも別物。別タブで変えた出典の競合を見逃さない）", () => {
       const withSources: MapDocumentV3 = {
         ...baseDoc,

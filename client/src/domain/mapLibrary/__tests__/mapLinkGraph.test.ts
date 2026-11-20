@@ -284,6 +284,64 @@ describe("mapLinkGraph", () => {
     });
   });
 
+  describe("collectBacklinks（同じマップの別ノードだけを指すリンク）", () => {
+    it("同じマップの別ノードだけを指すリンクを持つノードは、対象ノードの被リンクにもマップ全体の被リンクにも出ない", () => {
+      const corpus: CrossMapCorpus = {
+        readableMaps: [
+          {
+            mapId: "map-current",
+            mapName: "現在マップ",
+            isCurrent: true,
+            nodes: [
+              createTestNode({ id: 1, label: "対象ノード" }),
+              createTestNode({
+                id: 2,
+                label: "別ノードだけを指すノード",
+                mapLinks: [{ targetMapId: "map-current", targetNodeId: 99 }],
+              }),
+            ],
+          },
+          {
+            mapId: "map-other",
+            mapName: "他マップ",
+            isCurrent: false,
+            nodes: [
+              createTestNode({
+                id: 20,
+                label: "他マップから別ノードだけを指すノード",
+                mapLinks: [
+                  { targetMapId: "map-current", targetNodeId: 2 },
+                  { targetMapId: "map-current", targetNodeId: 99 },
+                ],
+              }),
+              createTestNode({
+                id: 21,
+                label: "対象ノードを指すノード",
+                mapLinks: [{ targetMapId: "map-current", targetNodeId: 1 }],
+              }),
+            ],
+          },
+        ],
+        unreadableMaps: [],
+      };
+
+      const result = collectBacklinks(corpus, "map-current", 1);
+
+      expect(result.items).toEqual([
+        {
+          sourceMapId: "map-other",
+          sourceMapName: "他マップ",
+          isCurrentMap: false,
+          sourceNodeId: 21,
+          sourceNodeLabel: "対象ノードを指すノード",
+          matchScope: "node",
+        },
+      ]);
+      expect(result.items.some((item) => item.sourceNodeId === 2 || item.sourceNodeId === 20)).toBe(false);
+      expect(result.items.filter((item) => item.matchScope === "map")).toEqual([]);
+    });
+  });
+
   describe("collectBrokenMapLinks", () => {
     it("missing-map / missing-node / unreadable-map のみを値ベース link 付きで収集し、valid を除外する（L-035）", () => {
       const corpus: CrossMapCorpus = {

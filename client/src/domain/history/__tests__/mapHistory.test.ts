@@ -170,6 +170,7 @@ describe("mapHistory", () => {
       ["links", { links: ["https://example.com/"] }],
       ["tags", { tags: ["重要"] }],
       ["sources", { sources: [{ title: "設計" }] }],
+      ["mapLinks", { mapLinks: [{ targetMapId: "map-b", targetNodeId: 2 }] }],
     ])("%sの違いを検出する", (_name, override) => {
       expect(areMapStatesEqual(make({}), make(override))).toBe(false);
     });
@@ -269,6 +270,46 @@ describe("mapHistory", () => {
         ["長さが違う", [{ title: "A" }], [{ title: "A" }, { title: "B" }]],
       ])("%s なら等しくない", (_name, left, right) => {
         expect(areMapStatesEqual(withSources(left), withSources(right))).toBe(false);
+      });
+    });
+
+    describe("配列の値（mapLinks）", () => {
+      type MapLinkInput = { targetMapId: string; targetNodeId?: number };
+      const withMapLinks = (mapLinks: readonly MapLinkInput[] | undefined): NodeMapState => ({
+        layoutMode: "manual",
+        nodes: [createTestNode({ id: 1, ...(mapLinks === undefined ? {} : { mapLinks }) })],
+      });
+
+      it("内容が同じなら別の配列・別オブジェクトでも等しく、確定しても履歴を積まない（L-135）", () => {
+        expect(
+          areMapStatesEqual(
+            withMapLinks([{ targetMapId: "map-b", targetNodeId: 2 }, { targetMapId: "map-c" }]),
+            withMapLinks([{ targetMapId: "map-b", targetNodeId: 2 }, { targetMapId: "map-c" }]),
+          ),
+        ).toBe(true);
+
+        const committed = commitMapHistory(
+          createMapHistory(withMapLinks([{ targetMapId: "map-b", targetNodeId: 2 }])),
+          withMapLinks([{ targetMapId: "map-b", targetNodeId: 2 }]),
+        );
+        expect(committed.past).toHaveLength(0);
+      });
+
+      it("未定義と空配列は等しい", () => {
+        expect(areMapStatesEqual(withMapLinks(undefined), withMapLinks([]))).toBe(true);
+      });
+
+      it.each<[string, readonly MapLinkInput[], readonly MapLinkInput[]]>([
+        ["マップが違う", [{ targetMapId: "map-b" }], [{ targetMapId: "map-c" }]],
+        ["ノードが違う", [{ targetMapId: "map-b", targetNodeId: 1 }], [{ targetMapId: "map-b", targetNodeId: 2 }]],
+        ["ノード指定の有無が違う", [{ targetMapId: "map-b" }], [{ targetMapId: "map-b", targetNodeId: 1 }]],
+        ["順が違う", [{ targetMapId: "map-b" }, { targetMapId: "map-c" }], [{ targetMapId: "map-c" }, { targetMapId: "map-b" }]],
+        ["長さが違う", [{ targetMapId: "map-b" }], [{ targetMapId: "map-b" }, { targetMapId: "map-c" }]],
+      ])("%s なら等しくなく、確定すると履歴を積む", (_name, left, right) => {
+        expect(areMapStatesEqual(withMapLinks(left), withMapLinks(right))).toBe(false);
+
+        const committed = commitMapHistory(createMapHistory(withMapLinks(left)), withMapLinks(right));
+        expect(committed.past).toHaveLength(1);
       });
     });
   });

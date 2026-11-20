@@ -316,6 +316,37 @@ describe("crossMapSearch", () => {
   });
 
   describe("詳細メモのスニペット抜粋（最大 80 コードポイント）", () => {
+    it.each<[string, string]>([
+      ["ちょうど 80 コードポイント", `ヒット語${"あ".repeat(76)}`],
+      ["サロゲートペアを含むちょうど 80 コードポイント（UTF-16 では 80 を超える）", `ヒット語${"😀".repeat(10)}${"あ".repeat(66)}`],
+    ])("%sのメモは抜粋せず全文をスニペットにする", (_name, note) => {
+      expect(Array.from(note)).toHaveLength(80);
+      const corpus = makeCorpus({
+        readableMaps: [
+          { mapId: "map-1", mapName: "境界", isCurrent: true, nodes: [createTestNode({ id: 1, label: "境界", note })] },
+        ],
+      });
+
+      expect(searchCrossMapCorpus(corpus, "ヒット語").matches[0].snippet).toBe(note);
+    });
+
+    it.each<[string, string]>([
+      ["81 コードポイント", `ヒット語${"あ".repeat(77)}`],
+      ["サロゲートペアを含む 81 コードポイント", `ヒット語${"😀".repeat(10)}${"あ".repeat(67)}`],
+    ])("%sのメモは先頭 79 コードポイント＋「…」に抜粋する", (_name, note) => {
+      const codePoints = Array.from(note);
+      expect(codePoints).toHaveLength(81);
+      const corpus = makeCorpus({
+        readableMaps: [
+          { mapId: "map-1", mapName: "境界", isCurrent: true, nodes: [createTestNode({ id: 1, label: "境界", note })] },
+        ],
+      });
+
+      const snippet = searchCrossMapCorpus(corpus, "ヒット語").matches[0].snippet!;
+      expect(snippet).toBe(`${codePoints.slice(0, 79).join("")}…`);
+      expect(Array.from(snippet)).toHaveLength(80);
+    });
+
     it("長いメモの先頭・中央・末尾一致で一致周辺を 80 コードポイント以内に抜粋する", () => {
       const longNoteHead = `ヒット語${"あ".repeat(120)}`;
       const longNoteMid = `${"あ".repeat(60)}ヒット語${"い".repeat(60)}`;
