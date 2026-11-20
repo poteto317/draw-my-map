@@ -19,6 +19,8 @@ type UseNodeSearchNavigationOptions = {
   setResolutionMode: (mode: ResolutionFilterMode) => void;
   selectNode: (id: number | null) => void;
   issueFocusRequest: (nodeId: number) => void;
+  focusRootId?: number | null;
+  onValidTarget?: (nodeId: number) => void;
 };
 
 const MISSING_NODE_NOTICE: OperationNotice = {
@@ -36,10 +38,15 @@ export function useNodeSearchNavigation({
   setResolutionMode,
   selectNode,
   issueFocusRequest,
+  focusRootId,
+  onValidTarget,
 }: UseNodeSearchNavigationOptions) {
   const { notice, publishNotice } = useRevisionScopedNotice(documentRevision);
 
-  const navigateToNode = useCallback((nodeId: number): NodeSearchNavigationResult => {
+  const navigateToNode = useCallback((
+    nodeId: number,
+    issueRequest = issueFocusRequest,
+  ): NodeSearchNavigationResult => {
     const node = nodes.find((candidate) => candidate.id === nodeId);
     if (node === undefined) {
       publishNotice(MISSING_NODE_NOTICE);
@@ -54,12 +61,13 @@ export function useNodeSearchNavigation({
       return "missing";
     }
 
+    onValidTarget?.(nodeId);
     const messages: string[] = [];
     if (reveal.ancestorIdsToExpand.length > 0) {
       expandNodes(reveal.ancestorIdsToExpand);
       messages.push("検索結果を表示するため、祖先の枝を展開しました。");
     }
-    if (reveal.resolutionLevel !== null) {
+    if (reveal.resolutionLevel !== null && nodeId !== focusRootId) {
       const level = reveal.resolutionLevel;
       setResolutionMode(level);
       messages.push(`表示を『${RESOLUTION_LEVEL_LABELS[level]}』に切り替えました。ズームに連動させるには『自動』を選んでください。`);
@@ -69,14 +77,16 @@ export function useNodeSearchNavigation({
     }
 
     selectNode(nodeId);
-    issueFocusRequest(nodeId);
+    issueRequest(nodeId);
     return messages.length > 0 ? "revealed" : "navigated";
   }, [
     collapseIndex,
     collapsedNodeIds,
     expandNodes,
+    focusRootId,
     issueFocusRequest,
     nodes,
+    onValidTarget,
     publishNotice,
     selectNode,
     setResolutionMode,

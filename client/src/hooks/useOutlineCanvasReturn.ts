@@ -20,6 +20,8 @@ type Options = {
   setResolutionMode: (mode: ResolutionFilterMode) => void;
   publishNotice: (notice: OperationNotice) => void;
   issueFocusRequest: (nodeId: number) => void;
+  focusRootId?: number | null;
+  onValidTarget?: (nodeId: number) => void;
 };
 
 export function useOutlineCanvasReturn({
@@ -32,6 +34,8 @@ export function useOutlineCanvasReturn({
   setResolutionMode,
   publishNotice,
   issueFocusRequest,
+  focusRootId,
+  onValidTarget,
 }: Options) {
   const returnToCanvas = useCallback(() => {
     if (selectedNodeId === null || !nodes.some(node => node.id === selectedNodeId)) return;
@@ -44,12 +48,13 @@ export function useOutlineCanvasReturn({
       nodeId: selectedNodeId,
     });
     if (reveal === null) return;
+    onValidTarget?.(selectedNodeId);
     const messages: string[] = [];
     if (reveal.ancestorIdsToExpand.length > 0) {
       expandNodes(reveal.ancestorIdsToExpand);
       messages.push("選択したノードを表示するため、祖先の枝を展開しました。");
     }
-    if (reveal.resolutionLevel !== null) {
+    if (reveal.resolutionLevel !== null && selectedNodeId !== focusRootId) {
       setResolutionMode(reveal.resolutionLevel);
       messages.push(`表示を『${RESOLUTION_LEVEL_LABELS[reveal.resolutionLevel]}』に切り替えました。ズームに連動させるには『自動』を選んでください。`);
     }
@@ -57,7 +62,7 @@ export function useOutlineCanvasReturn({
     issueFocusRequest(selectedNodeId);
   }, [
     nodes, selectedNodeId, collapseIndex, collapsedNodeIds, resolutionMode,
-    expandNodes, setResolutionMode, publishNotice, issueFocusRequest,
+    expandNodes, setResolutionMode, publishNotice, issueFocusRequest, focusRootId, onValidTarget,
   ]);
   return { returnToCanvas };
 }
