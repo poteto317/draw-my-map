@@ -1,9 +1,13 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode, RefObject } from "react";
+import { Application, Text } from "pixi.js";
 import { MapEditor } from "@/components/map/MapEditor";
 import {
   mockNodePointerHandlers,
+  mockContainers,
+  lastWorldContainer,
+  mockStage,
   mockStageBounds,
   mockStageHandlers,
   pointer,
@@ -19,6 +23,7 @@ import {
   RELOAD_SUCCESS_MESSAGE,
   SAVE_AS_COPY_BUTTON_LABEL,
   RELOAD_EXTERNAL_BUTTON_LABEL,
+  RELOAD_EXTERNAL_CONTENT_BUTTON_LABEL,
   RELOAD_CONFIRM_ACTION_LABEL,
 } from "@/domain/mapLibrary/mapConflictMessages";
 import { createConflictCopyName } from "@/domain/mapLibrary/mapConflict";
@@ -76,6 +81,8 @@ const legacyJson = `${JSON.stringify({
 
 type RenderEditorOptions = {
   mapName?: string;
+  mapCreatedAt?: string;
+  storageMode?: "persistent" | "protected";
   shortcutsEnabled?: boolean;
   mapControls?: ReactNode;
   storage?: TestStorageSession;
@@ -85,6 +92,8 @@ type RenderEditorOptions = {
 
 async function renderEditor({
   mapName = "テストのマップ",
+  mapCreatedAt,
+  storageMode = "persistent",
   shortcutsEnabled = true,
   mapControls = null,
   storage = createTestStorageSession(),
@@ -94,6 +103,7 @@ async function renderEditor({
   const rendered = await renderReady(
     <MapEditor
       mapId={storage.session.mapId}
+      mapCreatedAt={mapCreatedAt}
       exportButtonRef={{ current: null }}
       mapMoveTargets={[
         {
@@ -105,7 +115,7 @@ async function renderEditor({
       ]}
       onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "移動先がありません。" } })}
       mapName={mapName}
-      storageSession={storage.session} storageMode="persistent"
+      storageSession={storage.session} storageMode={storageMode}
       mapControls={mapControls}
       shortcutsEnabled={shortcutsEnabled}
       dialogMouseClickedAtRef={dialogMouseClickedAtRef}
@@ -171,6 +181,233 @@ beforeEach(() => {
 afterEach(() => {
   jest.restoreAllMocks();
 });
+
+const viewNavigationJson = JSON.stringify({
+  version: 3,
+  layoutMode: "manual",
+  nodes: [
+    { id: 1, parentId: null, label: "親ルート", importance: "high" },
+    { id: 2, parentId: 1, label: "集中する枝", importance: "low", mapLinks: [{ targetMapId: "test-map", targetNodeId: 5 }] },
+    { id: 3, parentId: 2, label: "内部ノード", importance: "low" },
+    { id: 4, parentId: 3, label: "末端ノード", importance: "low" },
+    { id: 5, parentId: null, label: "別のルート", importance: "high" },
+    { id: 6, parentId: 5, label: "別の枝の子", importance: "low" },
+  ].map((node, index) => ({ ...node, x: 100 + index * 120, y: 100 + index * 50, width: 100, height: 60 })),
+});
+
+async function renderViewNavigationEditor() {
+  const storage = createTestStorageSession({ initialJson: viewNavigationJson });
+  await renderEditor({ storage });
+  return userEvent.setup();
+}
+
+async function navigateBySearch(user: ReturnType<typeof userEvent.setup>, label: string) {
+  const search = screen.getByRole("combobox", { name: "ノードを検索" });
+  await user.clear(search);
+  await user.type(search, label);
+  await user.keyboard("{ArrowDown}{Enter}");
+}
+
+function findInteractiveCanvasNode(label: string) {
+  const textMock = jest.mocked(Text);
+  const worldChildren = lastWorldContainer()?.addChild.mock.calls.map(([child]) => child);
+  return mockContainers.findLast((container) => worldChildren?.includes(container)
+    && container.eventMode === "static"
+    && container.addChild.mock.calls.some(([child]) => textMock.mock.calls.some(
+      ([options], index) => typeof options === "object" && "text" in options
+        && options.text === label && child === textMock.mock.results[index].value,
+    )));
+}
+
+function isCanvasNodeInteractive(label: string) {
+  return findInteractiveCanvasNode(label) !== undefined;
+}
+
+function selectCanvasNodeByLabel(label: string, ctrlKey = false) {
+  const container = findInteractiveCanvasNode(label);
+  expect(container).toBeDefined();
+  const handler = container!.on.mock.lastCall![1];
+  act(() => {
+    handler(pointer(300, 200, { ctrlKey }));
+    mockStageHandlers.pointerup?.(pointer(300, 200, { ctrlKey }));
+  });
+}
+
+it("選択した枝だけを表示し、解像度で隠れた集中先を残して、終了時のズームと位置を保つ", async () => {
+  const user = await renderViewNavigationEditor();
+  await navigateBySearch(user, "集中する枝");
+  await user.click(screen.getByRole("button", { name: "枝に集中" }));
+  expect(isCanvasNodeInteractive("末端ノード")).toBe(true);
+  expect(isCanvasNodeInteractive("親ルート")).toBe(false);
+  expect(isCanvasNodeInteractive("別のルート")).toBe(false);
+  await user.click(screen.getByRole("button", { name: "表示 高のみ" }));
+  expect(isCanvasNodeInteractive("集中する枝")).toBe(true);
+  expect(isCanvasNodeInteractive("末端ノード")).toBe(false);
+  act(() => {
+    stageContainer().querySelector("canvas")!.dispatchEvent(new WheelEvent("wheel", {
+      deltaY: -100, clientX: 120, clientY: 130, cancelable: true,
+    }));
+  });
+  const world = lastWorldContainer()!;
+  const position = world.position.set.mock.lastCall;
+  const scale = world.scale.set.mock.lastCall;
+  await user.click(screen.getByRole("button", { name: "集中表示を終了" }));
+  expect(lastWorldContainer()?.position.set.mock.lastCall).toEqual(position);
+  expect(lastWorldContainer()?.scale.set.mock.lastCall).toEqual(scale);
+  expect(isCanvasNodeInteractive("親ルート")).toBe(true);
+  expect(exportedMap().nodes).toHaveLength(6);
+});
+
+it("集中中の全体フィットは解像度で隠れた対象を含め、折りたたんだ子と枝外を除く", async () => {
+  const user = await renderViewNavigationEditor();
+  await navigateBySearch(user, "内部ノード");
+  await user.click(screen.getByRole("button", { name: "枝を折りたたむ" }));
+  await navigateBySearch(user, "集中する枝");
+  await user.click(screen.getByRole("button", { name: "枝に集中" }));
+  await user.click(screen.getByRole("button", { name: "表示 高のみ" }));
+  expect(isCanvasNodeInteractive("内部ノード")).toBe(false);
+
+  await user.click(screen.getByRole("button", { name: "表示中の枝に合わせる" }));
+
+  const world = lastWorldContainer()!;
+  const [scale] = world.scale.set.mock.lastCall!;
+  const [x, y] = world.position.set.mock.lastCall!;
+  expect(scale).toBeLessThan(4);
+  expect(x + 330 * scale).toBeCloseTo(400);
+  expect(y + 205 * scale).toBeCloseTo(300);
+  expect(screen.getByRole("button", { name: "表示中の枝に合わせる" })).toHaveFocus();
+});
+
+it("選択フィットは単一選択と複数選択の範囲を中央へ移す", async () => {
+  const user = await renderViewNavigationEditor();
+  await navigateBySearch(user, "親ルート");
+  const fitSelection = screen.getByRole("button", { name: "選択に合わせる" });
+  await user.click(fitSelection);
+  expect(lastWorldContainer()?.scale.set.mock.lastCall).toEqual([4]);
+  expect(lastWorldContainer()?.position.set.mock.lastCall).toEqual([-200, -220]);
+
+  act(() => {
+    mockNodePointerHandlers.at(-2)?.pointerdown?.(pointer(300, 200, { ctrlKey: true }));
+    mockStageHandlers.pointerup?.(pointer(300, 200, { ctrlKey: true }));
+  });
+  expect(screen.getByRole("group", { name: /重要度（2件選択中/ })).toBeInTheDocument();
+  await user.click(fitSelection);
+  const world = lastWorldContainer()!;
+  const [scale] = world.scale.set.mock.lastCall!;
+  const [x, y] = world.position.set.mock.lastCall!;
+  expect(scale).toBeLessThan(4);
+  expect(x + 390 * scale).toBeCloseTo(400);
+  expect(y + 230 * scale).toBeCloseTo(300);
+});
+
+it("空のマップではフィットできない", async () => {
+  await renderEditor();
+  expect(screen.getByRole("button", { name: "全体に合わせる" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "選択に合わせる" })).toBeDisabled();
+});
+
+it("パンくずと検索で有効な枝外へ移動し、集中先の削除でも集中表示を終了する", async () => {
+  const user = await renderViewNavigationEditor();
+  await navigateBySearch(user, "集中する枝");
+  await user.click(screen.getByRole("button", { name: "枝に集中" }));
+  const breadcrumb = screen.getByRole("navigation", { name: "パンくず" });
+  expect(within(breadcrumb).getByText("集中する枝")).toHaveAttribute("aria-current", "location");
+  await user.click(within(breadcrumb).getByRole("button", { name: "親ルート" }));
+  expect(screen.queryByRole("button", { name: "集中表示を終了" })).not.toBeInTheDocument();
+  expect(within(breadcrumb).getByText("親ルート")).toHaveAttribute("aria-current", "location");
+  expect(stageContainer()).toHaveFocus();
+  await navigateBySearch(user, "集中する枝");
+  await user.click(screen.getByRole("button", { name: "枝に集中" }));
+  await navigateBySearch(user, "別のルート");
+  expect(screen.queryByRole("button", { name: "集中表示を終了" })).not.toBeInTheDocument();
+  await navigateBySearch(user, "集中する枝");
+  await user.click(screen.getByRole("button", { name: "枝に集中" }));
+  fireEvent.keyDown(stageContainer(), { key: "Delete" });
+  expect(screen.queryByRole("button", { name: "集中表示を終了" })).not.toBeInTheDocument();
+});
+
+it("枝の内部ノードを一括開閉し、単独展開後も内部の閉状態と枝外の閉状態を保持する", async () => {
+  const user = await renderViewNavigationEditor();
+  await navigateBySearch(user, "別のルート");
+  await user.click(screen.getByRole("button", { name: "枝を折りたたむ" }));
+  await navigateBySearch(user, "集中する枝");
+  const expand = screen.getByRole("button", { name: "枝を一括展開" });
+  const collapse = screen.getByRole("button", { name: "枝を一括折りたたみ" });
+  expect(expand).toBeDisabled();
+  await user.click(collapse);
+  expect(collapse).toBeDisabled();
+  await user.click(screen.getByRole("button", { name: "枝を展開" }));
+  expect(isCanvasNodeInteractive("内部ノード")).toBe(true);
+  expect(isCanvasNodeInteractive("末端ノード")).toBe(false);
+  await user.click(expand);
+  expect(expand).toBeDisabled();
+  expect(isCanvasNodeInteractive("末端ノード")).toBe(true);
+  expect(isCanvasNodeInteractive("別の枝の子")).toBe(false);
+  await navigateBySearch(user, "末端ノード");
+  expect(collapse).toBeDisabled();
+  expect(expand).toBeDisabled();
+});
+
+it.each([false, true])("同一マップの枝外リンクで集中表示を解除する（アウトライン: %s）", async (fromOutline) => {
+  const user = await renderViewNavigationEditor();
+  await navigateBySearch(user, "集中する枝");
+  await user.click(screen.getByRole("button", { name: "枝に集中" }));
+  if (fromOutline) await user.click(screen.getByRole("button", { name: "アウトライン" }));
+  await user.click(screen.getByRole("button", { name: "テストのマップ / 別のルート" }));
+  expect(screen.queryByRole("button", { name: "集中表示を終了" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "マップ" })).toHaveAttribute("aria-pressed", "true");
+  expect(within(screen.getByRole("navigation", { name: "パンくず" })).getByText("別のルート"))
+    .toHaveAttribute("aria-current", "location");
+});
+
+it("異なるルートのノードを複数選択しても枝の一括開閉と集中表示は主選択を使う", async () => {
+  const user = await renderViewNavigationEditor();
+  function selectWithPointer(offsetFromLast: number, ctrlKey = false) {
+    act(() => {
+      mockNodePointerHandlers.at(offsetFromLast)?.pointerdown?.(pointer(300, 200, { ctrlKey }));
+      mockStageHandlers.pointerup?.(pointer(300, 200, { ctrlKey }));
+    });
+  }
+  // 最終描画の後ろから2番目が別のルート、5番目が集中する枝。
+  selectWithPointer(-2);
+  await user.click(screen.getByRole("button", { name: "枝を折りたたむ" }));
+  selectWithPointer(-5, true);
+  expect(screen.getByRole("group", { name: /重要度（2件選択中/ })).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "枝を一括折りたたみ" }));
+  expect(isCanvasNodeInteractive("内部ノード")).toBe(false);
+  await user.click(screen.getByRole("button", { name: "枝を一括展開" }));
+  expect(isCanvasNodeInteractive("末端ノード")).toBe(true);
+  expect(isCanvasNodeInteractive("別の枝の子")).toBe(false);
+  expect(screen.getByRole("group", { name: /重要度（2件選択中/ })).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "枝に集中" }));
+  expect(isCanvasNodeInteractive("集中する枝")).toBe(true);
+  expect(isCanvasNodeInteractive("別のルート")).toBe(false);
+  await user.click(screen.getByRole("button", { name: "集中表示を終了" }));
+  expect(isCanvasNodeInteractive("別のルート")).toBe(true);
+  expect(isCanvasNodeInteractive("別の枝の子")).toBe(false);
+});
+
+it.each([["別ルートの下", "5", 5], ["新しいルート", "root", null]])(
+  "集中表示から枝を%sへ移動すると集中表示を終了し、移動したノードを選択したままにする",
+  async (_title, parentTarget, expectedParentId) => {
+    const user = await renderViewNavigationEditor();
+    await navigateBySearch(user, "集中する枝");
+    await user.click(screen.getByRole("button", { name: "枝に集中" }));
+    await navigateBySearch(user, "内部ノード");
+    await user.click(screen.getByRole("button", { name: "枝を移動" }));
+    const dialog = within(screen.getByRole("dialog"));
+    await user.selectOptions(dialog.getByLabelText("移動先の親"), parentTarget);
+    await user.click(dialog.getByRole("button", { name: "移動する" }));
+
+    expect(screen.queryByRole("button", { name: "集中表示を終了" })).not.toBeInTheDocument();
+    expect(within(screen.getByRole("navigation", { name: "パンくず" })).getByText("内部ノード"))
+      .toHaveAttribute("aria-current", "location");
+    expect(isCanvasNodeInteractive("内部ノード")).toBe(true);
+    expect(exportedMap().nodes.find(({ id }) => id === 3)?.parentId).toBe(expectedParentId);
+  },
+);
 
 describe("MapEditor", () => {
   it("V1 本体の復元直後は新形式への保存待ちを表示する", async () => {
@@ -936,4 +1173,358 @@ describe("MapEditor", () => {
       expect(rebaseSpy).toHaveBeenCalledWith(latestDocJson);
     });
   });
+});
+
+it("枝外検索から戻ると複数選択・主選択・閉状態・集中・位置と倍率を復元し、進むと検索先へ戻る", async () => {
+  const user = await renderViewNavigationEditor();
+  await navigateBySearch(user, "集中する枝");
+  await user.click(screen.getByRole("button", { name: "枝に集中" }));
+  selectCanvasNodeByLabel("内部ノード", true);
+  expect(screen.getByRole("group", { name: /重要度（2件選択中/ })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "枝を折りたたむ" }));
+  const primary = screen.getByRole("navigation", { name: "パンくず" }).querySelector('[aria-current="location"]')?.textContent;
+  act(() => {
+    stageContainer().querySelector("canvas")!.dispatchEvent(new WheelEvent("wheel", {
+      deltaY: -100, clientX: 120, clientY: 130, cancelable: true,
+    }));
+  });
+  const position = lastWorldContainer()?.position.set.mock.lastCall;
+  const scale = lastWorldContainer()?.scale.set.mock.lastCall;
+  await navigateBySearch(user, "別のルート");
+  await user.click(screen.getByRole("button", { name: "閲覧を戻る" }));
+  expect(screen.getByRole("button", { name: "集中表示を終了" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "枝を展開" })).toBeInTheDocument();
+  expect(screen.getByRole("group", { name: /重要度（2件選択中/ })).toBeInTheDocument();
+  expect(screen.getByRole("navigation", { name: "パンくず" }).querySelector('[aria-current="location"]')?.textContent).toBe(primary);
+  expect(lastWorldContainer()?.position.set.mock.lastCall).toEqual(position);
+  expect(lastWorldContainer()?.scale.set.mock.lastCall).toEqual(scale);
+  await user.click(screen.getByRole("button", { name: "閲覧を進む" }));
+  expect(screen.getByText("別のルート", { selector: '[aria-current="location"]' })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "閲覧を進む" })).toBeDisabled();
+});
+
+it("同じ位置への検索で進む履歴を保ち、フィットで分岐する", async () => {
+  const user = await renderViewNavigationEditor();
+  await navigateBySearch(user, "親ルート");
+  await navigateBySearch(user, "別のルート");
+  await user.click(screen.getByRole("button", { name: "閲覧を戻る" }));
+  await navigateBySearch(user, "親ルート");
+  const forward = screen.getByRole("button", { name: "閲覧を進む" });
+  expect(forward).toBeEnabled();
+  await user.click(screen.getByRole("button", { name: "全体に合わせる" }));
+  expect(forward).toBeDisabled();
+  await user.click(screen.getByRole("button", { name: "閲覧を戻る" }));
+  expect(screen.getByText("親ルート", { selector: '[aria-current="location"]' })).toBeInTheDocument();
+  expect(stageContainer()).toHaveFocus();
+});
+
+it("本文の編集Undo・Redoで閲覧履歴を保ち、消滅した主選択を復元しない", async () => {
+  const user = await renderViewNavigationEditor();
+  await navigateBySearch(user, "親ルート");
+  await navigateBySearch(user, "別のルート");
+  selectCanvasNodeByLabel("親ルート");
+  fireEvent.keyDown(stageContainer(), { key: "Delete" });
+  await user.click(screen.getByRole("button", { name: "元に戻す" }));
+  await user.click(screen.getByRole("button", { name: "やり直す" }));
+  expect(exportedMap().nodes.some(({ id }) => id === 1)).toBe(false);
+
+  await user.click(screen.getByRole("button", { name: "閲覧を戻る" }));
+  expect(screen.queryByRole("navigation", { name: "パンくず" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "閲覧を進む" })).toBeEnabled();
+  await user.click(screen.getByRole("button", { name: "閲覧を進む" }));
+  expect(lastWorldContainer()?.position.set.mock.lastCall).toEqual([-230, -30]);
+  expect(screen.getByRole("button", { name: "元に戻す" })).toBeEnabled();
+});
+
+it("同一文書で画面待ちの検索を新しい検索が追い越しても、遅い要求は位置と履歴を上書きしない", async () => {
+  const user = await renderViewNavigationEditor();
+  const { renderer } = jest.mocked(Application).mock.results.at(-1)!.value;
+  const back = screen.getByRole("button", { name: "閲覧を戻る" });
+  act(() => renderer.resize(0, 600));
+  await navigateBySearch(user, "親ルート");
+  expect(back).toBeDisabled();
+  await navigateBySearch(user, "別のルート");
+  expect(back).toBeDisabled();
+
+  act(() => renderer.resize(800, 600));
+  expect(lastWorldContainer()?.position.set.mock.lastCall).toEqual([-230, -30]);
+  await user.click(back);
+  expect(back).toBeDisabled();
+  expect(screen.queryByRole("navigation", { name: "パンくず" })).not.toBeInTheDocument();
+  act(() => renderer.resize(900, 600));
+  expect(lastWorldContainer()?.position.set.mock.lastCall).toEqual([0, 0]);
+});
+
+it("パンとホイールでは履歴を追加せず、F の中央移動を一度だけ記録する", async () => {
+  await renderViewNavigationEditor();
+  const back = screen.getByRole("button", { name: "閲覧を戻る" });
+  const undo = screen.getByRole("button", { name: "元に戻す" });
+  act(() => {
+    mockStageHandlers.pointerdown?.(pointer(0, 0, { target: mockStage }));
+    mockStageHandlers.pointermove?.(pointer(40, 30));
+    mockStageHandlers.pointerup?.(pointer(40, 30));
+    stageContainer().querySelector("canvas")!.dispatchEvent(new WheelEvent("wheel", {
+      deltaY: -100, clientX: 120, clientY: 130, cancelable: true,
+    }));
+  });
+  selectCanvasNodeByLabel("別のルート");
+  expect(back).toBeDisabled();
+  const position = lastWorldContainer()?.position.set.mock.lastCall;
+  stageContainer().focus();
+  fireEvent.keyDown(stageContainer(), { key: "f" });
+  fireEvent.keyDown(stageContainer(), { key: "f" });
+  expect(back).toBeEnabled();
+  fireEvent.click(back);
+  expect(back).toBeDisabled();
+  expect(lastWorldContainer()?.position.set.mock.lastCall).toEqual(position);
+  expect(undo).toBeDisabled();
+});
+
+it("編集Undoで旧文書世代の保留検索を破棄する", async () => {
+  const user = await renderViewNavigationEditor();
+  addNodeAt(50, 60);
+  const { renderer } = jest.mocked(Application).mock.results.at(-1)!.value;
+  act(() => renderer.resize(0, 600));
+  await navigateBySearch(user, "別のルート");
+  await user.click(screen.getByRole("button", { name: "元に戻す" }));
+  act(() => renderer.resize(800, 600));
+
+  expect(lastWorldContainer()?.position.set.mock.lastCall).toEqual([0, 0]);
+  expect(screen.getByRole("button", { name: "閲覧を戻る" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "やり直す" })).toBeEnabled();
+});
+
+it("パンくずから戻ると集中状態を戻し、集中終了の前後も往復できる", async () => {
+  const user = await renderViewNavigationEditor();
+  await navigateBySearch(user, "集中する枝");
+  await user.click(screen.getByRole("button", { name: "枝に集中" }));
+  const breadcrumb = screen.getByRole("navigation", { name: "パンくず" });
+  await user.click(within(breadcrumb).getByRole("button", { name: "親ルート" }));
+  const back = screen.getByRole("button", { name: "閲覧を戻る" });
+  const forward = screen.getByRole("button", { name: "閲覧を進む" });
+  await user.click(back);
+  await user.click(screen.getByRole("button", { name: "集中表示を終了" }));
+  expect(forward).toBeDisabled();
+  await user.click(back);
+  expect(screen.getByRole("button", { name: "集中表示を終了" })).toBeInTheDocument();
+  await user.click(forward);
+  expect(screen.getByRole("button", { name: "枝に集中" })).toBeInTheDocument();
+});
+
+it("同一マップの本文をJSONで置き換えると閲覧履歴と保留検索を破棄する", async () => {
+  const user = await renderViewNavigationEditor();
+  await navigateBySearch(user, "親ルート");
+  const back = screen.getByRole("button", { name: "閲覧を戻る" });
+  expect(back).toBeEnabled();
+  const { renderer } = jest.mocked(Application).mock.results.at(-1)!.value;
+  act(() => renderer.resize(0, 600));
+  await navigateBySearch(user, "別のルート");
+
+  const changedJson = viewNavigationJson.replace("別のルート", "置き換え後のルート");
+  const file = new File([changedJson], "map.json", { type: "application/json" });
+  Object.defineProperty(file, "text", { value: async () => changedJson });
+  fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"]')!, { target: { files: [file] } });
+  await waitFor(() => expect(back).toBeDisabled());
+  act(() => renderer.resize(800, 600));
+  expect(lastWorldContainer()?.position.set.mock.lastCall).toEqual([0, 0]);
+  expect(screen.getByRole("button", { name: "閲覧を進む" })).toBeDisabled();
+});
+
+it("同じ倍率帯でも拡大側・縮小側から入った自動解像度を閲覧履歴で往復できる", async () => {
+  const user = await renderViewNavigationEditor();
+  const wheel = (deltaY: number) => {
+    act(() => {
+      stageContainer().querySelector("canvas")!.dispatchEvent(new WheelEvent("wheel", {
+        deltaY, clientX: 120, clientY: 130, cancelable: true,
+      }));
+    });
+  };
+  await navigateBySearch(user, "親ルート");
+  wheel(30);
+  const scale = lastWorldContainer()?.scale.set.mock.lastCall?.[0];
+  expect(screen.getByText("現在: すべて")).toBeInTheDocument();
+  await navigateBySearch(user, "別のルート");
+  wheel(90);
+  wheel(-90);
+  expect(screen.getByText("現在: 中以上")).toBeInTheDocument();
+  expect(lastWorldContainer()?.scale.set.mock.lastCall?.[0]).toBeCloseTo(scale);
+
+  await user.click(screen.getByRole("button", { name: "閲覧を戻る" }));
+  expect(screen.getByText("現在: すべて")).toBeInTheDocument();
+  expect(lastWorldContainer()?.scale.set.mock.lastCall?.[0]).toBeCloseTo(scale);
+  await user.click(screen.getByRole("button", { name: "閲覧を進む" }));
+  expect(screen.getByText("現在: 中以上")).toBeInTheDocument();
+  expect(lastWorldContainer()?.scale.set.mock.lastCall?.[0]).toBeCloseTo(scale);
+});
+
+it("画面待ちの検索を集中操作で上書きしたときは検索前の状態へ戻る", async () => {
+  const user = await renderViewNavigationEditor();
+  await navigateBySearch(user, "親ルート");
+  const originalPosition = lastWorldContainer()?.position.set.mock.lastCall;
+  const { renderer } = jest.mocked(Application).mock.results.at(-1)!.value;
+  act(() => renderer.resize(0, 600));
+  await navigateBySearch(user, "別のルート");
+  await user.click(screen.getByRole("button", { name: "枝に集中" }));
+  expect(screen.getByRole("button", { name: "集中表示を終了" })).toBeInTheDocument();
+  act(() => renderer.resize(800, 600));
+  expect(lastWorldContainer()?.position.set.mock.lastCall).toEqual(originalPosition);
+
+  await user.click(screen.getByRole("button", { name: "閲覧を戻る" }));
+  expect(screen.getByText("親ルート", { selector: '[aria-current="location"]' })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "枝に集中" })).toBeInTheDocument();
+  expect(lastWorldContainer()?.position.set.mock.lastCall).toEqual(originalPosition);
+});
+
+it("画面待ちの検索先が削除されたら次の検索は削除後の状態を保存する", async () => {
+  const user = await renderViewNavigationEditor();
+  await navigateBySearch(user, "親ルート");
+  const originalPosition = lastWorldContainer()?.position.set.mock.lastCall;
+  const { renderer } = jest.mocked(Application).mock.results.at(-1)!.value;
+  act(() => renderer.resize(0, 600));
+  await navigateBySearch(user, "別のルート");
+  act(() => stageContainer().focus());
+  fireEvent.keyDown(stageContainer(), { key: "Delete" });
+  expect(exportedMap().nodes.some(({ id }) => id === 5)).toBe(false);
+  await navigateBySearch(user, "内部ノード");
+  act(() => renderer.resize(800, 600));
+
+  await user.click(screen.getByRole("button", { name: "閲覧を戻る" }));
+  expect(screen.queryByRole("navigation", { name: "パンくず" })).not.toBeInTheDocument();
+  expect(lastWorldContainer()?.position.set.mock.lastCall).toEqual(originalPosition);
+});
+
+it("ブックマークを保存し、再読込後は明示的な適用で閲覧状態とフォーカスを復元する", async () => {
+  const user = userEvent.setup();
+  const storage = createTestStorageSession({ initialJson: viewNavigationJson, storage: localStorage });
+  const mapCreatedAt = "2026-11-20T00:00:00.000Z";
+  const first = await renderEditor({ storage, mapCreatedAt });
+  await navigateBySearch(user, "集中する枝");
+  await user.click(screen.getByRole("button", { name: "枝に集中" }));
+  await user.type(screen.getByRole("textbox", { name: "表示ブックマーク名" }), "集中");
+  await user.click(screen.getByRole("button", { name: "現在の表示を保存" }));
+  first.unmount();
+
+  await renderEditor({ storage, mapCreatedAt });
+  expect(screen.queryByRole("button", { name: "集中表示を終了" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "閲覧を戻る" })).toBeDisabled();
+  const apply = screen.getByRole("button", { name: "集中を適用" });
+  act(() => apply.focus());
+  await user.keyboard("{Enter}");
+  expect(screen.getByRole("button", { name: "集中表示を終了" })).toBeInTheDocument();
+  expect(stageContainer()).toHaveFocus();
+  await user.click(screen.getByRole("button", { name: "閲覧を戻る" }));
+  expect(screen.queryByRole("button", { name: "集中表示を終了" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "集中を削除" }));
+  expect(apply).not.toBeInTheDocument();
+});
+
+it("作成日時がない互換入口では表示ブックマーク保存が無効になる", async () => {
+  await renderEditor({
+    storage: createTestStorageSession({ initialJson: viewNavigationJson, storage: localStorage }),
+  });
+  expect(screen.getByRole("button", { name: "現在の表示を保存" })).toBeDisabled();
+  expect(screen.getByText("このマップでは表示ブックマークを保存できません。")).toBeInTheDocument();
+  await navigateBySearch(userEvent.setup(), "集中する枝");
+  expect(screen.getByRole("button", { name: "枝に集中" })).toBeEnabled();
+});
+
+it("保護モードでは作成日時付きでも保存できず、閲覧操作は使える", async () => {
+  await renderEditor({
+    storage: createTestStorageSession({ initialJson: viewNavigationJson, storage: localStorage }),
+    storageMode: "protected",
+    mapCreatedAt: "2026-11-20T00:00:00.000Z",
+  });
+  expect(screen.getByRole("button", { name: "現在の表示を保存" })).toBeDisabled();
+  expect(screen.getByText("このマップでは表示ブックマークを保存できません。")).toBeInTheDocument();
+  await navigateBySearch(userEvent.setup(), "集中する枝");
+  expect(screen.getByRole("button", { name: "枝に集中" })).toBeEnabled();
+});
+
+it("空名・重複名と保存・削除は閲覧履歴を変えず、失敗時は一覧と本文を保つ", async () => {
+  const user = userEvent.setup();
+  const storage = createTestStorageSession({ initialJson: viewNavigationJson, storage: localStorage });
+  await renderEditor({ storage, mapCreatedAt: "2026-11-20T00:00:00.000Z" });
+  const name = screen.getByRole("textbox", { name: "表示ブックマーク名" });
+  const save = screen.getByRole("button", { name: "現在の表示を保存" });
+  await user.click(save);
+  expect(screen.getByText("表示ブックマーク名を入力してください。")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "閲覧を戻る" })).toBeDisabled();
+
+  await user.type(name, "一つ目");
+  await user.click(save);
+  expect(screen.getByRole("button", { name: "閲覧を戻る" })).toBeDisabled();
+  await user.type(name, "一つ目");
+  await user.click(save);
+  expect(screen.getByText("同じ名前の表示ブックマークがすでにあります。")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "閲覧を戻る" })).toBeDisabled();
+
+  jest.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("blocked"); });
+  await user.clear(name);
+  await user.type(name, "二つ目");
+  await user.click(save);
+  expect(screen.getByText("表示ブックマークを保存できませんでした。")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "一つ目を適用" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "二つ目を適用" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "閲覧を戻る" })).toBeDisabled();
+  expect(storage.writes).toEqual([]);
+  expect(exportedMap().nodes).toEqual(JSON.parse(viewNavigationJson).nodes.map((node: ExportedMap["nodes"][number]) =>
+    expect.objectContaining({ id: node.id, label: node.label, parentId: node.parentId })));
+
+  jest.restoreAllMocks();
+  await user.click(screen.getByRole("button", { name: "一つ目を削除" }));
+  expect(screen.queryByRole("button", { name: "一つ目を適用" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "閲覧を戻る" })).toBeDisabled();
+  expect(name).toHaveFocus();
+});
+
+it("同じマップに JSON を取り込んでもブックマークを保持し、置き換え後の同じノード ID に適用する", async () => {
+  const user = userEvent.setup();
+  const storage = createTestStorageSession({ initialJson: viewNavigationJson, storage: localStorage });
+  await renderEditor({ storage, mapCreatedAt: "2026-11-20T00:00:00.000Z" });
+  await navigateBySearch(user, "集中する枝");
+  await user.click(screen.getByRole("button", { name: "枝に集中" }));
+  await user.type(screen.getByRole("textbox", { name: "表示ブックマーク名" }), "集中");
+  await user.click(screen.getByRole("button", { name: "現在の表示を保存" }));
+  const changedJson = viewNavigationJson.replace("集中する枝", "置き換えた枝");
+  const file = new File([changedJson], "map.json", { type: "application/json" });
+  Object.defineProperty(file, "text", { value: async () => changedJson });
+  fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"]')!, { target: { files: [file] } });
+  await waitFor(() => expect(screen.getByRole("button", { name: "閲覧を戻る" })).toBeDisabled());
+  expect(screen.queryByRole("button", { name: "集中表示を終了" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "集中を適用" }));
+  expect(screen.getByRole("button", { name: "集中表示を終了" })).toBeInTheDocument();
+  expect(screen.getByText("置き換えた枝", { selector: '[aria-current="location"]' })).toBeInTheDocument();
+});
+
+it("外部変更を再読み込みした同じマップで表示ブックマークを保持する", async () => {
+  const user = userEvent.setup();
+  const storage = createTestStorageSession({ initialJson: viewNavigationJson, storage: localStorage });
+  await renderEditor({ storage, mapCreatedAt: "2026-11-20T00:00:00.000Z" });
+  await navigateBySearch(user, "集中する枝");
+  await user.type(screen.getByRole("textbox", { name: "表示ブックマーク名" }), "外部変更前");
+  await user.click(screen.getByRole("button", { name: "現在の表示を保存" }));
+  const external = viewNavigationJson.replace("集中する枝", "外部で変更した枝");
+  storage.session.readBody = () => ({ ok: true, value: external });
+  act(() => {
+    window.dispatchEvent(new StorageEvent("storage", { key: mapBodyKey(storage.session.mapId), newValue: external }));
+  });
+  await user.click(screen.getByRole("button", { name: RELOAD_EXTERNAL_CONTENT_BUTTON_LABEL }));
+  await waitFor(() => expect(exportedMap().nodes).toEqual(
+    expect.arrayContaining([expect.objectContaining({ id: 2, label: "外部で変更した枝" })]),
+  ));
+  await user.click(screen.getByRole("button", { name: "外部変更前を適用" }));
+  expect(screen.getByText("外部で変更した枝", { selector: '[aria-current="location"]' })).toBeInTheDocument();
+});
+
+it("長いブックマーク名の全体を適用・削除ボタンのアクセシブル名に使う", async () => {
+  const user = userEvent.setup();
+  const storage = createTestStorageSession({ initialJson: viewNavigationJson, storage: localStorage });
+  await renderEditor({ storage, mapCreatedAt: "2026-11-20T00:00:00.000Z" });
+  const name = "長い表示ブックマーク名".repeat(4);
+  await user.type(screen.getByRole("textbox", { name: "表示ブックマーク名" }), name);
+  await user.click(screen.getByRole("button", { name: "現在の表示を保存" }));
+  const apply = screen.getByRole("button", { name: `${name}を適用` });
+  const remove = screen.getByRole("button", { name: `${name}を削除` });
+  expect(apply).toHaveAttribute("title", name);
+  expect(remove).toBeEnabled();
 });

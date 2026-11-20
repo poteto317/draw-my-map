@@ -19,15 +19,7 @@ jest.mock("pixi.js", () => {
   const runtime = jest.requireActual<typeof import("@/components/map/testing/mapStageTestRuntime")>(
     "@/components/map/testing/mapStageTestRuntime",
   );
-  const pixiMock = runtime.createMockPixiModule();
-  pixiMock.Application.mockImplementation(() => ({
-    init: mockPixiInit,
-    destroy: jest.fn(),
-    canvas: document.createElement("canvas"),
-    stage: runtime.mockStage,
-    screen: { x: 0, y: 0, width: 800, height: 600 },
-  }));
-  return pixiMock;
+  return runtime.createMockPixiModule({ init: () => mockPixiInit() });
 });
 jest.mock("@/services/illustration/illustrationGeneration", () => ({
   generateIllustrationThumbnail: jest.fn(),

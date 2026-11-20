@@ -122,7 +122,7 @@ jest.mock("@/components/map/useNodeFocusRequest", () => {
   const actual = jest.requireActual<typeof import("@/components/map/useNodeFocusRequest")>("@/components/map/useNodeFocusRequest");
   return { useNodeFocusRequest: (options: Parameters<typeof actual.useNodeFocusRequest>[0]) => {
     mockFocusRequests(options.request);
-    actual.useNodeFocusRequest({ ...options, onFocusNode: (node, size) => { mockFocusedNodes(node.id); options.onFocusNode(node, size); } });
+    actual.useNodeFocusRequest({ ...options, onFocusNode: (node, size, request) => { mockFocusedNodes(node.id); options.onFocusNode(node, size, request); } });
   } };
 });
 const outlineJson = JSON.stringify({ version: 3, layoutMode: "manual", nodes: [

@@ -717,3 +717,24 @@ describe("移行と保護モード", () => {
     }
   });
 });
+
+it("表示ブックマークの一覧を開いたマップだけに表示し、新規マップへ引き継がない", async () => {
+  seedTwoMaps();
+  const user = setupUser();
+  await renderPage();
+  const name = banner().getByRole("textbox", { name: "表示ブックマーク名" });
+  await user.type(name, "A の表示");
+  await user.click(banner().getByRole("button", { name: "現在の表示を保存" }));
+  expect(banner().getByRole("button", { name: "A の表示を適用" })).toBeInTheDocument();
+
+  await switchTo(user, "B");
+  expect(banner().queryByRole("button", { name: "A の表示を適用" })).not.toBeInTheDocument();
+  await switchTo(user, "A");
+  expect(banner().getByRole("button", { name: "A の表示を適用" })).toBeInTheDocument();
+
+  await user.click(headerButton("新しいマップ"));
+  await user.type(dialog().getByRole("textbox"), "新しいマップ");
+  await user.click(dialog().getByRole("button", { name: "作成" }));
+  expect(currentMapName()).toHaveTextContent("新しいマップ");
+  expect(banner().queryByRole("button", { name: "A の表示を適用" })).not.toBeInTheDocument();
+});

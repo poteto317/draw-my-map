@@ -88,8 +88,9 @@ export default function Home() {
       ) : (
         <>
           <MapEditor
-            key={`${view.currentMap.id}:${view.storageMode}`}
+            key={`${view.currentMap.id}:${view.currentMap.createdAt}:${view.storageMode}`}
             mapId={view.currentMap.id}
+            mapCreatedAt={view.currentMap.createdAt}
             mapMoveTargets={view.maps}
             onMoveBranchToMap={(rootId, targetMapId) => {
               clearPendingNavigation();

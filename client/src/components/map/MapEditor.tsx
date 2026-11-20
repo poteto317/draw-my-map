@@ -15,6 +15,8 @@ import { useOutlineEditorActions } from "@/hooks/useOutlineEditorActions";
 import { useOutlineCanvasReturn } from "@/hooks/useOutlineCanvasReturn";
 import { useRevisionScopedNodeRequest } from "@/hooks/useRevisionScopedNodeRequest";
 import { BranchMoveControl } from "@/components/layout/BranchMoveControl";
+import { BranchNavigationControls } from "@/components/layout/BranchNavigationControls";
+import { MapViewBookmarkControls } from "@/components/layout/MapViewBookmarkControls";
 import { BranchMoveDialog } from "@/components/layout/BranchMoveDialog";
 import { LabelReplaceControl } from "@/components/layout/LabelReplaceControl";
 import { LabelReplaceDialog } from "@/components/layout/LabelReplaceDialog";
@@ -54,7 +56,7 @@ import { OutlineImportDialog } from "@/components/layout/OutlineImportDialog";
 import { resolveOutlineParentCandidate } from "@/components/layout/outlineParentCandidate";
 import { NodeSearchBox } from "@/components/layout/NodeSearchBox";
 import { NodeDetailPanel } from "@/components/layout/NodeDetailPanel";
-import { MapStage } from "@/components/map/MapStage";
+import { MapStage, type MapStageViewportHandle } from "@/components/map/MapStage";
 import { INITIAL_VIEWPORT } from "@/components/map/mapViewport";
 import { useCrossMapSearchShortcut } from "@/components/map/useCrossMapSearchShortcut";
 import { useIllustrationGeneration } from "@/hooks/useIllustrationGeneration";
@@ -64,17 +66,24 @@ import { useOutlineExport } from "@/hooks/useOutlineExport";
 import { useMapPersistence } from "@/hooks/useMapPersistence";
 import { useNodeDuplicationAction } from "@/hooks/useNodeDuplicationAction";
 import { useResettingMapReplacement } from "@/hooks/useResettingMapReplacement";
+import { useMapViewNavigation } from "@/hooks/useMapViewNavigation";
+import { useMapViewBookmarks } from "@/hooks/useMapViewBookmarks";
 import { useMapResolutionFilter } from "@/hooks/useMapResolutionFilter";
 import { useRevisionScopedNotice } from "@/hooks/useRevisionScopedNotice";
 import { useNodeLabelSearch } from "@/hooks/useNodeLabelSearch";
 import { useMapDisplayState } from "@/hooks/useMapDisplayState";
 import { useBranchCollapse } from "@/hooks/useBranchCollapse";
+import { useBranchFocus } from "@/hooks/useBranchFocus";
 import { useNodeSearchNavigation } from "@/hooks/useNodeSearchNavigation";
 import { useOutlineImport } from "@/hooks/useOutlineImport";
 import { useSiblingReorderAction } from "@/hooks/useSiblingReorderAction";
 import { useNodeIndentAction } from "@/hooks/useNodeIndentAction";
 import { useNodeOnlyDeletionAction } from "@/hooks/useNodeOnlyDeletionAction";
 import { useNodeParentInsertionAction } from "@/hooks/useNodeParentInsertionAction";
+import { filterSelectedFitNodes } from "@/domain/nodes/fitSelection";
+import { buildNodeBreadcrumb } from "@/domain/nodes/nodeBreadcrumb";
+import { collectSubtreeIds } from "@/domain/nodes/nodeCollapse";
+import { subtreeCollapseActionAvailability } from "@/domain/nodes/subtreeCollapseAvailability";
 import type { MapStorageSession } from "@/types/mapStorageSession";
 import type { OperationNotice } from "@/types/operationNotice";
 import type { PendingMapNodeNavigation } from "@/types/pendingMapNavigation";
@@ -87,6 +96,7 @@ const LAYOUT_FAILED_NOTICE: OperationNotice = {
 
 type MapEditorProps = {
   mapId: string;
+  mapCreatedAt?: string;
   mapName: string;
   storageSession: MapStorageSession;
   storageMode: "persistent" | "protected";
@@ -112,6 +122,7 @@ type MapEditorProps = {
 // 箇条書きの取り込みのダイアログを開いている間も同じように止め、ダイアログは根の兄弟に描いて inert の外に置く
 export function MapEditor({
   mapId,
+  mapCreatedAt = "",
   mapName,
   storageSession,
   storageMode,
@@ -137,6 +148,7 @@ export function MapEditor({
     addChildNode,
     addSiblingNode,
     selectNode,
+    restoreSelection,
     toggleNodeSelection,
     selectNodeRange,
     setSelectionFromMarquee,
@@ -197,7 +209,27 @@ export function MapEditor({
   }, [viewMode, selectedNodeIds, selectedNodeId]);
   const importanceSummary = summarizeSelectionImportance(nodes, importanceTargetIds);
   const branchCollapse = useBranchCollapse({ nodes, documentRevision });
-  const { expandNodes } = branchCollapse;
+  const { expandNodes, index: collapseIndex } = branchCollapse;
+  const { focusRootId, setFocusRootId, focusVisibleNodeIds, clearFocusOutsideBranch } = useBranchFocus({
+    mapId, resetRevision, collapseIndex, expandNodes,
+  });
+  const breadcrumb = useMemo(
+    () => buildNodeBreadcrumb(collapseIndex, selectedNodeId),
+    [collapseIndex, selectedNodeId],
+  );
+  const selectedBranchIds = useMemo(() => (
+    collapseIndex && selectedNodeId !== null ? collectSubtreeIds(collapseIndex, selectedNodeId) : null
+  ), [collapseIndex, selectedNodeId]);
+  const selectedInternalIds = useMemo(
+    () => Array.from(selectedBranchIds ?? []).filter(branchCollapse.canToggle),
+    [branchCollapse.canToggle, selectedBranchIds],
+  );
+  const { canExpand: canExpandSelectedBranch, canCollapse: canCollapseSelectedBranch } = useMemo(
+    () => subtreeCollapseActionAvailability(selectedInternalIds, branchCollapse.collapsedNodeIds),
+    [branchCollapse.collapsedNodeIds, selectedInternalIds],
+  );
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const viewportHandleRef = useRef<MapStageViewportHandle>(null);
   const expandNodesRef = useRef(expandNodes);
   useLayoutEffect(() => {
     expandNodesRef.current = expandNodes;
@@ -212,12 +244,29 @@ export function MapEditor({
     layoutMode,
     collapseVisibleNodeIds: branchCollapse.collapseVisibleNodeIds,
     resolutionVisibleNodeIds: resolutionFilter.visibleNodeIds,
+    focusVisibleNodeIds,
+    focusRootId,
   });
+  const selectedFitNodes = useMemo(
+    () => filterSelectedFitNodes(displayState.fitNodes, displayState.visibleNodeIds, selectedNodeIds),
+    [displayState.fitNodes, displayState.visibleNodeIds, selectedNodeIds],
+  );
+  const viewNavigation = useMapViewNavigation({
+    mapId, resetRevision, documentRevision, nodes, collapseIndex, viewportHandleRef,
+    selectedNodeId, selectedNodeIds, restoreSelection, focusRootId, setFocusRootId,
+    collapsedNodeIds: branchCollapse.collapsedNodeIds, setCollapsedNodeIds: branchCollapse.setCollapsedNodeIds,
+    resolutionMode: resolutionFilter.mode, getAutoResolutionLevel: resolutionFilter.getAutoResolutionLevel,
+    restoreResolution: resolutionFilter.restoreResolution, setViewportScale,
+    issueRequest: canvasFocus.issueRequest, clearRequest: canvasFocus.clearRequest,
+    isCurrentRequest: canvasFocus.isCurrentRequest, finishRequest: canvasFocus.finishRequest,
+  });
+  const { captureBeforeNavigation, issueViewFocus, recordBeforeViewportChange } = viewNavigation;
+
   const nodeSearch = useNodeLabelSearch({
     nodes,
     visibleNodeIds: displayState.visibleNodeIds,
   });
-  const nodeSearchNavigation = useNodeSearchNavigation({
+  const { navigateToNode: revealSearchTarget, notice: nodeSearchNotice } = useNodeSearchNavigation({
     issueFocusRequest: canvasFocus.issueRequest,
     nodes,
     resolutionVisibleNodeIds: resolutionFilter.visibleNodeIds,
@@ -227,7 +276,15 @@ export function MapEditor({
     documentRevision,
     setResolutionMode: resolutionFilter.setMode,
     selectNode,
+    focusRootId,
+    onValidTarget: clearFocusOutsideBranch,
   });
+  const navigateToNode = useCallback((nodeId: number, record = true) => {
+    const before = record ? captureBeforeNavigation() : null;
+    return revealSearchTarget(nodeId, (id) => issueViewFocus(id, before));
+  }, [captureBeforeNavigation, issueViewFocus, revealSearchTarget]);
+  const navigateToArrival = useCallback((nodeId: number) => navigateToNode(nodeId, false), [navigateToNode]);
+
   const persistence = useMapPersistence({
     nodes,
     layoutMode,
@@ -282,9 +339,13 @@ export function MapEditor({
     setViewportScale,
     setViewMode,
     selectNode,
-    issueCanvasFocusRequest: canvasFocus.issueRequest,
-    clearCanvasFocusRequest: canvasFocus.clearRequest,
-    navigateToNodeInMapView: nodeSearchNavigation.navigateToNode,
+    issueCanvasFocusRequest: viewNavigation.issueOutlineJumpFocus,
+    clearCanvasFocusRequest: viewNavigation.clearCanvasFocus,
+    onBeforeLocalOutlineJump: viewNavigation.captureBeforeOutlineJump,
+    navigateToNodeInMapView: navigateToNode,
+    navigateToArrivalInMapView: navigateToArrival,
+    focusRootId,
+    onValidOutlineTarget: clearFocusOutsideBranch,
     pendingNavigation,
     onConsumePendingNavigation,
     onSwitchToMapTarget,
@@ -346,7 +407,14 @@ export function MapEditor({
     nodes,
     selectedNodeId,
     documentRevision,
-    moveBranch,
+    moveBranch: (sourceId, parentId) => {
+      const result = moveBranch(sourceId, parentId);
+      if (result.ok && focusVisibleNodeIds && sourceId !== focusRootId
+        && (parentId === null || !focusVisibleNodeIds.has(parentId))) {
+        setFocusRootId(null);
+      }
+      return result;
+    },
     onMoveBranchToMap,
     expandNodes: branchCollapse.expandNodes,
     resolutionVisibleNodeIds: resolutionFilter.visibleNodeIds,
@@ -457,10 +525,13 @@ export function MapEditor({
     resolutionMode: resolutionFilter.mode, expandNodes: branchCollapse.expandNodes,
     setResolutionMode: resolutionFilter.setMode, publishNotice: publishTreeEditNotice,
     issueFocusRequest: canvasFocus.issueRequest,
+    focusRootId,
+    onValidTarget: clearFocusOutsideBranch,
   });
   function changeViewMode(nextMode: EditorViewMode) {
     if (!editorShortcutsEnabled || nextMode === viewMode) return;
-    canvasFocus.clearRequest();
+    viewNavigation.clearCanvasFocus();
+    if (nextMode === "outline") viewNavigation.rememberOutlineViewport();
     if (nextMode === "map") {
       setViewportScale(INITIAL_VIEWPORT.scale);
       resolutionFilter.resetViewportScale(INITIAL_VIEWPORT.scale);
@@ -470,14 +541,19 @@ export function MapEditor({
   }
 
   // 操作通知バーの並び（上から表示する順）。位置ごとに系統が決まっている
+  const bookmarks = useMapViewBookmarks(
+    storageSession.storage, mapId, mapCreatedAt,
+    storageMode === "persistent" && storageSession.mapId === mapId,
+  );
   const operationNotices = [
+    bookmarks.notice,
     displayState.layoutFailed ? LAYOUT_FAILED_NOTICE : null,
     persistence.notice,
     imageExport.notice,
     outlineExport.notice,
     duplication.notice,
     clipboardNotice,
-    nodeSearchNavigation.notice,
+    nodeSearchNotice,
     navigationNotice,
     outlineImport.notice,
     treeEditNotice,
@@ -510,7 +586,7 @@ export function MapEditor({
                   hasQuery={nodeSearch.hasQuery}
                   matches={nodeSearch.matches}
                   total={nodeSearch.total}
-                  onSelectResult={nodeSearchNavigation.navigateToNode}
+                  onSelectResult={navigateToNode}
                 />
               )}
               <button
@@ -553,6 +629,47 @@ export function MapEditor({
               />
               {viewMode === "map" && (
                 <>
+                  <BranchNavigationControls
+                    breadcrumb={breadcrumb}
+                    focusing={focusRootId !== null}
+                    canFocus={selectedBranchIds !== null}
+                    canExpand={canExpandSelectedBranch}
+                    canCollapse={canCollapseSelectedBranch}
+                    canFitAll={displayState.fitNodes.length > 0}
+                    canFitSelection={selectedFitNodes.length > 0}
+                    canGoBack={viewNavigation.canGoBack}
+                    canGoForward={viewNavigation.canGoForward}
+                    onTravel={(direction) => {
+                      if (viewNavigation.travel(direction)) canvasContainerRef.current?.focus();
+                    }}
+                    onFitAll={() => viewportHandleRef.current?.fitNodes(displayState.fitNodes, recordBeforeViewportChange)}
+                    onFitSelection={() => viewportHandleRef.current?.fitNodes(selectedFitNodes, recordBeforeViewportChange)}
+                    onToggleFocus={() => {
+                      const nextFocusId = focusRootId === null ? selectedNodeId : null;
+                      if (nextFocusId === focusRootId) return;
+                      recordBeforeViewportChange();
+                      setFocusRootId(nextFocusId);
+                    }}
+                    onSetSubtreeCollapsed={(collapsed) => {
+                      if (selectedNodeId !== null) branchCollapse.setSubtreeCollapsed(selectedNodeId, collapsed);
+                    }}
+                    onNavigate={(id) => {
+                      if (navigateToNode(id) !== "missing") canvasContainerRef.current?.focus();
+                    }}
+                  />
+                  <MapViewBookmarkControls
+                    key={bookmarks.key ?? mapId}
+                    unavailable={bookmarks.key === null}
+                    disabled={!bookmarks.ready || !persistence.hydrated || !editorShortcutsEnabled}
+                    bookmarks={bookmarks.bookmarks}
+                    onSave={(name) => bookmarks.save(name, viewNavigation.captureView())}
+                    onApply={(snapshot) => {
+                      if (viewNavigation.applyView(snapshot, viewNavigation.recordNavigation)) {
+                        canvasContainerRef.current?.focus();
+                      }
+                    }}
+                    onDelete={bookmarks.remove}
+                  />
                   <NodeCollapseControl
                     selectedNodeId={selectedNodeId}
                     canToggle={selectedNodeId !== null && branchCollapse.canToggle(selectedNodeId)}
@@ -652,8 +769,16 @@ export function MapEditor({
               documentRevision={documentRevision} enabled={editorShortcutsEnabled} actions={outlineActions} />
           ) : (
             <MapStage
+              canvasContainerRef={canvasContainerRef}
+              viewportHandleRef={viewportHandleRef}
               nodes={displayState.displayNodes}
               focusRequest={canvasFocus.request}
+              isCurrentFocusRequest={canvasFocus.isCurrentRequest}
+              onFocusRequestApplied={viewNavigation.onFocusRequestApplied}
+              onFocusRequestDiscarded={viewNavigation.onFocusRequestDiscarded}
+              onBeforeCenterNode={(request) => {
+                if (request === null) recordBeforeViewportChange();
+              }}
               visibleNodeIds={displayState.visibleNodeIds}
               onViewportScaleChange={setViewportScale}
               selectedNodeId={selectedNodeId}
