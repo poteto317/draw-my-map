@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   dialog,
@@ -267,11 +267,13 @@ describe("詳細メモ", () => {
 
     await user.click(screen.getByRole("tab", { name: "プレビュー" }));
 
-    expect(screen.getByRole("heading", { level: 1, name: "概要" })).toBeVisible();
-    expect(screen.getByRole("listitem")).toHaveTextContent("項目1");
-    const refLink = screen.getByRole("link", { name: "参考" });
+    // Phase 21 のパンくずも listitem を持つため、詳細メモのプレビュー枠に限定する
+    const preview = screen.getByRole("tabpanel", { name: "プレビュー" });
+    expect(within(preview).getByRole("heading", { level: 1, name: "概要" })).toBeVisible();
+    expect(within(preview).getByRole("listitem")).toHaveTextContent("項目1");
+    const refLink = within(preview).getByRole("link", { name: "参考" });
     expect(refLink).toHaveAttribute("href", "https://example.com/ref");
-    const imageLink = screen.getByRole("link", { name: "[画像: 構成図]" });
+    const imageLink = within(preview).getByRole("link", { name: "[画像: 構成図]" });
     expect(imageLink).toHaveAttribute("href", "https://example.com/diagram.png");
 
     const previewTab = screen.getByRole("tab", { name: "プレビュー" });
