@@ -2,6 +2,12 @@
 
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import type { MapIndexEntry } from "@/domain/mapLibrary/mapIndex";
+import {
+  filterAndSortMapsForList,
+  type MapLibraryMetaV1,
+  type MapListFolderFilter,
+  type MapListTab,
+} from "@/domain/mapLibrary/mapLibraryMeta";
 import type { MapTrashEntry } from "@/domain/mapLibrary/mapTrash";
 import {
   backFrom,
@@ -9,17 +15,24 @@ import {
   closeAfterEnteringProtectedMode,
   closeAfterSuccess,
   closeDialog,
+  closeDialogSilently,
   INITIAL_STATE,
   nextScreenAfterActiveDeletion,
   nextScreenOnBack,
   nextShellNotice,
   openScreen,
+  publishShellNoticeState,
   returnAfterActiveDeletion,
+  returnToFoldersAfterAction,
   returnToList,
   returnToTrashAfterAction,
+  selectFocusAfterFavoriteToggle,
+  selectFocusAfterFolderAssign,
+  selectFocusAfterFolderRemoval,
   selectFocusAfterRemoval,
   selectFocusAfterTrashRemoval,
   showFailure,
+  stayWithResult,
   type DialogState,
   type HeaderFocusRequest,
 } from "@/hooks/mapLibraryDialogState";
@@ -39,20 +52,31 @@ import type { OperationNotice, ShellNotice } from "@/types/operationNotice";
 export type { HeaderFocusRequest };
 export { selectFocusAfterRemoval };
 
+const ALL_FOLDERS_FILTER: MapListFolderFilter = { kind: "all" };
+
 export type UseMapLibraryDialogStateResult = {
   screen: MapLibraryDialogScreen;
   notices: MapLibraryDialogNotices;
   focusTarget: MapLibraryDialogFocusTarget | null;
   headerFocusRequest: HeaderFocusRequest | null;
   shellNotice: ShellNotice | null;
+  listTab: MapListTab;
+  setListTab: (tab: MapListTab) => void;
+  folderFilter: MapListFolderFilter;
+  setFolderFilter: (filter: MapListFolderFilter) => void;
   openList: () => void;
   openCreateFromHeader: () => void;
   openCreateFromList: () => void;
   openRename: (mapId: string) => void;
   openDelete: (mapId: string) => void;
   openTrash: () => void;
+  openFolders: () => void;
+  openFolderRename: (folderId: string) => void;
+  openFolderDelete: (folderId: string) => void;
   back: () => void; // Escape と「キャンセル」の共通処理
   close: () => void; // 一覧の「閉じる」
+  closeSilently: () => void; // headerFocusRequest を立てずに閉じる
+  publishShellNotice: (notice: OperationNotice) => void;
   submitCreate: (nameInput: string) => void;
   switchTo: (mapId: string) => void;
   submitRename: (mapId: string, nameInput: string) => void;
@@ -63,6 +87,12 @@ export type UseMapLibraryDialogStateResult = {
   confirmTrashPermanentDelete: (trashId: string) => void;
   openEmptyTrash: () => void;
   confirmEmptyTrash: () => void;
+  toggleFavorite: (mapId: string) => void;
+  assignFolder: (mapId: string, folderId: string | null) => void;
+  submitCreateFolder: (nameInput: string) => boolean;
+  submitRenameFolder: (folderId: string, nameInput: string) => void;
+  confirmDeleteFolder: (folderId: string) => void;
+  resetLibraryMeta: () => void;
   prepareBackup: () => void;
   downloadBackup: () => void;
   selectRestoreFile: (file: File) => Promise<void>;
@@ -88,20 +118,32 @@ type MapLibraryOperations = Pick<
   | "downloadBackup"
   | "previewRestore"
   | "confirmRestore"
+  | "toggleFavorite"
+  | "assignFolder"
+  | "createFolder"
+  | "renameFolder"
+  | "deleteFolder"
+  | "resetLibraryMeta"
 >;
 
 export function useMapLibraryDialogState(options: {
   library: MapLibraryOperations;
   maps: readonly MapIndexEntry[]; // 表示順
   trashEntries: readonly MapTrashEntry[]; // 表示順
+  libraryMeta: MapLibraryMetaV1;
   startupNotice: OperationNotice | null;
 }): UseMapLibraryDialogStateResult {
-  const { library, maps, trashEntries, startupNotice } = options;
+  const { library, maps, trashEntries, libraryMeta, startupNotice } = options;
   const [state, setState] = useState<DialogState>(INITIAL_STATE);
-  // 操作の関数を描画ごとに変えないため、最新の library・maps・trashEntries は ref から読む（L-521）
+  const [listTab, setListTabState] = useState<MapListTab>("all");
+  const [folderFilter, setFolderFilterState] = useState<MapListFolderFilter>(ALL_FOLDERS_FILTER);
+  // 操作の関数を描画ごとに変えないため、最新の値は layout effect で ref へ同期する（L-467, L-468, L-521）
   const libraryRef = useRef(library);
   const mapsRef = useRef(maps);
   const trashEntriesRef = useRef(trashEntries);
+  const libraryMetaRef = useRef(libraryMeta);
+  const listTabRef = useRef<MapListTab>("all");
+  const folderFilterRef = useRef<MapListFolderFilter>(ALL_FOLDERS_FILTER);
   const screenRef = useRef<MapLibraryDialogScreen>(INITIAL_STATE.screen);
   const generationRef = useRef(0);
   const readingRef = useRef(false);
@@ -120,11 +162,23 @@ export function useMapLibraryDialogState(options: {
     [transition],
   );
 
+  // 選択中フォルダーがメタデータから消えた場合は全件フィルタへ戻す（L-475, L-521）
+  const isSelectedFolderMissing =
+    folderFilter.kind === "folder" &&
+    !libraryMeta.folders.some((folder) => folder.id === folderFilter.folderId);
+  if (isSelectedFolderMissing) {
+    setFolderFilterState(ALL_FOLDERS_FILTER);
+  }
+  const effectiveFolderFilter = isSelectedFolderMissing ? ALL_FOLDERS_FILTER : folderFilter;
+
   useLayoutEffect(() => {
     libraryRef.current = library;
     mapsRef.current = maps;
     trashEntriesRef.current = trashEntries;
-  }, [library, maps, trashEntries]);
+    libraryMetaRef.current = libraryMeta;
+    listTabRef.current = listTab;
+    folderFilterRef.current = effectiveFolderFilter;
+  }, [library, maps, trashEntries, libraryMeta, listTab, effectiveFolderFilter]);
 
   // 起動の通知は、Home が loading を描画した後に値へ変わる。effect で遅らせず、
   // レンダー中の条件付きの state 調整で1回だけシェルの通知にする（L-521）
@@ -139,6 +193,39 @@ export function useMapLibraryDialogState(options: {
         },
     );
   }
+
+  // 操作前の絞り込み済み表示配列。行が消える操作の戻し先はこの配列で決める（L-460）
+  const currentVisibleMaps = useCallback(
+    () =>
+      filterAndSortMapsForList(mapsRef.current, libraryMetaRef.current, {
+        tab: listTabRef.current,
+        folderFilter: folderFilterRef.current,
+      }),
+    [],
+  );
+
+  // 一覧の行に対するメタデータ操作の結果。行が消えたときだけ戻し先へフォーカスを移す
+  const finishListRowMetaAction = useCallback(
+    (result: MapLibraryOperationResult, focusAfterRemoval: MapLibraryDialogFocusTarget | null) => {
+      if (result.ok && focusAfterRemoval !== null) {
+        transition({ kind: "list" });
+        setState((prev) => returnToList(prev, result, focusAfterRemoval));
+        return;
+      }
+      setState((prev) => stayWithResult(prev, result));
+    },
+    [transition],
+  );
+
+  const setListTab = useCallback((tab: MapListTab) => {
+    listTabRef.current = tab;
+    setListTabState(tab);
+  }, []);
+
+  const setFolderFilter = useCallback((filter: MapListFolderFilter) => {
+    folderFilterRef.current = filter;
+    setFolderFilterState(filter);
+  }, []);
 
   // 同じイベントの中で続けて変えても前の更新を消さないよう、関数形式で更新する（L-453）
   const openList = useCallback(() => {
@@ -171,6 +258,21 @@ export function useMapLibraryDialogState(options: {
     openDialogScreen({ kind: "trash" });
   }, [openDialogScreen]);
 
+  const openFolders = useCallback(
+    () => openDialogScreen({ kind: "folders" }),
+    [openDialogScreen],
+  );
+
+  const openFolderRename = useCallback(
+    (folderId: string) => openDialogScreen({ kind: "folderRename", folderId }),
+    [openDialogScreen],
+  );
+
+  const openFolderDelete = useCallback(
+    (folderId: string) => openDialogScreen({ kind: "folderDeleteConfirm", folderId }),
+    [openDialogScreen],
+  );
+
   const openTrashPermanentDelete = useCallback(
     (trashId: string) => openDialogScreen({ kind: "trashPermanentDelete", trashId }),
     [openDialogScreen],
@@ -190,6 +292,15 @@ export function useMapLibraryDialogState(options: {
     transition({ kind: "closed" });
     setState((prev) => closeDialog(prev, "list"));
   }, [transition]);
+
+  const closeSilently = useCallback(() => {
+    transition({ kind: "closed" });
+    setState(closeDialogSilently);
+  }, [transition]);
+
+  const publishShellNotice = useCallback((notice: OperationNotice) => {
+    setState((prev) => publishShellNoticeState(prev, notice));
+  }, []);
 
   const prepareBackup = useCallback(() => {
     if (screenRef.current.kind !== "list" || readingRef.current) return;
@@ -277,14 +388,14 @@ export function useMapLibraryDialogState(options: {
 
   const runActiveDeletion = useCallback(
     (mapId: string, deleteOperation: (id: string) => MapLibraryOperationResult) => {
-      // 戻し先は削除前の表示順で決める
-      const focusAfterRemoval = selectFocusAfterRemoval(mapsRef.current, mapId);
+      // 戻し先は削除前の絞り込み済み表示配列で決める（L-460）
+      const focusAfterRemoval = selectFocusAfterRemoval(currentVisibleMaps(), mapId);
       const result = deleteOperation(mapId);
       const nextScreen = nextScreenAfterActiveDeletion(result, mapId);
       if (nextScreen !== null) transition(nextScreen);
       setState((prev) => returnAfterActiveDeletion(prev, result, mapId, focusAfterRemoval));
     },
-    [transition],
+    [currentVisibleMaps, transition],
   );
 
   const confirmDelete = useCallback(
@@ -344,6 +455,90 @@ export function useMapLibraryDialogState(options: {
     finishTrashTransition(result, nextFocus);
   }, [finishTrashTransition]);
 
+  const toggleFavorite = useCallback((mapId: string) => {
+    const focusAfterRemoval = selectFocusAfterFavoriteToggle(
+      currentVisibleMaps(),
+      libraryMetaRef.current,
+      listTabRef.current,
+      mapId,
+    );
+    const result = libraryRef.current.toggleFavorite(mapId);
+    finishListRowMetaAction(result, focusAfterRemoval);
+  }, [currentVisibleMaps, finishListRowMetaAction]);
+
+  const assignFolder = useCallback((mapId: string, folderId: string | null) => {
+    const focusAfterRemoval = selectFocusAfterFolderAssign(
+      currentVisibleMaps(),
+      folderFilterRef.current,
+      mapId,
+      folderId,
+    );
+    const result = libraryRef.current.assignFolder(mapId, folderId);
+    finishListRowMetaAction(result, focusAfterRemoval);
+  }, [currentVisibleMaps, finishListRowMetaAction]);
+
+  const submitCreateFolder = useCallback((nameInput: string): boolean => {
+    const result = libraryRef.current.createFolder(nameInput);
+    if (!result.ok) {
+      setState((prev) => showFailure(prev, result.notice));
+      return false;
+    }
+    transition({ kind: "folders" });
+    setState((prev) => returnToFoldersAfterAction(prev, result, { kind: "folderCreateInput" }));
+    return true;
+  }, [transition]);
+
+  const submitRenameFolder = useCallback((folderId: string, nameInput: string) => {
+    const result = libraryRef.current.renameFolder(folderId, nameInput);
+    if (result.ok) transition({ kind: "folders" });
+    setState((prev) =>
+      result.ok
+        ? returnToFoldersAfterAction(prev, result, {
+          kind: "folderRow",
+          folderId,
+          action: "rename",
+        })
+        : showFailure(prev, result.notice),
+    );
+  }, [transition]);
+
+  const confirmDeleteFolder = useCallback((folderId: string) => {
+    const focusAfterRemoval = selectFocusAfterFolderRemoval(
+      libraryMetaRef.current.folders,
+      folderId,
+    );
+    const result = libraryRef.current.deleteFolder(folderId);
+    if (!result.ok) {
+      setState((prev) => showFailure(prev, result.notice));
+      return;
+    }
+    // 選択中フォルダーを削除したら全件フィルタへ戻す（L-475）
+    if (
+      folderFilterRef.current.kind === "folder" &&
+      folderFilterRef.current.folderId === folderId
+    ) {
+      folderFilterRef.current = ALL_FOLDERS_FILTER;
+      setFolderFilterState(ALL_FOLDERS_FILTER);
+    }
+    transition({ kind: "folders" });
+    setState((prev) => returnToFoldersAfterAction(prev, result, focusAfterRemoval));
+  }, [transition]);
+
+  const resetLibraryMeta = useCallback(() => {
+    const result = libraryRef.current.resetLibraryMeta();
+    if (!result.ok) {
+      setState((prev) => stayWithResult(prev, result));
+      return;
+    }
+    if (folderFilterRef.current.kind === "folder") {
+      folderFilterRef.current = ALL_FOLDERS_FILTER;
+      setFolderFilterState(ALL_FOLDERS_FILTER);
+    }
+    // 破損バナーが DOM から消えるため、一覧の「フォルダー管理」ボタンへフォーカスを戻す（L-397）
+    transition({ kind: "list" });
+    setState((prev) => returnToList(prev, result, { kind: "folderButton" }));
+  }, [transition]);
+
   // ダイアログは MapEditor が持つ。再マウントしない失敗は結果を返すだけで、そちらのエラー表示に任せる
   const moveBranchToMap = useCallback((
     sourceSession: MapStorageSession,
@@ -375,14 +570,23 @@ export function useMapLibraryDialogState(options: {
     focusTarget: state.focusTarget,
     headerFocusRequest: state.headerFocusRequest,
     shellNotice: state.shellNotice,
+    listTab,
+    setListTab,
+    folderFilter: effectiveFolderFilter,
+    setFolderFilter,
     openList,
     openCreateFromHeader,
     openCreateFromList,
     openRename,
     openDelete,
     openTrash,
+    openFolders,
+    openFolderRename,
+    openFolderDelete,
     back,
     close,
+    closeSilently,
+    publishShellNotice,
     submitCreate,
     switchTo,
     submitRename,
@@ -393,6 +597,12 @@ export function useMapLibraryDialogState(options: {
     confirmTrashPermanentDelete,
     openEmptyTrash,
     confirmEmptyTrash,
+    toggleFavorite,
+    assignFolder,
+    submitCreateFolder,
+    submitRenameFolder,
+    confirmDeleteFolder,
+    resetLibraryMeta,
     prepareBackup,
     downloadBackup,
     selectRestoreFile,

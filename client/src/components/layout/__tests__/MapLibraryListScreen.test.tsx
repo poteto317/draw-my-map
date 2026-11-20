@@ -4,6 +4,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MapLibraryListScreen } from "@/components/layout/MapLibraryListScreen";
 import type { MapIndexEntry } from "@/domain/mapLibrary/mapIndex";
+import { createEmptyMapLibraryMeta, type MapLibraryMetaV1 } from "@/domain/mapLibrary/mapLibraryMeta";
 
 type Props = Parameters<typeof MapLibraryListScreen>[0];
 
@@ -33,6 +34,16 @@ function renderList(overrides: Partial<Props> = {}) {
     headingId: "map-library-heading",
     maps,
     currentMapId: "a",
+    libraryMeta: createEmptyMapLibraryMeta(),
+    libraryMetaStatus: "ready",
+    listTab: "all",
+    folderFilter: { kind: "all" },
+    onChangeListTab: jest.fn(),
+    onChangeFolderFilter: jest.fn(),
+    onOpenFolders: jest.fn(),
+    onToggleFavorite: jest.fn(),
+    onAssignFolder: jest.fn(),
+    onResetLibraryMeta: jest.fn(),
     onOpenCreate: jest.fn(),
     onClose: jest.fn(),
     onSwitch: jest.fn(),
@@ -43,6 +54,7 @@ function renderList(overrides: Partial<Props> = {}) {
     trashCount: 0,
     trashStatus: "ok",
     onOpenTrash: jest.fn(),
+    onOpenBrokenLinks: jest.fn(),
     storageMode: "persistent",
     ...overrides,
   };
@@ -214,5 +226,204 @@ describe("MapLibraryListScreen", () => {
     expect(normalProps.onOpenTrash).not.toHaveBeenCalled();
     fireEvent.click(normalTrash, { detail: 1 });
     expect(normalProps.onOpenTrash).toHaveBeenCalledTimes(1);
+  });
+
+  it("お気に入りボタンはマップを開くボタンと入れ子にせず（L-835）、トグル・バッジ・フォルダー割当を操作できる", async () => {
+    const user = userEvent.setup();
+    const meta: MapLibraryMetaV1 = {
+      version: 1,
+      folders: [
+        {
+          id: "f1",
+          name: "仕事",
+          createdAt: "2026-10-01T00:00:00.000Z",
+          updatedAt: "2026-10-01T00:00:00.000Z",
+        },
+        {
+          id: "f2",
+          name: "読書",
+          createdAt: "2026-10-01T00:00:00.000Z",
+          updatedAt: "2026-10-01T00:00:00.000Z",
+        },
+      ],
+      mapMeta: {
+        b: { favorite: true, folderId: "f1" },
+        c: { lastOpenedAt: "2026-10-22T00:30:00.000Z" },
+      },
+    };
+    const props = renderList({ libraryMeta: meta });
+
+    const [firstRow, , thirdRow] = rows();
+    const openB = within(firstRow).getByRole("button", { name: /^旅行の計画/ });
+    const favB = within(firstRow).getByRole("button", { name: "お気に入り: 旅行の計画" });
+    expect(openB).not.toContainElement(favB);
+    expect(favB).not.toContainElement(openB);
+    // 名前は状態によらず固定し、状態は aria-pressed だけで伝える（重要度・表示の切り替えボタンと同じ慣行）
+    expect(favB).toHaveAttribute("aria-pressed", "true");
+    expect(favB).toHaveTextContent("★");
+    expect(openB).toHaveTextContent("仕事");
+
+    const favC = within(thirdRow).getByRole("button", { name: "お気に入り: 読書メモ" });
+    expect(favC).toHaveAttribute("aria-pressed", "false");
+    expect(favC).toHaveTextContent("☆");
+
+    await user.click(favB);
+    expect(props.onToggleFavorite).toHaveBeenCalledWith("b");
+
+    const folderSelect = within(thirdRow).getByRole("combobox", { name: "読書メモのフォルダー" });
+    expect(folderSelect).toHaveValue("");
+    await user.selectOptions(folderSelect, "f2");
+    expect(props.onAssignFolder).toHaveBeenCalledWith("c", "f2");
+
+    const folderSelectB = within(firstRow).getByRole("combobox", { name: "旅行の計画のフォルダー" });
+    expect(folderSelectB).toHaveValue("f1");
+    await user.selectOptions(folderSelectB, "");
+    expect(props.onAssignFolder).toHaveBeenCalledWith("b", null);
+  });
+
+  it("フォルダーの選択欄は長いフォルダー名でもダイアログの幅を超えない（max-w-full・min-w-0、絞り込みは truncate）", () => {
+    const longName = "長".repeat(50);
+    const meta: MapLibraryMetaV1 = {
+      version: 1,
+      folders: [
+        {
+          id: "f1",
+          name: longName,
+          createdAt: "2026-10-01T00:00:00.000Z",
+          updatedAt: "2026-10-01T00:00:00.000Z",
+        },
+      ],
+      mapMeta: { c: { folderId: "f1" } },
+    };
+    renderList({ libraryMeta: meta });
+
+    const rowSelect = screen.getByRole("combobox", { name: "読書メモのフォルダー" });
+    expect(rowSelect).toHaveClass("max-w-full", "min-w-0");
+    const filterSelect = screen.getByRole("combobox", { name: "フォルダーで絞り込み" });
+    expect(filterSelect).toHaveClass("max-w-full", "min-w-0", "truncate");
+  });
+
+  it("表示切替タブ・フォルダー絞り込み・最近使用タブのボタン外最終閲覧日時・0件空状態を表示する", async () => {
+    const user = userEvent.setup();
+    const meta: MapLibraryMetaV1 = {
+      version: 1,
+      folders: [
+        {
+          id: "f1",
+          name: "仕事",
+          createdAt: "2026-10-01T00:00:00.000Z",
+          updatedAt: "2026-10-01T00:00:00.000Z",
+        },
+      ],
+      mapMeta: {
+        c: { lastOpenedAt: "2026-10-22T01:15:00.000Z", folderId: "f1" },
+      },
+    };
+    const props = renderList({
+      libraryMeta: meta,
+      listTab: "recent",
+      folderFilter: { kind: "all" },
+    });
+
+    expect(screen.getByRole("button", { name: "すべて" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "お気に入り" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "最近使用" })).toHaveAttribute("aria-pressed", "true");
+
+    const items = rows();
+    expect(items).toHaveLength(1);
+    const openBtn = within(items[0]).getByRole("button", { name: /^読書メモ/ });
+    expect(openBtn).not.toHaveTextContent("最終閲覧:");
+    expect(items[0]).toHaveTextContent("最終閲覧: 2026/10/22 10:15");
+
+    await user.click(screen.getByRole("button", { name: "お気に入り" }));
+    expect(props.onChangeListTab).toHaveBeenCalledWith("favorites");
+
+    const filterSelect = screen.getByRole("combobox", { name: "フォルダーで絞り込み" });
+    await user.selectOptions(filterSelect, "folder:f1");
+    expect(props.onChangeFolderFilter).toHaveBeenCalledWith({ kind: "folder", folderId: "f1" });
+    await user.selectOptions(filterSelect, "unclassified");
+    expect(props.onChangeFolderFilter).toHaveBeenCalledWith({ kind: "unclassified" });
+
+    renderList({ libraryMeta: meta, listTab: "favorites", folderFilter: { kind: "all" } });
+    expect(screen.getByText("該当するマップはありません")).toBeInTheDocument();
+  });
+
+  it("corrupt 時は初期化ボタン付き alert、unavailable（非保護）時は初期化ボタンなし alert、非ready/保護時は書込UIを disabled にする（L-002, L-057, L-061）", async () => {
+    const user = userEvent.setup();
+    const corruptProps = renderList({ libraryMetaStatus: "corrupt" });
+    expect(screen.getByRole("alert")).toHaveTextContent("破損");
+    const resetBtn = screen.getByRole("button", { name: "メタデータを初期化" });
+    expect(screen.getByRole("button", { name: "フォルダー管理" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "お気に入り: 読書メモ" })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "読書メモのフォルダー" })).toBeDisabled();
+    await user.click(resetBtn);
+    expect(corruptProps.onResetLibraryMeta).toHaveBeenCalledTimes(1);
+
+    const { unmount } = render(
+      <MapLibraryListScreen {...corruptProps} libraryMetaStatus="unavailable" storageMode="persistent" />,
+    );
+    expect(screen.getAllByRole("alert").some((el) => el.textContent?.includes("読み込めませんでした"))).toBe(true);
+    unmount();
+
+    const { container } = render(
+      <MapLibraryListScreen {...corruptProps} libraryMetaStatus="unavailable" storageMode="persistent" />,
+    );
+    expect(within(container).queryByRole("button", { name: "メタデータを初期化" })).not.toBeInTheDocument();
+    expect(within(container).getByRole("button", { name: "フォルダー管理" })).toBeDisabled();
+  });
+
+  it("孤立 folderId は未分類として選択値を表示し、メタデータ初期化の detail>1 と不正フォルダー絞り込み値をガードする", () => {
+    const orphanMeta: MapLibraryMetaV1 = {
+      version: 1,
+      folders: [],
+      mapMeta: {
+        b: { folderId: "orphan-folder" },
+      },
+    };
+    const props = renderList({
+      libraryMeta: orphanMeta,
+      libraryMetaStatus: "corrupt",
+    });
+
+    const [firstRow] = rows();
+    expect(within(firstRow).getByRole("combobox", { name: "旅行の計画のフォルダー" })).toHaveValue("");
+
+    const resetBtn = screen.getByRole("button", { name: "メタデータを初期化" });
+    fireEvent.click(resetBtn, { detail: 2 });
+    expect(props.onResetLibraryMeta).not.toHaveBeenCalled();
+    fireEvent.click(resetBtn, { detail: 1 });
+    expect(props.onResetLibraryMeta).toHaveBeenCalledTimes(1);
+
+    const filterSelect = screen.getByRole("combobox", { name: "フォルダーで絞り込み" });
+    const badOption = document.createElement("option");
+    badOption.value = "folder:invalid id!";
+    filterSelect.appendChild(badOption);
+    fireEvent.change(filterSelect, { target: { value: "folder:invalid id!" } });
+    expect(props.onChangeFolderFilter).toHaveBeenCalledWith({ kind: "all" });
+  });
+
+  it("リンク切れを確認ボタンは通常クリックで onOpenBrokenLinks を呼び、保護モード・repeat/IME・detail>1 を抑止する", () => {
+    const protectedProps = renderList({ storageMode: "protected" });
+    const protectedButton = screen.getByRole("button", { name: "リンク切れを確認" });
+    expect(protectedButton).toHaveAttribute("data-map-library-action", "brokenLinks");
+    fireEvent.click(protectedButton, { detail: 1 });
+    expect(protectedProps.onOpenBrokenLinks).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent("JSON書き出し");
+
+    const normalProps = renderList();
+    const buttons = screen.getAllByRole("button", { name: "リンク切れを確認" });
+    const normalButton = buttons[buttons.length - 1];
+    for (const keyEvent of [
+      { key: "Enter", repeat: true },
+      { key: " ", repeat: true },
+      { key: "Enter", isComposing: true },
+      { key: "Enter", keyCode: 229 },
+    ]) {
+      expect(fireEvent.keyDown(normalButton, keyEvent)).toBe(false);
+    }
+    fireEvent.click(normalButton, { detail: 2 });
+    expect(normalProps.onOpenBrokenLinks).not.toHaveBeenCalled();
+    fireEvent.click(normalButton, { detail: 1 });
+    expect(normalProps.onOpenBrokenLinks).toHaveBeenCalledTimes(1);
   });
 });

@@ -6,7 +6,7 @@ export type MapHistoryShortcut = "undo" | "redo";
 const IME_PROCESS_KEY_CODE = 229;
 
 // IME変換中・キーリピート・処理済みのイベントは、キーの組み合わせによらず扱わない
-function isProcessableKeyEvent(event: KeyboardEvent): boolean {
+export function isProcessableKeyEvent(event: KeyboardEvent): boolean {
   return !event.defaultPrevented
     && !event.repeat
     && !event.isComposing
@@ -14,7 +14,7 @@ function isProcessableKeyEvent(event: KeyboardEvent): boolean {
 }
 
 // 修飾キーはCtrlかCmdのどちらか一方だけを受け付け、Altとの組み合わせは扱わない
-function hasSingleCommandModifier(event: KeyboardEvent): boolean {
+export function hasSingleCommandModifier(event: KeyboardEvent): boolean {
   return event.ctrlKey !== event.metaKey && !event.altKey;
 }
 

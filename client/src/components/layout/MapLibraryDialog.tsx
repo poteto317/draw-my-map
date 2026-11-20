@@ -1,7 +1,10 @@
 "use client";
 
-import { useId, useLayoutEffect, useRef, useState } from "react";
+import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { handleDialogClickCapture } from "@/components/layout/dialogClickCapture";
+import { MapFolderDeleteConfirmScreen } from "@/components/layout/MapFolderDeleteConfirmScreen";
+import { MapFolderManagerScreen } from "@/components/layout/MapFolderManagerScreen";
+import { MapFolderRenameScreen } from "@/components/layout/MapFolderRenameScreen";
 import { MapLibraryDeleteConfirm } from "@/components/layout/MapLibraryDeleteConfirm";
 import { MapLibraryBackupConfirm } from "@/components/layout/MapLibraryBackupConfirm";
 import { MapLibraryRestoreConfirm } from "@/components/layout/MapLibraryRestoreConfirm";
@@ -10,7 +13,10 @@ import { MapLibraryNameForm } from "@/components/layout/MapLibraryNameForm";
 import { MapLibraryTrashEmptyConfirm } from "@/components/layout/MapLibraryTrashEmptyConfirm";
 import { MapLibraryTrashPermanentDeleteConfirm } from "@/components/layout/MapLibraryTrashPermanentDeleteConfirm";
 import { MapLibraryTrashScreen } from "@/components/layout/MapLibraryTrashScreen";
-import { mapLibraryListButtonSelector } from "@/components/layout/mapLibraryListButtons";
+import {
+  mapLibraryFolderTargetSelector,
+  mapLibraryListButtonSelector,
+} from "@/components/layout/mapLibraryListButtons";
 import { suppressBackupRestoreActionKey } from "@/components/layout/suppressBackupRestoreActionKey";
 import { useReannouncedNotice } from "@/components/layout/useReannouncedNotice";
 import {
@@ -21,6 +27,13 @@ import {
   describeMapRemoval,
   type MapIndexEntry,
 } from "@/domain/mapLibrary/mapIndex";
+import {
+  countMapsByFolder,
+  type MapLibraryMetaStatus,
+  type MapLibraryMetaV1,
+  type MapListFolderFilter,
+  type MapListTab,
+} from "@/domain/mapLibrary/mapLibraryMeta";
 import type { MapTrashEntry } from "@/domain/mapLibrary/mapTrash";
 import type {
   MapLibraryDialogFocusTarget,
@@ -34,6 +47,21 @@ type MapLibraryDialogProps = {
   currentMapId: string;
   trashEntries: readonly MapTrashEntry[];
   trashStatus: "ok" | "corrupt";
+  libraryMeta: MapLibraryMetaV1;
+  libraryMetaStatus: MapLibraryMetaStatus;
+  listTab: MapListTab;
+  folderFilter: MapListFolderFilter;
+  onChangeListTab: (tab: MapListTab) => void;
+  onChangeFolderFilter: (filter: MapListFolderFilter) => void;
+  onOpenFolders: () => void;
+  onOpenFolderRename: (folderId: string) => void;
+  onOpenFolderDelete: (folderId: string) => void;
+  onToggleFavorite: (mapId: string) => void;
+  onAssignFolder: (mapId: string, folderId: string | null) => void;
+  onCreateFolder: (nameInput: string) => boolean;
+  onSubmitRenameFolder: (folderId: string, nameInput: string) => void;
+  onConfirmDeleteFolder: (folderId: string) => void;
+  onResetLibraryMeta: () => void;
   now?: Date;
   notices: MapLibraryDialogNotices;
   focusTarget: MapLibraryDialogFocusTarget | null;
@@ -44,6 +72,7 @@ type MapLibraryDialogProps = {
   onOpenRename: (mapId: string) => void;
   onOpenDelete: (mapId: string) => void;
   onOpenTrash: () => void;
+  onOpenBrokenLinks: () => void;
   onSwitch: (mapId: string) => void;
   onCancel: () => void;
   onSubmitCreate: (nameInput: string) => void;
@@ -77,6 +106,19 @@ function queryLibraryAction(dialog: HTMLElement, action: string): HTMLElement | 
   return dialog.querySelector<HTMLElement>(`[data-map-library-action="${action}"]`);
 }
 
+function isEnabledFocusTarget(element: HTMLElement | null): element is HTMLElement {
+  if (element === null) return false;
+  if ("disabled" in element && Boolean((element as HTMLButtonElement).disabled)) {
+    return false;
+  }
+  return true;
+}
+
+function queryEnabled(dialog: HTMLElement, selector: string): HTMLElement | null {
+  const found = dialog.querySelector<HTMLElement>(selector);
+  return isEnabledFocusTarget(found) ? found : null;
+}
+
 function resolveFocusElement(
   dialog: HTMLElement,
   focusTarget: MapLibraryDialogFocusTarget,
@@ -87,12 +129,25 @@ function resolveFocusElement(
   if (focusTarget.kind === "screenDefault") {
     switch (screenKind) {
       case "list":
-        return dialog.querySelector<HTMLElement>(
-          mapLibraryListButtonSelector({ kind: "row", mapId: currentMapId, action: "open" }),
+        return (
+          queryEnabled(
+            dialog,
+            mapLibraryListButtonSelector({ kind: "row", mapId: currentMapId, action: "open" }),
+          )
+          ?? queryEnabled(dialog, '[data-map-action="open"]')
+          ?? queryEnabled(dialog, mapLibraryListButtonSelector({ kind: "listCreateButton" }))
         );
       case "trash":
         return (
           dialog.querySelector<HTMLElement>('[data-trash-action="restore"]')
+          ?? queryLibraryAction(dialog, "backToList")
+        );
+      case "folders":
+        return (
+          queryEnabled(
+            dialog,
+            mapLibraryFolderTargetSelector({ kind: "folderCreateInput" }),
+          )
           ?? queryLibraryAction(dialog, "backToList")
         );
       case "delete":
@@ -101,10 +156,12 @@ function resolveFocusElement(
       case "restoreReading":
       case "trashPermanentDelete":
       case "trashEmptyConfirm":
+      case "folderDeleteConfirm":
         // 取り消せない操作または中断操作なので、既定を安全側にする
         return refs.cancelButton;
       case "create":
       case "rename":
+      case "folderRename":
         return refs.nameInput;
     }
   }
@@ -115,8 +172,19 @@ function resolveFocusElement(
       ) ?? queryLibraryAction(dialog, "backToList")
     );
   }
-  if (focusTarget.kind === "listCreateButton" || focusTarget.kind === "row") {
-    return dialog.querySelector<HTMLElement>(mapLibraryListButtonSelector(focusTarget));
+  if (focusTarget.kind === "folderCreateInput" || focusTarget.kind === "folderRow") {
+    return (
+      queryEnabled(dialog, mapLibraryFolderTargetSelector(focusTarget))
+      ?? queryEnabled(dialog, mapLibraryFolderTargetSelector({ kind: "folderCreateInput" }))
+      ?? queryLibraryAction(dialog, "backToList")
+    );
+  }
+  if (
+    focusTarget.kind === "listCreateButton"
+    || focusTarget.kind === "folderButton"
+    || focusTarget.kind === "row"
+  ) {
+    return queryEnabled(dialog, mapLibraryListButtonSelector(focusTarget));
   }
   const action = LIBRARY_ACTION_BY_TARGET[focusTarget.kind];
   return queryLibraryAction(dialog, action) ?? queryLibraryAction(dialog, "backToList");
@@ -129,6 +197,9 @@ function getScreenKey(screen: OpenMapLibraryDialogScreen): string {
       return `${screen.kind}:${screen.mapId}`;
     case "trashPermanentDelete":
       return `${screen.kind}:${screen.trashId}`;
+    case "folderRename":
+    case "folderDeleteConfirm":
+      return `${screen.kind}:${screen.folderId}`;
     default:
       return screen.kind;
   }
@@ -140,6 +211,21 @@ export function MapLibraryDialog({
   currentMapId,
   trashEntries,
   trashStatus,
+  libraryMeta,
+  libraryMetaStatus,
+  listTab,
+  folderFilter,
+  onChangeListTab,
+  onChangeFolderFilter,
+  onOpenFolders,
+  onOpenFolderRename,
+  onOpenFolderDelete,
+  onToggleFavorite,
+  onAssignFolder,
+  onCreateFolder,
+  onSubmitRenameFolder,
+  onConfirmDeleteFolder,
+  onResetLibraryMeta,
   now,
   notices,
   focusTarget,
@@ -150,6 +236,7 @@ export function MapLibraryDialog({
   onOpenRename,
   onOpenDelete,
   onOpenTrash,
+  onOpenBrokenLinks,
   onSwitch,
   onCancel,
   onSubmitCreate,
@@ -186,6 +273,11 @@ export function MapLibraryDialog({
   useDialogFocusTrap({ dialogRef, overlayRef, onEscape });
   const shownNotices = useReannouncedNotice(notices.sequence, notices);
 
+  const mapCountByFolderId = useMemo(
+    () => countMapsByFolder(maps, libraryMeta),
+    [maps, libraryMeta],
+  );
+
   // 次に開くマップは describeMapRemoval だけで決める（表示順。L-170）
   const removal =
     screen.kind === "delete"
@@ -199,17 +291,27 @@ export function MapLibraryDialog({
     screen.kind === "trashPermanentDelete"
       ? (trashEntries.find((entry) => entry.id === screen.trashId) ?? null)
       : null;
+  const folderRenameTarget =
+    screen.kind === "folderRename"
+      ? (libraryMeta.folders.find((folder) => folder.id === screen.folderId) ?? null)
+      : null;
+  const folderDeleteTarget =
+    screen.kind === "folderDeleteConfirm"
+      ? (libraryMeta.folders.find((folder) => folder.id === screen.folderId) ?? null)
+      : null;
   const isTargetMissing =
     (screen.kind === "delete" && removal === null)
     || (screen.kind === "rename" && renameTarget === null)
-    || (screen.kind === "trashPermanentDelete" && trashPermanentDeleteTarget === null);
+    || (screen.kind === "trashPermanentDelete" && trashPermanentDeleteTarget === null)
+    || (screen.kind === "folderRename" && folderRenameTarget === null)
+    || (screen.kind === "folderDeleteConfirm" && folderDeleteTarget === null);
 
   useLayoutEffect(() => {
     onFocusTargetAppliedRef.current = onFocusTargetApplied;
     onCancelRef.current = onCancel;
   }, [onFocusTargetApplied, onCancel]);
 
-  // 対象がもう無い名前変更・削除・ゴミ箱個別削除の画面は描画せず、キャンセルと同じく前画面へ戻す
+  // 対象がもう無い名前変更・削除・ゴミ箱個別削除・フォルダー操作画面は描画せず前画面へ戻す
   useLayoutEffect(() => {
     if (isTargetMissing) onCancelRef.current();
   }, [isTargetMissing]);
@@ -232,6 +334,8 @@ export function MapLibraryDialog({
     onFocusTargetAppliedRef.current();
   }, [focusTarget, screen.kind, currentMapId, isTargetMissing]);
 
+  const isMetaWriteDisabled = storageMode === "protected" || libraryMetaStatus !== "ready";
+
   const renderScreen = () => {
     switch (screen.kind) {
       case "list":
@@ -240,6 +344,16 @@ export function MapLibraryDialog({
             headingId={headingId}
             maps={maps}
             currentMapId={currentMapId}
+            libraryMeta={libraryMeta}
+            libraryMetaStatus={libraryMetaStatus}
+            listTab={listTab}
+            folderFilter={folderFilter}
+            onChangeListTab={onChangeListTab}
+            onChangeFolderFilter={onChangeFolderFilter}
+            onOpenFolders={onOpenFolders}
+            onToggleFavorite={onToggleFavorite}
+            onAssignFolder={onAssignFolder}
+            onResetLibraryMeta={onResetLibraryMeta}
             onOpenCreate={onOpenCreate}
             onClose={onClose}
             onSwitch={onSwitch}
@@ -250,6 +364,7 @@ export function MapLibraryDialog({
             trashCount={trashEntries.length}
             trashStatus={trashStatus}
             onOpenTrash={handleOpenTrash}
+            onOpenBrokenLinks={onOpenBrokenLinks}
             storageMode={storageMode}
           />
         );
@@ -330,6 +445,46 @@ export function MapLibraryDialog({
             onCancel={onCancel}
           />
         );
+      case "folders":
+        return (
+          <MapFolderManagerScreen
+            headingId={headingId}
+            folders={libraryMeta.folders}
+            mapCountByFolderId={mapCountByFolderId}
+            disabled={isMetaWriteDisabled}
+            onCreateFolder={onCreateFolder}
+            onOpenRename={onOpenFolderRename}
+            onOpenDelete={onOpenFolderDelete}
+            onBackToList={onCancel}
+          />
+        );
+      case "folderRename":
+        if (folderRenameTarget === null) return null;
+        return (
+          <MapFolderRenameScreen
+            headingId={headingId}
+            target={folderRenameTarget}
+            folders={libraryMeta.folders}
+            disabled={isMetaWriteDisabled}
+            inputRef={nameInputRef}
+            onSubmit={(nameInput) => onSubmitRenameFolder(screen.folderId, nameInput)}
+            onCancel={onCancel}
+          />
+        );
+      case "folderDeleteConfirm":
+        if (folderDeleteTarget === null) return null;
+        return (
+          <MapFolderDeleteConfirmScreen
+            headingId={headingId}
+            descriptionId={descriptionId}
+            target={folderDeleteTarget}
+            mapCount={mapCountByFolderId.get(folderDeleteTarget.id) ?? 0}
+            disabled={isMetaWriteDisabled}
+            cancelButtonRef={cancelButtonRef}
+            onConfirm={() => onConfirmDeleteFolder(screen.folderId)}
+            onCancel={onCancel}
+          />
+        );
       case "backupConfirm":
         return <MapLibraryBackupConfirm headingId={headingId} descriptionId={descriptionId} preview={screen.preview} cancelButtonRef={cancelButtonRef} onConfirm={onDownloadBackup} onCancel={onCancel} />;
       case "restoreReading":
@@ -339,14 +494,15 @@ export function MapLibraryDialog({
     }
   };
   const screenContent = renderScreen();
-  // 画面（と対象のマップ・ゴミ箱項目）ごとに group を作り直し、入力欄の状態も画面ごとに持ち直す
+  // 画面（と対象のマップ・ゴミ箱項目・フォルダー）ごとに group を作り直し、入力欄の状態も画面ごとに持ち直す
   const screenKey = getScreenKey(screen);
   const hasDescription =
     screen.kind === "delete"
     || screen.kind === "backupConfirm"
     || screen.kind === "restoreConfirm"
     || screen.kind === "trashPermanentDelete"
-    || screen.kind === "trashEmptyConfirm";
+    || screen.kind === "trashEmptyConfirm"
+    || screen.kind === "folderDeleteConfirm";
 
   return (
     <div
@@ -363,7 +519,7 @@ export function MapLibraryDialog({
         // 画面ごとの名前と説明は、下の group に持たせる。ダイアログ自身は画面によらない名前にして、
         // 開いたときに見出しが二度読まれないようにする
         aria-label="マップの管理"
-        className="flex max-h-full w-full max-w-[28rem] flex-col gap-3 overflow-y-auto rounded-lg bg-white p-4 text-zinc-900 shadow-lg dark:bg-zinc-800 dark:text-zinc-100"
+        className="flex max-h-full w-full max-w-[36rem] flex-col gap-3 overflow-y-auto rounded-lg bg-white p-4 text-zinc-900 shadow-lg dark:bg-zinc-800 dark:text-zinc-100"
       >
         {screenContent !== null && (
           // ダイアログの要素は画面が変わっても同じなので、画面ごとに新しい group を作り、

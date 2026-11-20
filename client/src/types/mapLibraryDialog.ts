@@ -12,7 +12,10 @@ export type MapLibraryDialogScreen =
   | { kind: "trashEmptyConfirm" }
   | { kind: "backupConfirm"; preview: LibraryBackupPreview }
   | { kind: "restoreReading" }
-  | { kind: "restoreConfirm"; preview: LibraryRestorePreview };
+  | { kind: "restoreConfirm"; preview: LibraryRestorePreview }
+  | { kind: "folders" }
+  | { kind: "folderRename"; folderId: string }
+  | { kind: "folderDeleteConfirm"; folderId: string };
 
 export type OpenMapLibraryDialogScreen = Exclude<
   MapLibraryDialogScreen,
@@ -23,16 +26,21 @@ export type MapLibraryRowAction = "open" | "rename" | "delete";
 
 export type MapLibraryTrashRowAction = "restore" | "permanentDelete";
 
+export type MapLibraryFolderRowAction = "rename" | "delete";
+
 export type MapLibraryDialogFocusTarget =
   | { kind: "screenDefault" }
   | { kind: "listCreateButton" }
+  | { kind: "folderButton" }
+  | { kind: "folderCreateInput" }
   | { kind: "trashButton" }
   | { kind: "emptyTrashButton" }
   | { kind: "backToListButton" }
   | { kind: "backupButton" }
   | { kind: "restoreButton" }
   | { kind: "row"; mapId: string; action: MapLibraryRowAction }
-  | { kind: "trashRow"; trashId: string; action: MapLibraryTrashRowAction };
+  | { kind: "trashRow"; trashId: string; action: MapLibraryTrashRowAction }
+  | { kind: "folderRow"; folderId: string; action: MapLibraryFolderRowAction };
 
 // 空文字は表示なし。sequence は通知を出し直すたびに進め、同じ文言でも読み上げ直させる
 export type MapLibraryDialogNotices = { status: string; alert: string; sequence: number };

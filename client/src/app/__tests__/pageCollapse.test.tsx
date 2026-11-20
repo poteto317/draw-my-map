@@ -86,7 +86,7 @@ async function search(label: string) {
   const user = userEvent.setup();
   const input = screen.getByRole("combobox", { name: "ノードを検索" });
   await user.clear(input); await user.type(input, label);
-  await user.click(screen.getByRole("option"));
+  await user.click(within(screen.getByRole("listbox", { name: "ノード検索結果" })).getByRole("option"));
   act(() => (document.activeElement as HTMLElement).blur());
 }
 function blobText(blob: Blob): Promise<string> {

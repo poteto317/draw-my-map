@@ -1,4 +1,8 @@
 import type { MapIndexEntry, MapIndexV1 } from "@/domain/mapLibrary/mapIndex";
+import {
+  createEmptyMapLibraryMeta,
+  type MapLibraryMetaV1,
+} from "@/domain/mapLibrary/mapLibraryMeta";
 import type { MapTrashEntry } from "@/domain/mapLibrary/mapTrash";
 import {
   failedOperation,
@@ -33,6 +37,8 @@ describe("isActiveBranchMoveSource", () => {
     session,
     startupNotice: null,
     trash: { status: "ok" as const, entries: [] },
+    libraryMeta: createEmptyMapLibraryMeta(),
+    libraryMetaStatus: "ready" as const,
   };
 
   it("開いているセッションなら true", () => {
@@ -51,7 +57,7 @@ describe("toMapLibraryView", () => {
     expect(toMapLibraryView(null)).toEqual({ status: "loading" });
   });
 
-  it("通常のモードは一覧を表示順（更新日時の新しい順）に並べ、現在のマップとゴミ箱状態を返す", () => {
+  it("通常のモードは一覧を表示順（更新日時の新しい順）に並べ、現在のマップとゴミ箱状態・メタデータを返す", () => {
     const { storage } = createRecordingStorage();
     const session = createTestStorageSession().session;
     const notice = { kind: "warning" as const, message: "起動時の通知" };
@@ -65,6 +71,20 @@ describe("toMapLibraryView", () => {
       expiresAt: "2026-03-03T00:00:00.000Z",
       hasBody: true,
     };
+    const libraryMeta: MapLibraryMetaV1 = {
+      version: 1,
+      folders: [
+        {
+          id: "folder-1",
+          name: "仕事",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      mapMeta: {
+        older: { favorite: true, folderId: "folder-1" },
+      },
+    };
 
     const view = toMapLibraryView({
       mode: "persistent",
@@ -73,6 +93,8 @@ describe("toMapLibraryView", () => {
       session,
       startupNotice: notice,
       trash: { status: "ok", entries: [trashEntry] },
+      libraryMeta,
+      libraryMetaStatus: "ready",
     });
 
     expect(view).toEqual({
@@ -84,12 +106,15 @@ describe("toMapLibraryView", () => {
       startupNotice: notice,
       trashEntries: [trashEntry],
       trashStatus: "ok",
+      libraryMeta,
+      libraryMetaStatus: "ready",
     });
   });
 
-  it("ゴミ箱が破損しているときは trashStatus を corrupt・trashEntries を空配列にする", () => {
+  it("ゴミ箱が破損しているときは trashStatus を corrupt・trashEntries を空配列にし、libraryMetaStatus もそのまま返す", () => {
     const { storage } = createRecordingStorage();
     const session = createTestStorageSession().session;
+    const emptyMeta = createEmptyMapLibraryMeta();
 
     const view = toMapLibraryView({
       mode: "persistent",
@@ -98,6 +123,8 @@ describe("toMapLibraryView", () => {
       session,
       startupNotice: null,
       trash: { status: "corrupt" },
+      libraryMeta: emptyMeta,
+      libraryMetaStatus: "corrupt",
     });
 
     expect(view).toEqual({
@@ -109,14 +136,19 @@ describe("toMapLibraryView", () => {
       startupNotice: null,
       trashEntries: [],
       trashStatus: "corrupt",
+      libraryMeta: emptyMeta,
+      libraryMetaStatus: "corrupt",
     });
   });
 
-  it("保護モードは1件だけの一覧と、そのマップを現在のマップとして返し、ゴミ箱は空の ok とする", () => {
+  it("保護モードは1件だけの一覧と、そのマップを現在のマップとして返し、ゴミ箱は空の ok・メタデータは空の unavailable（毎回新参照）とする", () => {
     const session = createTestStorageSession().session;
     const notice = { kind: "warning" as const, message: "保存されません" };
 
-    expect(toMapLibraryView({ mode: "protected", entry: OLDER, session, startupNotice: notice })).toEqual({
+    const first = toMapLibraryView({ mode: "protected", entry: OLDER, session, startupNotice: notice });
+    const second = toMapLibraryView({ mode: "protected", entry: OLDER, session, startupNotice: notice });
+
+    expect(first).toEqual({
       status: "ready",
       storageMode: "protected",
       maps: [OLDER],
@@ -125,7 +157,12 @@ describe("toMapLibraryView", () => {
       startupNotice: notice,
       trashEntries: [],
       trashStatus: "ok",
+      libraryMeta: createEmptyMapLibraryMeta(),
+      libraryMetaStatus: "unavailable",
     });
+    if (first.status === "ready" && second.status === "ready") {
+      expect(first.libraryMeta).not.toBe(second.libraryMeta);
+    }
   });
 
   it("現在のマップがインデックスに無い状態は例外にする", () => {
@@ -138,6 +175,8 @@ describe("toMapLibraryView", () => {
       session: createTestStorageSession().session,
       startupNotice: null,
       trash: { status: "ok", entries: [] },
+      libraryMeta: createEmptyMapLibraryMeta(),
+      libraryMetaStatus: "ready",
     })).toThrow("現在のマップがインデックスにありません。");
   });
 });
@@ -160,6 +199,20 @@ describe("操作の結果", () => {
       remounted: true,
       notice,
       saveRetryNotice: null,
+    });
+    expect(succeededOperation(notice, true, { sessionNumber: 3 })).toEqual({
+      ok: true,
+      remounted: true,
+      notice,
+      saveRetryNotice: null,
+      sessionNumber: 3,
+    });
+    expect(succeededOperation(notice, false, { folderId: "folder-1" })).toEqual({
+      ok: true,
+      remounted: false,
+      notice,
+      saveRetryNotice: null,
+      folderId: "folder-1",
     });
   });
 

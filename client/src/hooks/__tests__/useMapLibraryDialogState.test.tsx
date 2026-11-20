@@ -19,6 +19,7 @@ import {
   switchFlushFailedNotice,
 } from "@/domain/mapLibrary/mapLibraryMessages";
 import type { MapIndexEntry } from "@/domain/mapLibrary/mapIndex";
+import { createEmptyMapLibraryMeta, type MapLibraryMetaV1 } from "@/domain/mapLibrary/mapLibraryMeta";
 import type { MapTrashEntry } from "@/domain/mapLibrary/mapTrash";
 import {
   mapPermanentlyDeletedNotice,
@@ -64,6 +65,12 @@ type FakeLibrary = Pick<
   | "downloadBackup"
   | "previewRestore"
   | "confirmRestore"
+  | "toggleFavorite"
+  | "assignFolder"
+  | "createFolder"
+  | "renameFolder"
+  | "deleteFolder"
+  | "resetLibraryMeta"
 >;
 
 function entry(id: string, name: string): MapIndexEntry {
@@ -131,6 +138,12 @@ function createFakeLibrary(): jest.Mocked<FakeLibrary> {
     downloadBackup: jest.fn<MapLibraryOperationResult, [LibraryBackupPreview]>(() => UNCHANGED),
     previewRestore: jest.fn<Promise<{ ok: false; error: string }>, [File]>(async () => ({ ok: false, error: "読込失敗" })),
     confirmRestore: jest.fn<MapLibraryOperationResult, [LibraryRestorePreview]>(() => UNCHANGED),
+    toggleFavorite: jest.fn<MapLibraryOperationResult, [string]>(() => UNCHANGED),
+    assignFolder: jest.fn<MapLibraryOperationResult, [string, string | null]>(() => UNCHANGED),
+    createFolder: jest.fn<MapLibraryOperationResult, [string]>(() => UNCHANGED),
+    renameFolder: jest.fn<MapLibraryOperationResult, [string, string]>(() => UNCHANGED),
+    deleteFolder: jest.fn<MapLibraryOperationResult, [string]>(() => UNCHANGED),
+    resetLibraryMeta: jest.fn<MapLibraryOperationResult, []>(() => UNCHANGED),
   };
 }
 
@@ -138,6 +151,7 @@ type HookProps = {
   library: FakeLibrary;
   maps: readonly MapIndexEntry[];
   trashEntries: readonly MapTrashEntry[];
+  libraryMeta: MapLibraryMetaV1;
   startupNotice: OperationNotice | null;
 };
 
@@ -146,6 +160,7 @@ function renderDialogState(overrides: Partial<HookProps> = {}) {
     library: createFakeLibrary(),
     maps: threeMaps,
     trashEntries: [],
+    libraryMeta: createEmptyMapLibraryMeta(),
     startupNotice: null,
     ...overrides,
   };
@@ -818,8 +833,15 @@ describe("useMapLibraryDialogState", () => {
         "openRename",
         "openDelete",
         "openTrash",
+        "openFolders",
+        "openFolderRename",
+        "openFolderDelete",
         "back",
         "close",
+        "closeSilently",
+        "publishShellNotice",
+        "setListTab",
+        "setFolderFilter",
         "submitCreate",
         "switchTo",
         "submitRename",
@@ -830,6 +852,12 @@ describe("useMapLibraryDialogState", () => {
         "confirmTrashPermanentDelete",
         "openEmptyTrash",
         "confirmEmptyTrash",
+        "toggleFavorite",
+        "assignFolder",
+        "submitCreateFolder",
+        "submitRenameFolder",
+        "confirmDeleteFolder",
+        "resetLibraryMeta",
         "consumeFocusTarget",
         "consumeHeaderFocusRequest",
       ] as const;
@@ -900,6 +928,8 @@ describe("useMapLibraryDialogState", () => {
 
 // 設計書の「フォーカスの戻し先」の表を、ダイアログと組み合わせて実際のフォーカスで確かめる
 describe("useMapLibraryDialogState と MapLibraryDialog のフォーカスの戻し先", () => {
+  const EMPTY_HARNESS_META = createEmptyMapLibraryMeta();
+
   function Harness({
     fakeLibrary,
     initialMaps,
@@ -941,7 +971,13 @@ describe("useMapLibraryDialogState と MapLibraryDialog のフォーカスの戻
         return result;
       },
     }), [fakeLibrary]);
-    const state = useMapLibraryDialogState({ library, maps, trashEntries, startupNotice: null });
+    const state = useMapLibraryDialogState({
+      library,
+      maps,
+      trashEntries,
+      libraryMeta: EMPTY_HARNESS_META,
+      startupNotice: null,
+    });
     useLayoutEffect(() => {
       if (state.headerFocusRequest !== null) onHeaderFocusRequest(state.headerFocusRequest);
     }, [state.headerFocusRequest, onHeaderFocusRequest]);
@@ -960,6 +996,21 @@ describe("useMapLibraryDialogState と MapLibraryDialog のフォーカスの戻
             currentMapId="a"
             trashEntries={trashEntries}
             trashStatus="ok"
+            libraryMeta={EMPTY_HARNESS_META}
+            libraryMetaStatus="ready"
+            listTab={state.listTab}
+            folderFilter={state.folderFilter}
+            onChangeListTab={state.setListTab}
+            onChangeFolderFilter={state.setFolderFilter}
+            onOpenFolders={state.openFolders}
+            onOpenFolderRename={state.openFolderRename}
+            onOpenFolderDelete={state.openFolderDelete}
+            onToggleFavorite={state.toggleFavorite}
+            onAssignFolder={state.assignFolder}
+            onCreateFolder={state.submitCreateFolder}
+            onSubmitRenameFolder={state.submitRenameFolder}
+            onConfirmDeleteFolder={state.confirmDeleteFolder}
+            onResetLibraryMeta={state.resetLibraryMeta}
             now={new Date("2026-11-14T12:00:00.000Z")}
             notices={state.notices}
             focusTarget={state.focusTarget}
@@ -970,6 +1021,7 @@ describe("useMapLibraryDialogState と MapLibraryDialog のフォーカスの戻
             onOpenRename={state.openRename}
             onOpenDelete={state.openDelete}
             onOpenTrash={state.openTrash}
+            onOpenBrokenLinks={() => {}}
             onSwitch={state.switchTo}
             onCancel={state.back}
             onSubmitCreate={state.submitCreate}
@@ -1441,5 +1493,369 @@ describe("useMapLibraryDialogState のゴミ箱遷移と完全削除フォール
     expect(result.current.screen).toEqual({ kind: "trash" });
     expect(result.current.focusTarget).toEqual({ kind: "backToListButton" });
     expect(result.current.notices.status).toBe(trashEmptiedNotice().message);
+  });
+});
+
+describe("useMapLibraryDialogState のお気に入り・フォルダー管理・絞り込み・補助操作", () => {
+  const metaWithTwoFolders: MapLibraryMetaV1 = {
+    version: 1,
+    folders: [
+      {
+        id: "f1",
+        name: "仕事",
+        createdAt: "2026-10-01T00:00:00.000Z",
+        updatedAt: "2026-10-01T00:00:00.000Z",
+      },
+      {
+        id: "f2",
+        name: "読書",
+        createdAt: "2026-10-01T00:00:00.000Z",
+        updatedAt: "2026-10-01T00:00:00.000Z",
+      },
+    ],
+    mapMeta: {
+      a: { favorite: true, folderId: "f1" },
+      b: { folderId: "f2" },
+      c: { favorite: true, folderId: "f1" },
+    },
+  };
+
+  it("folders / folderRename / folderDeleteConfirm 間の遷移と back、作成・名前変更・削除が動作する", () => {
+    const library = createFakeLibrary();
+    library.createFolder
+      .mockReturnValueOnce(failedResult({ kind: "error", message: "重複しています。" }))
+      .mockReturnValueOnce({
+        ok: true,
+        remounted: false,
+        notice: { kind: "status", message: "フォルダー「企画」を作成しました。" },
+        saveRetryNotice: null,
+        folderId: "f3",
+      });
+    library.renameFolder.mockReturnValueOnce(
+      keptResult({ kind: "status", message: "フォルダー名を「業務」に変更しました。" }),
+    );
+    library.deleteFolder.mockReturnValueOnce(
+      keptResult({ kind: "status", message: "フォルダー「仕事」を削除しました。" }),
+    );
+
+    const { result } = renderDialogState({ library, libraryMeta: metaWithTwoFolders });
+    act(() => result.current.openList());
+    act(() => result.current.openFolders());
+    expect(result.current.screen).toEqual({ kind: "folders" });
+
+    let created = true;
+    act(() => {
+      created = result.current.submitCreateFolder("仕事");
+    });
+    expect(created).toBe(false);
+    expect(result.current.notices.alert).toBe("重複しています。");
+
+    act(() => {
+      created = result.current.submitCreateFolder("企画");
+    });
+    expect(created).toBe(true);
+    expect(result.current.notices.status).toBe("フォルダー「企画」を作成しました。");
+    expect(result.current.focusTarget).toEqual({ kind: "folderCreateInput" });
+
+    act(() => result.current.openFolderRename("f1"));
+    expect(result.current.screen).toEqual({ kind: "folderRename", folderId: "f1" });
+    act(() => result.current.back());
+    expect(result.current.screen).toEqual({ kind: "folders" });
+    expect(result.current.focusTarget).toEqual({
+      kind: "folderRow",
+      folderId: "f1",
+      action: "rename",
+    });
+
+    act(() => result.current.openFolderRename("f1"));
+    act(() => result.current.submitRenameFolder("f1", "業務"));
+    expect(result.current.screen).toEqual({ kind: "folders" });
+    expect(result.current.focusTarget).toEqual({
+      kind: "folderRow",
+      folderId: "f1",
+      action: "rename",
+    });
+    expect(result.current.notices.status).toBe("フォルダー名を「業務」に変更しました。");
+
+    act(() => result.current.openFolderDelete("f1"));
+    expect(result.current.screen).toEqual({ kind: "folderDeleteConfirm", folderId: "f1" });
+    act(() => result.current.confirmDeleteFolder("f1"));
+    expect(result.current.screen).toEqual({ kind: "folders" });
+    expect(result.current.focusTarget).toEqual({
+      kind: "folderRow",
+      folderId: "f2",
+      action: "rename",
+    });
+
+    act(() => result.current.back());
+    expect(result.current.screen).toEqual({ kind: "list" });
+    expect(result.current.focusTarget).toEqual({ kind: "folderButton" });
+  });
+
+  it("選択中フォルダーを削除したら folderFilter を { kind: 'all' } へ自動リセットする（L-475）", () => {
+    const library = createFakeLibrary();
+    library.deleteFolder.mockReturnValue(
+      keptResult({ kind: "status", message: "フォルダー「仕事」を削除しました。" }),
+    );
+    const { result } = renderDialogState({ library, libraryMeta: metaWithTwoFolders });
+
+    act(() => {
+      result.current.openList();
+      result.current.setFolderFilter({ kind: "folder", folderId: "f1" });
+      result.current.openFolders();
+      result.current.openFolderDelete("f1");
+    });
+    expect(result.current.folderFilter).toEqual({ kind: "folder", folderId: "f1" });
+
+    act(() => result.current.confirmDeleteFolder("f1"));
+    expect(result.current.folderFilter).toEqual({ kind: "all" });
+  });
+
+  it("絞り込み中にマップを削除したときは filteredMaps 基準で隣行にフォーカスする（L-460）", () => {
+    const library = createFakeLibrary();
+    library.deleteMap.mockReturnValue(keptResult(mapDeletedNotice("A")));
+    const { result } = renderDialogState({ library, libraryMeta: metaWithTwoFolders });
+
+    // threeMaps は [a, b, c] だが、お気に入り絞り込み後は [a, c] のみ
+    act(() => {
+      result.current.openList();
+      result.current.setListTab("favorites");
+      result.current.openDelete("a");
+    });
+    act(() => result.current.confirmDelete("a"));
+
+    expect(result.current.focusTarget).toEqual({ kind: "row", mapId: "c", action: "open" });
+  });
+
+  it("選択中フォルダーが libraryMeta の更新で消失した場合も folderFilter を自動リセットする（L-475, L-521）", () => {
+    const { result, rerender, props } = renderDialogState({ libraryMeta: metaWithTwoFolders });
+    act(() => result.current.setFolderFilter({ kind: "folder", folderId: "f1" }));
+    expect(result.current.folderFilter).toEqual({ kind: "folder", folderId: "f1" });
+
+    rerender({ ...props, libraryMeta: createEmptyMapLibraryMeta() });
+    expect(result.current.folderFilter).toEqual({ kind: "all" });
+  });
+
+  it("toggleFavorite / assignFolder / resetLibraryMeta は画面を維持して通知を出し、publishShellNotice と closeSilently が動作する", () => {
+    const library = createFakeLibrary();
+    library.toggleFavorite.mockReturnValueOnce(
+      keptResult({ kind: "status", message: "お気に入りに追加しました。" }),
+    );
+    library.assignFolder.mockReturnValueOnce(
+      failedResult({ kind: "error", message: "保存できませんでした。" }),
+    );
+    library.resetLibraryMeta.mockReturnValueOnce(
+      keptResult({ kind: "status", message: "初期化しました。" }),
+    );
+    const { result } = renderDialogState({ library, libraryMeta: metaWithTwoFolders });
+
+    act(() => result.current.openList());
+    act(() => result.current.toggleFavorite("b"));
+    expect(result.current.screen).toEqual({ kind: "list" });
+    expect(result.current.notices.status).toBe("お気に入りに追加しました。");
+
+    act(() => result.current.assignFolder("b", "f1"));
+    expect(result.current.screen).toEqual({ kind: "list" });
+    expect(result.current.notices.alert).toBe("保存できませんでした。");
+
+    act(() => result.current.setFolderFilter({ kind: "folder", folderId: "f1" }));
+    act(() => result.current.resetLibraryMeta());
+    expect(result.current.notices.status).toBe("初期化しました。");
+    expect(result.current.folderFilter).toEqual({ kind: "all" });
+
+    act(() => result.current.publishShellNotice({ kind: "error", message: "切替に失敗" }));
+    expect(result.current.shellNotice).toEqual({
+      sequence: 1,
+      notice: { kind: "error", message: "切替に失敗" },
+    });
+
+    act(() => result.current.closeSilently());
+    expect(result.current.screen).toEqual({ kind: "closed" });
+    expect(result.current.headerFocusRequest).toBeNull();
+  });
+
+  it("DOM から操作元が消える resetLibraryMeta・お気に入り解除・絞り込み中フォルダー変更でフォーカス先を復帰する（L-397, L-460）", () => {
+    const library = createFakeLibrary();
+    library.resetLibraryMeta.mockReturnValue(
+      keptResult({ kind: "status", message: "初期化しました。" }),
+    );
+    library.toggleFavorite.mockReturnValue(
+      keptResult({ kind: "status", message: "お気に入りから外しました。" }),
+    );
+    library.assignFolder.mockReturnValue(
+      keptResult({ kind: "status", message: "フォルダーを変更しました。" }),
+    );
+    const { result } = renderDialogState({ library, libraryMeta: metaWithTwoFolders });
+
+    // 1. resetLibraryMeta 成功時: 破損バナー消失に備え folderButton へ戻す
+    act(() => result.current.openList());
+    act(() => result.current.consumeFocusTarget());
+    act(() => result.current.resetLibraryMeta());
+    expect(result.current.focusTarget).toEqual({ kind: "folderButton" });
+
+    // 2. お気に入りタブでお気に入り解除して行が消える場合: filteredMaps [a, c] 基準で c へ戻す
+    act(() => {
+      result.current.consumeFocusTarget();
+      result.current.setListTab("favorites");
+    });
+    act(() => result.current.toggleFavorite("a"));
+    expect(result.current.focusTarget).toEqual({ kind: "row", mapId: "c", action: "open" });
+
+    // 通常タブ（行が消えない）では focusTarget を設定しない
+    act(() => {
+      result.current.consumeFocusTarget();
+      result.current.setListTab("all");
+    });
+    act(() => result.current.toggleFavorite("a"));
+    expect(result.current.focusTarget).toBeNull();
+
+    // 3a. フォルダー絞り込み中（f1: [a, c]）に a を未分類へ移すと行が消える → c へ戻す
+    act(() => result.current.setFolderFilter({ kind: "folder", folderId: "f1" }));
+    act(() => result.current.assignFolder("a", null));
+    expect(result.current.focusTarget).toEqual({ kind: "row", mapId: "c", action: "open" });
+
+    // 3b. 同じフォルダー再選択（行が消えない）は focusTarget を設定しない
+    act(() => result.current.consumeFocusTarget());
+    act(() => result.current.assignFolder("a", "f1"));
+    expect(result.current.focusTarget).toBeNull();
+
+    // 3c. 未分類絞り込み中にフォルダーを割り当てると行が消える
+    const metaWithUnclassified: MapLibraryMetaV1 = {
+      ...metaWithTwoFolders,
+      mapMeta: { a: {}, b: {}, c: { folderId: "f1" } },
+    };
+    const { result: unclassifiedResult } = renderDialogState({
+      library,
+      libraryMeta: metaWithUnclassified,
+    });
+    act(() => {
+      unclassifiedResult.current.openList();
+      unclassifiedResult.current.consumeFocusTarget();
+      unclassifiedResult.current.setFolderFilter({ kind: "unclassified" });
+    });
+    act(() => unclassifiedResult.current.assignFolder("a", "f1"));
+    expect(unclassifiedResult.current.focusTarget).toEqual({
+      kind: "row",
+      mapId: "b",
+      action: "open",
+    });
+  });
+
+  it("結合確認: resetLibraryMeta・お気に入りタブ解除・フォルダー絞り込み中移動で実フォーカスが遷移する（L-397, L-460）", async () => {
+    const user = userEvent.setup();
+    function MetaFocusHarness() {
+      const [meta, setMeta] = useState<MapLibraryMetaV1>(metaWithTwoFolders);
+      const [metaStatus, setMetaStatus] = useState<"ready" | "corrupt">("corrupt");
+      const library = useMemo<FakeLibrary>(() => ({
+        ...createFakeLibrary(),
+        resetLibraryMeta: () => {
+          setMetaStatus("ready");
+          return keptResult({ kind: "status", message: "初期化しました。" });
+        },
+        toggleFavorite: (mapId) => {
+          setMeta((current) => ({
+            ...current,
+            mapMeta: {
+              ...current.mapMeta,
+              [mapId]: { ...current.mapMeta[mapId], favorite: !current.mapMeta[mapId]?.favorite },
+            },
+          }));
+          return keptResult({ kind: "status", message: "更新しました。" });
+        },
+        assignFolder: (mapId, folderId) => {
+          setMeta((current) => ({
+            ...current,
+            mapMeta: {
+              ...current.mapMeta,
+              [mapId]: {
+                ...current.mapMeta[mapId],
+                folderId: folderId ?? undefined,
+              },
+            },
+          }));
+          return keptResult({ kind: "status", message: "移動しました。" });
+        },
+      }), []);
+      const state = useMapLibraryDialogState({
+        library,
+        maps: threeMaps,
+        trashEntries: [],
+        libraryMeta: meta,
+        startupNotice: null,
+      });
+      return state.screen.kind === "closed" ? (
+        <button type="button" onClick={state.openList}>一覧を開く</button>
+      ) : (
+        <MapLibraryDialog
+          screen={state.screen}
+          maps={threeMaps}
+          currentMapId="a"
+          trashEntries={[]}
+          trashStatus="ok"
+          libraryMeta={meta}
+          libraryMetaStatus={metaStatus}
+          listTab={state.listTab}
+          folderFilter={state.folderFilter}
+          onChangeListTab={state.setListTab}
+          onChangeFolderFilter={state.setFolderFilter}
+          onOpenFolders={state.openFolders}
+          onOpenFolderRename={state.openFolderRename}
+          onOpenFolderDelete={state.openFolderDelete}
+          onToggleFavorite={state.toggleFavorite}
+          onAssignFolder={state.assignFolder}
+          onCreateFolder={state.submitCreateFolder}
+          onSubmitRenameFolder={state.submitRenameFolder}
+          onConfirmDeleteFolder={state.confirmDeleteFolder}
+          onResetLibraryMeta={state.resetLibraryMeta}
+          notices={state.notices}
+          focusTarget={state.focusTarget}
+          onFocusTargetApplied={state.consumeFocusTarget}
+          onEscape={state.back}
+          onClose={state.close}
+          onOpenCreate={state.openCreateFromList}
+          onOpenRename={state.openRename}
+          onOpenDelete={state.openDelete}
+          onOpenTrash={state.openTrash}
+          onOpenBrokenLinks={() => {}}
+          onSwitch={state.switchTo}
+          onCancel={state.back}
+          onSubmitCreate={state.submitCreate}
+          onSubmitRename={state.submitRename}
+          onConfirmDelete={state.confirmDelete}
+          onConfirmPermanentDeleteActive={state.confirmPermanentDeleteActive}
+          onRestoreTrash={state.restoreTrash}
+          onOpenTrashPermanentDelete={state.openTrashPermanentDelete}
+          onConfirmTrashPermanentDelete={state.confirmTrashPermanentDelete}
+          onOpenEmptyTrash={state.openEmptyTrash}
+          onConfirmEmptyTrash={state.confirmEmptyTrash}
+          onPrepareBackup={state.prepareBackup}
+          onDownloadBackup={state.downloadBackup}
+          onSelectRestoreFile={state.selectRestoreFile}
+          onConfirmRestore={state.confirmRestore}
+          storageMode="persistent"
+          onMouseClick={() => {}}
+        />
+      );
+    }
+
+    render(<MetaFocusHarness />);
+    await user.click(screen.getByRole("button", { name: "一覧を開く" }));
+
+    // 1. 破損バナーの「メタデータを初期化」押下後 → 「フォルダー管理」ボタンにフォーカス復帰
+    await user.click(screen.getByRole("button", { name: "メタデータを初期化" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "フォルダー管理" })).toHaveFocus(),
+    );
+
+    // 2. お気に入りタブ（A, C）で A のお気に入りを解除 → C の「開く」にフォーカス復帰
+    await user.click(screen.getByRole("button", { name: "お気に入り" }));
+    await user.click(screen.getByRole("button", { name: "お気に入り: A" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /^C/ })).toHaveFocus());
+
+    // 3. すべてタブ + フォルダー f1（A, C）絞り込み中に A を未分類へ移す → C の「開く」にフォーカス復帰
+    await user.click(screen.getByRole("button", { name: "すべて" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "フォルダーで絞り込み" }), "folder:f1");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Aのフォルダー" }), "");
+    await waitFor(() => expect(screen.getByRole("button", { name: /^C/ })).toHaveFocus());
   });
 });

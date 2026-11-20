@@ -8,6 +8,7 @@ import {
   pointer,
   renderReady,
 } from "@/components/map/testing/mapStageTestRuntime";
+import type { NodeMapLink } from "@/domain/nodes/nodeMapLink";
 import { readActiveMapJson } from "@/testing/mapLibraryTestStorage";
 
 // Home（app/page）を本物の MapEditor・MapStage まで通して描画する結合テストの共通ヘルパー。
@@ -28,6 +29,7 @@ export type ExportedNode = {
   links?: readonly string[];
   tags?: readonly string[];
   sources?: readonly { title: string; page?: string; url?: string }[];
+  mapLinks?: readonly NodeMapLink[];
 };
 export type ExportedMap = { version: number; layoutMode: string; nodes: ExportedNode[] };
 

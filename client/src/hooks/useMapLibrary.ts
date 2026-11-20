@@ -34,6 +34,7 @@ import {
   setCurrentMap,
   type MapIndexV1,
 } from "@/domain/mapLibrary/mapIndex";
+import type { MapLibraryMetaV1 } from "@/domain/mapLibrary/mapLibraryMeta";
 import type { MapTrashState } from "@/domain/mapLibrary/mapTrash";
 import {
   trashEmptyFailedNotice,
@@ -41,6 +42,21 @@ import {
   trashRestoreWriteFailedNotice,
 } from "@/domain/mapLibrary/mapTrashMessages";
 import { validateMapNameInput } from "@/domain/mapLibrary/mapName";
+import {
+  loadStartupLibraryMeta,
+  metaProtectedUnavailableNotice,
+  persistDeletionMeta,
+  persistMapOpenedMeta,
+  persistRestoredMeta,
+  runAssignFolder,
+  runCreateFolder,
+  runDeleteFolder,
+  runRenameFolder,
+  runResetLibraryMeta,
+  runToggleFavorite,
+  type LibraryMetaActionOutcome,
+  type StartupLibraryMetaResult,
+} from "@/hooks/mapLibraryMetaActions";
 import {
   createPersistentMapSession,
   flushRegisteredSession,
@@ -129,6 +145,12 @@ export type UseMapLibraryResult = {
   previewRestore: (file: File) => Promise<MapDocumentResult<LibraryRestorePreview>>;
   confirmRestore: (preview: LibraryRestorePreview) => MapLibraryOperationResult;
   saveCurrentAsNewMap: (nameInput: string, snapshotJson: string) => MapLibraryOperationResult;
+  toggleFavorite: (mapId: string) => MapLibraryOperationResult;
+  assignFolder: (mapId: string, folderId: string | null) => MapLibraryOperationResult;
+  createFolder: (name: string) => MapLibraryOperationResult;
+  renameFolder: (folderId: string, name: string) => MapLibraryOperationResult;
+  deleteFolder: (folderId: string) => MapLibraryOperationResult;
+  resetLibraryMeta: () => MapLibraryOperationResult;
 };
 
 const BACKUP_RETRY = "マップ一覧を開き直して、バックアップを再試行してください。";
@@ -148,6 +170,7 @@ function toFailedOperationResult(failure: TrashTransactionFailure): MapLibraryOp
 export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
   const [library, setLibrary] = useState<LibraryState | null>(null);
   const startupRef = useRef<MapLibraryStartupResult | null>(null);
+  const startupMetaRef = useRef<StartupLibraryMetaResult | null>(null);
   const storageRef = useRef<MapLibraryStorage | null>(null);
   // 操作とセッションは ref だけを読むので、コミット後の値を layout effect で同期し、
   // 操作の中で次の値を計算したときにも書き換える（L-453、L-468、L-521）
@@ -209,28 +232,30 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
     [commitIndex],
   );
 
-  // 現在のマップが変わったときは、進めたセッション番号で新しいセッションを作る
-  const commitSession = useCallback((
-    current: PersistentLibraryState,
-    index: MapIndexV1,
-    sessionNumber: number,
-  ) => {
-    commitLibrary({
-      ...current,
-      index,
-      session: createPersistentSession(current.storage, index.currentMapId, sessionNumber),
-    });
-  }, [commitLibrary, createPersistentSession]);
-
   // セッション番号だけを先に進める。旧セッションの writeBody と registerFlush は以後拒否される
   const advanceSessionNumber = useCallback((): number => {
     sessionNumberRef.current += 1;
     return sessionNumberRef.current;
   }, []);
 
-  const commitNewSession = useCallback((current: PersistentLibraryState, index: MapIndexV1) => {
-    commitSession(current, index, advanceSessionNumber());
-  }, [advanceSessionNumber, commitSession]);
+  // 現在のマップが変わったときは、進めたセッション番号で新しいセッションを作りコミットする
+  const commitNewSession = useCallback(
+    (
+      current: PersistentLibraryState,
+      index: MapIndexV1,
+      libraryMeta: MapLibraryMetaV1 = current.libraryMeta,
+    ): number => {
+      const sessionNumber = advanceSessionNumber();
+      commitLibrary({
+        ...current,
+        index,
+        session: createPersistentSession(current.storage, index.currentMapId, sessionNumber),
+        libraryMeta,
+      });
+      return sessionNumber;
+    },
+    [advanceSessionNumber, commitLibrary, createPersistentSession],
+  );
 
   // 起動の判定は書き込みを伴うので1回だけ確定させる。StrictMode の2回目の effect は
   // ref の結果を state に設定するだけ。購読やタイマーを持たないので cleanup は無い（L-469）。
@@ -243,11 +268,21 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
     const currentDeps = depsRef.current;
     if (startupRef.current === null) {
       storageRef.current = currentDeps.getStorage();
-      startupRef.current = runMapLibraryStartup(storageRef.current, currentDeps);
+      const started = runMapLibraryStartup(storageRef.current, currentDeps);
+      startupRef.current = started;
+      if (started.mode === "persistent" && storageRef.current !== null) {
+        startupMetaRef.current = loadStartupLibraryMeta(
+          storageRef.current,
+          started.index.currentMapId,
+          currentDeps.now().toISOString(),
+          started.notice,
+        );
+      }
     }
     const startup = startupRef.current;
     const storage = storageRef.current;
     if (startup.mode === "persistent" && storage !== null) {
+      const startupMeta = startupMetaRef.current!;
       commitLibrary({
         mode: "persistent",
         storage,
@@ -257,8 +292,10 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
           startup.index.currentMapId,
           sessionNumberRef.current,
         ),
-        startupNotice: startup.notice,
+        startupNotice: startupMeta.startupNotice,
         trash: readMapTrashState(storage),
+        libraryMeta: startupMeta.libraryMeta,
+        libraryMetaStatus: startupMeta.libraryMetaStatus,
       });
       return;
     }
@@ -323,15 +360,23 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
         if (id === null) {
           return failedOperation(mapIdUnavailableNotice());
         }
+        const nowIso = now().toISOString();
         const next = addMapEntry(
           index,
-          createMapIndexEntry(id, validation.name, now().toISOString()),
+          createMapIndexEntry(id, validation.name, nowIso),
         );
         if (!writeMapIndex(storage, next).ok) {
           return failedOperation(indexWriteFailedNotice("マップを作成"));
         }
-        commitNewSession(current, next);
-        return succeededOperation(mapCreatedNotice(validation.name), true);
+        const { libraryMeta, notice } = persistMapOpenedMeta(
+          current,
+          id,
+          nowIso,
+          mapCreatedNotice(validation.name),
+          `「${validation.name}」を作成しました`,
+        );
+        commitNewSession(current, next, libraryMeta);
+        return succeededOperation(notice, true);
       }),
     [commitNewSession, flushCurrentSession, requirePersistent],
   );
@@ -364,8 +409,15 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
         ) {
           return failedOperation(indexWriteFailedNotice("マップを切り替え"));
         }
-        commitNewSession(current, next);
-        return succeededOperation(mapSwitchedNotice(target.name), true);
+        const { libraryMeta, notice } = persistMapOpenedMeta(
+          current,
+          id,
+          depsRef.current.now().toISOString(),
+          mapSwitchedNotice(target.name),
+          `「${target.name}」に切り替えました`,
+        );
+        const sessionNumber = commitNewSession(current, next, libraryMeta);
+        return succeededOperation(notice, true, { sessionNumber });
       }),
     [commitNewSession, flushCurrentSession, requirePersistent],
   );
@@ -406,6 +458,14 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
       if (plan.isCurrent) {
         const sessionNumber = advanceSessionNumber();
         const removed = removeMapBody(current.storage, plan.target.id);
+        const baseNotice = removed.ok ? notices.removed : notices.bodyRemains;
+        const { libraryMeta, notice } = persistDeletionMeta(
+          current,
+          plan.target.id,
+          plan.nextIndex.currentMapId,
+          depsRef.current.now().toISOString(),
+          baseNotice,
+        );
         commitLibrary({
           ...current,
           index: plan.nextIndex,
@@ -415,12 +475,20 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
             sessionNumber,
           ),
           trash: nextTrash,
+          libraryMeta,
         });
-        return succeededOperation(removed.ok ? notices.removed : notices.bodyRemains, true);
+        return succeededOperation(notice, true);
       }
-      commitLibrary({ ...current, index: plan.nextIndex, trash: nextTrash });
       const removed = removeMapBody(current.storage, plan.target.id);
-      const notice = removed.ok ? notices.removed : notices.bodyRemains;
+      const baseNotice = removed.ok ? notices.removed : notices.bodyRemains;
+      const { libraryMeta, notice } = persistDeletionMeta(
+        current,
+        plan.target.id,
+        null,
+        depsRef.current.now().toISOString(),
+        baseNotice,
+      );
+      commitLibrary({ ...current, index: plan.nextIndex, trash: nextTrash, libraryMeta });
       const saveRetryNotice =
         flushCurrentSession().status === "failed" ? autoSaveFailedNotice() : null;
       return { ok: true, remounted: false, notice, saveRetryNotice };
@@ -571,8 +639,15 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
         protectAfterBranchMove(current, moved.sourceJson, notice);
         return protectedModeFailure(notice);
       }
-      commitNewSession(current, moved.index);
-      return succeededOperation(branchMovedToMapNotice(), true);
+      const { libraryMeta, notice } = persistMapOpenedMeta(
+        current,
+        targetId,
+        depsRef.current.now().toISOString(),
+        branchMovedToMapNotice(),
+        "枝を移動しました",
+      );
+      commitNewSession(current, moved.index, libraryMeta);
+      return succeededOperation(notice, true);
     }), [commitNewSession, flushCurrentSession, protectAfterBranchMove, requirePersistent]);
 
   const prepareBackup = useCallback((): MapDocumentResult<LibraryBackupPreview> => {
@@ -580,7 +655,16 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
     if (restoreLockRef.current || current?.mode !== "persistent") {
       return { ok: false, error: BACKUP_RETRY };
     }
-    const prepared = prepareLibraryBackup(current.storage, current.index, current.session, depsRef.current.now());
+    const prepared = prepareLibraryBackup(
+      current.storage,
+      current.index,
+      current.session,
+      depsRef.current.now(),
+      {
+        libraryMeta: current.libraryMeta,
+        libraryMetaStatus: current.libraryMetaStatus,
+      },
+    );
     if (prepared.ok) backupPreviewsRef.current.set(prepared.value, revisionRef.current);
     return prepared;
   }, []);
@@ -659,8 +743,18 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
       }
       const written = writeLibraryRestore(current.storage, planned.value);
       if (written.status === "saved") {
-        commitIndex(planned.value.indexAfter);
-        return succeededOperation({ kind: "status", message: "バックアップのマップを追加しました。" }, false);
+        const { libraryMeta, notice } = persistRestoredMeta(
+          current,
+          preview.backup,
+          planned.value.mapIdMapping,
+          depsRef.current.generateId,
+        );
+        commitLibrary({
+          ...current,
+          index: planned.value.indexAfter,
+          libraryMeta,
+        });
+        return succeededOperation(notice, false);
       }
       const notice: OperationNotice = { kind: "error", message: written.error };
       if (written.status === "failed") return failedOperation(notice);
@@ -677,7 +771,7 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
     } finally {
       restoreLockRef.current = false;
     }
-  }, [advanceSessionNumber, commitIndex, commitLibrary, flushCurrentSession]);
+  }, [advanceSessionNumber, commitLibrary, flushCurrentSession]);
 
   const saveCurrentAsNewMap = useCallback(
     (nameInput: string, snapshotJson: string): MapLibraryOperationResult =>
@@ -700,7 +794,8 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
           return failedOperation(indexWriteFailedNotice("マップを作成"));
         }
 
-        const entry = createMapIndexEntry(id, validation.name, now().toISOString());
+        const nowIso = now().toISOString();
+        const entry = createMapIndexEntry(id, validation.name, nowIso);
         const withEntry = addMapEntry(index, entry);
         const next = setCurrentMap(withEntry, id);
         if (next === null || !writeMapIndex(storage, next).ok) {
@@ -708,10 +803,80 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
           return failedOperation(indexWriteFailedNotice("マップを作成"));
         }
 
-        commitNewSession(current, next);
-        return succeededOperation(mapCreatedNotice(validation.name), true);
+        const { libraryMeta, notice } = persistMapOpenedMeta(
+          current,
+          id,
+          nowIso,
+          mapCreatedNotice(validation.name),
+          `「${validation.name}」を作成しました`,
+        );
+        commitNewSession(current, next, libraryMeta);
+        return succeededOperation(notice, true);
       }),
     [commitNewSession, requirePersistent],
+  );
+
+  const applyMetaAction = useCallback(
+    (
+      run: (current: PersistentLibraryState) => LibraryMetaActionOutcome,
+    ): MapLibraryOperationResult =>
+      requirePersistent(metaProtectedUnavailableNotice(), (current) => {
+        const outcome = run(current);
+        if (outcome.nextState !== undefined) {
+          commitLibrary({
+            ...current,
+            libraryMeta: outcome.nextState.libraryMeta,
+            libraryMetaStatus: outcome.nextState.libraryMetaStatus,
+          });
+        }
+        return outcome.result;
+      }),
+    [commitLibrary, requirePersistent],
+  );
+
+  const toggleFavorite = useCallback(
+    (mapId: string): MapLibraryOperationResult =>
+      applyMetaAction((current) => runToggleFavorite(current, mapId)),
+    [applyMetaAction],
+  );
+
+  const assignFolder = useCallback(
+    (mapId: string, folderId: string | null): MapLibraryOperationResult =>
+      applyMetaAction((current) => runAssignFolder(current, mapId, folderId)),
+    [applyMetaAction],
+  );
+
+  const createFolder = useCallback(
+    (name: string): MapLibraryOperationResult =>
+      applyMetaAction((current) =>
+        runCreateFolder(
+          current,
+          name,
+          depsRef.current.now().toISOString(),
+          depsRef.current.generateId,
+        ),
+      ),
+    [applyMetaAction],
+  );
+
+  const renameFolder = useCallback(
+    (folderId: string, name: string): MapLibraryOperationResult =>
+      applyMetaAction((current) =>
+        runRenameFolder(current, folderId, name, depsRef.current.now().toISOString()),
+      ),
+    [applyMetaAction],
+  );
+
+  const deleteFolder = useCallback(
+    (folderId: string): MapLibraryOperationResult =>
+      applyMetaAction((current) => runDeleteFolder(current, folderId)),
+    [applyMetaAction],
+  );
+
+  const resetLibraryMeta = useCallback(
+    (): MapLibraryOperationResult =>
+      applyMetaAction((current) => runResetLibraryMeta(current)),
+    [applyMetaAction],
   );
 
   return {
@@ -731,5 +896,11 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
     previewRestore,
     confirmRestore,
     saveCurrentAsNewMap,
+    toggleFavorite,
+    assignFolder,
+    createFolder,
+    renameFolder,
+    deleteFolder,
+    resetLibraryMeta,
   };
 }

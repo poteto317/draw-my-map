@@ -809,5 +809,26 @@ describe("useMapPersistence", () => {
       });
       expect(result.current.isConfirmOpen).toBe(false);
     });
+
+    it("hydrated を公開し、初回復元前は false・復元完了後は true を返す", () => {
+      const storage = createTestStorageSession({ initialJson: mapAJson });
+      const hydratedHistory: boolean[] = [];
+
+      const { result } = renderHook(() => {
+        const persistence = useMapPersistence({
+          nodes: [],
+          layoutMode: "manual",
+          replaceMap: jest.fn(),
+          storageSession: storage.session,
+          storageMode: "persistent",
+          mapName: "旅行",
+        });
+        hydratedHistory.push(persistence.hydrated);
+        return persistence;
+      });
+
+      expect(hydratedHistory[0]).toBe(false);
+      expect(result.current.hydrated).toBe(true);
+    });
   });
 });

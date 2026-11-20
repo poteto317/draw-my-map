@@ -2,7 +2,10 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { NodeDetailPanel } from "@/components/layout/NodeDetailPanel";
+import type { CrossMapCorpus } from "@/domain/mapLibrary/crossMapCorpus";
+import type { MapIndexEntry } from "@/domain/mapLibrary/mapIndex";
 import type { AddNodeLinkOutcome } from "@/domain/nodes/nodeLink";
+import type { AddNodeMapLinkOutcome } from "@/domain/nodes/nodeMapLink";
 import type { AddNodeSourceOutcome } from "@/domain/nodes/nodeSource";
 import type { AddNodeTagOutcome } from "@/domain/nodes/nodeTag";
 import { createMapHistoryLeaseSpy, createTestMapHistoryLease } from "@/testing/createTestMapHistoryLease";
@@ -11,6 +14,73 @@ type Props = ComponentProps<typeof NodeDetailPanel>;
 
 const APPLE_URL = "https://example.com/apple";
 const SOURCE_URL = "https://example.com/book";
+
+const DEFAULT_MAPS: readonly MapIndexEntry[] = [
+  {
+    id: "map-a",
+    name: "マップA",
+    createdAt: "2026-10-01T00:00:00.000Z",
+    updatedAt: "2026-10-02T00:00:00.000Z",
+  },
+  {
+    id: "map-b",
+    name: "マップB",
+    createdAt: "2026-10-01T00:00:00.000Z",
+    updatedAt: "2026-10-01T00:00:00.000Z",
+  },
+];
+
+const DEFAULT_CORPUS: CrossMapCorpus = {
+  readableMaps: [
+    {
+      mapId: "map-a",
+      mapName: "マップA",
+      isCurrent: true,
+      nodes: [
+        {
+          id: 1,
+          parentId: null,
+          label: "りんご",
+          importance: "medium",
+          x: 100,
+          y: 100,
+          width: 100,
+          height: 60,
+          mapLinks: [{ targetMapId: "map-b", targetNodeId: 20 }],
+        },
+        {
+          id: 2,
+          parentId: null,
+          label: "みかん",
+          importance: "medium",
+          x: 200,
+          y: 100,
+          width: 100,
+          height: 60,
+        },
+      ],
+    },
+    {
+      mapId: "map-b",
+      mapName: "マップB",
+      isCurrent: false,
+      nodes: [
+        {
+          id: 20,
+          parentId: null,
+          label: "参照先ノード",
+          importance: "medium",
+          x: 100,
+          y: 100,
+          width: 100,
+          height: 60,
+          mapLinks: [{ targetMapId: "map-a", targetNodeId: 1 }],
+        },
+      ],
+    },
+  ],
+  unreadableMaps: [],
+};
 
 function renderPanel(overrides: Partial<Props> = {}) {
   const props: Props = {
@@ -21,9 +91,14 @@ function renderPanel(overrides: Partial<Props> = {}) {
       tags: ["果物"],
       links: [APPLE_URL],
       sources: [{ title: "設計入門", page: "12", url: SOURCE_URL }],
+      mapLinks: [{ targetMapId: "map-b", targetNodeId: 20 }],
     },
     selectionCount: 1,
     documentRevision: 0,
+    currentMapId: "map-a",
+    maps: DEFAULT_MAPS,
+    corpus: DEFAULT_CORPUS,
+    storageMode: "persistent",
     onPreviewNote: jest.fn(() => true),
     onBeginNoteEdit: jest.fn(() => createTestMapHistoryLease()),
     onAddTag: jest.fn((): AddNodeTagOutcome => ({ ok: true })),
@@ -32,6 +107,9 @@ function renderPanel(overrides: Partial<Props> = {}) {
     onRemoveLink: jest.fn(() => true),
     onAddSource: jest.fn((): AddNodeSourceOutcome => ({ ok: true })),
     onRemoveSource: jest.fn(() => true),
+    onAddMapLink: jest.fn((): AddNodeMapLinkOutcome => ({ ok: true })),
+    onRemoveMapLink: jest.fn(() => true),
+    onNavigateToMapTarget: jest.fn(),
     generation: { status: "idle" },
     onGenerate: jest.fn(),
     onAttach: jest.fn(),
@@ -76,14 +154,24 @@ describe("NodeDetailPanel", () => {
     expect(panel()).toHaveClass("w-72", "shrink-0", "min-h-0", "overflow-y-auto");
   });
 
-  it("上から詳細メモ、タグ、リンク、出典、イラストの順に置く", () => {
+  it("上から詳細メモ、タグ、リンク、出典、マップ間リンク、被リンク、イラストの 7 節の順に置く", () => {
     renderPanel();
 
     const headings = within(panel()).getAllByRole("heading").map((heading) => heading.textContent);
-    expect(headings).toEqual(["詳細メモ", "タグ", "リンク", "出典", "イラスト"]);
+    expect(headings).toEqual([
+      "詳細メモ",
+      "タグ",
+      "リンク",
+      "出典",
+      "マップ間リンク",
+      "被リンク",
+      "イラスト",
+    ]);
     expect(within(panel()).getByRole("region", { name: "タグ" })).toBeInTheDocument();
     expect(within(panel()).getByRole("region", { name: "リンク" })).toBeInTheDocument();
     expect(within(panel()).getByRole("region", { name: "出典" })).toBeInTheDocument();
+    expect(within(panel()).getByRole("region", { name: "マップ間リンク" })).toBeInTheDocument();
+    expect(within(panel()).getByRole("region", { name: "被リンク" })).toBeInTheDocument();
     expect(within(panel()).getByRole("region", { name: "イラスト" })).toBeInTheDocument();
   });
 
@@ -96,17 +184,18 @@ describe("NodeDetailPanel", () => {
     expect(props.onGenerate).toHaveBeenCalledWith(1);
   });
 
-  it("未選択のときはメモの欄を無効にし、タグ・URL・出典の入力欄を出さず、5 つの節すべてに案内を出す", () => {
+  it("未選択のときはメモの欄を無効にし、タグ・URL・出典・マップ間リンクの入力欄を出さず、7 つの節すべてに案内を出す", () => {
     renderPanel({ selectedNode: null, selectionCount: 0 });
 
     expect(box()).toBeDisabled();
     expect(screen.queryByRole("textbox", { name: "タグを追加" })).toBeNull();
     expect(screen.queryByRole("textbox", { name: "URLを追加" })).toBeNull();
     expect(screen.queryByRole("textbox", { name: "タイトル" })).toBeNull();
-    expect(within(panel()).getAllByText("ノードを選択してください")).toHaveLength(5);
+    expect(screen.queryByRole("combobox", { name: "対象マップ" })).toBeNull();
+    expect(within(panel()).getAllByText("ノードを選択してください")).toHaveLength(7);
   });
 
-  it("選択中のノードのメモ・タグ・URL・出典を出し、選択件数を渡す", () => {
+  it("選択中のノードのメモ・タグ・URL・出典・マップ間リンク・被リンクを出し、選択件数を渡す", () => {
     renderPanel({ selectionCount: 2 });
 
     expect(box()).toHaveValue("りんごのメモ");
@@ -115,7 +204,40 @@ describe("NodeDetailPanel", () => {
     expect(screen.getByText("設計入門")).toBeInTheDocument();
     expect(screen.getByText("p. 12")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: SOURCE_URL })).toHaveAttribute("href", SOURCE_URL);
+    expect(
+      within(screen.getByRole("region", { name: "マップ間リンク" })).getByRole("button", {
+        name: "マップB / 参照先ノード",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("region", { name: "被リンク" })).getByRole("button", {
+        name: /参照先ノード/,
+      }),
+    ).toBeInTheDocument();
     expect(screen.getByText("2 件選択中。主選択のノードのメモを編集します")).toBeInTheDocument();
+  });
+
+  it("マップ間リンクの追加・削除・移動と、被リンクからの移動を通知する", async () => {
+    const user = userEvent.setup();
+    const { props } = renderPanel();
+
+    const mapLinksRegion = screen.getByRole("region", { name: "マップ間リンク" });
+    await user.click(within(mapLinksRegion).getByRole("button", { name: "マップB / 参照先ノード" }));
+    expect(props.onNavigateToMapTarget).toHaveBeenCalledWith("map-b", 20);
+
+    await user.selectOptions(within(mapLinksRegion).getByRole("combobox", { name: "対象マップ" }), "map-a");
+    await user.selectOptions(within(mapLinksRegion).getByRole("combobox", { name: "対象ノード（任意）" }), "2");
+    await user.click(within(mapLinksRegion).getByRole("button", { name: "追加" }));
+    expect(props.onAddMapLink).toHaveBeenCalledWith(1, { targetMapId: "map-a", targetNodeId: 2 });
+
+    await user.click(
+      within(mapLinksRegion).getByRole("button", { name: "マップ間リンクを削除: マップB / 参照先ノード" }),
+    );
+    expect(props.onRemoveMapLink).toHaveBeenCalledWith(1, { targetMapId: "map-b", targetNodeId: 20 });
+
+    const backlinksRegion = screen.getByRole("region", { name: "被リンク" });
+    await user.click(within(backlinksRegion).getByRole("button", { name: /参照先ノード/ }));
+    expect(props.onNavigateToMapTarget).toHaveBeenLastCalledWith("map-b", 20);
   });
 
   it("URL の追加と削除は、選択中のノードの ID で通知する", async () => {
@@ -184,6 +306,7 @@ describe("NodeDetailPanel", () => {
     expect(screen.getByText("タグはありません")).toBeInTheDocument();
     expect(sourceTitleInput()).toHaveValue("");
     expect(screen.getByText("出典はありません")).toBeInTheDocument();
+    expect(screen.getByText("マップ間リンクはありません")).toBeInTheDocument();
   });
 
   it("documentRevision が変わると作り直し、文書の入れ替え（グループの失効）では古い下書きを書かない（L-588）", () => {
@@ -254,6 +377,30 @@ describe("NodeDetailPanel", () => {
     expect(sourcePageInput()).toHaveValue("");
     expect(sourceUrlInput()).toHaveValue("");
     expect(screen.getByRole("button", { name: `出典を削除: 設計入門 p. 12 ${SOURCE_URL}` })).toBe(deleteButton);
+    expect(deleteButton).toHaveFocus();
+  });
+
+  it("documentRevision が変わると、マップ間リンクの節は作り直さずにエラーを消し、削除ボタンのフォーカスを保つ（L-397・L-588）", () => {
+    const { props, rerender } = renderPanel({
+      onAddMapLink: jest.fn((): AddNodeMapLinkOutcome => ({ ok: false, reason: "duplicate" })),
+    });
+    const mapLinksRegion = screen.getByRole("region", { name: "マップ間リンク" });
+    const mapSelect = within(mapLinksRegion).getByRole("combobox", { name: "対象マップ" });
+    fireEvent.submit(mapSelect.closest("form")!);
+    expect(within(mapLinksRegion).getByRole("alert")).toBeInTheDocument();
+    const deleteButton = within(mapLinksRegion).getByRole("button", {
+      name: "マップ間リンクを削除: マップB / 参照先ノード",
+    });
+    act(() => deleteButton.focus());
+
+    rerender(<NodeDetailPanel {...props} documentRevision={1} />);
+
+    expect(within(mapLinksRegion).queryByRole("alert")).toBeNull();
+    expect(
+      within(mapLinksRegion).getByRole("button", {
+        name: "マップ間リンクを削除: マップB / 参照先ノード",
+      }),
+    ).toBe(deleteButton);
     expect(deleteButton).toHaveFocus();
   });
 

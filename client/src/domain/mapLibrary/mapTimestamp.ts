@@ -43,3 +43,8 @@ export function formatMapUpdatedAt(iso: string): string {
 export function formatMapDeletedAt(iso: string): string {
   return formatMapTimestampWithLabel("削除", iso);
 }
+
+// ローカル時刻の「最終閲覧: YYYY/MM/DD HH:mm」。toLocaleString は使わない。
+export function formatMapLastOpenedAt(iso: string): string {
+  return formatMapTimestampWithLabel("最終閲覧", iso);
+}

@@ -1,14 +1,16 @@
 "use client";
 
-import { useLayoutEffect, useRef } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { MapLibraryControls } from "@/components/layout/MapLibraryControls";
 import { MapLibraryDialog } from "@/components/layout/MapLibraryDialog";
 import { MapLibraryNoticeRegion } from "@/components/layout/MapLibraryNoticeRegion";
 import { MapEditor } from "@/components/map/MapEditor";
 import type { MapIndexEntry } from "@/domain/mapLibrary/mapIndex";
+import { createEmptyMapLibraryMeta, type MapLibraryMetaV1 } from "@/domain/mapLibrary/mapLibraryMeta";
 import type { MapTrashEntry } from "@/domain/mapLibrary/mapTrash";
 import { useMapLibrary, type MapLibraryDeps } from "@/hooks/useMapLibrary";
 import { useMapLibraryDialogState } from "@/hooks/useMapLibraryDialogState";
+import { usePendingMapNavigation } from "@/hooks/usePendingMapNavigation";
 import { generateMapId } from "@/services/persistence/mapIdGenerator";
 import { getBrowserMapLibraryStorage } from "@/services/persistence/mapLibraryStorage";
 
@@ -21,6 +23,7 @@ const MAP_LIBRARY_DEPS: MapLibraryDeps = {
 
 const NO_MAPS: readonly MapIndexEntry[] = [];
 const NO_TRASH_ENTRIES: readonly MapTrashEntry[] = [];
+const EMPTY_LIBRARY_META: MapLibraryMetaV1 = createEmptyMapLibraryMeta();
 
 // シェル。マップの一覧の状態とダイアログを持ち、現在のマップの MapEditor を id で再マウントする
 export default function Home() {
@@ -31,6 +34,7 @@ export default function Home() {
     library,
     maps: view.status === "ready" ? view.maps : NO_MAPS,
     trashEntries: view.status === "ready" ? view.trashEntries : NO_TRASH_ENTRIES,
+    libraryMeta: view.status === "ready" ? view.libraryMeta : EMPTY_LIBRARY_META,
     startupNotice: view.status === "ready" ? view.startupNotice : null,
   });
   const listButtonRef = useRef<HTMLButtonElement>(null);
@@ -40,7 +44,33 @@ export default function Home() {
   // 2回目がキャンバスへ届いたときに、MapStage が dblclick を無視する（L-150）。再マウントをまたぐのでシェルで持つ
   const dialogMouseClickedAtRef = useRef<number | null>(null);
   const currentMapId = view.status === "ready" ? view.currentMap.id : null;
-  const { headerFocusRequest, consumeHeaderFocusRequest } = dialog;
+  const {
+    headerFocusRequest,
+    consumeHeaderFocusRequest,
+    closeSilently,
+    publishShellNotice,
+  } = dialog;
+
+  const {
+    pendingNavigation,
+    consumePendingNavigation,
+    clearPendingNavigation,
+    switchToMapTarget,
+  } = usePendingMapNavigation({
+    view,
+    switchMap: library.switchMap,
+    publishShellNotice,
+  });
+  const [brokenLinksDialogRequest, setBrokenLinksDialogRequest] = useState(0);
+
+  const handleOpenBrokenLinks = useCallback(() => {
+    closeSilently();
+    setBrokenLinksDialogRequest((count) => count + 1);
+  }, [closeSilently]);
+
+  const handleBrokenLinksDialogClosed = useCallback(() => {
+    listButtonRef.current?.focus();
+  }, []);
 
   // 再マウントで新しいヘッダーの ref がつながった後に、ダイアログの戻し先へフォーカスする
   useLayoutEffect(() => {
@@ -61,14 +91,25 @@ export default function Home() {
             key={`${view.currentMap.id}:${view.storageMode}`}
             mapId={view.currentMap.id}
             mapMoveTargets={view.maps}
-            onMoveBranchToMap={(rootId, targetMapId) => dialog.moveBranchToMap(view.storageSession, targetMapId, rootId)}
+            onMoveBranchToMap={(rootId, targetMapId) => {
+              clearPendingNavigation();
+              return dialog.moveBranchToMap(view.storageSession, targetMapId, rootId);
+            }}
             mapName={view.currentMap.name}
             storageSession={view.storageSession}
             storageMode={view.storageMode}
             shortcutsEnabled={dialog.screen.kind === "closed"}
             dialogMouseClickedAtRef={dialogMouseClickedAtRef}
             exportButtonRef={exportButtonRef}
-            onSaveCurrentAsNewMap={(name, json) => library.saveCurrentAsNewMap(name, json)}
+            onSaveCurrentAsNewMap={(name, json) => {
+              clearPendingNavigation();
+              return library.saveCurrentAsNewMap(name, json);
+            }}
+            pendingNavigation={pendingNavigation}
+            onConsumePendingNavigation={consumePendingNavigation}
+            onSwitchToMapTarget={switchToMapTarget}
+            brokenLinksDialogRequest={brokenLinksDialogRequest}
+            onBrokenLinksDialogClosed={handleBrokenLinksDialogClosed}
             mapControls={(
               <MapLibraryControls
                 mapName={view.currentMap.name}
@@ -88,6 +129,21 @@ export default function Home() {
               currentMapId={view.currentMap.id}
               trashEntries={view.trashEntries}
               trashStatus={view.trashStatus}
+              libraryMeta={view.libraryMeta}
+              libraryMetaStatus={view.libraryMetaStatus}
+              listTab={dialog.listTab}
+              folderFilter={dialog.folderFilter}
+              onChangeListTab={dialog.setListTab}
+              onChangeFolderFilter={dialog.setFolderFilter}
+              onOpenFolders={dialog.openFolders}
+              onOpenFolderRename={dialog.openFolderRename}
+              onOpenFolderDelete={dialog.openFolderDelete}
+              onToggleFavorite={dialog.toggleFavorite}
+              onAssignFolder={dialog.assignFolder}
+              onCreateFolder={dialog.submitCreateFolder}
+              onSubmitRenameFolder={dialog.submitRenameFolder}
+              onConfirmDeleteFolder={dialog.confirmDeleteFolder}
+              onResetLibraryMeta={dialog.resetLibraryMeta}
               notices={dialog.notices}
               focusTarget={dialog.focusTarget}
               onFocusTargetApplied={dialog.consumeFocusTarget}
@@ -97,12 +153,25 @@ export default function Home() {
               onOpenRename={dialog.openRename}
               onOpenDelete={dialog.openDelete}
               onOpenTrash={dialog.openTrash}
-              onSwitch={dialog.switchTo}
+              onOpenBrokenLinks={handleOpenBrokenLinks}
+              onSwitch={(mapId) => {
+                clearPendingNavigation();
+                dialog.switchTo(mapId);
+              }}
               onCancel={dialog.back}
-              onSubmitCreate={dialog.submitCreate}
+              onSubmitCreate={(nameInput) => {
+                clearPendingNavigation();
+                dialog.submitCreate(nameInput);
+              }}
               onSubmitRename={dialog.submitRename}
-              onConfirmDelete={dialog.confirmDelete}
-              onConfirmPermanentDeleteActive={dialog.confirmPermanentDeleteActive}
+              onConfirmDelete={(mapId) => {
+                clearPendingNavigation();
+                dialog.confirmDelete(mapId);
+              }}
+              onConfirmPermanentDeleteActive={(mapId) => {
+                clearPendingNavigation();
+                dialog.confirmPermanentDeleteActive(mapId);
+              }}
               onRestoreTrash={dialog.restoreTrash}
               onOpenTrashPermanentDelete={dialog.openTrashPermanentDelete}
               onConfirmTrashPermanentDelete={dialog.confirmTrashPermanentDelete}
@@ -111,7 +180,10 @@ export default function Home() {
               onPrepareBackup={dialog.prepareBackup}
               onDownloadBackup={dialog.downloadBackup}
               onSelectRestoreFile={dialog.selectRestoreFile}
-              onConfirmRestore={dialog.confirmRestore}
+              onConfirmRestore={() => {
+                clearPendingNavigation();
+                dialog.confirmRestore();
+              }}
               storageMode={view.storageMode}
               onMouseClick={() => {
                 dialogMouseClickedAtRef.current = Date.now();

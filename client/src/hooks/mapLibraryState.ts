@@ -4,6 +4,11 @@ import {
   type MapIndexEntry,
   type MapIndexV1,
 } from "@/domain/mapLibrary/mapIndex";
+import {
+  createEmptyMapLibraryMeta,
+  type MapLibraryMetaStatus,
+  type MapLibraryMetaV1,
+} from "@/domain/mapLibrary/mapLibraryMeta";
 import type { MapTrashEntry, MapTrashState } from "@/domain/mapLibrary/mapTrash";
 import type { MapLibraryStorage } from "@/services/persistence/mapLibraryStorage";
 import type { MapStorageSession } from "@/types/mapStorageSession";
@@ -23,6 +28,8 @@ export type MapLibraryView =
       startupNotice: OperationNotice | null;
       trashEntries: readonly MapTrashEntry[];
       trashStatus: "ok" | "corrupt";
+      libraryMeta: MapLibraryMetaV1;
+      libraryMetaStatus: MapLibraryMetaStatus;
     };
 
 export type MapLibraryOperationResult =
@@ -31,6 +38,8 @@ export type MapLibraryOperationResult =
       remounted: boolean;
       notice: OperationNotice | null;
       saveRetryNotice: OperationNotice | null;
+      sessionNumber?: number;
+      folderId?: string;
     }
   // enteredProtectedMode: 操作の失敗で保護モードへ移った（編集画面は作り直される）
   // canPermanentDelete: ゴミ箱移動不可（容量不足・ゴミ箱破損等）時に完全削除フォールバックを提示できる
@@ -51,6 +60,8 @@ export type LibraryState =
       session: MapStorageSession;
       startupNotice: OperationNotice | null;
       trash: MapTrashState;
+      libraryMeta: MapLibraryMetaV1;
+      libraryMetaStatus: MapLibraryMetaStatus;
     }
   | {
       mode: "protected";
@@ -77,8 +88,16 @@ export const UNCHANGED_OPERATION_RESULT: MapLibraryOperationResult = {
 export function succeededOperation(
   notice: OperationNotice,
   remounted: boolean,
+  extra?: { sessionNumber?: number; folderId?: string },
 ): MapLibraryOperationResult {
-  return { ok: true, remounted, notice, saveRetryNotice: null };
+  return {
+    ok: true,
+    remounted,
+    notice,
+    saveRetryNotice: null,
+    ...(extra?.sessionNumber !== undefined ? { sessionNumber: extra.sessionNumber } : {}),
+    ...(extra?.folderId !== undefined ? { folderId: extra.folderId } : {}),
+  };
 }
 
 export function failedOperation(notice: OperationNotice): MapLibraryOperationResult {
@@ -115,6 +134,8 @@ export function toMapLibraryView(library: LibraryState | null): MapLibraryView {
       startupNotice: library.startupNotice,
       trashEntries: [],
       trashStatus: "ok",
+      libraryMeta: createEmptyMapLibraryMeta(),
+      libraryMetaStatus: "unavailable",
     };
   }
   const currentMap = findMapEntry(library.index, library.index.currentMapId);
@@ -131,6 +152,8 @@ export function toMapLibraryView(library: LibraryState | null): MapLibraryView {
     startupNotice: library.startupNotice,
     trashEntries: library.trash.status === "ok" ? library.trash.entries : [],
     trashStatus: library.trash.status,
+    libraryMeta: library.libraryMeta,
+    libraryMetaStatus: library.libraryMetaStatus,
   };
 }
 
