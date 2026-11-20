@@ -118,6 +118,23 @@ function readLatestLibraryMeta(current: PersistentLibraryState): LatestLibraryMe
   return { ok: true, meta: read.meta };
 }
 
+// 一括バックアップの書き出しに使うメタデータ。他マップの本体と同じく、ストレージ上の最新を 1 回読む
+// （別タブで付けたお気に入り・フォルダーを落とさない）。最新が壊れている・読めないときは、その状態として渡し
+// メタデータ抜きで書き出す。読むだけで書き込まず、画面の状態も変えない
+export function resolveBackupLibraryMeta(current: PersistentLibraryState): {
+  readonly libraryMeta: MapLibraryMetaV1;
+  readonly libraryMetaStatus: MapLibraryMetaStatus;
+} {
+  if (current.libraryMetaStatus !== "ready") {
+    return { libraryMeta: current.libraryMeta, libraryMetaStatus: current.libraryMetaStatus };
+  }
+  const latest = readLatestLibraryMeta(current);
+  if (!latest.ok) {
+    return { libraryMeta: current.libraryMeta, libraryMetaStatus: latest.status };
+  }
+  return { libraryMeta: latest.meta, libraryMetaStatus: "ready" };
+}
+
 // 起動時のメタデータ読み込みと初期マップの最終閲覧日時記録。
 // 破損・読込不能時は自動上書きせず、書込失敗時は既存の起動通知を優先する（L-001, L-002, L-669）。
 export function loadStartupLibraryMeta(
