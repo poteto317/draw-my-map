@@ -1,8 +1,8 @@
 import type { KeyboardEvent, RefObject } from "react";
-import type { OutlineEditorActions } from "@/hooks/useOutlineEditorActions";
+import type { OutlineEditorUiActions } from "@/hooks/useOutlineEditorActions";
 
 type OutlineToolbarProps = {
-  actions: OutlineEditorActions;
+  actions: OutlineEditorUiActions;
   enabled: boolean;
   selectedNodeId: number | null;
   rootAddButtonRef: RefObject<HTMLButtonElement | null>;
@@ -25,7 +25,7 @@ export function OutlineToolbar({ actions, enabled, selectedNodeId, rootAddButton
     { name: "階層を上げる", available: actions.canOutdent, run: () => actions.changeIndent("outdent") },
     { name: "ノードだけ削除", available: actions.canDelete, run: actions.deleteSelected },
   ];
-  return <div className="flex flex-wrap gap-2" role="group" aria-label="アウトライン操作">
+  return <div className="flex flex-wrap gap-2" role="group" aria-label="アウトライン操作" data-outline-toolbar>
     {buttons.map(button => <button key={button.name} type="button" ref={button.ref}
       className="rounded border border-slate-300 px-3 py-2 text-sm disabled:opacity-40"
       disabled={!enabled || !button.available} onKeyDown={preventRepeatedActivation}

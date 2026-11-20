@@ -3,7 +3,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { OutlineEditor, type OutlineEditorProps } from "../OutlineEditor";
 import { buildOutlineRows } from "@/domain/outline/outlineRows";
-import { useOutlineEditorActions, type OutlineEditorActions } from "@/hooks/useOutlineEditorActions";
+import { useOutlineEditorActions, type OutlineEditorUiActions } from "@/hooks/useOutlineEditorActions";
 import { createTestNode } from "@/testing/createTestNode";
 import type { Node } from "@/types/node";
 
@@ -11,7 +11,7 @@ const initial = [createTestNode({ id: 1, label: "根" }), createTestNode({ id: 3
 const scroll = jest.fn();
 beforeAll(() => { Element.prototype.scrollIntoView = scroll; });
 beforeEach(() => { jest.clearAllMocks(); });
-function actionsStub(): OutlineEditorActions {
+function actionsStub(): OutlineEditorUiActions {
   return { draft: null, focusRequest: null, canAddRoot: true, canAddRelated: true, canEdit: true, canMoveUp: true, canMoveDown: true, canIndent: true, canOutdent: true, canDelete: true,
     select: jest.fn(), beginEdit: jest.fn(), setDraftText: jest.fn(), finishEdit: jest.fn(), cancelEdit: jest.fn(), invalidateDraft: jest.fn(), addRoot: jest.fn(), addChild: jest.fn(), addSibling: jest.fn(), move: jest.fn(), changeIndent: jest.fn(), deleteSelected: jest.fn() };
 }
@@ -176,4 +176,53 @@ it("同じ選択で再有効化してもscrollせず、無効中の選択変更�
   expect(scroll).toHaveBeenCalledTimes(1);
   view.rerender(<OutlineEditor {...p} selectedNodeId={3} />);
   expect(scroll).toHaveBeenCalledTimes(2);
+});
+
+function selectionStatus() {
+  return screen.getByRole("status");
+}
+
+it("キーボードまたはクリックで選択が変わると live が更新され、同じ ID 再選択では文言が変わらない", () => {
+  render(<Harness />);
+  const status = selectionStatus();
+  expect(status).toHaveAttribute("aria-live", "polite");
+  expect(status).toHaveClass("sr-only");
+  expect(status).toHaveTextContent("全3件中1件目、階層1、根");
+
+  fireEvent.keyDown(row("階層1・根"), { key: "ArrowDown" });
+  expect(status).toHaveTextContent("全3件中2件目、階層2、子");
+  expect(selectionStatus()).toBe(status);
+
+  const afterArrow = status.textContent;
+  fireEvent.click(row("階層2・子"));
+  expect(status.textContent).toBe(afterArrow);
+
+  fireEvent.keyDown(row("階層2・子"), { key: "End" });
+  expect(status).toHaveTextContent("全3件中3件目、階層1、末尾");
+  fireEvent.keyDown(row("階層1・末尾"), { key: "Home" });
+  expect(status).toHaveTextContent("全3件中1件目、階層1、根");
+});
+
+it("空ラベルは getNodeDisplayLabel の表示名を live に使い、空マップでは live を更新しない", () => {
+  render(<Harness nodes={[createTestNode({ id: 1, label: "" })]} />);
+  const status = selectionStatus();
+  expect(status).toHaveTextContent("全1件中1件目、階層1、新しいノード");
+
+  fireEvent.click(row("ノードだけ削除"));
+  expect(screen.getByText("ノードがありません")).toBeVisible();
+  expect(status).toHaveTextContent("全1件中1件目、階層1、新しいノード");
+  expect(selectionStatus()).toBe(status);
+
+  const empty = render(<OutlineEditor {...props({ nodes: [], model: buildOutlineRows([]), selectedNodeId: null })} />);
+  expect(within(empty.container).getByRole("status")).toBeEmptyDOMElement();
+});
+
+it("行フォーカスから Shift+Tab でアウトライン操作ツールバーへ到達できる", async () => {
+  const user = userEvent.setup();
+  render(<Harness />);
+  row("階層1・根").focus();
+  await user.tab({ shift: true });
+  expect(document.activeElement?.closest('[aria-label="アウトライン操作"]')).not.toBeNull();
+  expect(within(screen.getByRole("group", { name: "アウトライン操作" })).getAllByRole("button"))
+    .toContain(document.activeElement);
 });

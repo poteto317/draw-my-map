@@ -471,6 +471,7 @@ export function MapStage({
     <div
       ref={containerRef}
       tabIndex={-1}
+      aria-label="マップキャンバス"
       className="relative h-full w-full cursor-crosshair"
       onMouseDown={handleMouseDown}
       onDoubleClick={handleDoubleClick}
