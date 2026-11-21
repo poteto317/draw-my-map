@@ -59,4 +59,15 @@ describe("decodeUiPrefs", () => {
     expect(result.prefs.wheelZoomSensitivity).toBe(DEFAULT_WHEEL_ZOOM_SENSITIVITY);
     expect(result.document.futureFlag).toBe(1);
   });
+
+  it("範囲外の有限値は clamp して repaired: true", () => {
+    const raw = JSON.stringify({
+      version: 1,
+      wheelZoomSensitivity: 0.01,
+    });
+    const result = decodeUiPrefs(raw);
+    expect(result.repaired).toBe(true);
+    expect(result.prefs.wheelZoomSensitivity).toBe(0.006);
+    expect(result.document.wheelZoomSensitivity).toBe(0.006);
+  });
 });
