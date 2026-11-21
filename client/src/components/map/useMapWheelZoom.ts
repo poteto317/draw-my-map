@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import type { Point } from "@/components/map/mapGeometry";
 import type { Viewport } from "@/components/map/mapViewport";
+import { calculateWheelPanRequest } from "@/components/map/wheelPan";
 import { calculateWheelZoomRequest } from "@/components/map/wheelZoom";
 import type { LatestValue } from "@/components/map/pixi/pointerGesture";
 import type { PixiRuntime } from "@/components/map/pixi/pixiTypes";
@@ -11,33 +12,59 @@ type Options = {
   runtime: PixiRuntime | null;
   viewportRef: LatestValue<Viewport>;
   onBeforeZoom: () => void;
+  onPanBy: (dx: number, dy: number) => void;
   onZoomAt: (anchor: Point, requestedScale: number) => void;
 };
 
-export function useMapWheelZoom({ runtime, viewportRef, onBeforeZoom, onZoomAt }: Options): void {
+export function useMapWheelZoom({
+  runtime,
+  viewportRef,
+  onBeforeZoom,
+  onPanBy,
+  onZoomAt,
+}: Options): void {
   const onBeforeZoomRef = useRef(onBeforeZoom);
+  const onPanByRef = useRef(onPanBy);
   const onZoomAtRef = useRef(onZoomAt);
   useLayoutEffect(() => {
     onBeforeZoomRef.current = onBeforeZoom;
+    onPanByRef.current = onPanBy;
     onZoomAtRef.current = onZoomAt;
-  }, [onBeforeZoom, onZoomAt]);
+  }, [onBeforeZoom, onPanBy, onZoomAt]);
 
   useEffect(() => {
     if (!runtime) return;
     const canvas = runtime.app.canvas;
     const handleWheel = (event: WheelEvent) => {
-      const request = calculateWheelZoomRequest({
-        clientX: event.clientX,
-        clientY: event.clientY,
+      const pageHeight = runtime.app.screen.height;
+
+      if (event.ctrlKey || event.metaKey) {
+        const bounds = canvas.getBoundingClientRect();
+        const request = calculateWheelZoomRequest({
+          clientX: event.clientX,
+          clientY: event.clientY,
+          deltaY: event.deltaY,
+          deltaMode: event.deltaMode,
+          pageHeight,
+          bounds,
+        }, viewportRef.current.scale);
+        event.preventDefault();
+        if (!request) return;
+        onBeforeZoomRef.current();
+        onZoomAtRef.current(request.anchor, request.requestedScale);
+        return;
+      }
+
+      const request = calculateWheelPanRequest({
+        deltaX: event.deltaX,
         deltaY: event.deltaY,
         deltaMode: event.deltaMode,
-        pageHeight: runtime.app.screen.height,
-        bounds: canvas.getBoundingClientRect(),
-      }, viewportRef.current.scale);
+        pageHeight,
+      });
       if (!request) return;
       event.preventDefault();
       onBeforeZoomRef.current();
-      onZoomAtRef.current(request.anchor, request.requestedScale);
+      onPanByRef.current(request.dx, request.dy);
     };
     canvas.addEventListener("wheel", handleWheel, { passive: false });
     return () => canvas.removeEventListener("wheel", handleWheel);

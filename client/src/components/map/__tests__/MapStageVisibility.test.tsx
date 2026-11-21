@@ -301,6 +301,7 @@ describe("MapStage visibility boundary", () => {
         clientX: 100,
         clientY: 100,
         deltaY: -100,
+        ctrlKey: true,
         cancelable: true,
       }));
     });
