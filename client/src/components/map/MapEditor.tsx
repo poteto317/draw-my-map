@@ -39,6 +39,7 @@ import { AppHeader } from "@/components/layout/AppHeader";
 import { AppWorkspace } from "@/components/layout/AppWorkspace";
 import { NodeImportanceSelector } from "@/components/layout/NodeImportanceSelector";
 import { ResolutionFilterSelector } from "@/components/layout/ResolutionFilterSelector";
+import { WheelZoomSensitivityControl } from "@/components/layout/WheelZoomSensitivityControl";
 import { MapImageExportControls } from "@/components/layout/MapImageExportControls";
 import { OutlineExportControls } from "@/components/layout/OutlineExportControls";
 import { MapHistoryControls } from "@/components/layout/MapHistoryControls";
@@ -76,6 +77,7 @@ import { buildCommandAvailabilityContext } from "@/domain/commands/buildCommandA
 import { filterCommandCatalog } from "@/domain/commands/filterCommandCatalog";
 import type { CommandId } from "@/domain/commands/commandTypes";
 import { useIllustrationGeneration } from "@/hooks/useIllustrationGeneration";
+import { useUiPrefs } from "@/hooks/useUiPrefs";
 import { useMapHistoryShortcuts } from "@/components/map/useMapHistoryShortcuts";
 import { useMapImageExport } from "@/hooks/useMapImageExport";
 import { useOutlineExport } from "@/hooks/useOutlineExport";
@@ -217,6 +219,7 @@ export function MapEditor({
     resetRevision,
     resetScale: INITIAL_VIEWPORT.scale,
   });
+  const { prefs: uiPrefs, setWheelZoomSensitivity } = useUiPrefs();
   const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? null;
   // 一括編集の対象。アウトラインは単一選択のため、キャンバスで残った複数選択を見えないまま変えない
   const importanceTargetIds = useMemo<readonly number[]>(() => {
@@ -860,11 +863,17 @@ export function MapEditor({
             />
           )}
           resolutionControls={viewMode === "map" && (
-            <ResolutionFilterSelector
-              mode={resolutionFilter.mode}
-              level={resolutionFilter.level}
-              onChange={resolutionFilter.setMode}
-            />
+            <>
+              <ResolutionFilterSelector
+                mode={resolutionFilter.mode}
+                level={resolutionFilter.level}
+                onChange={resolutionFilter.setMode}
+              />
+              <WheelZoomSensitivityControl
+                value={uiPrefs.wheelZoomSensitivity}
+                onChange={setWheelZoomSensitivity}
+              />
+            </>
           )}
           operationControls={(
             <>
@@ -1062,6 +1071,7 @@ export function MapEditor({
                 resetRevision={resetRevision}
                 documentRevision={documentRevision}
                 shortcutsEnabled={editorShortcutsEnabled}
+                wheelZoomSensitivity={uiPrefs.wheelZoomSensitivity}
                 dialogMouseClickedAtRef={dialogMouseClickedAtRef}
               />
               <MapViewportZoomControls

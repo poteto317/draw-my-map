@@ -23,6 +23,7 @@ import { useMapStageReset } from "@/components/map/useMapStageReset";
 import { useMapViewport } from "@/components/map/useMapViewport";
 import { useMapViewportShortcut } from "@/components/map/useMapViewportShortcut";
 import { useMapWheelZoom } from "@/components/map/useMapWheelZoom";
+import { DEFAULT_WHEEL_ZOOM_SENSITIVITY } from "@/domain/uiPrefs/uiPrefs";
 import { useNodeEditing } from "@/components/map/useNodeEditing";
 import { useNodeKeyboardShortcuts } from "@/components/map/useNodeKeyboardShortcuts";
 import { useNodeFocusRequest } from "@/components/map/useNodeFocusRequest";
@@ -104,6 +105,7 @@ type MapStageProps = {
   onGenerateIllustration?: (nodeId: number) => void;
   // false の間（ダイアログ表示中など）は、キーボード・クリップボードのショートカットとメニューを閉じる操作を止める
   shortcutsEnabled: boolean;
+  wheelZoomSensitivity?: number;
   // 画面の外のダイアログで最後にマウスでクリックした時刻。ダイアログが1回目のクリックで閉じると、
   // ダブルクリックの2回目と dblclick がこのキャンバスへ届くので、メニューの項目と同じ時間窓で無視する
   dialogMouseClickedAtRef: RefObject<number | null>;
@@ -148,6 +150,7 @@ export function MapStage({
   onClipboardNotice,
   onGenerateIllustration,
   shortcutsEnabled,
+  wheelZoomSensitivity = DEFAULT_WHEEL_ZOOM_SENSITIVITY,
   dialogMouseClickedAtRef,
 }: MapStageProps) {
   const effectiveVisibleNodeIds = useMemo(
@@ -321,6 +324,7 @@ export function MapStage({
   useMapWheelZoom({
     runtime,
     viewportRef,
+    wheelZoomSensitivity,
     onBeforeZoom: cancelActiveGesture,
     onPanBy: panBy,
     onZoomAt: zoomAt,
