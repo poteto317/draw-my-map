@@ -245,7 +245,7 @@ it("選択した枝だけを表示し、解像度で隠れた集中先を残し�
   expect(isCanvasNodeInteractive("末端ノード")).toBe(false);
   act(() => {
     stageContainer().querySelector("canvas")!.dispatchEvent(new WheelEvent("wheel", {
-      deltaY: -100, clientX: 120, clientY: 130, cancelable: true,
+      deltaY: -100, clientX: 120, clientY: 130, ctrlKey: true, cancelable: true,
     }));
   });
   const world = lastWorldContainer()!;
@@ -1185,7 +1185,7 @@ it("枝外検索から戻ると複数選択・主選択・閉状態・集中・�
   const primary = screen.getByRole("navigation", { name: "パンくず" }).querySelector('[aria-current="location"]')?.textContent;
   act(() => {
     stageContainer().querySelector("canvas")!.dispatchEvent(new WheelEvent("wheel", {
-      deltaY: -100, clientX: 120, clientY: 130, cancelable: true,
+      deltaY: -100, clientX: 120, clientY: 130, ctrlKey: true, cancelable: true,
     }));
   });
   const position = lastWorldContainer()?.position.set.mock.lastCall;
@@ -1264,7 +1264,7 @@ it("パンとホイールでは履歴を追加せず、F の中央移動を一�
     mockStageHandlers.pointermove?.(pointer(40, 30));
     mockStageHandlers.pointerup?.(pointer(40, 30));
     stageContainer().querySelector("canvas")!.dispatchEvent(new WheelEvent("wheel", {
-      deltaY: -100, clientX: 120, clientY: 130, cancelable: true,
+      deltaY: -100, clientX: 120, clientY: 130, ctrlKey: true, cancelable: true,
     }));
   });
   selectCanvasNodeByLabel("別のルート");
@@ -1335,7 +1335,7 @@ it("同じ倍率帯でも拡大側・縮小側から入った自動解像度を�
   const wheel = (deltaY: number) => {
     act(() => {
       stageContainer().querySelector("canvas")!.dispatchEvent(new WheelEvent("wheel", {
-        deltaY, clientX: 120, clientY: 130, cancelable: true,
+        deltaY, clientX: 120, clientY: 130, ctrlKey: true, cancelable: true,
       }));
     });
   };
@@ -1406,7 +1406,7 @@ it("ブックマークを保存し、再読込後は明示的な適用で閲覧�
   const primary = screen.getByRole("navigation", { name: "パンくず" }).querySelector('[aria-current="location"]')?.textContent;
   act(() => {
     stageContainer().querySelector("canvas")!.dispatchEvent(new WheelEvent("wheel", {
-      deltaY: -100, clientX: 120, clientY: 130, cancelable: true,
+      deltaY: -100, clientX: 120, clientY: 130, ctrlKey: true, cancelable: true,
     }));
   });
   const position = lastWorldContainer()?.position.set.mock.lastCall;
@@ -1543,4 +1543,61 @@ it("長いブックマーク名の全体を適用・削除ボタンのアクセ�
   const remove = screen.getByRole("button", { name: `${name}を削除` });
   expect(apply).toHaveAttribute("title", name);
   expect(remove).toBeEnabled();
+});
+
+describe("MapEditor のズームコントロール", () => {
+  it("修飾キーなしのホイールでパンし倍率は変えない", async () => {
+    await renderEditor();
+    addNodeAt(300, 200);
+    const world = lastWorldContainer()!;
+    const scaleBefore = world.scale.set.mock.lastCall;
+    const positionBefore = world.position.set.mock.lastCall;
+
+    act(() => {
+      stageContainer().querySelector("canvas")!.dispatchEvent(new WheelEvent("wheel", {
+        deltaY: 100,
+        deltaMode: WheelEvent.DOM_DELTA_PIXEL,
+        cancelable: true,
+      }));
+    });
+
+    expect(world.scale.set.mock.lastCall).toEqual(scaleBefore);
+    expect(world.position.set.mock.lastCall).not.toEqual(positionBefore);
+  });
+
+  it("マップ表示のとき右下の±で中央基準×1.25ズームし閲覧履歴に積まない", async () => {
+    const user = userEvent.setup();
+    await renderEditor();
+    addNodeAt(300, 200);
+
+    const zoom = screen.getByRole("group", { name: "ズーム" });
+    expect(zoom).toHaveClass("absolute", "bottom-3", "right-3");
+    expect(screen.getByRole("button", { name: "閲覧を戻る" })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "拡大" }));
+
+    expect(lastWorldContainer()?.scale.set).toHaveBeenLastCalledWith(1.25);
+    expect(lastWorldContainer()?.position.set).toHaveBeenLastCalledWith(-100, -75);
+    expect(screen.getByRole("button", { name: "閲覧を戻る" })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "縮小" }));
+
+    expect(lastWorldContainer()?.scale.set).toHaveBeenLastCalledWith(1);
+    const position = lastWorldContainer()?.position.set.mock.lastCall;
+    expect(position?.[0]).toBeCloseTo(0);
+    expect(position?.[1]).toBeCloseTo(0);
+    expect(screen.getByRole("button", { name: "閲覧を戻る" })).toBeDisabled();
+  });
+
+  it("アウトライン表示ではズームコントロールを出さない", async () => {
+    const user = userEvent.setup();
+    await renderEditor();
+    addNodeAt(300, 200);
+
+    expect(screen.getByRole("group", { name: "ズーム" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "アウトライン" }));
+
+    expect(screen.queryByRole("group", { name: "ズーム" })).not.toBeInTheDocument();
+  });
 });
