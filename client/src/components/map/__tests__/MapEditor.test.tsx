@@ -1605,4 +1605,39 @@ describe("MapEditor のズームコントロール", () => {
 
     expect(screen.queryByRole("group", { name: "ズーム" })).not.toBeInTheDocument();
   });
+
+  it("マップ表示ではズーム感度スライダーがあり、アウトラインでは出さない", async () => {
+    const user = userEvent.setup();
+    await renderEditor();
+
+    expect(screen.getByLabelText("ズーム感度")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "アウトライン" }));
+
+    expect(screen.queryByLabelText("ズーム感度")).not.toBeInTheDocument();
+  });
+
+  it("ズーム感度スライダーを変えるとCtrl+ホイールの倍率が変わる", async () => {
+    const user = userEvent.setup();
+    await renderEditor();
+    addNodeAt(300, 200);
+
+    const slider = screen.getByLabelText("ズーム感度");
+    await user.click(slider);
+    fireEvent.change(slider, { target: { value: "0.005" } });
+
+    const canvas = stageContainer().querySelector("canvas")!;
+    act(() => {
+      canvas.dispatchEvent(new WheelEvent("wheel", {
+        clientX: 120,
+        clientY: 130,
+        deltaY: -100,
+        deltaMode: WheelEvent.DOM_DELTA_PIXEL,
+        ctrlKey: true,
+        cancelable: true,
+      }));
+    });
+
+    expect(lastWorldContainer()?.scale.set).toHaveBeenLastCalledWith(Math.exp(0.5));
+  });
 });

@@ -231,4 +231,42 @@ describe("useMapWheelZoom", () => {
     expect(onPanBy).not.toHaveBeenCalled();
     expect(onZoomAt).not.toHaveBeenCalled();
   });
+
+  it("mount後に感度を変えると次のCtrl+wheelに新しい感度が使われる", () => {
+    const canvas = document.createElement("canvas");
+    jest.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
+      left: 0, top: 0, width: 800, height: 600,
+      right: 800, bottom: 600, x: 0, y: 0, toJSON: () => ({}),
+    });
+    const onZoomAt = jest.fn();
+    const { rerender } = renderHook(
+      ({ sensitivity }) => useMapWheelZoom({
+        runtime: defaultRuntime(canvas) as never,
+        viewportRef: { current: { offsetX: 0, offsetY: 0, scale: 1 } },
+        wheelZoomSensitivity: sensitivity,
+        onBeforeZoom: jest.fn(),
+        onPanBy: jest.fn(),
+        onZoomAt,
+      }),
+      { initialProps: { sensitivity: DEFAULT_WHEEL_ZOOM_SENSITIVITY } },
+    );
+
+    const fireZoom = () => {
+      canvas.dispatchEvent(new WheelEvent("wheel", {
+        clientX: 100,
+        clientY: 100,
+        deltaY: -100,
+        deltaMode: WheelEvent.DOM_DELTA_PIXEL,
+        cancelable: true,
+        ctrlKey: true,
+      }));
+    };
+
+    fireZoom();
+    expect(onZoomAt).toHaveBeenLastCalledWith({ x: 100, y: 100 }, Math.exp(0.25));
+
+    rerender({ sensitivity: 0.005 });
+    fireZoom();
+    expect(onZoomAt).toHaveBeenLastCalledWith({ x: 100, y: 100 }, Math.exp(0.5));
+  });
 });
