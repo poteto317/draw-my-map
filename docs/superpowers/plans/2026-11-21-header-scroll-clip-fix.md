@@ -4,7 +4,7 @@
 
 **Goal:** ヘッダー操作が `40dvh` を超えて折り返したとき、ヘッダー内縦スクロールで下段ボタンへ届くようにし、マップ領域が潰れないようにする。
 
-**Architecture:** `AppHeader` の `<header>` に `max-h-[40dvh] overflow-y-auto overscroll-y-contain` を追加するだけの最小変更。ページ全体スクロールやヘッダー再編成はしない。シェル／`main` の overflow 契約は現状維持。
+**Architecture:** `AppHeader` の `<header>` に `max-h-[40dvh] flex flex-col gap-4` を付け、縦スクロールは下段ラッパ（`data-testid="header-operations-scroll"`、`min-h-0 flex-1 overflow-y-auto overscroll-y-contain`）に集約する。`<header>` 自体には `overflow-y-auto` を付けない（検索ドロップダウン等の `absolute` 子のクリップ防止）。上段は `data-testid="header-primary"` の `shrink-0 flex flex-wrap` 行。ページ全体スクロールやヘッダー再編成はしない。シェル／`main` の overflow 契約は現状維持。
 
 **Tech Stack:** Next.js / React / Tailwind CSS / Jest / Testing Library
 
@@ -13,7 +13,9 @@
 ## Global Constraints
 
 - ページ全体・シェルに `overflow-hidden` を新たに付けない。`main` の `overflow-hidden` は維持する。
-- ヘッダー class は正確に `max-h-[40dvh]`・`overflow-y-auto`・`overscroll-y-contain`（表記固定）。
+- root `<header>` の class は正確に `max-h-[40dvh]`・`flex`・`flex-col`・`gap-4`（背景／padding／shadow は既存維持）。root `header` に `overflow-y-auto` を付けない。
+- 下段ラッパの class は正確に `min-h-0`・`flex-1`・`overflow-y-auto`・`overscroll-y-contain`（表記固定）。`data-testid="header-operations-scroll"`。
+- 下段の有無は操作系 props（`importanceControls` / `resolutionControls` / `operationControls` / `operationNotices`）の truthy 判定。すべて未指定または falsy のとき下段は描画しない。
 - ヘッダー操作の削減・再配置・コマンドパレット移行・ヘルプ追記・横はみ出し修正は範囲外。
 - ROADMAP の Phase 項目は完了にしない（バグ修正）。
 - TDD: 実装より先に失敗するテストを追加し RED を確認する。
@@ -22,7 +24,7 @@
 
 ---
 
-### Task 1: AppHeader の高さ上限と縦スクロール（TDD）
+### Task 1: AppHeader の高さ上限と下段縦スクロール（TDD）
 
 **Files:**
 - Modify: `client/src/components/layout/__tests__/AppHeader.test.tsx`（既存ファイル。ケース追加のみ。既存テストは削除しない）
@@ -31,15 +33,24 @@
 
 **Interfaces:**
 - Consumes: 既存 `AppHeader` props（変更なし）
-- Produces: `<header>` className に `max-h-[40dvh] overflow-y-auto overscroll-y-contain` を含む（既存の `flex flex-wrap ...` は維持）
+- Produces: root `<header>` に `max-h-[40dvh] flex flex-col gap-4`（`overflow-y-auto` は付けない）。上段 `header-primary`（`shrink-0 flex flex-wrap`）。下段 `header-operations-scroll` に `min-h-0 flex-1 overflow-y-auto overscroll-y-contain`。操作系 props がすべて falsy のとき下段なし。
 
 - [x] **Step 1: 失敗するテストを書く**
 
-既存の `describe("AppHeader")` に `it` を1本追加する。同ファイルの既存 render と同じ必須 props（`viewControls` / `showCanvasHints` / `layoutMode` / `onLayoutModeChange` / `searchControls` / `mapControls` / `saveStatus`）を使い、`screen.getByRole("banner")` が次を持つことを断言する。
+既存の `describe("AppHeader")` に `it` を追加する。同ファイルの既存 render と同じ必須 props を使い、次を断言する。
 
 ```tsx
-expect(header).toHaveClass("max-h-[40dvh]", "overflow-y-auto", "overscroll-y-contain");
+expect(banner).toHaveClass("max-h-[40dvh]", "flex", "flex-col");
+expect(banner).not.toHaveClass("overflow-y-auto");
+expect(screen.getByTestId("header-operations-scroll")).toHaveClass(
+  "min-h-0",
+  "flex-1",
+  "overflow-y-auto",
+  "overscroll-y-contain",
+);
 ```
+
+検索 `absolute` ダミーで `search-controls` が `header-primary` 内にあり `header-operations-scroll` 外にあること、操作系 props がすべて falsy のとき `header-operations-scroll` が無いことを固定する。
 
 - [x] **Step 2: RED を確認**
 
@@ -51,7 +62,7 @@ cd client && npx jest src/components/layout/__tests__/AppHeader.test.tsx --runIn
 
 - [x] **Step 3: 最小実装**
 
-`AppHeader.tsx` の `<header className="flex flex-wrap ...">` に上記3クラスを追加する。他ファイルは触らない。
+`AppHeader.tsx` で上段／下段の二段構成と下段ラッパの overflow を実装する。他ファイルは触らない。
 
 - [x] **Step 4: GREEN + 回帰**
 
