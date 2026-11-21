@@ -150,8 +150,8 @@ Pixi.js による高速な 2D キャンバス描画と、React 19 による宣�
   3. **ズームボタン（`+` / `−`）**: マップ表示のキャンバス右下（`MapViewportZoomControls`）。1 回あたり現在倍率の **×1.25**（拡大）／ **÷1.25**（縮小）のあと `clampViewportScale`。アンカーはキャンバス要素のローカル中央。上限・下限に達した方向のボタンは `disabled`。アウトライン表示では非表示。
 - **アンカーズーム挙動**:
   - ズームの中心（アンカー点）となるカーソルの指す World 座標は、拡大・縮小の前後で画面上の同じ位置に保たれます（`zoomViewportAt`）。
-  - マウスホイール感度定数: `WHEEL_ZOOM_SENSITIVITY = 0.001`
-  - スケール計算式: $\text{requestedScale} = \text{currentScale} \times e^{-\Delta \times 0.001}$
+  - マウスホイール感度定数: `WHEEL_ZOOM_SENSITIVITY = 0.0025`
+  - スケール計算式: $\text{requestedScale} = \text{currentScale} \times e^{-\Delta \times \text{WHEEL\_ZOOM\_SENSITIVITY}}$
 - **ホイール経路の分岐 (`useMapWheelZoom`)**:
   - **修飾キーなし**（`ctrlKey` も `metaKey` も false）: `calculateWheelPanRequest` でパン（2.2 節）。有効なパン要求が成立したときのみ `event.preventDefault()` と進行中ジェスチャーのキャンセル（`onBeforeZoom`）を実行します。閲覧履歴には積みません。
   - **`ctrlKey` または `metaKey` あり**: 下記のカーソル基準ズーム。
@@ -159,7 +159,7 @@ Pixi.js による高速な 2D キャンバス描画と、React 19 による宣�
   - `deltaMode === 1` (`WHEEL_DELTA_MODE_LINE`): `delta * 16`
   - `deltaMode === 2` (`WHEEL_DELTA_MODE_PAGE`): `delta * pageHeight`（`runtime.app.screen.height`）
   - `deltaMode === 0` (ピクセル単位等): `delta` をそのまま使用
-  - 倍率更新式 `clampViewportScale(currentScale * Math.exp(-delta * 0.001))` の結果が `currentScale` と等しい場合（`deltaY === 0` の場合や、最小倍率 `0.25x`・最大倍率 `4.0x` の上下限にすでに到達している場合）は `calculateWheelZoomRequest` が `null` を返し、`useMapWheelZoom` は `event.preventDefault()` を呼ばずにブラウザのデフォルト挙動を妨げません。有効なズーム要求が成立したときのみ `event.preventDefault()` と進行中ジェスチャーのキャンセル（`onBeforeZoom`）を実行します。
+  - 倍率更新式 `clampViewportScale(currentScale * Math.exp(-delta * WHEEL_ZOOM_SENSITIVITY))` の結果が `currentScale` と等しい場合（`deltaY === 0` の場合や、最小倍率 `0.25x`・最大倍率 `4.0x` の上下限にすでに到達している場合）は `calculateWheelZoomRequest` が `null` を返し、`useMapWheelZoom` は `event.preventDefault()` を呼ばずにブラウザのデフォルト挙動を妨げません。有効なズーム要求が成立したときのみ `event.preventDefault()` と進行中ジェスチャーのキャンセル（`onBeforeZoom`）を実行します。
 - **ズームボタン**: `+` / `−` によるズームも閲覧履歴には積みません（ホイールズームと同様。フィット操作の `recordBeforeViewportChange` とは揃えません）。
 - **2本指ピンチズーム (`calculatePinchViewport` in `pinchViewport.ts`, `pinchZoomGesture.ts`, `touchGestureCoordinator.ts`)**:
   - 2本指タッチ開始時の2点間距離 `startDistance` と現在距離 `currentDistance` の比から `rawScale = startViewport.scale * (currentDistance / startDistance)` を算出し、`clampViewportScale(rawScale)` でクランプします。
