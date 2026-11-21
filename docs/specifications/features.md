@@ -52,7 +52,7 @@ Pixi.js による高速な 2D キャンバス描画と、React 19 による宣�
 | **Phase 0** | 基盤 | PixiJS キャンバス描画、ダブルクリックでのノード追加、ヘッダー+キャンバスレイアウト、ダークモード対応、高解像度対応、Jestテスト基盤 |
 | **Phase 1** | ノード基本操作 | ルート・子・兄弟ノード作成、単一選択、ドラッグ移動、インラインラベル編集、ノード削除 |
 | **Phase 2** | ノード間接続 | 三次ベジェ曲線による親子接続線描画、`Shift + ドラッグ` による親子接続の追加・付け替え、自己接続・循環参照防止 |
-| **Phase 3** | キャンバス操作 | 背景ドラッグによるパン、カーソル基準のホイールズーム 0.25x〜4.0x、2本指ピンチズーム、`F` キーによるノードフォーカス、親移動時の子孫一括移動 |
+| **Phase 3** | キャンバス操作 | 背景ドラッグ・修飾キーなしホイールによるパン、`Ctrl`/`Cmd`+ホイール・ピンチ・右下の＋−によるズーム（0.25x〜4.0x）、2本指ピンチズーム、`F` キーによるノードフォーカス、親移動時の子孫一括移動 |
 | **Phase 4** | 自動レイアウト | 階層型ツリー自動整列アルゴリズム、重なり回避、手動配置 / 自動配置モード切替 |
 | **Phase 5** | データの永続化・エクスポート | `localStorage` 300ms デバウンス自動保存、JSON インポート/エクスポート、PNG / SVG 画像エクスポート |
 | **Phase 6** | 解像度フィルタリング | ノード重要度 `high`/`medium`/`low`、ズーム連動 Auto フィルタ、手動フィルタ切替、160ms フェードトランジション |
@@ -131,26 +131,36 @@ Pixi.js による高速な 2D キャンバス描画と、React 19 による宣�
 - **操作方法**:
   1. **マウス**: ノード以外のキャンバス背景上で、**`Alt`（`Option`）を押さない**左ボタンドラッグ（`Shift` / `Cmd` / `Ctrl` の有無は問わない）
   2. **タッチ**: 背景領域を1本指でドラッグ
+  3. **マウスホイール／トラックパッド**: **`Ctrl` / `Cmd` を押さない**縦・横スクロール（`wheel` の `deltaY` / `deltaX`）
 - **`Alt` との関係**: `Alt`（`Option`）を押しながらの空き背景ドラッグはパンではなく矩形選択です（3.3 節）。
+- **ホイールの挙動**: `normalizeWheelDelta` で `deltaX` / `deltaY` を正規化し、`dx = -deltaX`、`dy = -deltaY` として `panViewport` に渡します（`calculateWheelPanRequest` in `wheelPan.ts`、`useMapWheelZoom`）。正規化後の移動量が `(0, 0)` のときは `preventDefault` しません。空白ドラッグパンとはスクロール方向の期待が異なるため符号規則は揃えません。
 - **移動しきい値**: ドラッグ開始判定として **4px**（`dragThreshold = 4`）の移動判定しきい値を設けており、クリック操作時の微細なブレによる誤移動を防ぎます。
-- **実装参照**: `client/src/components/map/pixi/canvasPanGesture.ts`
+- **実装参照**:
+  - `client/src/components/map/pixi/canvasPanGesture.ts`
+  - `client/src/components/map/wheelPan.ts`
+  - `client/src/components/map/useMapWheelZoom.ts`
 
 ### 2.3 ズーム操作（拡大・縮小）
 
-カーソル位置または指のピンチ中心を中心として、歪みなく滑らかにスケールを変更します。
+カーソル位置、ピンチ中点、またはビューポート中央を中心として、歪みなく滑らかにスケールを変更します。
 
 - **操作方法**:
-  1. **マウスホイール**: マウスホイールの回転、またはトラックパッドの2本指スクロール
-  2. **ピンチ操作**: トラックパッドのピンチイン／ピンチアウト、またはタッチ対応端末での2本指ピンチジェスチャー
+  1. **`Ctrl` / `Cmd` + マウスホイール**: カーソル位置をアンカーとしたズーム。多くのブラウザでは、トラックパッドのピンチが `wheel` + `ctrlKey: true` として届くため、この経路がトラックパッドピンチのズームも兼ねます。
+  2. **ピンチ操作**: タッチ対応端末での2本指ピンチジェスチャー（pointer 経路。トラックパッドのピンチは上記 `Ctrl` / `Cmd` + ホイール経路と重なる場合があります）
+  3. **ズームボタン（`+` / `−`）**: マップ表示のキャンバス右下（`MapViewportZoomControls`）。1 回あたり現在倍率の **×1.25**（拡大）／ **÷1.25**（縮小）のあと `clampViewportScale`。アンカーはキャンバス要素のローカル中央。上限・下限に達した方向のボタンは `disabled`。アウトライン表示では非表示。
 - **アンカーズーム挙動**:
   - ズームの中心（アンカー点）となるカーソルの指す World 座標は、拡大・縮小の前後で画面上の同じ位置に保たれます（`zoomViewportAt`）。
   - マウスホイール感度定数: `WHEEL_ZOOM_SENSITIVITY = 0.001`
   - スケール計算式: $\text{requestedScale} = \text{currentScale} \times e^{-\Delta \times 0.001}$
-- **ホイールイベントのデルタ正規化 (`normalizeWheelDeltaY`, `calculateWheelZoomRequest` in `wheelZoom.ts`)**:
-  - `deltaMode === 1` (`WHEEL_DELTA_MODE_LINE`): `deltaY * 16`
-  - `deltaMode === 2` (`WHEEL_DELTA_MODE_PAGE`): `deltaY * pageHeight`（`runtime.app.screen.height`）
-  - `deltaMode === 0` (ピクセル単位等): `deltaY` をそのまま使用
+- **ホイール経路の分岐 (`useMapWheelZoom`)**:
+  - **修飾キーなし**（`ctrlKey` も `metaKey` も false）: `calculateWheelPanRequest` でパン（2.2 節）。有効なパン要求が成立したときのみ `event.preventDefault()` と進行中ジェスチャーのキャンセル（`onBeforeZoom`）を実行します。閲覧履歴には積みません。
+  - **`ctrlKey` または `metaKey` あり**: 下記のカーソル基準ズーム。
+- **ホイールズームのデルタ正規化 (`normalizeWheelDelta` / `normalizeWheelDeltaY`, `calculateWheelZoomRequest` in `wheelZoom.ts`)**:
+  - `deltaMode === 1` (`WHEEL_DELTA_MODE_LINE`): `delta * 16`
+  - `deltaMode === 2` (`WHEEL_DELTA_MODE_PAGE`): `delta * pageHeight`（`runtime.app.screen.height`）
+  - `deltaMode === 0` (ピクセル単位等): `delta` をそのまま使用
   - 倍率更新式 `clampViewportScale(currentScale * Math.exp(-delta * 0.001))` の結果が `currentScale` と等しい場合（`deltaY === 0` の場合や、最小倍率 `0.25x`・最大倍率 `4.0x` の上下限にすでに到達している場合）は `calculateWheelZoomRequest` が `null` を返し、`useMapWheelZoom` は `event.preventDefault()` を呼ばずにブラウザのデフォルト挙動を妨げません。有効なズーム要求が成立したときのみ `event.preventDefault()` と進行中ジェスチャーのキャンセル（`onBeforeZoom`）を実行します。
+- **ズームボタン**: `+` / `−` によるズームも閲覧履歴には積みません（ホイールズームと同様。フィット操作の `recordBeforeViewportChange` とは揃えません）。
 - **2本指ピンチズーム (`calculatePinchViewport` in `pinchViewport.ts`, `pinchZoomGesture.ts`, `touchGestureCoordinator.ts`)**:
   - 2本指タッチ開始時の2点間距離 `startDistance` と現在距離 `currentDistance` の比から `rawScale = startViewport.scale * (currentDistance / startDistance)` を算出し、`clampViewportScale(rawScale)` でクランプします。
   - **初期座標が同一（距離0）のときのベースライン遅延確定 (`waitingForBaseline` in `pinchZoomGesture.ts`)**: 2本指の初期スクリーン座標 `startFirst`, `startSecond` が完全に同一（距離 `0`）または非有限で `!hasFinitePositiveDistance(startFirst, startSecond)` となった場合は、`waitingForBaseline = true` としてピンチ計算を保留します。その後、後続の `move` イベントで2点間に正の有限距離（`hasFinitePositiveDistance(first, second) === true`）が得られた最初の時点で `startFirst = { ...first }`, `startSecond = { ...second }` をベースラインとして確定（`waitingForBaseline = false`）し、以降の `move` から `calculatePinchViewport` によるズーム・パン更新を開始します。
@@ -158,7 +168,9 @@ Pixi.js による高速な 2D キャンバス描画と、React 19 による宣�
   - **単一ポインタ操作との排他制御**: 2本目のタッチ（`pointerType === "touch"`）が検出された時点で、`onBeforePinch()` により進行中の単一ポインタ操作（キャンバスパンやノード移動等）を即時キャンセルしてピンチズームへ移行します。ピンチ終了またはキャンセル後は、タッチ中のすべての指が画面から離れるまで（`suppressUntilAllReleased = true`、かつ `samples.size === 0` になるまで）単一ポインタ操作の再開を抑止し、指を離す際の意図しないジャンプや誤ドラッグを防止します。
 - **実装参照**:
   - `client/src/components/map/wheelZoom.ts`
+  - `client/src/components/map/wheelPan.ts`
   - `client/src/components/map/useMapWheelZoom.ts`
+  - `client/src/components/map/MapViewportZoomControls.tsx`
   - `client/src/components/map/pixi/pinchViewport.ts`
   - `client/src/components/map/pixi/pinchZoomGesture.ts`
   - `client/src/components/map/pixi/touchGestureCoordinator.ts`
@@ -931,7 +943,9 @@ sequenceDiagram
 | **ドラッグ** | キャンバス背景（`Alt` なし） | キャンバスを**パン（平行移動）**する（2.2 節・3.3 節） |
 | **`Alt` + ドラッグ** | キャンバス背景 | **矩形選択**する（`Alt` のみ置換、`Alt`+`Cmd`/`Ctrl` は加算。ラバーバンド表示。3.3 節） |
 | **`Shift` + ドラッグ（4px 超）** | ノード → 別ノード | ドロップ先ノードを子として**親子接続（エッジ作成・付け替え）**する（4px 未満は範囲選択。閉じた親へ接続しても親は開かない。ドラッグ中は接続可能なターゲット候補を緑枠 `#10b981`・薄緑背景 `#ecfdf5` でハイライト。3.7 節） |
-| **マウスホイール回転** | キャンバス上 | カーソル位置を中心に**拡大・縮小（ズーム）**する（0.25x 〜 4.0x） |
+| **マウスホイール回転**（`Ctrl` / `Cmd` なし） | キャンバス上 | **パン（平行移動）**する。縦スクロールは `deltaY`、横スクロールは `deltaX`（2.2 節） |
+| **`Ctrl` / `Cmd` + マウスホイール** | キャンバス上 | カーソル位置を中心に**拡大・縮小（ズーム）**する（0.25x 〜 4.0x。2.3 節） |
+| **ズームボタン `+` / `−`** | マップ表示のキャンバス右下 | ビューポート中央をアンカーに**拡大・縮小**する（1 回あたり ×1.25 / ÷1.25。2.3 節） |
 | **右クリック** | ノード | そのノードを選択し、**コンテキストメニュー**を表示（「イラストを生成」/「イラストを再生成」） |
 
 ### 11.3 タッチジェスチャー一覧（スマートフォン・タブレット）
@@ -1055,9 +1069,9 @@ sequenceDiagram
 #### レイアウトモード別操作ヒント (`LayoutModeOperationHint.tsx`)
 ヘッダー内には現在の `layoutMode` に応じて以下の操作ヒント文字列が表示されます（`LayoutModeOperationHint.tsx`）：
 - **手動配置モード (`manual`)**:
-  `空白ダブルクリックで追加・ノードダブルクリックで編集・ノードドラッグで移動・空白ドラッグで移動・ホイール/ピンチで拡大縮小・Fで中央表示・Shift+ノードドラッグで接続・Alt(Option)+↑/↓で兄弟の順序を変更・Alt(Option)+←/→で階層を上げ下げ・Alt(Option)+Enterで親を挿入`
+  `空白ダブルクリックで追加・ノードダブルクリックで編集・ノードドラッグで移動・空白ドラッグで移動・ホイールで移動・Ctrl/Cmd+ホイールまたはピンチまたは右下の＋−で拡大縮小・Fで中央表示・Shift+ノードドラッグで接続・Alt(Option)+↑/↓で兄弟の順序を変更・Alt(Option)+←/→で階層を上げ下げ・Alt(Option)+Enterで親を挿入`
 - **自動配置モード (`auto`)**:
-  `空白ダブルクリックで追加・ノードダブルクリックで編集・追加・削除・接続時に自動整列・ノードドラッグで兄弟の順序を変更・空白ドラッグで移動・ホイール/ピンチで拡大縮小・Fで中央表示・Shift+ノードドラッグで接続・Alt(Option)+↑/↓で兄弟の順序を変更・Alt(Option)+←/→で階層を上げ下げ・Alt(Option)+Enterで親を挿入`
+  `空白ダブルクリックで追加・ノードダブルクリックで編集・追加・削除・接続時に自動整列・ノードドラッグで兄弟の順序を変更・空白ドラッグで移動・ホイールで移動・Ctrl/Cmd+ホイールまたはピンチまたは右下の＋−で拡大縮小・Fで中央表示・Shift+ノードドラッグで接続・Alt(Option)+↑/↓で兄弟の順序を変更・Alt(Option)+←/→で階層を上げ下げ・Alt(Option)+Enterで親を挿入`
 
 #### 操作通知バー (`MapOperationNotice.tsx`) の10系統独立表示と ARIA 属性
 ヘッダー下部（`data-testid="operation-notices"`）には、**永続化・JSON入出力系の通知（`persistence.notice`）**、**画像エクスポート系の通知（`imageExport.notice`）**、**枝の複製の通知（成功は `role="status"`、失敗は `role="alert"`）**、**枝のコピー／貼り付けの通知（同様に成功は `role="status"`、失敗は `role="alert"`）**の 4 系統に加え、**自動配置不能の通知（折りたたみ中の表示用の自動配置ができない間だけ `role="status"` で「表示用の自動配置ができないため、元の位置で表示しています。」を先頭に表示）**、**ノード検索の通知（表示の切り替え・祖先の枝の展開は `role="status"`、対象が見つからない場合は `role="alert"`）**、**箇条書きからの追加の成功の通知（`role="status"`。失敗はダイアログの中に出し、ここには出さない）**、**枝の構造の変更の通知（兄弟の順序変更・階層の上げ下げ・親の挿入・ノードだけ削除・同じマップ内の枝の移動に、ラベルの一括置換とノードの分割・統合の成功を加えた通知で1つの枠を共有する。成功と端の通知は `role="status"`、失敗は `role="alert"`。親の挿入は失敗だけを出し、成功では枠を空にする）**、**アウトライン書き出しの通知（成功は status、空・上限は warning、不正構造・生成・ダウンロード開始の失敗は error）**、そして**複数タブ競合通知（`MapConflictNotice`。`role="alert"` / `aria-live="assertive"`。別名保存・最新読込・JSON書き出しのアクションボタン群を含む）**の **10 系統がそれぞれ独立した `<MapOperationNotice />` として同時表示可能**な構造になっています（`MapEditor.tsx`, `MapOperationNotice.tsx`, `MapConflictNotice.tsx`）。操作通知バーは `MapEditor` の中にあるため、マップを切り替えると消えます。
@@ -1476,7 +1490,7 @@ sequenceDiagram
   | :--- | :--- |
   | `Escape` | 自動配置でノードを押した時点（しきい値の 4px に達する前を含む）から離すまでの間だけ、中止して `preventDefault()` する（`useSiblingReorderDragEscape`。`isSiblingReorderActive` が真の間）。ほかのジェスチャー中やジェスチャーが無いときは何もしない。IME 変換中は処理しない。ダイアログを開いている間も働く |
   | `pointercancel`、ステージの外で離す | 中止 |
-  | 2本目の指（ピンチ）、ホイールでの拡大縮小 | 中止して拡大縮小になる |
+  | 2本目の指（ピンチ）、ホイール操作 | 中止する |
   | `documentRevision` の変化（成功した Undo / Redo、マップの置き換え） | 中止 |
   | T が見えなくなる・削除される | 中止 |
   | 配置モードが手動になる | 次のポインタの移動・離したときに中止 |
