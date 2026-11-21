@@ -863,20 +863,20 @@ export function MapEditor({
             />
           )}
           resolutionControls={viewMode === "map" && (
-            <>
-              <ResolutionFilterSelector
-                mode={resolutionFilter.mode}
-                level={resolutionFilter.level}
-                onChange={resolutionFilter.setMode}
-              />
-              <WheelZoomSensitivityControl
-                value={uiPrefs.wheelZoomSensitivity}
-                onChange={setWheelZoomSensitivity}
-              />
-            </>
+            <ResolutionFilterSelector
+              mode={resolutionFilter.mode}
+              level={resolutionFilter.level}
+              onChange={resolutionFilter.setMode}
+            />
           )}
           operationControls={(
             <>
+              {viewMode === "map" && (
+                <WheelZoomSensitivityControl
+                  value={uiPrefs.wheelZoomSensitivity}
+                  onChange={setWheelZoomSensitivity}
+                />
+              )}
               <CommandPaletteControl
                 expanded={commandPalette.screen === "open"}
                 onOpen={openCommandPalette}

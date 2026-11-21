@@ -14,7 +14,7 @@ export type UiPrefsReadResult = {
 
 export type UiPrefsWriteResult =
   | { readonly ok: true }
-  | { readonly ok: false; readonly reason: "quota" | "write-error" | "read-error" };
+  | { readonly ok: false; readonly reason: "quota" | "write-error" };
 
 export function readUiPrefs(storage: MapLibraryStorage): UiPrefsReadResult {
   let raw: string | null;
