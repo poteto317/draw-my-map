@@ -58,7 +58,7 @@ describe("calculateWheelZoomRequest", () => {
       bounds: { left: 50, top: 40 },
     }, 2)).toEqual({
       anchor: { x: 100, y: 50 },
-      requestedScale: 2 * Math.exp(0.1),
+      requestedScale: 2 * Math.exp(0.25),
     });
   });
 

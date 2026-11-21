@@ -348,7 +348,7 @@ describe("マップの切り替えと混在の防止", () => {
       mockStageHandlers.pointerup?.(pointer(20, 10));
     });
     const world = lastWorldContainer()!;
-    expect(world.scale.set.mock.lastCall).toEqual([Math.exp(0.1)]);
+    expect(world.scale.set.mock.lastCall).toEqual([Math.exp(0.25)]);
     expect(world.position.set.mock.lastCall)
       .not.toEqual([INITIAL_VIEWPORT.offsetX, INITIAL_VIEWPORT.offsetY]);
 

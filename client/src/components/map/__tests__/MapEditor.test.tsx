@@ -1340,12 +1340,16 @@ it("同じ倍率帯でも拡大側・縮小側から入った自動解像度を�
     });
   };
   await navigateBySearch(user, "親ルート");
-  wheel(30);
+  // wheelZoom の感度積（delta × sensitivity）を固定し、感度変更でも同じ倍率帯の往復になるようにする
+  const wheelZoomSensitivity = 0.0025;
+  const stayInAllBandDelta = 0.03 / wheelZoomSensitivity;
+  const crossMediumBandDelta = 0.09 / wheelZoomSensitivity;
+  wheel(stayInAllBandDelta);
   const scale = lastWorldContainer()?.scale.set.mock.lastCall?.[0];
   expect(screen.getByText("現在: すべて")).toBeInTheDocument();
   await navigateBySearch(user, "別のルート");
-  wheel(90);
-  wheel(-90);
+  wheel(crossMediumBandDelta);
+  wheel(-crossMediumBandDelta);
   expect(screen.getByText("現在: 中以上")).toBeInTheDocument();
   expect(lastWorldContainer()?.scale.set.mock.lastCall?.[0]).toBeCloseTo(scale);
 
