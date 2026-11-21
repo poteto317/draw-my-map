@@ -2,8 +2,8 @@ import {
   calculateWheelZoomRequest,
   normalizeWheelDelta,
   normalizeWheelDeltaY,
-  WHEEL_ZOOM_SENSITIVITY,
 } from "@/components/map/wheelZoom";
+import { DEFAULT_WHEEL_ZOOM_SENSITIVITY } from "@/domain/uiPrefs/uiPrefs";
 
 describe("normalizeWheelDelta", () => {
   it.each([
@@ -59,7 +59,7 @@ describe("calculateWheelZoomRequest", () => {
       bounds: { left: 50, top: 40 },
     }, 2)).toEqual({
       anchor: { x: 100, y: 50 },
-      requestedScale: 2 * Math.exp(100 * WHEEL_ZOOM_SENSITIVITY),
+      requestedScale: 2 * Math.exp(100 * DEFAULT_WHEEL_ZOOM_SENSITIVITY),
     });
   });
 

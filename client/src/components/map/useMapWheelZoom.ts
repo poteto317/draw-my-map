@@ -72,5 +72,5 @@ export function useMapWheelZoom({
     };
     canvas.addEventListener("wheel", handleWheel, { passive: false });
     return () => canvas.removeEventListener("wheel", handleWheel);
-  }, [runtime, viewportRef, wheelZoomSensitivity]);
+  }, [runtime, viewportRef]);
 }

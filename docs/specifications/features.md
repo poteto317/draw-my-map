@@ -150,7 +150,7 @@ Pixi.js による高速な 2D キャンバス描画と、React 19 による宣�
   3. **ズームボタン（`+` / `−`）**: マップ表示のキャンバス右下（`MapViewportZoomControls`）。1 回あたり現在倍率の **×1.25**（拡大）／ **÷1.25**（縮小）のあと `clampViewportScale`。アンカーはキャンバス要素のローカル中央。上限・下限に達した方向のボタンは `disabled`。アウトライン表示では非表示。
 - **アンカーズーム挙動**:
   - ズームの中心（アンカー点）となるカーソルの指す World 座標は、拡大・縮小の前後で画面上の同じ位置に保たれます（`zoomViewportAt`）。
-  - マウスホイール感度: 既定 `0.0025`（`WHEEL_ZOOM_SENSITIVITY` / `DEFAULT_WHEEL_ZOOM_SENSITIVITY`）。マップ表示ヘッダーの「ズーム感度」スライダーで `0.0005`〜`0.006`（刻み `0.0001`）へ変更でき、`localStorage` キー `draw-my-map.ui-prefs.v1` に保存される（マップ JSON には含めない）。
+  - マウスホイール感度: 既定 `0.0025`（`DEFAULT_WHEEL_ZOOM_SENSITIVITY`）。マップ表示ヘッダーの「ズーム感度」スライダーで `0.0005`〜`0.006`（刻み `0.0001`）へ変更でき、`localStorage` キー `draw-my-map.ui-prefs.v1` に保存される（マップ JSON には含めない）。感度のクランプは UI 設定層で行い、`calculateWheelZoomRequest` は有効な感度の数値を受け取る。
   - スケール計算式: $\text{requestedScale} = \text{currentScale} \times e^{-\Delta \times \text{sensitivity}}$（`sensitivity` は上記ユーザー設定。`+/-` ボタン・タッチピンチはこの設定の対象外）
 - **ホイール経路の分岐 (`useMapWheelZoom`)**:
   - **修飾キーなし**（`ctrlKey` も `metaKey` も false）: `calculateWheelPanRequest` でパン（2.2 節）。有効なパン要求が成立したときのみ `event.preventDefault()` と進行中ジェスチャーのキャンセル（`onBeforeZoom`）を実行します。閲覧履歴には積みません。
