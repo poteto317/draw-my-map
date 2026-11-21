@@ -418,7 +418,7 @@ describe("MapStageの復元時の後始末", () => {
     pan.moveTo(20, 10);
     pan.release(20, 10);
     const transformed = worldTransform();
-    expect(transformed.scale).toEqual([Math.exp(0.1)]);
+    expect(transformed.scale).toEqual([Math.exp(0.25)]);
 
     act(() => {
       expect(api().undo()).toBe(true);

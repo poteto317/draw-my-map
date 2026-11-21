@@ -1,7 +1,7 @@
 import { toLocalPoint, type Point } from "@/components/map/mapGeometry";
 import { clampViewportScale } from "@/components/map/mapViewport";
 
-const WHEEL_ZOOM_SENSITIVITY = 0.001;
+const WHEEL_ZOOM_SENSITIVITY = 0.0025;
 const WHEEL_DELTA_MODE_LINE = 1;
 const WHEEL_DELTA_MODE_PAGE = 2;
 

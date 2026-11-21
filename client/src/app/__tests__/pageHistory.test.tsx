@@ -251,7 +251,7 @@ describe("ページの元に戻す・やり直す", () => {
       position: world?.position.set.mock.lastCall,
       scale: world?.scale.set.mock.lastCall,
     };
-    expect(transform.scale).toEqual([Math.exp(0.1)]);
+    expect(transform.scale).toEqual([Math.exp(0.25)]);
 
     await user.click(undoButton());
     await user.click(redoButton());

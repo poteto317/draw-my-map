@@ -413,7 +413,7 @@ describe("MapStage boundary", () => {
       }));
     });
 
-    expect(lastWorldContainer()?.scale.set).toHaveBeenCalledWith(Math.exp(0.1));
+    expect(lastWorldContainer()?.scale.set).toHaveBeenCalledWith(Math.exp(0.25));
   });
 
   it("viewport更新ではworld containerを再生成せずtransformだけ変更する", async () => {

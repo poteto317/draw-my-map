@@ -307,6 +307,6 @@ describe("MapStage visibility boundary", () => {
     });
 
     expect(firstCallback).toHaveBeenCalledTimes(1);
-    expect(secondCallback).toHaveBeenCalledWith(Math.exp(0.1));
+    expect(secondCallback).toHaveBeenCalledWith(Math.exp(0.25));
   });
 });

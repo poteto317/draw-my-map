@@ -67,7 +67,7 @@ describe("useMapWheelZoom", () => {
     expect(onBeforeZoom).toHaveBeenCalledTimes(1);
     expect(onZoomAt).toHaveBeenCalledWith(
       { x: 200, y: 150 },
-      Math.exp(0.1),
+      Math.exp(0.25),
     );
     expect(onPanBy).not.toHaveBeenCalled();
   });
