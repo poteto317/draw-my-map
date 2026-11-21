@@ -29,7 +29,7 @@ describe("AppHeader", () => {
       />,
     );
 
-    const topRow = screen.getByRole("banner").firstElementChild;
+    const topRow = screen.getByTestId("header-primary");
     expect(topRow).toHaveClass("flex-wrap");
   });
 
@@ -48,12 +48,50 @@ describe("AppHeader", () => {
     );
 
     const banner = screen.getByRole("banner");
-    expect(banner).toHaveClass("max-h-[40dvh]", "flex", "flex-col");
+    expect(banner).toHaveClass("max-h-[40dvh]", "flex", "flex-col", "gap-4");
     expect(banner).not.toHaveClass("overflow-y-auto");
     expect(screen.getByTestId("header-operations-scroll")).toHaveClass(
+      "min-h-0",
+      "flex-1",
       "overflow-y-auto",
       "overscroll-y-contain",
     );
+  });
+
+  it("操作系スロットがすべて未指定のとき下段スクロール領域を描画しない", () => {
+    render(
+      <AppHeader
+        viewControls={null}
+        showCanvasHints={true}
+        layoutMode="manual"
+        onLayoutModeChange={jest.fn()}
+        searchControls={null}
+        mapControls={null}
+        saveStatus="saved"
+      />,
+    );
+
+    expect(screen.queryByTestId("header-operations-scroll")).not.toBeInTheDocument();
+  });
+
+  it("操作系スロットがすべて falsy のとき下段スクロール領域を描画しない", () => {
+    render(
+      <AppHeader
+        viewControls={null}
+        showCanvasHints={true}
+        layoutMode="manual"
+        onLayoutModeChange={jest.fn()}
+        searchControls={null}
+        mapControls={null}
+        saveStatus="saved"
+        importanceControls={false}
+        resolutionControls={false}
+        operationControls={false}
+        operationNotices={false}
+      />,
+    );
+
+    expect(screen.queryByTestId("header-operations-scroll")).not.toBeInTheDocument();
   });
 
   it("検索結果の absolute 配置をヘッダー overflow で切らない", () => {
@@ -76,8 +114,14 @@ describe("AppHeader", () => {
       />,
     );
 
-    expect(screen.getByRole("banner")).not.toHaveClass("overflow-y-auto");
-    expect(screen.getByRole("listbox", { name: "" })).toBeInTheDocument();
+    const banner = screen.getByRole("banner");
+    expect(banner).not.toHaveClass("overflow-y-auto");
+    const primary = screen.getByTestId("header-primary");
+    const opsScroll = screen.getByTestId("header-operations-scroll");
+    const search = screen.getByTestId("search-controls");
+    expect(primary).toContainElement(search);
+    expect(opsScroll).not.toContainElement(search);
+    expect(screen.getByText("検索結果")).toBeInTheDocument();
   });
 
   it("モード選択を変更commandへ接続する", () => {

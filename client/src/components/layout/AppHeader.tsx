@@ -33,14 +33,17 @@ export function AppHeader({
   operationNotices,
 }: AppHeaderProps) {
   const hasOperationsSection =
-    importanceControls != null ||
-    resolutionControls != null ||
-    operationControls != null ||
-    operationNotices != null;
+    Boolean(importanceControls) ||
+    Boolean(resolutionControls) ||
+    Boolean(operationControls) ||
+    Boolean(operationNotices);
 
   return (
-    <header className="flex max-h-[40dvh] flex-col bg-white px-6 py-3 shadow-sm dark:bg-zinc-800">
-      <div className="flex shrink-0 flex-wrap items-center gap-4">
+    <header className="flex max-h-[40dvh] flex-col gap-4 bg-white px-6 py-3 shadow-sm dark:bg-zinc-800">
+      <div
+        data-testid="header-primary"
+        className="flex shrink-0 flex-wrap items-center gap-4"
+      >
         <h1 className="shrink-0 text-lg font-semibold text-zinc-800 dark:text-zinc-100">
           Draw My Map
         </h1>
