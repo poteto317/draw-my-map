@@ -11,6 +11,7 @@ import type { PixiRuntime } from "@/components/map/pixi/pixiTypes";
 type Options = {
   runtime: PixiRuntime | null;
   viewportRef: LatestValue<Viewport>;
+  wheelZoomSensitivity: number;
   onBeforeZoom: () => void;
   onPanBy: (dx: number, dy: number) => void;
   onZoomAt: (anchor: Point, requestedScale: number) => void;
@@ -19,6 +20,7 @@ type Options = {
 export function useMapWheelZoom({
   runtime,
   viewportRef,
+  wheelZoomSensitivity,
   onBeforeZoom,
   onPanBy,
   onZoomAt,
@@ -26,11 +28,13 @@ export function useMapWheelZoom({
   const onBeforeZoomRef = useRef(onBeforeZoom);
   const onPanByRef = useRef(onPanBy);
   const onZoomAtRef = useRef(onZoomAt);
+  const wheelZoomSensitivityRef = useRef(wheelZoomSensitivity);
   useLayoutEffect(() => {
     onBeforeZoomRef.current = onBeforeZoom;
     onPanByRef.current = onPanBy;
     onZoomAtRef.current = onZoomAt;
-  }, [onBeforeZoom, onPanBy, onZoomAt]);
+    wheelZoomSensitivityRef.current = wheelZoomSensitivity;
+  }, [onBeforeZoom, onPanBy, onZoomAt, wheelZoomSensitivity]);
 
   useEffect(() => {
     if (!runtime) return;
@@ -47,7 +51,7 @@ export function useMapWheelZoom({
           deltaMode: event.deltaMode,
           pageHeight,
           bounds,
-        }, viewportRef.current.scale);
+        }, viewportRef.current.scale, wheelZoomSensitivityRef.current);
         event.preventDefault();
         if (!request) return;
         onBeforeZoomRef.current();
@@ -68,5 +72,5 @@ export function useMapWheelZoom({
     };
     canvas.addEventListener("wheel", handleWheel, { passive: false });
     return () => canvas.removeEventListener("wheel", handleWheel);
-  }, [runtime, viewportRef]);
+  }, [runtime, viewportRef, wheelZoomSensitivity]);
 }

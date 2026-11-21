@@ -2,6 +2,7 @@ import {
   calculateWheelZoomRequest,
   normalizeWheelDelta,
   normalizeWheelDeltaY,
+  WHEEL_ZOOM_SENSITIVITY,
 } from "@/components/map/wheelZoom";
 
 describe("normalizeWheelDelta", () => {
@@ -58,8 +59,24 @@ describe("calculateWheelZoomRequest", () => {
       bounds: { left: 50, top: 40 },
     }, 2)).toEqual({
       anchor: { x: 100, y: 50 },
-      requestedScale: 2 * Math.exp(0.25),
+      requestedScale: 2 * Math.exp(100 * WHEEL_ZOOM_SENSITIVITY),
     });
+  });
+
+  it("感度引数で倍率変化の強さを変えられる", () => {
+    const input = {
+      clientX: 150,
+      clientY: 90,
+      deltaY: -100,
+      deltaMode: WheelEvent.DOM_DELTA_PIXEL,
+      pageHeight: 600,
+      bounds: { left: 50, top: 40 },
+    };
+    const defaultResult = calculateWheelZoomRequest(input, 1);
+    const higherResult = calculateWheelZoomRequest(input, 1, 0.005);
+    expect(defaultResult?.requestedScale).toBeCloseTo(Math.exp(0.25));
+    expect(higherResult?.requestedScale).toBeCloseTo(Math.exp(0.5));
+    expect(higherResult!.requestedScale).toBeGreaterThan(defaultResult!.requestedScale);
   });
 
   it("実効倍率が変わらない入力を拒否する", () => {

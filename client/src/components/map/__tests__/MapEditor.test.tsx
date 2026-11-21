@@ -28,6 +28,7 @@ import {
 } from "@/domain/mapLibrary/mapConflictMessages";
 import { createConflictCopyName } from "@/domain/mapLibrary/mapConflict";
 import type { MapLibraryOperationResult } from "@/hooks/useMapLibrary";
+import { DEFAULT_WHEEL_ZOOM_SENSITIVITY } from "@/domain/uiPrefs/uiPrefs";
 
 // ページのテストと同じく、Pixi・画像化・ダウンロードだけを差し替える
 jest.mock("pixi.js", () => {
@@ -1341,7 +1342,7 @@ it("同じ倍率帯でも拡大側・縮小側から入った自動解像度を�
   };
   await navigateBySearch(user, "親ルート");
   // wheelZoom の感度積（delta × sensitivity）を固定し、感度変更でも同じ倍率帯の往復になるようにする
-  const wheelZoomSensitivity = 0.0025;
+  const wheelZoomSensitivity = DEFAULT_WHEEL_ZOOM_SENSITIVITY;
   const stayInAllBandDelta = 0.03 / wheelZoomSensitivity;
   const crossMediumBandDelta = 0.09 / wheelZoomSensitivity;
   wheel(stayInAllBandDelta);

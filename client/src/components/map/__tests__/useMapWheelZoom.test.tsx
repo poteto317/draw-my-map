@@ -1,5 +1,6 @@
 import { renderHook } from "@testing-library/react";
 import { useMapWheelZoom } from "@/components/map/useMapWheelZoom";
+import { DEFAULT_WHEEL_ZOOM_SENSITIVITY } from "@/domain/uiPrefs/uiPrefs";
 
 function defaultRuntime(canvas: HTMLCanvasElement) {
   return { app: { canvas, screen: { width: 800, height: 600 } } };
@@ -14,6 +15,7 @@ describe("useMapWheelZoom", () => {
     renderHook(() => useMapWheelZoom({
       runtime: defaultRuntime(canvas) as never,
       viewportRef: { current: { offsetX: 0, offsetY: 0, scale: 1 } },
+      wheelZoomSensitivity: DEFAULT_WHEEL_ZOOM_SENSITIVITY,
       onBeforeZoom,
       onPanBy,
       onZoomAt,
@@ -48,6 +50,7 @@ describe("useMapWheelZoom", () => {
     renderHook(() => useMapWheelZoom({
       runtime: defaultRuntime(canvas) as never,
       viewportRef: { current: { offsetX: 0, offsetY: 0, scale: 1 } },
+      wheelZoomSensitivity: DEFAULT_WHEEL_ZOOM_SENSITIVITY,
       onBeforeZoom,
       onPanBy,
       onZoomAt,
@@ -72,6 +75,37 @@ describe("useMapWheelZoom", () => {
     expect(onPanBy).not.toHaveBeenCalled();
   });
 
+  it("感度を上げると同じホイール入力でより大きくズームする", () => {
+    const canvas = document.createElement("canvas");
+    jest.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
+      left: 0, top: 0, width: 800, height: 600,
+      right: 800, bottom: 600, x: 0, y: 0, toJSON: () => ({}),
+    });
+    const onZoomAt = jest.fn();
+    renderHook(() => useMapWheelZoom({
+      runtime: defaultRuntime(canvas) as never,
+      viewportRef: { current: { offsetX: 0, offsetY: 0, scale: 1 } },
+      wheelZoomSensitivity: 0.005,
+      onBeforeZoom: jest.fn(),
+      onPanBy: jest.fn(),
+      onZoomAt,
+    }));
+
+    canvas.dispatchEvent(new WheelEvent("wheel", {
+      clientX: 100,
+      clientY: 100,
+      deltaY: -100,
+      deltaMode: WheelEvent.DOM_DELTA_PIXEL,
+      cancelable: true,
+      ctrlKey: true,
+    }));
+
+    expect(onZoomAt).toHaveBeenCalledWith(
+      { x: 100, y: 100 },
+      Math.exp(0.5),
+    );
+  });
+
   it("修飾キーなしで横スクロールのみのwheelを横パンに使う", () => {
     const canvas = document.createElement("canvas");
     const onBeforeZoom = jest.fn();
@@ -80,6 +114,7 @@ describe("useMapWheelZoom", () => {
     renderHook(() => useMapWheelZoom({
       runtime: defaultRuntime(canvas) as never,
       viewportRef: { current: { offsetX: 0, offsetY: 0, scale: 1 } },
+      wheelZoomSensitivity: DEFAULT_WHEEL_ZOOM_SENSITIVITY,
       onBeforeZoom,
       onPanBy,
       onZoomAt,
@@ -106,6 +141,7 @@ describe("useMapWheelZoom", () => {
     renderHook(() => useMapWheelZoom({
       runtime: { app: { canvas, screen: { height: 600 } } } as never,
       viewportRef: { current: { offsetX: 0, offsetY: 0, scale: 1 } },
+      wheelZoomSensitivity: DEFAULT_WHEEL_ZOOM_SENSITIVITY,
       onBeforeZoom,
       onPanBy,
       onZoomAt,
@@ -135,6 +171,7 @@ describe("useMapWheelZoom", () => {
     renderHook(() => useMapWheelZoom({
       runtime: { app: { canvas, screen: { height: 600 } } } as never,
       viewportRef: { current: { offsetX: 0, offsetY: 0, scale } },
+      wheelZoomSensitivity: DEFAULT_WHEEL_ZOOM_SENSITIVITY,
       onBeforeZoom,
       onPanBy,
       onZoomAt,
@@ -160,6 +197,7 @@ describe("useMapWheelZoom", () => {
     renderHook(() => useMapWheelZoom({
       runtime: { app: { canvas, screen: { height: 600 } } } as never,
       viewportRef: { current: { offsetX: 0, offsetY: 0, scale: 4 } },
+      wheelZoomSensitivity: DEFAULT_WHEEL_ZOOM_SENSITIVITY,
       onBeforeZoom,
       onPanBy,
       onZoomAt,
@@ -181,6 +219,7 @@ describe("useMapWheelZoom", () => {
     const { unmount } = renderHook(() => useMapWheelZoom({
       runtime: { app: { canvas, screen: { height: 600 } } } as never,
       viewportRef: { current: { offsetX: 0, offsetY: 0, scale: 1 } },
+      wheelZoomSensitivity: DEFAULT_WHEEL_ZOOM_SENSITIVITY,
       onBeforeZoom: jest.fn(),
       onPanBy,
       onZoomAt,
