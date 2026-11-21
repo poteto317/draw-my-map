@@ -410,6 +410,7 @@ describe("MapStageの復元時の後始末", () => {
         clientX: 100,
         clientY: 100,
         deltaY: -100,
+        ctrlKey: true,
         cancelable: true,
       }));
     });

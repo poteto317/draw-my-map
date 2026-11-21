@@ -408,6 +408,7 @@ describe("MapStage boundary", () => {
         clientX: 100,
         clientY: 100,
         deltaY: -100,
+        ctrlKey: true,
         cancelable: true,
       }));
     });
@@ -492,6 +493,7 @@ describe("MapStage boundary", () => {
         clientX: 0,
         clientY: 0,
         deltaY: -10000,
+        ctrlKey: true,
         cancelable: true,
       }));
     });
@@ -513,6 +515,7 @@ describe("MapStage boundary", () => {
         clientX: 0,
         clientY: 0,
         deltaY: -10000,
+        ctrlKey: true,
         cancelable: true,
       }));
     });
@@ -537,6 +540,7 @@ describe("MapStage boundary", () => {
         clientX: 0,
         clientY: 0,
         deltaY: -10000,
+        ctrlKey: true,
         cancelable: true,
       }));
     });
@@ -565,6 +569,7 @@ describe("MapStage boundary", () => {
         clientX: 0,
         clientY: 0,
         deltaY: -100,
+        ctrlKey: true,
         cancelable: true,
       }));
     });
@@ -592,6 +597,7 @@ describe("MapStage boundary", () => {
         clientX: 0,
         clientY: 0,
         deltaY: -100,
+        ctrlKey: true,
         cancelable: true,
       }));
     });

@@ -241,6 +241,7 @@ describe("ページの元に戻す・やり直す", () => {
         clientX: 100,
         clientY: 100,
         deltaY: -100,
+        ctrlKey: true,
         cancelable: true,
       }));
     });

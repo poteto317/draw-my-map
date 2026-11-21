@@ -179,6 +179,7 @@ export function MapStage({
     viewport,
     viewportRef,
     setViewport,
+    panBy,
     zoomAt,
     focusNode,
   } = useMapViewport();
@@ -321,6 +322,7 @@ export function MapStage({
     runtime,
     viewportRef,
     onBeforeZoom: cancelActiveGesture,
+    onPanBy: panBy,
     onZoomAt: zoomAt,
   });
 
