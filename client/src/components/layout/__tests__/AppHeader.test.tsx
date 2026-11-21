@@ -29,7 +29,55 @@ describe("AppHeader", () => {
       />,
     );
 
-    expect(screen.getByRole("banner")).toHaveClass("flex-wrap");
+    const topRow = screen.getByRole("banner").firstElementChild;
+    expect(topRow).toHaveClass("flex-wrap");
+  });
+
+  it("高さ上限と縦スクロールで折り返し内容へ届く", () => {
+    render(
+      <AppHeader
+        viewControls={null}
+        showCanvasHints={true}
+        layoutMode="manual"
+        onLayoutModeChange={jest.fn()}
+        searchControls={null}
+        mapControls={null}
+        saveStatus="saved"
+        operationControls={<button type="button">保存操作</button>}
+      />,
+    );
+
+    const banner = screen.getByRole("banner");
+    expect(banner).toHaveClass("max-h-[40dvh]", "flex", "flex-col");
+    expect(banner).not.toHaveClass("overflow-y-auto");
+    expect(screen.getByTestId("header-operations-scroll")).toHaveClass(
+      "overflow-y-auto",
+      "overscroll-y-contain",
+    );
+  });
+
+  it("検索結果の absolute 配置をヘッダー overflow で切らない", () => {
+    render(
+      <AppHeader
+        viewControls={null}
+        showCanvasHints={true}
+        layoutMode="manual"
+        onLayoutModeChange={jest.fn()}
+        searchControls={
+          <div className="relative" data-testid="search-controls">
+            <div role="listbox" className="absolute top-full z-10">
+              検索結果
+            </div>
+          </div>
+        }
+        mapControls={null}
+        saveStatus="saved"
+        operationControls={<button type="button">保存操作</button>}
+      />,
+    );
+
+    expect(screen.getByRole("banner")).not.toHaveClass("overflow-y-auto");
+    expect(screen.getByRole("listbox", { name: "" })).toBeInTheDocument();
   });
 
   it("モード選択を変更commandへ接続する", () => {
