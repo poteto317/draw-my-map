@@ -1,7 +1,11 @@
 import { toLocalPoint, type Point } from "@/components/map/mapGeometry";
 import { clampViewportScale } from "@/components/map/mapViewport";
+import {
+  clampWheelZoomSensitivity,
+  DEFAULT_WHEEL_ZOOM_SENSITIVITY,
+} from "@/domain/uiPrefs/uiPrefs";
 
-const WHEEL_ZOOM_SENSITIVITY = 0.0025;
+export const WHEEL_ZOOM_SENSITIVITY = DEFAULT_WHEEL_ZOOM_SENSITIVITY;
 const WHEEL_DELTA_MODE_LINE = 1;
 const WHEEL_DELTA_MODE_PAGE = 2;
 
@@ -40,6 +44,7 @@ export function normalizeWheelDeltaY(
 export function calculateWheelZoomRequest(
   input: WheelZoomInput,
   currentScale: number,
+  sensitivity: number = WHEEL_ZOOM_SENSITIVITY,
 ): WheelZoomRequest | null {
   const values = [
     input.clientX,
@@ -54,7 +59,8 @@ export function calculateWheelZoomRequest(
   if (values.some((value) => !Number.isFinite(value)) || currentScale <= 0) return null;
 
   const delta = normalizeWheelDeltaY(input.deltaY, input.deltaMode, input.pageHeight);
-  const requestedScale = currentScale * Math.exp(-delta * WHEEL_ZOOM_SENSITIVITY);
+  const wheelZoomSensitivity = clampWheelZoomSensitivity(sensitivity);
+  const requestedScale = currentScale * Math.exp(-delta * wheelZoomSensitivity);
   const anchor = toLocalPoint(
     input.clientX,
     input.clientY,
