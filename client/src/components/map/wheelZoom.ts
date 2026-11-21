@@ -19,14 +19,22 @@ type WheelZoomInput = {
   bounds: Pick<DOMRect, "left" | "top">;
 };
 
+export function normalizeWheelDelta(
+  delta: number,
+  deltaMode: number,
+  pageHeight: number,
+): number {
+  if (deltaMode === WHEEL_DELTA_MODE_LINE) return delta * 16;
+  if (deltaMode === WHEEL_DELTA_MODE_PAGE) return delta * pageHeight;
+  return delta;
+}
+
 export function normalizeWheelDeltaY(
   deltaY: number,
   deltaMode: number,
   pageHeight: number,
 ): number {
-  if (deltaMode === WHEEL_DELTA_MODE_LINE) return deltaY * 16;
-  if (deltaMode === WHEEL_DELTA_MODE_PAGE) return deltaY * pageHeight;
-  return deltaY;
+  return normalizeWheelDelta(deltaY, deltaMode, pageHeight);
 }
 
 export function calculateWheelZoomRequest(

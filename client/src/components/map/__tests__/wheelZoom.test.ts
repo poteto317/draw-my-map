@@ -1,7 +1,23 @@
 import {
   calculateWheelZoomRequest,
+  normalizeWheelDelta,
   normalizeWheelDeltaY,
 } from "@/components/map/wheelZoom";
+
+describe("normalizeWheelDelta", () => {
+  it.each([
+    [5, WheelEvent.DOM_DELTA_PIXEL, 600, 5],
+    [5, WheelEvent.DOM_DELTA_LINE, 600, 80],
+    [5, WheelEvent.DOM_DELTA_PAGE, 600, 3000],
+  ])("delta mode %sをpixel相当へ正規化する", (delta, mode, pageHeight, expected) => {
+    expect(normalizeWheelDelta(delta, mode, pageHeight)).toBe(expected);
+  });
+
+  it("横方向 delta でも縦と同じ規則で正規化する", () => {
+    expect(normalizeWheelDelta(3, WheelEvent.DOM_DELTA_LINE, 800)).toBe(48);
+    expect(normalizeWheelDelta(2, WheelEvent.DOM_DELTA_PAGE, 800)).toBe(1600);
+  });
+});
 
 describe("normalizeWheelDeltaY", () => {
   it.each([
