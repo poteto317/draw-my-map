@@ -255,7 +255,7 @@ it("dialogとdisabledはoutline操作を止め、共通選択をイラストパ�
 
 it("旧auto/highのズームを持ち込まず復帰時の初期scaleでauto/allへ戻す", async () => {
   await renderOutlineEditor();
-  act(() => { stageContainer().querySelector("canvas")!.dispatchEvent(new WheelEvent("wheel", { deltaY: 700, cancelable: true })); });
+  act(() => { stageContainer().querySelector("canvas")!.dispatchEvent(new WheelEvent("wheel", { deltaY: 700, ctrlKey: true, cancelable: true })); });
   expect(screen.getByText("現在: 高のみ")).toBeInTheDocument();
   await switchTo("アウトライン");
   await userEvent.click(screen.getByRole("button", { name: "階層2・子B" }));

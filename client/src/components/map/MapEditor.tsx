@@ -68,7 +68,8 @@ import {
 import { isRestorableFocusTarget } from "@/components/map/isRestorableFocusTarget";
 import { resolveOutlineInitialFocusTarget } from "@/components/map/resolveOutlineInitialFocusTarget";
 import { MapStage, type MapStageViewportHandle } from "@/components/map/MapStage";
-import { INITIAL_VIEWPORT } from "@/components/map/mapViewport";
+import { MapViewportZoomControls, ZOOM_FACTOR } from "@/components/map/MapViewportZoomControls";
+import { clampViewportScale, INITIAL_VIEWPORT, zoomViewportAt } from "@/components/map/mapViewport";
 import { useCommandPaletteShortcut } from "@/components/map/useCommandPaletteShortcut";
 import { useCrossMapSearchShortcut } from "@/components/map/useCrossMapSearchShortcut";
 import { buildCommandAvailabilityContext } from "@/domain/commands/buildCommandAvailabilityContext";
@@ -276,6 +277,20 @@ export function MapEditor({
     isCurrentRequest: canvasFocus.isCurrentRequest, finishRequest: canvasFocus.finishRequest,
   });
   const { captureBeforeNavigation, issueViewFocus, recordBeforeViewportChange } = viewNavigation;
+
+  const zoomMapViewportFromCenter = useCallback((factor: number) => {
+    const handle = viewportHandleRef.current;
+    if (!handle) return;
+    const screen = handle.getScreenSize();
+    if (!screen) return;
+    const current = handle.getViewport();
+    const anchor = { x: screen.width / 2, y: screen.height / 2 };
+    const requestedScale = clampViewportScale(current.scale * factor);
+    const next = zoomViewportAt(current, anchor, requestedScale);
+    handle.applyViewport(next);
+  }, []);
+  const handleZoomIn = useCallback(() => zoomMapViewportFromCenter(ZOOM_FACTOR), [zoomMapViewportFromCenter]);
+  const handleZoomOut = useCallback(() => zoomMapViewportFromCenter(1 / ZOOM_FACTOR), [zoomMapViewportFromCenter]);
 
   const nodeSearch = useNodeLabelSearch({
     nodes,
@@ -1005,49 +1020,56 @@ export function MapEditor({
             <OutlineEditor nodes={nodes} model={outlineModel} selectedNodeId={selectedNodeId}
               documentRevision={documentRevision} enabled={editorShortcutsEnabled} actions={outlineActions} />
           ) : (
-            <MapStage
-              canvasContainerRef={canvasContainerRef}
-              viewportHandleRef={viewportHandleRef}
-              nodes={displayState.displayNodes}
-              focusRequest={canvasFocus.request}
-              isCurrentFocusRequest={canvasFocus.isCurrentRequest}
-              onFocusRequestApplied={viewNavigation.onFocusRequestApplied}
-              onFocusRequestDiscarded={viewNavigation.onFocusRequestDiscarded}
-              onBeforeCenterNode={(request) => {
-                if (request === null) recordBeforeViewportChange();
-              }}
-              visibleNodeIds={displayState.visibleNodeIds}
-              onViewportScaleChange={setViewportScale}
-              selectedNodeId={selectedNodeId}
-              selectedNodeIds={selectedNodeIds}
-              onDoubleClick={addNode}
-              onAddChildNode={addChildNodeExpanding}
-              onAddSiblingNode={addSiblingNode}
-              onSelectNode={selectNode}
-              onToggleNodeSelection={toggleNodeSelection}
-              onSelectNodeRange={selectNodeRange}
-              onSetSelectionFromMarquee={setSelectionFromMarquee}
-              onClearSelection={clearSelection}
-              pruneSelectionToVisible={pruneSelectionToVisible}
-              onUpdateLabel={updateNodeLabel}
-              onMoveNode={moveNode}
-              onBeginNodeMove={beginMoveHistory}
-              onConnectNodes={connectNodes}
-              layoutMode={layoutMode}
-              onReorderSibling={siblingReorder.reorder}
-              onChangeNodeIndent={nodeIndent.change}
-              onInsertParentNode={nodeParentInsertion.insert}
-              labelEditRequest={nodeParentInsertion.labelEditRequest}
-              onDeleteNode={deleteNode}
-              onCopySubtree={copySubtree}
-              onPasteSubtree={pasteSubtree}
-              onClipboardNotice={publishClipboardNotice}
-              onGenerateIllustration={generateIllustration}
-              resetRevision={resetRevision}
-              documentRevision={documentRevision}
-              shortcutsEnabled={editorShortcutsEnabled}
-              dialogMouseClickedAtRef={dialogMouseClickedAtRef}
-            />
+            <div className="relative h-full min-h-0 w-full">
+              <MapStage
+                canvasContainerRef={canvasContainerRef}
+                viewportHandleRef={viewportHandleRef}
+                nodes={displayState.displayNodes}
+                focusRequest={canvasFocus.request}
+                isCurrentFocusRequest={canvasFocus.isCurrentRequest}
+                onFocusRequestApplied={viewNavigation.onFocusRequestApplied}
+                onFocusRequestDiscarded={viewNavigation.onFocusRequestDiscarded}
+                onBeforeCenterNode={(request) => {
+                  if (request === null) recordBeforeViewportChange();
+                }}
+                visibleNodeIds={displayState.visibleNodeIds}
+                onViewportScaleChange={setViewportScale}
+                selectedNodeId={selectedNodeId}
+                selectedNodeIds={selectedNodeIds}
+                onDoubleClick={addNode}
+                onAddChildNode={addChildNodeExpanding}
+                onAddSiblingNode={addSiblingNode}
+                onSelectNode={selectNode}
+                onToggleNodeSelection={toggleNodeSelection}
+                onSelectNodeRange={selectNodeRange}
+                onSetSelectionFromMarquee={setSelectionFromMarquee}
+                onClearSelection={clearSelection}
+                pruneSelectionToVisible={pruneSelectionToVisible}
+                onUpdateLabel={updateNodeLabel}
+                onMoveNode={moveNode}
+                onBeginNodeMove={beginMoveHistory}
+                onConnectNodes={connectNodes}
+                layoutMode={layoutMode}
+                onReorderSibling={siblingReorder.reorder}
+                onChangeNodeIndent={nodeIndent.change}
+                onInsertParentNode={nodeParentInsertion.insert}
+                labelEditRequest={nodeParentInsertion.labelEditRequest}
+                onDeleteNode={deleteNode}
+                onCopySubtree={copySubtree}
+                onPasteSubtree={pasteSubtree}
+                onClipboardNotice={publishClipboardNotice}
+                onGenerateIllustration={generateIllustration}
+                resetRevision={resetRevision}
+                documentRevision={documentRevision}
+                shortcutsEnabled={editorShortcutsEnabled}
+                dialogMouseClickedAtRef={dialogMouseClickedAtRef}
+              />
+              <MapViewportZoomControls
+                scale={viewportScale}
+                onZoomIn={handleZoomIn}
+                onZoomOut={handleZoomOut}
+              />
+            </div>
           )}
           sidePanel={(
             <NodeDetailPanel
