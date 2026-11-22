@@ -56,6 +56,8 @@ export type Node = {
   // 配列順に同じリンクとみなすものを除いて連結し、複製・貼り付け・別マップへの移動では写し、親の挿入では新しい親に持たせない。
   // 履歴の同値判定（domain/history/mapHistory.ts）は要素がオブジェクトなので areNodeMapLinksEqual で比べる
   mapLinks?: readonly NodeMapLink[];
+  // 編集ロック。値があるノードでは true のみキーを持つ
+  locked?: true;
 };
 
 // 出典 1 件。任意の page / url は無いときキーごと持たない。規則は domain/nodes/nodeSource.ts
