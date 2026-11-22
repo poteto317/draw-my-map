@@ -1,13 +1,26 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { BrokenMapLinksDialog } from "@/components/layout/BrokenMapLinksDialog";
 import { CrossMapSearchDialog } from "@/components/layout/CrossMapSearchDialog";
 import { EditorViewModeControl, type EditorViewMode } from "@/components/layout/EditorViewModeControl";
+import { ExportScopeControl } from "@/components/layout/ExportScopeControl";
 import { OutlineEditor } from "@/components/outline/OutlineEditor";
 import type { MapIndexEntry } from "@/domain/mapLibrary/mapIndex";
+import {
+  canUseSelectionScope,
+  resolveExportFormatControls,
+} from "@/domain/exportScope/exportFormatAvailability";
+import type { ExportScope } from "@/domain/exportScope/exportScope";
+import { normalizeExportForestParents } from "@/domain/exportScope/normalizeExportForestParents";
+import { resolveExportNodes } from "@/domain/exportScope/resolveExportNodes";
+import { resolveSelectionTargetIds } from "@/domain/exportScope/resolveSelectionTargetIds";
 import { summarizeSelectionImportance } from "@/domain/nodes/selectionImportanceSummary";
 import { buildOutlineRows } from "@/domain/outline/outlineRows";
+import {
+  createMapDocument,
+  serializeMapDocument,
+} from "@/domain/persistence/mapDocumentCodec";
 import { useCrossMapCorpus } from "@/hooks/useCrossMapCorpus";
 import { useCrossMapDialogs } from "@/hooks/useCrossMapDialogs";
 import { useCrossMapNavigation } from "@/hooks/useCrossMapNavigation";
@@ -26,6 +39,10 @@ import { NodeMergeControl } from "@/components/layout/NodeMergeControl";
 import { NodeMergeDialog } from "@/components/layout/NodeMergeDialog";
 import { NodeSplitControl } from "@/components/layout/NodeSplitControl";
 import { NodeSplitDialog } from "@/components/layout/NodeSplitDialog";
+import {
+  PartsLibraryDialog,
+  type PartsLibraryDialogMode,
+} from "@/components/layout/PartsLibraryDialog";
 import { useBranchMoveDialog } from "@/hooks/useBranchMoveDialog";
 import { useCommandPalette } from "@/hooks/useCommandPalette";
 import { useHeaderFocusReturn } from "@/hooks/useHeaderFocusReturn";
@@ -35,6 +52,7 @@ import { useNodeSplitDialog } from "@/hooks/useNodeSplitDialog";
 import { useLatestRef } from "@/hooks/useLatestRef";
 import type { MapLibraryOperationResult } from "@/hooks/useMapLibrary";
 import { useNodes } from "@/hooks/useNodes";
+import { usePartsLibrary } from "@/hooks/usePartsLibrary";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { AppWorkspace } from "@/components/layout/AppWorkspace";
 import { NodeImportanceSelector } from "@/components/layout/NodeImportanceSelector";
@@ -80,6 +98,7 @@ import { useIllustrationGeneration } from "@/hooks/useIllustrationGeneration";
 import { useUiPrefs } from "@/hooks/useUiPrefs";
 import { useMapHistoryShortcuts } from "@/components/map/useMapHistoryShortcuts";
 import { useMapImageExport } from "@/hooks/useMapImageExport";
+import { useMapJsonExport } from "@/hooks/useMapJsonExport";
 import { useOutlineExport } from "@/hooks/useOutlineExport";
 import { useMapPersistence } from "@/hooks/useMapPersistence";
 import { useNodeDuplicationAction } from "@/hooks/useNodeDuplicationAction";
@@ -179,6 +198,7 @@ export function MapEditor({
     duplicateSubtree,
     copySubtree,
     pasteSubtree,
+    insertSubtree,
     insertForest,
     reorderSibling,
     changeNodeIndent,
@@ -210,6 +230,8 @@ export function MapEditor({
     redo,
   } = useNodes();
   const [viewMode, setViewMode] = useState<EditorViewMode>("map");
+  const [exportScope, setExportScope] = useState<ExportScope>("all");
+  const [scopedJsonNotice, setScopedJsonNotice] = useState<OperationNotice | null>(null);
   const canvasFocus = useRevisionScopedNodeRequest(documentRevision);
   const [viewportScale, setViewportScale] = useState(1);
   const { replaceMapAndReset, resetRevision } = useResettingMapReplacement(replaceMap);
@@ -327,10 +349,54 @@ export function MapEditor({
     mapName,
     onSaveCurrentAsNewMap,
   });
+  const selectionTargetIds = useMemo(
+    () => resolveSelectionTargetIds(viewMode, selectedNodeId, selectedNodeIds),
+    [viewMode, selectedNodeId, selectedNodeIds],
+  );
+  const selectionScopeAvailable = canUseSelectionScope(selectionTargetIds);
+  /* eslint-disable react-hooks/set-state-in-effect -- 選択が外れたときの書き出し対象フォールバック */
+  useEffect(() => {
+    if (exportScope === "selection" && !selectionScopeAvailable) {
+      setExportScope("all");
+    }
+  }, [exportScope, selectionScopeAvailable]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+  const exportNodes = useMemo(
+    () => resolveExportNodes(
+      exportScope,
+      nodes,
+      displayState.visibleNodeIds,
+      selectionTargetIds,
+    ),
+    [exportScope, nodes, displayState.visibleNodeIds, selectionTargetIds],
+  );
+  const exportDocumentNodes = useMemo(
+    () => (exportScope === "all"
+      ? exportNodes
+      : normalizeExportForestParents(exportNodes)),
+    [exportScope, exportNodes],
+  );
   const imageExport = useMapImageExport({
-    nodes,
+    nodes: exportNodes,
     mapName,
   });
+  const scopedJsonSnapshot = useMemo(
+    () => serializeMapDocument(createMapDocument(exportDocumentNodes, layoutMode)),
+    [exportDocumentNodes, layoutMode],
+  );
+  const exportScopedJson = useMapJsonExport({
+    currentSnapshot: scopedJsonSnapshot,
+    mapName,
+    publishNotice: setScopedJsonNotice,
+  });
+  const exportJsonAll = persistence.exportJson;
+  const handleExportJson = useCallback(() => {
+    if (exportScope === "all") {
+      exportJsonAll();
+      return;
+    }
+    exportScopedJson();
+  }, [exportScope, exportJsonAll, exportScopedJson]);
   const { generation, generateIllustration, dismissGeneration } = useIllustrationGeneration(nodes, documentRevision);
   const duplication = useNodeDuplicationAction({
     selectedNodeId: selectedNode?.id ?? null,
@@ -347,6 +413,14 @@ export function MapEditor({
     publishNotice: publishTreeEditNotice,
     clearNotice: clearTreeEditNotice,
   } = useRevisionScopedNotice(documentRevision);
+  const [partsDialogMode, setPartsDialogMode] = useState<PartsLibraryDialogMode | null>(null);
+  const partsLibrary = usePartsLibrary({
+    storage: storageSession.storage,
+    nodes,
+    selectionTargetIds,
+    insertSubtree,
+    publishNotice: publishTreeEditNotice,
+  });
   const { corpus, refreshCorpus } = useCrossMapCorpus({
     maps: mapMoveTargets,
     currentMapId: mapId,
@@ -543,6 +617,7 @@ export function MapEditor({
     && labelReplace.screen === "closed"
     && nodeSplit.screen === "closed"
     && nodeMerge.screen === "closed"
+    && partsDialogMode === null
     && !crossMapDialogs.crossMapSearchOpen
     && !crossMapDialogs.brokenLinksDialogOpen
     && !persistence.isConfirmOpen;
@@ -552,7 +627,15 @@ export function MapEditor({
     onOpen: crossMapDialogs.openCrossMapSearch,
   });
   const outlineModel = useMemo(() => buildOutlineRows(nodes), [nodes]);
-  const outlineExport = useOutlineExport({ model: outlineModel, mapName });
+  const exportOutlineModel = useMemo(
+    () => buildOutlineRows(exportDocumentNodes),
+    [exportDocumentNodes],
+  );
+  const outlineExport = useOutlineExport({ model: exportOutlineModel, mapName });
+  const exportFormatControls = useMemo(
+    () => resolveExportFormatControls(exportScope, exportNodes.length),
+    [exportScope, exportNodes.length],
+  );
   const outlineActions = useOutlineEditorActions({
     nodes, selectedNodeId, documentRevision,
     enabled: editorShortcutsEnabled && viewMode === "outline",
@@ -652,6 +735,9 @@ export function MapEditor({
         nodeSplitDisabledReason: nodeSplit.disabledReason,
         canOpenNodeMerge: nodeMerge.canOpen,
         nodeMergeDisabledReason: nodeMerge.disabledReason,
+        canRegisterPart: partsLibrary.canRegister,
+        canInsertPart: partsLibrary.parts.length > 0,
+        canDeletePart: partsLibrary.parts.length > 0,
         canFocusInMapSearch: viewMode === "map",
         canOpenCrossMapSearch: true,
         outlineDuplicateIds: outlineModel.duplicateIds,
@@ -667,6 +753,7 @@ export function MapEditor({
       outlineActions.structureCanMoveUp, outlineActions.structureCanMoveDown,
       outlineActions.structureCanIndent, outlineActions.structureCanOutdent, nodes.length,
       nodeSplit.canOpen, nodeSplit.disabledReason, nodeMerge.canOpen, nodeMerge.disabledReason,
+      partsLibrary.canRegister, partsLibrary.parts.length,
       outlineModel.duplicateIds, outlineModel.invalidStructure, outlineModel.allNodeIds,
     ],
   );
@@ -757,8 +844,20 @@ export function MapEditor({
       openNodeSplit: nodeSplit.open,
       openNodeMerge: nodeMerge.open,
       openCrossMapSearch: crossMapDialogs.openCrossMapSearch,
+      openRegisterPart: () => {
+        partsLibrary.refresh();
+        setPartsDialogMode("register");
+      },
+      openInsertPart: () => {
+        partsLibrary.refresh();
+        setPartsDialogMode("insert");
+      },
+      openDeletePart: () => {
+        partsLibrary.refresh();
+        setPartsDialogMode("delete");
+      },
     });
-  }, [labelReplace, branchMove, nodeSplit, nodeMerge, crossMapDialogs]);
+  }, [labelReplace, branchMove, nodeSplit, nodeMerge, crossMapDialogs, partsLibrary]);
   const handleExecutePaletteActive = useCallback(() => {
     const item = filteredPalette.items[commandPalette.activeIndex];
     if (!item) return;
@@ -797,6 +896,7 @@ export function MapEditor({
     bookmarks.notice,
     displayState.layoutFailed ? LAYOUT_FAILED_NOTICE : null,
     persistence.notice,
+    scopedJsonNotice,
     imageExport.notice,
     outlineExport.notice,
     duplication.notice,
@@ -998,19 +1098,34 @@ export function MapEditor({
                 onOpen={outlineImport.open}
                 buttonRef={outlineImportButtonRef}
               />
+              <ExportScopeControl
+                scope={exportScope}
+                onChange={setExportScope}
+                selectionAvailable={selectionScopeAvailable}
+              />
               <MapPersistenceControls
-                onExport={persistence.exportJson}
+                onExport={handleExportJson}
                 onImport={persistence.importJsonFile}
                 exportButtonRef={exportButtonRef}
+                jsonExportEnabled={exportFormatControls.json.enabled}
+                jsonExportDisabledReason={exportFormatControls.json.disabledReason}
               />
               <MapImageExportControls
                 onExportPng={imageExport.exportPng}
                 onExportSvg={imageExport.exportSvg}
                 isExportingPng={imageExport.isExportingPng}
+                pngEnabled={exportFormatControls.png.enabled}
+                svgEnabled={exportFormatControls.svg.enabled}
+                pngDisabledReason={exportFormatControls.png.disabledReason}
+                svgDisabledReason={exportFormatControls.svg.disabledReason}
               />
               <OutlineExportControls
                 onExportMarkdown={outlineExport.exportMarkdown}
                 onExportPlainText={outlineExport.exportPlainText}
+                markdownEnabled={exportFormatControls.markdown.enabled}
+                plainTextEnabled={exportFormatControls.bullets.enabled}
+                markdownDisabledReason={exportFormatControls.markdown.disabledReason}
+                plainTextDisabledReason={exportFormatControls.bullets.disabledReason}
               />
             </>
           )}
@@ -1194,6 +1309,32 @@ export function MapEditor({
           onCustomSeparatorChange={nodeMerge.setCustomSeparator}
           onCancel={nodeMerge.close}
           onSubmit={nodeMerge.submit}
+          onMouseClick={() => {
+            dialogMouseClickedAtRef.current = Date.now();
+          }}
+        />
+      )}
+      {partsDialogMode !== null && (
+        <PartsLibraryDialog
+          mode={partsDialogMode}
+          parts={partsLibrary.parts}
+          canInsertChild={partsLibrary.canInsertChild}
+          onCancel={() => setPartsDialogMode(null)}
+          onRegister={(name) => {
+            if (partsLibrary.registerPartFromSelection(name).ok) {
+              setPartsDialogMode(null);
+            }
+          }}
+          onInsert={(partId, insertMode) => {
+            if (partsLibrary.insertPart(partId, insertMode).ok) {
+              setPartsDialogMode(null);
+            }
+          }}
+          onDelete={(partId) => {
+            if (partsLibrary.deletePart(partId).ok) {
+              setPartsDialogMode(null);
+            }
+          }}
           onMouseClick={() => {
             dialogMouseClickedAtRef.current = Date.now();
           }}

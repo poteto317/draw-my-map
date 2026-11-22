@@ -61,6 +61,21 @@ jest.mock("@/services/imageExport/mapImageDownload", () => ({
   downloadMapImage: (blob: Blob, fileName: string) => mockDownloadMapImage(blob, fileName),
 }));
 
+const mockCreateMapSvgExport = jest.fn(
+  (nodes: Array<{ id: number }>) => (nodes.length === 0
+    ? null
+    : { svg: "<svg xmlns=\"http://www.w3.org/2000/svg\" />", width: 10, height: 10 }),
+);
+jest.mock("@/services/imageExport/createMapSvgExport", () => ({
+  createMapSvgExport: (nodes: Array<{ id: number }>) => mockCreateMapSvgExport(nodes),
+}));
+
+const mockDownloadOutlineText = jest.fn();
+jest.mock("@/services/outlineExport/outlineTextDownload", () => ({
+  downloadOutlineText: (text: string, mapName: string, format: string) =>
+    mockDownloadOutlineText(text, mapName, format),
+}));
+
 jest.mock("@/services/imageExport/mapPngRasterizer", () => ({
   rasterizeMapSvgToPng: jest.fn(),
 }));
@@ -177,6 +192,8 @@ beforeEach(() => {
   window.localStorage.clear();
   mockDownloadMapJson.mockReset();
   mockDownloadMapImage.mockReset();
+  mockCreateMapSvgExport.mockClear();
+  mockDownloadOutlineText.mockReset();
 });
 
 afterEach(() => {
@@ -1639,5 +1656,138 @@ describe("MapEditor のズームコントロール", () => {
     });
 
     expect(lastWorldContainer()?.scale.set).toHaveBeenLastCalledWith(Math.exp(0.5));
+  });
+});
+
+describe("書き出し対象スコープの配線", () => {
+  function exportScopeGroup() {
+    return screen.getByRole("group", { name: "書き出し対象" });
+  }
+
+  async function selectExportScope(user: ReturnType<typeof userEvent.setup>, label: "全件" | "表示中" | "選択") {
+    await user.click(within(exportScopeGroup()).getByRole("button", { name: label === "選択" ? /^選択/ : label }));
+  }
+
+  function selectionScopeButton() {
+    return within(exportScopeGroup()).getByRole("button", { name: /^選択/ });
+  }
+
+  it("表示中スコープでは visibleNodeIds のノードだけが画像・Markdown に渡る", async () => {
+    const user = await renderViewNavigationEditor();
+    await navigateBySearch(user, "集中する枝");
+    await user.click(screen.getByRole("button", { name: "枝に集中" }));
+
+    await selectExportScope(user, "表示中");
+    await user.click(screen.getByRole("button", { name: /SVG書き出し/ }));
+
+    expect(mockCreateMapSvgExport).toHaveBeenCalled();
+    const exportedIds = (mockCreateMapSvgExport.mock.lastCall![0] as Array<{ id: number; label: string }>)
+      .map((node) => node.label)
+      .sort();
+    expect(exportedIds).toEqual(["内部ノード", "末端ノード", "集中する枝"]);
+
+    await user.click(screen.getByRole("button", { name: /Markdown書き出し/ }));
+    expect(mockDownloadOutlineText).toHaveBeenLastCalledWith(
+      expect.stringContaining("集中する枝"),
+      "テストのマップ",
+      "md",
+    );
+    expect(mockDownloadOutlineText.mock.lastCall![0]).not.toContain("親ルート");
+    expect(mockDownloadOutlineText.mock.lastCall![0]).not.toContain("別のルート");
+  });
+
+  it("選択0件・複数選択では選択スコープを選べず、map と outline の両方で無効になる", async () => {
+    const user = await renderViewNavigationEditor();
+    expect(selectionScopeButton()).toBeDisabled();
+
+    await navigateBySearch(user, "親ルート");
+    expect(selectionScopeButton()).toBeEnabled();
+
+    act(() => {
+      mockNodePointerHandlers.at(-1)?.pointerdown?.(pointer(300, 200, { ctrlKey: true }));
+      mockStageHandlers.pointerup?.(pointer(300, 200, { ctrlKey: true }));
+    });
+    expect(screen.getByRole("group", { name: /重要度（2件選択中/ })).toBeInTheDocument();
+    expect(selectionScopeButton()).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "アウトライン" }));
+    expect(selectionScopeButton()).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "マップ" }));
+
+    // 選択解除（背景クリック相当）
+    act(() => {
+      mockStageHandlers.pointerdown?.(pointer(10, 10));
+      mockStageHandlers.pointerup?.(pointer(10, 10));
+    });
+    expect(selectionScopeButton()).toBeDisabled();
+  });
+
+  it("選択スコープ中に選択解除すると全件へ戻る", async () => {
+    const user = await renderViewNavigationEditor();
+    await navigateBySearch(user, "集中する枝");
+    await selectExportScope(user, "選択");
+
+    expect(selectionScopeButton()).toHaveAttribute("aria-pressed", "true");
+    expect(within(exportScopeGroup()).getByRole("button", { name: "全件" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+
+    act(() => {
+      mockStageHandlers.pointerdown?.(pointer(10, 10, { target: mockStage }));
+      mockStageHandlers.pointerup?.(pointer(10, 10, { target: mockStage }));
+    });
+
+    expect(selectionScopeButton()).toBeDisabled();
+    expect(within(exportScopeGroup()).getByRole("button", { name: "全件" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("選択スコープでは SVG・箇条書きが無効で、表示中では JSON・箇条書きが無効", async () => {
+    const user = await renderViewNavigationEditor();
+    await navigateBySearch(user, "集中する枝");
+
+    await selectExportScope(user, "選択");
+    expect(screen.getByRole("button", { name: /SVG書き出し/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /箇条書き書き出し/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /PNG書き出し/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Markdown書き出し/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /JSON書き出し/ })).toBeEnabled();
+
+    await selectExportScope(user, "表示中");
+    expect(screen.getByRole("button", { name: /JSON書き出し/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /箇条書き書き出し/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /SVG書き出し/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Markdown書き出し/ })).toBeEnabled();
+  });
+
+  it("visibleNodeIds が空のとき表示中書き出しを無効化する", async () => {
+    const user = userEvent.setup();
+    await renderEditor();
+    await selectExportScope(user, "表示中");
+
+    const png = screen.getByRole("button", { name: /PNG書き出し/ });
+    expect(png).toBeDisabled();
+    expect(screen.getByRole("button", { name: /SVG書き出し/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Markdown書き出し/ })).toBeDisabled();
+    expect(png).toHaveAccessibleName(/書き出すノードがありません|表示中/);
+  });
+
+  it("選択スコープの JSON は根の parentId を null に正規化する", async () => {
+    const user = await renderViewNavigationEditor();
+    await navigateBySearch(user, "集中する枝");
+    await selectExportScope(user, "選択");
+
+    fireEvent.click(screen.getByRole("button", { name: /JSON書き出し/ }));
+    const exported = JSON.parse(mockDownloadMapJson.mock.lastCall![0] as string) as ExportedMap;
+    expect(exported.nodes.map((node) => node.label).sort()).toEqual([
+      "内部ノード",
+      "末端ノード",
+      "集中する枝",
+    ]);
+    expect(exported.nodes.find((node) => node.label === "集中する枝")?.parentId).toBeNull();
+    expect(exported.nodes.find((node) => node.label === "内部ノード")?.parentId).not.toBeNull();
   });
 });
