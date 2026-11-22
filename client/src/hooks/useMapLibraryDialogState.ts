@@ -77,7 +77,7 @@ export type UseMapLibraryDialogStateResult = {
   close: () => void; // 一覧の「閉じる」
   closeSilently: () => void; // headerFocusRequest を立てずに閉じる
   publishShellNotice: (notice: OperationNotice) => void;
-  submitCreate: (nameInput: string) => void;
+  submitCreate: (nameInput: string, templateId?: string | null) => void;
   switchTo: (mapId: string) => void;
   submitRename: (mapId: string, nameInput: string) => void;
   confirmDelete: (mapId: string) => void;
@@ -105,6 +105,7 @@ export type UseMapLibraryDialogStateResult = {
 type MapLibraryOperations = Pick<
   UseMapLibraryResult,
   | "createMap"
+  | "createMapFromTemplate"
   | "switchMap"
   | "renameMap"
   | "deleteMap"
@@ -363,8 +364,8 @@ export function useMapLibraryDialogState(options: {
     });
   }, [transition]);
 
-  const submitCreate = useCallback((nameInput: string) => {
-    const result = libraryRef.current.createMap(nameInput);
+  const submitCreate = useCallback((nameInput: string, templateId: string | null = null) => {
+    const result = libraryRef.current.createMapFromTemplate({ name: nameInput, templateId });
     if (result.ok) transition({ kind: "closed" });
     setState((prev) => (result.ok ? closeAfterSuccess(prev, result) : showFailure(prev, result.notice)));
   }, [transition]);

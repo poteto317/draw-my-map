@@ -1828,6 +1828,113 @@ describe("useMapLibrary のライブラリバックアップ境界", () => {
       expect(storedIndex(entries()).currentMapId).toBe("map-1");
     });
 
+    it("createMapFromTemplate はテンプレ本体を書いて新しいマップを開く", () => {
+      const { result, entries } = setup({
+        initial: twoMapsInitial(),
+        ids: ["from-template"],
+      });
+      let outcome: ReturnType<ReturnType<typeof useMapLibrary>["createMapFromTemplate"]>;
+      act(() => {
+        outcome = result.current.createMapFromTemplate({
+          name: "議事録マップ",
+          templateId: "meeting-minutes",
+        });
+      });
+
+      expect(outcome!.ok).toBe(true);
+      const view = readyView(result.current.view);
+      expect(view.currentMap.id).toBe("from-template");
+      expect(view.currentMap.name).toBe("議事録マップ");
+      const body = entries()[mapBodyKey("from-template")];
+      expect(body).toEqual(expect.any(String));
+      expect(JSON.parse(body).version).toBe(3);
+      expect(JSON.parse(body).nodes.length).toBeGreaterThan(0);
+      expect(storedIndex(entries()).maps.some((map) => map.id === "from-template")).toBe(true);
+    });
+
+    it("createMapFromTemplate は templateId が null のとき従来の createMap と同じく本体を書かない", () => {
+      const { result, entries } = setup({
+        initial: twoMapsInitial(),
+        ids: ["empty-created"],
+      });
+      let outcome: ReturnType<ReturnType<typeof useMapLibrary>["createMapFromTemplate"]>;
+      act(() => {
+        outcome = result.current.createMapFromTemplate({
+          name: "空マップ",
+          templateId: null,
+        });
+      });
+
+      expect(outcome!.ok).toBe(true);
+      expect(readyView(result.current.view).currentMap.id).toBe("empty-created");
+      expect(entries()[mapBodyKey("empty-created")]).toBeUndefined();
+    });
+
+    it("createMapFromTemplate は未知の templateId で失敗しマップを変えない", () => {
+      const { result, entries } = setup({
+        initial: twoMapsInitial(),
+        ids: ["should-not-create"],
+      });
+      const indexBefore = storedIndex(entries());
+      const entriesBefore = { ...entries() };
+      let outcome: ReturnType<ReturnType<typeof useMapLibrary>["createMapFromTemplate"]>;
+      act(() => {
+        outcome = result.current.createMapFromTemplate({
+          name: "未知テンプレ",
+          templateId: "not-a-real-template",
+        });
+      });
+
+      expect(outcome!.ok).toBe(false);
+      expect(outcome!.notice?.kind).toBe("error");
+      expect(outcome!.notice?.message).toMatch(/テンプレート/);
+      expect(storedIndex(entries())).toEqual(indexBefore);
+      expect(entries()[mapBodyKey("should-not-create")]).toBeUndefined();
+      expect(entries()).toEqual(entriesBefore);
+      expect(readyView(result.current.view).currentMap.id).toBe("map-1");
+    });
+
+    it("createMapFromTemplate は writeMapBody 失敗時に index 非追加・body 未残存で失敗する", () => {
+      const { result, entries } = setup({
+        initial: twoMapsInitial(),
+        ids: ["body-fail"],
+        failSetItem: (key) => key === mapBodyKey("body-fail"),
+      });
+      const indexBefore = storedIndex(entries());
+      let outcome: ReturnType<ReturnType<typeof useMapLibrary>["createMapFromTemplate"]>;
+      act(() => {
+        outcome = result.current.createMapFromTemplate({
+          name: "失敗マップ",
+          templateId: "learning",
+        });
+      });
+
+      expect(outcome!.ok).toBe(false);
+      expect(outcome!.notice?.kind).toBe("error");
+      expect(storedIndex(entries())).toEqual(indexBefore);
+      expect(entries()[mapBodyKey("body-fail")]).toBeUndefined();
+      expect(readyView(result.current.view).currentMap.id).toBe("map-1");
+    });
+
+    it("createMapFromTemplate は index 書込失敗時に書いた body を除去する", () => {
+      const { result, entries, setFailIndexWrite } = setup({
+        initial: twoMapsInitial(),
+        ids: ["index-fail"],
+      });
+      setFailIndexWrite(true);
+      let outcome: ReturnType<ReturnType<typeof useMapLibrary>["createMapFromTemplate"]>;
+      act(() => {
+        outcome = result.current.createMapFromTemplate({
+          name: "残さない",
+          templateId: "planning",
+        });
+      });
+
+      expect(outcome!.ok).toBe(false);
+      expect(entries()[mapBodyKey("index-fail")]).toBeUndefined();
+      expect(storedIndex(entries()).maps.some((map) => map.id === "index-fail")).toBe(false);
+    });
+
     it("switchMap は flush が conflict を返したときに安全に中断し、競合通知を返す", () => {
       const { result } = setup({ initial: twoMapsInitial() });
       const session = readyView(result.current.view).storageSession;

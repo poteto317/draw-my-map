@@ -52,6 +52,7 @@ import type { LibraryRestorePreview } from "@/hooks/mapLibraryState";
 type FakeLibrary = Pick<
   UseMapLibraryResult,
   | "createMap"
+  | "createMapFromTemplate"
   | "switchMap"
   | "renameMap"
   | "deleteMap"
@@ -125,6 +126,10 @@ function failedResult(notice: OperationNotice): MapLibraryOperationResult {
 function createFakeLibrary(): jest.Mocked<FakeLibrary> {
   return {
     createMap: jest.fn<MapLibraryOperationResult, [string]>(() => UNCHANGED),
+    createMapFromTemplate: jest.fn<
+      MapLibraryOperationResult,
+      [{ name: string; templateId: string | null }]
+    >(() => UNCHANGED),
     switchMap: jest.fn<MapLibraryOperationResult, [string]>(() => UNCHANGED),
     renameMap: jest.fn<MapLibraryOperationResult, [string, string]>(() => UNCHANGED),
     deleteMap: jest.fn<MapLibraryOperationResult, [string]>(() => UNCHANGED),
@@ -415,12 +420,31 @@ describe("useMapLibraryDialogState", () => {
     });
   });
 
+  describe("テンプレートからの作成", () => {
+    it("submitCreate は templateId 付きで createMapFromTemplate を呼び、createMap には落とさない", () => {
+      const library = createFakeLibrary();
+      library.createMapFromTemplate.mockReturnValue(remountedResult(mapCreatedNotice("週次")));
+      const { result } = renderDialogState({ library });
+      act(() => result.current.openList());
+      act(() => result.current.openCreateFromList());
+      act(() => result.current.submitCreate("週次", "meeting-minutes"));
+
+      expect(library.createMapFromTemplate).toHaveBeenCalledWith({
+        name: "週次",
+        templateId: "meeting-minutes",
+      });
+      expect(library.createMap).not.toHaveBeenCalled();
+      expect(result.current.screen).toEqual({ kind: "closed" });
+    });
+  });
+
   describe("再マウントを伴う成功", () => {
+
     it.each([
       [
         "作成",
         (lib: jest.Mocked<FakeLibrary>) =>
-          lib.createMap.mockReturnValue(remountedResult(mapCreatedNotice("読書メモ"))),
+          lib.createMapFromTemplate.mockReturnValue(remountedResult(mapCreatedNotice("読書メモ"))),
         (state: ReturnType<typeof useMapLibraryDialogState>) => state.submitCreate("読書メモ"),
         mapCreatedNotice("読書メモ"),
       ],
@@ -536,7 +560,7 @@ describe("useMapLibraryDialogState", () => {
         "作成のインデックスの失敗",
         (state: ReturnType<typeof useMapLibraryDialogState>) => state.openCreateFromList(),
         (lib: jest.Mocked<FakeLibrary>) =>
-          lib.createMap.mockReturnValue(failedResult(indexWriteFailedNotice("マップを作成"))),
+          lib.createMapFromTemplate.mockReturnValue(failedResult(indexWriteFailedNotice("マップを作成"))),
         (state: ReturnType<typeof useMapLibraryDialogState>) => state.submitCreate("読書メモ"),
         { kind: "create", origin: "list" },
         indexWriteFailedNotice("マップを作成"),
@@ -545,7 +569,7 @@ describe("useMapLibraryDialogState", () => {
         "id を決められない作成",
         (state: ReturnType<typeof useMapLibraryDialogState>) => state.openCreateFromHeader(),
         (lib: jest.Mocked<FakeLibrary>) =>
-          lib.createMap.mockReturnValue(failedResult(mapIdUnavailableNotice())),
+          lib.createMapFromTemplate.mockReturnValue(failedResult(mapIdUnavailableNotice())),
         (state: ReturnType<typeof useMapLibraryDialogState>) => state.submitCreate("読書メモ"),
         { kind: "create", origin: "header" },
         mapIdUnavailableNotice(),
@@ -578,7 +602,7 @@ describe("useMapLibraryDialogState", () => {
 
     it("画面とフォーカス先を変えずに alert に文言を出し、続けて成功すると alert が空になる", () => {
       const library = createFakeLibrary();
-      library.createMap
+      library.createMapFromTemplate
         .mockReturnValueOnce(failedResult(createFlushFailedNotice()))
         .mockReturnValueOnce(remountedResult(mapCreatedNotice("読書メモ")));
       const { result } = renderDialogState({ library });
@@ -912,7 +936,7 @@ describe("useMapLibraryDialogState", () => {
 
     it("起動の通知の後に作成に成功すると、sequence: 2 の作成の通知になる", () => {
       const library = createFakeLibrary();
-      library.createMap.mockReturnValue(remountedResult(mapCreatedNotice("読書メモ")));
+      library.createMapFromTemplate.mockReturnValue(remountedResult(mapCreatedNotice("読書メモ")));
       const { result } = renderDialogState({ library, startupNotice: warning });
       act(() => result.current.openCreateFromHeader());
 

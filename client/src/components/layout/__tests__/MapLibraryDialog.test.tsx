@@ -349,7 +349,7 @@ describe("MapLibraryDialog", () => {
     expect(input.selectionEnd).toBe(1);
   });
 
-  it("新規作成の送信で、入力のまま onSubmitCreate を呼ぶ", async () => {
+  it("新規作成の送信で、入力のまま onSubmitCreate を呼ぶ（既定は空テンプレ）", async () => {
     const user = userEvent.setup();
     const props = createProps({ screen: { kind: "create", origin: "header" } });
     render(<MapLibraryDialog {...props} />);
@@ -358,7 +358,20 @@ describe("MapLibraryDialog", () => {
     await user.click(screen.getByRole("button", { name: "作成" }));
 
     expect(props.onSubmitCreate).toHaveBeenCalledTimes(1);
-    expect(props.onSubmitCreate).toHaveBeenCalledWith(" 読書メモ");
+    expect(props.onSubmitCreate).toHaveBeenCalledWith(" 読書メモ", null);
+  });
+
+  it("新規作成でテンプレを選ぶと templateId 付きで onSubmitCreate を呼ぶ", async () => {
+    const user = userEvent.setup();
+    const props = createProps({ screen: { kind: "create", origin: "list" } });
+    render(<MapLibraryDialog {...props} />);
+
+    await user.click(screen.getByRole("radio", { name: "議事録" }));
+    await user.type(screen.getByRole("textbox", { name: "マップ名" }), "週次MTG");
+    await user.click(screen.getByRole("button", { name: "作成" }));
+
+    expect(props.onSubmitCreate).toHaveBeenCalledTimes(1);
+    expect(props.onSubmitCreate).toHaveBeenCalledWith("週次MTG", "meeting-minutes");
   });
 
   it("名前変更の送信で、対象の id と入力で onSubmitRename を呼ぶ", async () => {

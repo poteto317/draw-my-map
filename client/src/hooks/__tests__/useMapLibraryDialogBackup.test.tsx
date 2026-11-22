@@ -14,7 +14,7 @@ const restore = { backup: { maps: [{ name: "C" }] } } as unknown as LibraryResto
 
 function setup() {
   const library: jest.Mocked<Operations> = {
-    createMap: jest.fn(), switchMap: jest.fn(), renameMap: jest.fn(), deleteMap: jest.fn(), permanentlyDeleteMap: jest.fn(),
+    createMap: jest.fn(), createMapFromTemplate: jest.fn(), switchMap: jest.fn(), renameMap: jest.fn(), deleteMap: jest.fn(), permanentlyDeleteMap: jest.fn(),
     refreshTrash: jest.fn(), restoreFromTrash: jest.fn(), permanentlyDeleteFromTrash: jest.fn(), emptyTrash: jest.fn(),
     moveBranchToMap: jest.fn(),
     prepareBackup: jest.fn(() => ({ ok: true, value: backup })),

@@ -160,9 +160,9 @@ export default function Home() {
                 dialog.switchTo(mapId);
               }}
               onCancel={dialog.back}
-              onSubmitCreate={(nameInput) => {
+              onSubmitCreate={(nameInput, templateId) => {
                 clearPendingNavigation();
-                dialog.submitCreate(nameInput);
+                dialog.submitCreate(nameInput, templateId);
               }}
               onSubmitRename={dialog.submitRename}
               onConfirmDelete={(mapId) => {
