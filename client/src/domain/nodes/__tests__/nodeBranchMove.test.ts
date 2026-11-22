@@ -111,6 +111,16 @@ describe("moveNodeBranch", () => {
     expect(moveNodeBranch(lockedParent, 2, 4, "manual")).toEqual({ ok: false, reason: "locked" });
   });
 
+  it("現在の親が locked なら拒否する", () => {
+    const lockedCurrentParent = [
+      { ...node(1, null, 0, 0), locked: true as const },
+      node(2, 1, 300, 20),
+      node(4, null, 0, 300),
+      node(5, 4, 300, 300),
+    ];
+    expect(moveNodeBranch(lockedCurrentParent, 2, 4, "manual")).toEqual({ ok: false, reason: "locked" });
+  });
+
   it("枝の中に locked があるなら拒否する", () => {
     const lockedChild = [
       node(1, null, 0, 0),
