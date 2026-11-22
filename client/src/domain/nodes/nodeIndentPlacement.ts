@@ -1,4 +1,3 @@
-import { CHILD_HORIZONTAL_GAP, SIBLING_VERTICAL_GAP } from "@/config/shapes";
 import {
   checkedAdd,
   calculateGapRoundingTolerance,
@@ -6,6 +5,8 @@ import {
   hasSufficientGap,
 } from "@/domain/nodes/nodeLayoutArithmetic";
 import { collectSubtreeIds } from "@/domain/nodes/nodeTree";
+import { DEFAULT_LAYOUT_SPACING } from "@/domain/persistence/mapDocumentLayoutSpacing";
+import type { LayoutSpacing } from "@/types/layoutSpacing";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 
@@ -68,15 +69,17 @@ export function calculateIndentTranslation(
   nodes: readonly Node[],
   nodeId: number,
   newParentId: number,
+  spacing: LayoutSpacing = DEFAULT_LAYOUT_SPACING,
 ): BranchTranslation | null {
+  const { childGap, siblingGap } = spacing;
   const pair = findPair(nodes, newParentId, nodeId);
   if (pair === null) return null;
   const [parent, target] = pair;
 
   const right = checkedAdd(parent.x, parent.width);
-  const rootX = right === null ? null : checkedAdd(right, CHILD_HORIZONTAL_GAP);
+  const rootX = right === null ? null : checkedAdd(right, childGap);
   if (right === null || rootX === null) return null;
-  if (!hasSufficientGap(right, rootX, CHILD_HORIZONTAL_GAP)) return null;
+  if (!hasSufficientGap(right, rootX, childGap)) return null;
 
   // 隠れた子も既存の子に数える。孫は数えない
   let hasChild = false;
@@ -91,9 +94,9 @@ export function calculateIndentTranslation(
 
   let rootY: number;
   if (hasChild) {
-    const belowChildren = checkedAdd(bottom, SIBLING_VERTICAL_GAP);
+    const belowChildren = checkedAdd(bottom, siblingGap);
     if (belowChildren === null) return null;
-    if (!hasSufficientGap(bottom, belowChildren, SIBLING_VERTICAL_GAP)) return null;
+    if (!hasSufficientGap(bottom, belowChildren, siblingGap)) return null;
     rootY = belowChildren;
   } else {
     if (!Number.isFinite(parent.y)) return null;
@@ -101,8 +104,8 @@ export function calculateIndentTranslation(
   }
 
   const magnitude = measureBranchMagnitude(nodes, collectSubtreeIds(nodes, target.id));
-  const dx = calculateOffsetIgnoringRounding(rootX, target.x, magnitude.x, CHILD_HORIZONTAL_GAP);
-  const dy = calculateOffsetIgnoringRounding(rootY, target.y, magnitude.y, SIBLING_VERTICAL_GAP);
+  const dx = calculateOffsetIgnoringRounding(rootX, target.x, magnitude.x, childGap);
+  const dy = calculateOffsetIgnoringRounding(rootY, target.y, magnitude.y, siblingGap);
   if (dx === null || dy === null) return null;
   return { rootX, rootY, dx, dy };
 }
@@ -113,7 +116,9 @@ export function calculateOutdentTranslation(
   nodes: readonly Node[],
   nodeId: number,
   parentId: number,
+  spacing: LayoutSpacing = DEFAULT_LAYOUT_SPACING,
 ): BranchTranslation | null {
+  const { childGap, siblingGap } = spacing;
   const pair = findPair(nodes, parentId, nodeId);
   if (pair === null) return null;
   const [parent, target] = pair;
@@ -139,15 +144,15 @@ export function calculateOutdentTranslation(
     }
   }
 
-  const newTop = checkedAdd(parentBottom, SIBLING_VERTICAL_GAP);
+  const newTop = checkedAdd(parentBottom, siblingGap);
   if (newTop === null) return null;
-  if (!hasSufficientGap(parentBottom, newTop, SIBLING_VERTICAL_GAP)) return null;
+  if (!hasSufficientGap(parentBottom, newTop, siblingGap)) return null;
 
   const rootX = parent.x;
   if (!Number.isFinite(rootX)) return null;
   const magnitude = measureBranchMagnitude(nodes, subtree);
-  const dx = calculateOffsetIgnoringRounding(rootX, target.x, magnitude.x, CHILD_HORIZONTAL_GAP);
-  const dy = calculateOffsetIgnoringRounding(newTop, branchTop, magnitude.y, SIBLING_VERTICAL_GAP);
+  const dx = calculateOffsetIgnoringRounding(rootX, target.x, magnitude.x, childGap);
+  const dy = calculateOffsetIgnoringRounding(newTop, branchTop, magnitude.y, siblingGap);
   if (dx === null || dy === null) return null;
 
   // T が枝の上端なら、根の y は式の値をそのまま使う（T.y + dy の丸めを残さない）

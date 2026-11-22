@@ -4,6 +4,8 @@ import {
   type NodeLayoutMetrics,
 } from "@/domain/nodes/nodeLayoutMetrics";
 import { placeNodeForest } from "@/domain/nodes/nodeLayoutPlacement";
+import { resolveLayoutMetrics } from "@/domain/nodes/resolveLayoutMetrics";
+import { DEFAULT_LAYOUT_SPACING } from "@/domain/persistence/mapDocumentLayoutSpacing";
 import type { Node } from "@/types/node";
 import { createTestNode } from "@/testing/createTestNode";
 
@@ -11,12 +13,14 @@ function node(id: number, parentId: number | null, y = 0, height = 60): Node {
   return createTestNode({ id, parentId, x: 80, y, height, label: String(id) });
 }
 
+const defaultMetrics = resolveLayoutMetrics(DEFAULT_LAYOUT_SPACING);
+
 // 実際の寸法計算の結果で配置する。寸法計算では止まらず、配置の計算まで届く入力だけを使う
 function placeWithCalculatedMetrics(nodes: readonly Node[]): ReturnType<typeof placeNodeForest> {
   const forest = indexNodeForest(nodes)!;
-  const metrics = calculateNodeLayoutMetrics(forest);
+  const metrics = calculateNodeLayoutMetrics(forest, defaultMetrics);
   expect(metrics).not.toBeNull();
-  return placeNodeForest(forest, metrics!);
+  return placeNodeForest(forest, metrics!, defaultMetrics);
 }
 
 describe("placeNodeForest", () => {
@@ -29,7 +33,7 @@ describe("placeNodeForest", () => {
       childrenHeightById: new Map([[1, 352], ...children.map((child): [number, number] => [child.id, 0]), [10, 0]]),
     };
 
-    const positions = placeNodeForest(forest, metrics);
+    const positions = placeNodeForest(forest, metrics, defaultMetrics);
 
     expect(positions).not.toBeNull();
     expect(positions!.get(9)!.y - 2 ** 56).toBe(448);
@@ -44,7 +48,7 @@ describe("placeNodeForest", () => {
       childrenHeightById: new Map([[1, 1], [2, 0], [3, 0]]),
     };
 
-    expect(placeNodeForest(forest, metrics)).toBeNull();
+    expect(placeNodeForest(forest, metrics, defaultMetrics)).toBeNull();
   });
 
   it("大座標でツリー間の実gapが64へ丸められる配置を拒否する", () => {
@@ -55,7 +59,7 @@ describe("placeNodeForest", () => {
       childrenHeightById: new Map([[1, 0], [2, 0]]),
     };
 
-    expect(placeNodeForest(forest, metrics)).toBeNull();
+    expect(placeNodeForest(forest, metrics, defaultMetrics)).toBeNull();
   });
 
   it("10,000階層の全ノードを配置し、末端まで座標を返す", () => {
@@ -76,7 +80,7 @@ describe("placeNodeForest", () => {
         [current.id, current.id === 10_000 ? 0 : 60])),
     };
 
-    const positions = placeNodeForest(forest, metrics);
+    const positions = placeNodeForest(forest, metrics, defaultMetrics);
 
     expect(positions?.size).toBe(10_000);
     expect(positions?.get(1)).toEqual({ x: 80, y: 25 });
@@ -91,7 +95,7 @@ describe("placeNodeForest", () => {
       spanById: new Map([[1, 160], [3, 60], [2, 60]]),
       childrenHeightById: new Map([[1, 160], [3, 0], [2, 0]]),
     };
-    const positions = placeNodeForest(forest, metrics);
+    const positions = placeNodeForest(forest, metrics, defaultMetrics);
 
     expect(positions?.get(1)).toEqual({ x: 80, y: 0.1 });
     expect(positions?.get(3)).toEqual({ x: 300, y: -49.9 });
@@ -105,7 +109,7 @@ describe("placeNodeForest", () => {
       spanById: new Map([[1, 300], [2, 60], [3, 60]]),
       childrenHeightById: new Map([[1, 160], [2, 0], [3, 0]]),
     };
-    const positions = placeNodeForest(forest, metrics);
+    const positions = placeNodeForest(forest, metrics, defaultMetrics);
 
     expect(positions?.get(1)).toEqual({ x: 80, y: 50 });
     expect(positions?.get(2)).toEqual({ x: 300, y: 120 });
@@ -120,7 +124,7 @@ describe("placeNodeForest", () => {
       childrenHeightById: new Map([[1, 160], [2, 0], [3, 0], [9, 0]]),
     };
 
-    expect(placeNodeForest(forest, metrics)?.get(9)).toEqual({ x: 80, y: 240 });
+    expect(placeNodeForest(forest, metrics, defaultMetrics)?.get(9)).toEqual({ x: 80, y: 240 });
   });
 
   it.each([false, true])("葉のchildTop・最後の子とルートの末尾を計算しない（子あり: %s）", (withChild) => {
@@ -131,7 +135,7 @@ describe("placeNodeForest", () => {
       spanById: new Map([[1, 60], [2, 60]]),
       childrenHeightById: new Map([[1, withChild ? 60 : 0], [2, 0]]),
     };
-    const positions = placeNodeForest(indexNodeForest(nodes)!, metrics);
+    const positions = placeNodeForest(indexNodeForest(nodes)!, metrics, defaultMetrics);
 
     expect(positions?.get(1)).toEqual({ x: 80, y: Number.MAX_VALUE });
     if (withChild) expect(positions?.get(2)).toEqual({ x: 300, y: Number.MAX_VALUE });
@@ -145,7 +149,7 @@ describe("placeNodeForest", () => {
       childrenHeightById: new Map([[1, 256], [2, 0]]),
     };
 
-    expect(placeNodeForest(forest, metrics)).toBeNull();
+    expect(placeNodeForest(forest, metrics, defaultMetrics)).toBeNull();
   });
 
   it("後続ルートがある場合は必要なtree gapのprecision saturationを拒否する", () => {
@@ -156,7 +160,7 @@ describe("placeNodeForest", () => {
       childrenHeightById: new Map([[1, 0], [2, 0]]),
     };
 
-    expect(placeNodeForest(forest, metrics)).toBeNull();
+    expect(placeNodeForest(forest, metrics, defaultMetrics)).toBeNull();
   });
 });
 

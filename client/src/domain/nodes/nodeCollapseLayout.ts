@@ -1,4 +1,8 @@
-import { layoutNodeForest } from "@/domain/nodes/nodeAutoLayout";
+import {
+  DEFAULT_LAYOUT_NODE_FOREST_OPTIONS,
+  layoutNodeForest,
+  type LayoutNodeForestOptions,
+} from "@/domain/nodes/nodeAutoLayout";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 
@@ -11,13 +15,14 @@ export function projectCollapsedLayout(
   nodes: readonly Node[],
   mode: NodeLayoutMode,
   collapseVisibleNodeIds: ReadonlySet<number>,
+  layoutOptions: LayoutNodeForestOptions = DEFAULT_LAYOUT_NODE_FOREST_OPTIONS,
 ): CollapsedLayoutProjection {
   if (mode === "manual" || collapseVisibleNodeIds.size === nodes.length) {
     return { nodes, layoutFailed: false };
   }
 
   const visibleNodes = nodes.filter((node) => collapseVisibleNodeIds.has(node.id));
-  const projectedVisibleNodes = layoutNodeForest(visibleNodes);
+  const projectedVisibleNodes = layoutNodeForest(visibleNodes, layoutOptions);
   if (projectedVisibleNodes === null) {
     return { nodes, layoutFailed: true };
   }

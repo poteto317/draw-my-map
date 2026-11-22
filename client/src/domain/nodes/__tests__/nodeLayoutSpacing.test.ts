@@ -1,7 +1,10 @@
 import { indexNodeForest } from "@/domain/nodes/nodeLayoutForest";
 import { hasValidVerticalSpacing } from "@/domain/nodes/nodeLayoutSpacing";
+import { DEFAULT_LAYOUT_SPACING } from "@/domain/persistence/mapDocumentLayoutSpacing";
 import type { Node } from "@/types/node";
 import { createTestNode } from "@/testing/createTestNode";
+
+const { siblingGap: defaultSiblingGap } = DEFAULT_LAYOUT_SPACING;
 
 function node(id: number, parentId: number | null = null, height = 60): Node {
   return createTestNode({ id, parentId, height, label: String(id) });
@@ -24,7 +27,7 @@ describe("hasValidVerticalSpacing", () => {
       if (invalidY === undefined) positions.delete(invalidId);
       else positions.set(invalidId, { x: 0, y: invalidY });
 
-      expect(hasValidVerticalSpacing(forest, positions)).toBe(false);
+      expect(hasValidVerticalSpacing(forest, positions, defaultSiblingGap)).toBe(false);
     });
   });
 
@@ -38,7 +41,7 @@ describe("hasValidVerticalSpacing", () => {
     const forest = indexNodeForest([node(1), node(2)])!;
     const positions = new Map([[1, { x: 0, y: firstY }], [2, { x: 0, y: secondY }]]);
 
-    expect(hasValidVerticalSpacing(forest, positions)).toBe(expected);
+    expect(hasValidVerticalSpacing(forest, positions, defaultSiblingGap)).toBe(expected);
   });
 
   it("大座標で加算が丸められた実gap32を拒否する", () => {
@@ -48,7 +51,7 @@ describe("hasValidVerticalSpacing", () => {
     const positions = new Map([[1, { x: 0, y: firstY }], [2, { x: 0, y: secondY }]]);
 
     expect(secondY - (firstY + 60)).toBe(32);
-    expect(hasValidVerticalSpacing(forest, positions)).toBe(false);
+    expect(hasValidVerticalSpacing(forest, positions, defaultSiblingGap)).toBe(false);
   });
 
   it.each([
@@ -59,7 +62,7 @@ describe("hasValidVerticalSpacing", () => {
     const forest = indexNodeForest([node(1, null, height), node(2)])!;
     const positions = new Map([[1, { x: 0, y: firstY }], [2, { x: 0, y: secondY }]]);
 
-    expect(hasValidVerticalSpacing(forest, positions)).toBe(false);
+    expect(hasValidVerticalSpacing(forest, positions, defaultSiblingGap)).toBe(false);
   });
 
   it("各深さの最後のbottomを計算しない", () => {
@@ -70,7 +73,7 @@ describe("hasValidVerticalSpacing", () => {
       [3, { x: 220, y: Number.MAX_VALUE }],
     ]);
 
-    expect(hasValidVerticalSpacing(forest, positions)).toBe(true);
+    expect(hasValidVerticalSpacing(forest, positions, defaultSiblingGap)).toBe(true);
   });
 
   it.each([
@@ -83,6 +86,6 @@ describe("hasValidVerticalSpacing", () => {
       [2, { x: 0, y: Number.MAX_VALUE }],
     ]);
 
-    expect(hasValidVerticalSpacing(forest, positions)).toBe(false);
+    expect(hasValidVerticalSpacing(forest, positions, defaultSiblingGap)).toBe(false);
   });
 });

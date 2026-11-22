@@ -215,6 +215,16 @@ describe("insertNodeForest: 失敗と採番", () => {
     }
   });
 
+  it("親が locked なら locked で、allocateIds を呼ばない", () => {
+    const current = [createTestNode({ id: 1, locked: true })];
+    for (const mode of ["manual", "auto"] as const) {
+      const allocateIds = idsFrom(10);
+      expect(insertNodeForest(current, twoTrees, { kind: "child", parentId: 1 }, mode, allocateIds))
+        .toEqual({ ok: false, reason: "locked" });
+      expect(allocateIds).not.toHaveBeenCalled();
+    }
+  });
+
   it("root・manual で既存のノードの下端が Number.MAX_VALUE 付近なら placement-failed で、allocateIds を呼ばない", () => {
     const current = [createTestNode({ id: 1, y: Number.MAX_VALUE, height: 60 })];
     const allocateIds = idsFrom(10);
