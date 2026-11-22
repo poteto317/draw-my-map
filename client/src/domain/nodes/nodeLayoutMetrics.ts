@@ -1,10 +1,10 @@
-import { CHILD_HORIZONTAL_GAP, SIBLING_VERTICAL_GAP } from "@/config/shapes";
 import {
   checkedAdd,
   checkedMultiply,
   checkedSubtract,
   hasSufficientGap,
 } from "@/domain/nodes/nodeLayoutArithmetic";
+import type { LayoutGapMetrics } from "@/domain/nodes/resolveLayoutMetrics";
 import type { IndexedNodeForest } from "@/domain/nodes/nodeLayoutForest";
 
 export type NodeLayoutMetrics = {
@@ -15,6 +15,7 @@ export type NodeLayoutMetrics = {
 
 export function calculateNodeLayoutMetrics(
   forest: IndexedNodeForest,
+  { childGap, siblingGap }: LayoutGapMetrics,
 ): NodeLayoutMetrics | null {
   const maxWidthByDepth = forest.nodesByDepth.map((level) => {
     let maxWidth = 0;
@@ -25,12 +26,12 @@ export function calculateNodeLayoutMetrics(
   for (let depth = 1; depth < maxWidthByDepth.length; depth += 1) {
     const afterWidth = checkedAdd(columnX[depth - 1], maxWidthByDepth[depth - 1]);
     if (afterWidth === null) return null;
-    const x = checkedAdd(afterWidth, CHILD_HORIZONTAL_GAP);
+    const x = checkedAdd(afterWidth, childGap);
     if (x === null) return null;
     if (!hasSufficientGap(
       afterWidth,
       x,
-      CHILD_HORIZONTAL_GAP,
+      childGap,
     )) return null;
     columnX.push(x);
   }
@@ -49,7 +50,7 @@ export function calculateNodeLayoutMetrics(
     if (children.length > 1) {
       const gapCount = checkedSubtract(children.length, 1);
       if (gapCount === null) return null;
-      const totalGap = checkedMultiply(SIBLING_VERTICAL_GAP, gapCount);
+      const totalGap = checkedMultiply(siblingGap, gapCount);
       if (totalGap === null) return null;
       const heightWithGaps = checkedAdd(childrenHeight, totalGap);
       if (heightWithGaps === null) return null;

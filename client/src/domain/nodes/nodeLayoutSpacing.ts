@@ -1,4 +1,3 @@
-import { SIBLING_VERTICAL_GAP } from "@/config/shapes";
 import {
   checkedAdd,
   hasSufficientGap,
@@ -9,6 +8,7 @@ import type { LayoutPoint } from "@/domain/nodes/nodeLayoutPlacement";
 export function hasValidVerticalSpacing(
   forest: IndexedNodeForest,
   positions: ReadonlyMap<number, LayoutPoint>,
+  siblingGap: number,
 ): boolean {
   for (const level of forest.nodesByDepth) {
     let previous: (typeof level)[number] | null = null;
@@ -21,7 +21,7 @@ export function hasValidVerticalSpacing(
         if (!hasSufficientGap(
           previousBottom,
           point.y,
-          SIBLING_VERTICAL_GAP,
+          siblingGap,
         )) return false;
       }
       previous = current;

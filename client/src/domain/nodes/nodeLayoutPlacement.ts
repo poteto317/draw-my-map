@@ -1,4 +1,3 @@
-import { SIBLING_VERTICAL_GAP, TREE_VERTICAL_GAP } from "@/config/shapes";
 import {
   checkedAdd,
   checkedMultiply,
@@ -7,6 +6,7 @@ import {
 } from "@/domain/nodes/nodeLayoutArithmetic";
 import type { IndexedNodeForest } from "@/domain/nodes/nodeLayoutForest";
 import type { NodeLayoutMetrics } from "@/domain/nodes/nodeLayoutMetrics";
+import type { LayoutGapMetrics } from "@/domain/nodes/resolveLayoutMetrics";
 import type { Node } from "@/types/node";
 
 export type LayoutPoint = { x: number; y: number };
@@ -24,6 +24,7 @@ function calculateChildFrames(
   span: number,
   childrenHeight: number,
   spanById: ReadonlyMap<number, number>,
+  siblingGap: number,
 ): ChildFrame[] | null {
   const childFrames: ChildFrame[] = [];
   const childTopOffset = calculateCenteringOffset(span, childrenHeight);
@@ -35,7 +36,7 @@ function calculateChildFrames(
     if (childIndex + 1 < children.length) {
       const afterChild = checkedAdd(childTop, spanById.get(child.id)!);
       if (afterChild === null) return null;
-      childTop = checkedAdd(afterChild, SIBLING_VERTICAL_GAP);
+      childTop = checkedAdd(afterChild, siblingGap);
       if (childTop === null) return null;
     }
   }
@@ -45,8 +46,10 @@ function calculateChildFrames(
 export function placeNodeForest(
   forest: IndexedNodeForest,
   metrics: NodeLayoutMetrics,
+  { siblingGap }: LayoutGapMetrics,
 ): ReadonlyMap<number, LayoutPoint> | null {
   const { columnX, spanById, childrenHeightById } = metrics;
+  const treeGap = siblingGap * 2;
   const positions = new Map<number, LayoutPoint>();
   let nextTreeTop: number | null = null;
   for (const [rootIndex, root] of forest.roots.entries()) {
@@ -87,6 +90,7 @@ export function placeNodeForest(
         span,
         childrenHeightById.get(frame.node.id)!,
         spanById,
+        siblingGap,
       );
       if (childFrames === null) return null;
       for (let index = childFrames.length - 1; index >= 0; index -= 1) {
@@ -94,12 +98,12 @@ export function placeNodeForest(
       }
     }
     if (hasNextRoot) {
-      nextTreeTop = checkedAdd(actualTreeBottom, TREE_VERTICAL_GAP);
+      nextTreeTop = checkedAdd(actualTreeBottom, treeGap);
       if (nextTreeTop === null) return null;
       if (!hasSufficientGap(
         actualTreeBottom,
         nextTreeTop,
-        TREE_VERTICAL_GAP,
+        treeGap,
       )) return null;
     }
   }

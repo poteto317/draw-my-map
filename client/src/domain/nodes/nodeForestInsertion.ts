@@ -1,5 +1,9 @@
 import { RECT_HEIGHT, RECT_WIDTH } from "@/config/shapes";
-import { layoutNodeForest } from "@/domain/nodes/nodeAutoLayout";
+import {
+  DEFAULT_LAYOUT_NODE_FOREST_OPTIONS,
+  layoutNodeForest,
+  type LayoutNodeForestOptions,
+} from "@/domain/nodes/nodeAutoLayout";
 import { DEFAULT_NODE_IMPORTANCE } from "@/domain/nodes/nodeImportance";
 import { checkedAdd, checkedSubtract } from "@/domain/nodes/nodeLayoutArithmetic";
 import {
@@ -7,8 +11,10 @@ import {
   calculateManualOffsetY,
 } from "@/domain/nodes/nodeManualPlacement";
 import type { AllocateNodeIds } from "@/domain/nodes/nodeSubtreeInsertion";
+import type { LayoutSpacing } from "@/types/layoutSpacing";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
+import { DEFAULT_LAYOUT_SPACING } from "@/domain/persistence/mapDocumentLayoutSpacing";
 
 export type ForestItem = { label: string; parentIndex: number | null }; // parentIndex は自分より前の添字
 
@@ -16,7 +22,11 @@ export type ForestInsertionTarget =
   | { kind: "root" }
   | { kind: "child"; parentId: number };
 
-export type ForestInsertionFailureReason = "parent-missing" | "invalid-items" | "placement-failed";
+export type ForestInsertionFailureReason =
+  | "parent-missing"
+  | "invalid-items"
+  | "placement-failed"
+  | "locked";
 
 export type ForestInsertionResult =
   | { ok: true; nodes: Node[]; rootIds: number[] } // rootIds は深さ0の項目の新しい ID（入力の順）
@@ -65,6 +75,8 @@ function translate(node: Node, offset: Point): Point | null {
 function placeRootForest(
   current: readonly Node[],
   items: readonly ForestItem[],
+  spacing: LayoutSpacing,
+  layoutOptions: LayoutNodeForestOptions,
 ): Point[] | null {
   let x0 = Infinity;
   for (const node of current) {
@@ -78,10 +90,10 @@ function placeRootForest(
       index, items[index].parentIndex, x0, EMPTY_MAP_ORIGIN, RECT_WIDTH, RECT_HEIGHT,
     ));
   }
-  const laidOut = layoutNodeForest(placeholders);
+  const laidOut = layoutNodeForest(placeholders, layoutOptions);
   if (laidOut === null) return null;
 
-  const offsetY = calculateManualOffsetY(current, laidOut);
+  const offsetY = calculateManualOffsetY(current, laidOut, spacing);
   if (offsetY === null) return null;
   return translateAll(laidOut, { x: 0, y: offsetY });
 }
@@ -91,8 +103,10 @@ function placeChildForest(
   current: readonly Node[],
   items: readonly ForestItem[],
   parent: Node,
+  spacing: LayoutSpacing,
+  layoutOptions: LayoutNodeForestOptions,
 ): Point[] | null {
-  const base = calculateChildPlacement(current, parent.id);
+  const base = calculateChildPlacement(current, parent.id, spacing);
   if (base === null) return null;
 
   const placeholderParentId = items.length;
@@ -110,7 +124,7 @@ function placeChildForest(
       RECT_HEIGHT,
     ));
   }
-  const laidOut = layoutNodeForest(placeholders);
+  const laidOut = layoutNodeForest(placeholders, layoutOptions);
   if (laidOut === null) return null;
 
   const laidOutItems = laidOut.slice(1);
@@ -144,14 +158,16 @@ function placeForest(
   items: readonly ForestItem[],
   parent: Node | null,
   mode: NodeLayoutMode,
+  spacing: LayoutSpacing,
+  layoutOptions: LayoutNodeForestOptions,
 ): Point[] | null {
   switch (mode) {
     case "auto":
       return placeAutoForest(items);
     case "manual":
       return parent === null
-        ? placeRootForest(current, items)
-        : placeChildForest(current, items, parent);
+        ? placeRootForest(current, items, spacing, layoutOptions)
+        : placeChildForest(current, items, parent, spacing, layoutOptions);
     default: {
       const unreachable: never = mode;
       return unreachable;
@@ -186,13 +202,16 @@ export function insertNodeForest(
   target: ForestInsertionTarget,
   mode: NodeLayoutMode,
   allocateIds: AllocateNodeIds,
+  spacing: LayoutSpacing = DEFAULT_LAYOUT_SPACING,
+  layoutOptions: LayoutNodeForestOptions = DEFAULT_LAYOUT_NODE_FOREST_OPTIONS,
 ): ForestInsertionResult {
   if (!hasValidItems(items)) return { ok: false, reason: "invalid-items" };
 
   const targetParent = findTargetParent(current, target);
   if (!targetParent.found) return { ok: false, reason: "parent-missing" };
+  if (targetParent.parent?.locked === true) return { ok: false, reason: "locked" };
 
-  const positions = placeForest(current, items, targetParent.parent, mode);
+  const positions = placeForest(current, items, targetParent.parent, mode, spacing, layoutOptions);
   if (positions === null) return { ok: false, reason: "placement-failed" };
 
   const ids = allocateIds(current, items.length);

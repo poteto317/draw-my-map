@@ -1,11 +1,9 @@
-import {
-  RECT_HEIGHT,
-  RECT_WIDTH,
-  SIBLING_VERTICAL_GAP,
-} from "@/config/shapes";
+import { RECT_HEIGHT, RECT_WIDTH } from "@/config/shapes";
 import type { Node } from "@/types/node";
 import { DEFAULT_NODE_IMPORTANCE } from "@/domain/nodes/nodeImportance";
 import { calculateChildPlacement } from "@/domain/nodes/nodeManualPlacement";
+import { DEFAULT_LAYOUT_SPACING } from "@/domain/persistence/mapDocumentLayoutSpacing";
+import type { LayoutSpacing } from "@/types/layoutSpacing";
 
 function createNode(id: number, parentId: number | null, x: number, y: number): Node {
   return {
@@ -28,8 +26,9 @@ export function createChildNode(
   nodes: readonly Node[],
   parentId: number,
   id: number,
+  spacing: LayoutSpacing = DEFAULT_LAYOUT_SPACING,
 ): Node | null {
-  const placement = calculateChildPlacement(nodes, parentId);
+  const placement = calculateChildPlacement(nodes, parentId, spacing);
   if (!placement) return null;
 
   return createNode(id, parentId, placement.x, placement.y);
@@ -39,12 +38,13 @@ export function createSiblingNode(
   nodes: readonly Node[],
   sourceId: number,
   id: number,
+  spacing: LayoutSpacing = DEFAULT_LAYOUT_SPACING,
 ): Node | null {
   const source = nodes.find((node) => node.id === sourceId);
   if (!source) return null;
 
   const siblings = nodes.filter((node) => node.parentId === source.parentId);
-  const y = Math.max(...siblings.map((node) => node.y + node.height)) + SIBLING_VERTICAL_GAP;
+  const y = Math.max(...siblings.map((node) => node.y + node.height)) + spacing.siblingGap;
 
   return createNode(id, source.parentId, source.x, y);
 }

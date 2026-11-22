@@ -42,6 +42,14 @@ describe("calculateChildPlacement", () => {
     expect(calculateChildPlacement([parent], parent.id)).toEqual({ x: 320, y: 50 });
   });
 
+  it("マップの layoutSpacing を参照して子の位置を決める", () => {
+    const spacing = { childGap: 64, siblingGap: 16 };
+    expect(calculateChildPlacement([parent], parent.id, spacing)).toEqual({
+      x: 100 + 100 + spacing.childGap,
+      y: 50,
+    });
+  });
+
   it("既存の子があれば、子の下端の最大値から40空けた位置に置く", () => {
     const nodes = [
       parent,

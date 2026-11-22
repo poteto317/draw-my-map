@@ -70,6 +70,49 @@ it("親を子グループ中央へ置き、入力順の兄弟を縦方向へ離�
     .toBe((first.y + (second.y + second.height)) / 2);
 });
 
+it("手動座標から tb 再配置に失敗しない", () => {
+  const nodes = [node(1, null, 50, 70), node(2, 1), node(3, 1)];
+  expect(layoutNodeForest(nodes, {
+    direction: "tb",
+    spacing: { childGap: 80, siblingGap: 24 },
+  })).toHaveLength(3);
+});
+
+it("tb では子を +Y、兄弟を +X に配置する", () => {
+  const result = layoutNodeForest([
+    node(1, null, 50, 70),
+    node(2, 1),
+    node(3, 1),
+  ], { direction: "tb", spacing: { childGap: CHILD_HORIZONTAL_GAP, siblingGap: SIBLING_VERTICAL_GAP } })!;
+  const [root, first, second] = result;
+
+  expect(root).toMatchObject({ x: 50, y: 70 });
+  expect(first.y).toBeGreaterThan(root.y + root.height);
+  expect(second.x).toBe(first.x + first.width + SIBLING_VERTICAL_GAP);
+  expect(root.x + root.width / 2)
+    .toBeCloseTo((first.x + (second.x + second.width)) / 2, 5);
+});
+
+it("tb で layoutSpacing の childGap は垂直、siblingGap は水平に効く", () => {
+  const nodes = [node(1, null, 50, 70), node(2, 1), node(3, 1)];
+  const customSpacing = { childGap: 80, siblingGap: 24 };
+  const result = layoutNodeForest(nodes, { direction: "tb", spacing: customSpacing })!;
+  const [root, first, second] = result;
+
+  expect(second.x).toBe(first.x + first.width + customSpacing.siblingGap);
+  expect(first.y).toBe(root.y + root.height + customSpacing.childGap);
+});
+
+it("layoutSpacing を変えると兄弟間隔と子列の X が変わる", () => {
+  const nodes = [node(1, null, 50, 70), node(2, 1), node(3, 1)];
+  const customSpacing = { childGap: 80, siblingGap: 24 };
+  const result = layoutNodeForest(nodes, { direction: "lr", spacing: customSpacing })!;
+  const [, first, second] = result;
+
+  expect(second.y).toBe(first.y + first.height + customSpacing.siblingGap);
+  expect(result.find(({ id }) => id === 2)?.x).toBe(50 + 100 + customSpacing.childGap);
+});
+
 it("複数ルートを入力順に積み、部分木区間の間へtree gapを置く", () => {
   const result = layoutNodeForest([
     node(1, null, 30, 40), node(2, 1), node(9, null),
