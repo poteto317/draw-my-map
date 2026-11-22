@@ -41,6 +41,8 @@ export function AutoLayoutMapStageHarness({ shortcutsEnabled = true }: AutoLayou
     <>
       <MapStage
         nodes={nodes}
+        highlightNodeIds={new Set<number>()}
+        pinnedNodeIds={new Set<number>()}
         focusRequest={null}
         dialogMouseClickedAtRef={{ current: null }}
         selectedNodeId={selectedNodeId}

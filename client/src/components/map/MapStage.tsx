@@ -34,7 +34,9 @@ import { useNodeIndentShortcut } from "@/components/map/useNodeIndentShortcut";
 import { useNodeParentInsertionShortcut } from "@/components/map/useNodeParentInsertionShortcut";
 import { useNodeLabelEditRequest } from "@/components/map/useNodeLabelEditRequest";
 import { useIllustrationTextures } from "@/components/map/useIllustrationTextures";
+import { useViewportFrameNotification } from "@/components/map/useViewportFrameNotification";
 import { useViewportScaleNotification } from "@/components/map/useViewportScaleNotification";
+import type { ViewportFrame } from "@/components/map/useViewportFrameNotification";
 import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
 import type { SiblingReorderRequest } from "@/domain/nodes/nodeSiblingOrder";
 import type { NodeIndentDirection } from "@/domain/nodes/nodeIndent";
@@ -67,7 +69,13 @@ type MapStageProps = {
   onFocusRequestApplied?: (request: NodeFocusRequest) => void;
   onFocusRequestDiscarded?: (request: NodeFocusRequest) => void;
   visibleNodeIds?: ReadonlySet<number>;
+  /** 一時強調対象。空集合 = 強調オフ。省略不可（L-060） */
+  highlightNodeIds: ReadonlySet<number>;
+  /** ピン済みノード。空集合 = 印なし */
+  pinnedNodeIds: ReadonlySet<number>;
   onViewportScaleChange?: (scale: number) => void;
+  /** ミニマップ等へ viewport + 画面サイズを伝える（L-060） */
+  onViewportFrameChange?: (frame: ViewportFrame) => void;
   resetRevision?: number;
   // 成功したUndo／Redoとマップ置換で増える。復元前の編集・ジェスチャー・メニューを閉じる
   documentRevision: number;
@@ -121,7 +129,10 @@ export function MapStage({
   onFocusRequestApplied,
   onFocusRequestDiscarded,
   visibleNodeIds,
+  highlightNodeIds,
+  pinnedNodeIds,
   onViewportScaleChange,
+  onViewportFrameChange,
   resetRevision = 0,
   documentRevision,
   selectedNodeId,
@@ -269,10 +280,13 @@ export function MapStage({
       siblingReorderIndicator: siblingReorderPreview?.indicator ?? null,
       createNodePointerDownHandler,
       visibleNodeIds: effectiveVisibleNodeIds,
+      highlightNodeIds,
+      pinnedNodeIds,
       illustrationTextures,
     },
     viewport,
     viewportRef,
+    screenSize,
   });
 
   useMapVisibilityTransition({
@@ -371,6 +385,7 @@ export function MapStage({
   });
 
   useViewportScaleNotification(viewport.scale, onViewportScaleChange);
+  useViewportFrameNotification(viewport, screenSize, onViewportFrameChange);
 
   useNodeKeyboardShortcuts({
     selectedNodeId,

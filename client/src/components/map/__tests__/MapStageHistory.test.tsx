@@ -50,6 +50,8 @@ function HistoryHarness({ apiRef, setup, visibleNodeIds }: HistoryHarnessProps) 
   return (
     <MapStage
       nodes={api.nodes}
+      highlightNodeIds={new Set<number>()}
+      pinnedNodeIds={new Set<number>()}
       focusRequest={null}
       visibleNodeIds={visibleNodeIds}
       selectedNodeId={api.selectedNodeId}

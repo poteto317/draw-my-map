@@ -52,10 +52,15 @@ import { useNodeSplitDialog } from "@/hooks/useNodeSplitDialog";
 import { useLatestRef } from "@/hooks/useLatestRef";
 import type { MapLibraryOperationResult } from "@/hooks/useMapLibrary";
 import { useNodes } from "@/hooks/useNodes";
+import { useNodePins } from "@/hooks/useNodePins";
 import { usePartsLibrary } from "@/hooks/usePartsLibrary";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { AppWorkspace } from "@/components/layout/AppWorkspace";
 import { NodeImportanceSelector } from "@/components/layout/NodeImportanceSelector";
+import { DepthLimitControl } from "@/components/layout/DepthLimitControl";
+import { DepthLimitEmptyHint } from "@/components/layout/DepthLimitEmptyHint";
+import { HighlightModeControl } from "@/components/layout/HighlightModeControl";
+import { NodePinControls } from "@/components/layout/NodePinControls";
 import { ResolutionFilterSelector } from "@/components/layout/ResolutionFilterSelector";
 import { WheelZoomSensitivityControl } from "@/components/layout/WheelZoomSensitivityControl";
 import { MapImageExportControls } from "@/components/layout/MapImageExportControls";
@@ -87,8 +92,11 @@ import {
 import { isRestorableFocusTarget } from "@/components/map/isRestorableFocusTarget";
 import { resolveOutlineInitialFocusTarget } from "@/components/map/resolveOutlineInitialFocusTarget";
 import { MapStage, type MapStageViewportHandle } from "@/components/map/MapStage";
+import { Minimap } from "@/components/map/Minimap";
 import { MapViewportZoomControls, ZOOM_FACTOR } from "@/components/map/MapViewportZoomControls";
 import { clampViewportScale, INITIAL_VIEWPORT, zoomViewportAt } from "@/components/map/mapViewport";
+import type { ViewportFrame } from "@/components/map/useViewportFrameNotification";
+import { focusViewportOnWorldPoint } from "@/components/map/nodeViewportFocus";
 import { useCommandPaletteShortcut } from "@/components/map/useCommandPaletteShortcut";
 import { useCrossMapSearchShortcut } from "@/components/map/useCrossMapSearchShortcut";
 import { buildCommandAvailabilityContext } from "@/domain/commands/buildCommandAvailabilityContext";
@@ -100,6 +108,8 @@ import { useMapHistoryShortcuts } from "@/components/map/useMapHistoryShortcuts"
 import { useMapImageExport } from "@/hooks/useMapImageExport";
 import { useMapJsonExport } from "@/hooks/useMapJsonExport";
 import { useOutlineExport } from "@/hooks/useOutlineExport";
+import { useMapDepthLimit } from "@/hooks/useMapDepthLimit";
+import { useMapHighlightMode } from "@/hooks/useMapHighlightMode";
 import { useMapPersistence } from "@/hooks/useMapPersistence";
 import { useNodeDuplicationAction } from "@/hooks/useNodeDuplicationAction";
 import { useResettingMapReplacement } from "@/hooks/useResettingMapReplacement";
@@ -232,8 +242,10 @@ export function MapEditor({
   const [viewMode, setViewMode] = useState<EditorViewMode>("map");
   const [exportScope, setExportScope] = useState<ExportScope>("all");
   const [scopedJsonNotice, setScopedJsonNotice] = useState<OperationNotice | null>(null);
+  const { maxDepth, setMaxDepth, depthVisibleNodeIds } = useMapDepthLimit(nodes);
   const canvasFocus = useRevisionScopedNodeRequest(documentRevision);
   const [viewportScale, setViewportScale] = useState(1);
+  const [viewportFrame, setViewportFrame] = useState<ViewportFrame | null>(null);
   const { replaceMapAndReset, resetRevision } = useResettingMapReplacement(replaceMap);
   const resolutionFilter = useMapResolutionFilter({
     nodes,
@@ -285,6 +297,7 @@ export function MapEditor({
     layoutMode,
     collapseVisibleNodeIds: branchCollapse.collapseVisibleNodeIds,
     resolutionVisibleNodeIds: resolutionFilter.visibleNodeIds,
+    depthVisibleNodeIds,
     focusVisibleNodeIds,
     focusRootId,
   });
@@ -316,11 +329,32 @@ export function MapEditor({
   }, []);
   const handleZoomIn = useCallback(() => zoomMapViewportFromCenter(ZOOM_FACTOR), [zoomMapViewportFromCenter]);
   const handleZoomOut = useCallback(() => zoomMapViewportFromCenter(1 / ZOOM_FACTOR), [zoomMapViewportFromCenter]);
+  const handleViewportFrameChange = useCallback((frame: ViewportFrame) => {
+    setViewportFrame(frame);
+  }, []);
+  const handleMinimapPan = useCallback((worldPoint: { x: number; y: number }) => {
+    const handle = viewportHandleRef.current;
+    if (!handle) return;
+    const screen = handle.getScreenSize();
+    if (!screen) return;
+    const next = focusViewportOnWorldPoint(handle.getViewport(), worldPoint, screen);
+    handle.applyViewport(next);
+  }, []);
 
   const nodeSearch = useNodeLabelSearch({
     nodes,
     visibleNodeIds: displayState.visibleNodeIds,
   });
+  const searchHitIds = useMemo(
+    () => new Set(nodeSearch.matches.map((match) => match.nodeId)),
+    [nodeSearch.matches],
+  );
+  const { highlightMode, setHighlightMode, highlightNodeIds } = useMapHighlightMode(
+    nodes,
+    displayState.visibleNodeIds,
+    searchHitIds,
+    selectedNodeIds,
+  );
   const { navigateToNode: revealSearchTarget, notice: nodeSearchNotice } = useNodeSearchNavigation({
     issueFocusRequest: canvasFocus.issueRequest,
     nodes,
@@ -333,6 +367,8 @@ export function MapEditor({
     selectNode,
     focusRootId,
     onValidTarget: clearFocusOutsideBranch,
+    maxDepth,
+    setMaxDepth,
   });
   const navigateToNode = useCallback((nodeId: number, record = true) => {
     const before = record ? captureBeforeNavigation() : null;
@@ -420,6 +456,14 @@ export function MapEditor({
     selectionTargetIds,
     insertSubtree,
     publishNotice: publishTreeEditNotice,
+  });
+  const nodePins = useNodePins({
+    storage: storageSession.storage,
+    mapId,
+    nodes,
+    selectionTargetIds,
+    publishNotice: publishTreeEditNotice,
+    navigateToNode,
   });
   const { corpus, refreshCorpus } = useCrossMapCorpus({
     maps: mapMoveTargets,
@@ -963,11 +1007,29 @@ export function MapEditor({
             />
           )}
           resolutionControls={viewMode === "map" && (
-            <ResolutionFilterSelector
-              mode={resolutionFilter.mode}
-              level={resolutionFilter.level}
-              onChange={resolutionFilter.setMode}
-            />
+            <>
+              <ResolutionFilterSelector
+                mode={resolutionFilter.mode}
+                level={resolutionFilter.level}
+                onChange={resolutionFilter.setMode}
+              />
+              <DepthLimitControl maxDepth={maxDepth} onChange={setMaxDepth} />
+              <HighlightModeControl mode={highlightMode} onChange={setHighlightMode} />
+              <NodePinControls
+                pins={nodePins.pins}
+                nodes={nodes}
+                canRegister={nodePins.canRegister}
+                onRegister={() => {
+                  nodePins.registerPin();
+                }}
+                onJump={(nodeId) => {
+                  nodePins.jumpToPin(nodeId);
+                }}
+                onDelete={(nodeId) => {
+                  nodePins.deletePin(nodeId);
+                }}
+              />
+            </>
           )}
           operationControls={(
             <>
@@ -1145,11 +1207,20 @@ export function MapEditor({
               documentRevision={documentRevision} enabled={editorShortcutsEnabled} actions={outlineActions} />
           ) : (
             <div className="relative h-full min-h-0 w-full">
+              {maxDepth !== null
+                && nodes.length > 0
+                && displayState.visibleNodeIds.size === 0 && (
+                <div className="absolute left-3 top-3 z-10 max-w-lg">
+                  <DepthLimitEmptyHint onResetToUnlimited={() => setMaxDepth(null)} />
+                </div>
+              )}
               <MapStage
                 canvasContainerRef={canvasContainerRef}
                 viewportHandleRef={viewportHandleRef}
                 nodes={displayState.displayNodes}
                 focusRequest={canvasFocus.request}
+                highlightNodeIds={highlightNodeIds}
+                pinnedNodeIds={nodePins.pinnedNodeIds}
                 isCurrentFocusRequest={canvasFocus.isCurrentRequest}
                 onFocusRequestApplied={viewNavigation.onFocusRequestApplied}
                 onFocusRequestDiscarded={viewNavigation.onFocusRequestDiscarded}
@@ -1158,6 +1229,7 @@ export function MapEditor({
                 }}
                 visibleNodeIds={displayState.visibleNodeIds}
                 onViewportScaleChange={setViewportScale}
+                onViewportFrameChange={handleViewportFrameChange}
                 selectedNodeId={selectedNodeId}
                 selectedNodeIds={selectedNodeIds}
                 onDoubleClick={addNode}
@@ -1189,6 +1261,15 @@ export function MapEditor({
                 wheelZoomSensitivity={uiPrefs.wheelZoomSensitivity}
                 dialogMouseClickedAtRef={dialogMouseClickedAtRef}
               />
+              {viewportFrame !== null && (
+                <Minimap
+                  nodes={displayState.displayNodes}
+                  visibleNodeIds={displayState.visibleNodeIds}
+                  viewport={viewportFrame.viewport}
+                  screenSize={viewportFrame.screen}
+                  onPanToWorldPoint={handleMinimapPan}
+                />
+              )}
               <MapViewportZoomControls
                 scale={viewportScale}
                 onZoomIn={handleZoomIn}
