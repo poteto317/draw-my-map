@@ -156,6 +156,48 @@ describe("useNodeSearchNavigation", () => {
     act(() => result.current.navigateToNode(4));
     expect(result.current.focusRequest).toEqual({ nodeId: 4, sequence: 2, documentRevision: 2 });
   });
+
+  it("深さ制限より深い着地では N を引き上げて通知する", () => {
+    const nodes = [
+      createTestNode({ id: 1 }),
+      createTestNode({ id: 2, parentId: 1 }),
+      createTestNode({ id: 3, parentId: 2, importance: "high" }),
+    ];
+    const setMaxDepth = jest.fn();
+    const setResolutionMode = jest.fn();
+    const selectNode = jest.fn();
+    const expandNodes = jest.fn();
+    const { result } = renderHook(() => {
+      const issuer = useRevisionScopedNodeRequest(0);
+      return {
+        ...useNodeSearchNavigation({
+          nodes,
+          resolutionVisibleNodeIds: new Set([1, 2, 3]),
+          collapseIndex: createNodeCollapseIndex(nodes),
+          collapsedNodeIds: new Set(),
+          expandNodes,
+          documentRevision: 0,
+          setResolutionMode,
+          selectNode,
+          issueFocusRequest: issuer.issueRequest,
+          maxDepth: 0,
+          setMaxDepth,
+        }),
+        focusRequest: issuer.request,
+      };
+    });
+
+    let navigationResult: string | undefined;
+    act(() => { navigationResult = result.current.navigateToNode(3); });
+
+    expect(navigationResult).toBe("revealed");
+    expect(setMaxDepth).toHaveBeenCalledWith(2);
+    expect(selectNode).toHaveBeenCalledWith(3);
+    expect(result.current.notice).toEqual({
+      kind: "status",
+      message: "検索結果を表示するため、深さを『2』まで広げました。",
+    });
+  });
 });
 
 const tree = [

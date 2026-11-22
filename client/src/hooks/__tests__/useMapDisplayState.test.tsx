@@ -9,6 +9,10 @@ function node(id: number, parentId: number | null, overrides: Partial<Node> = {}
   return createTestNode({ id, parentId, label: `node-${id}`, ...overrides });
 }
 
+function allIds(nodes: readonly Node[]): ReadonlySet<number> {
+  return new Set(nodes.map(({ id }) => id));
+}
+
 describe("useMapDisplayState", () => {
   it("解像度集合Rだけが変わるとdisplayNodes参照を維持してVだけを更新する", () => {
     const nodes = [node(1, null), node(2, 1), node(3, 1)];
@@ -19,6 +23,7 @@ describe("useMapDisplayState", () => {
         layoutMode: "auto",
         collapseVisibleNodeIds,
         resolutionVisibleNodeIds,
+        depthVisibleNodeIds: allIds(nodes),
       }),
       { initialProps: { resolutionVisibleNodeIds: new Set([1, 2, 3]) } },
     );
@@ -42,6 +47,7 @@ describe("useMapDisplayState", () => {
       layoutMode: "auto",
       collapseVisibleNodeIds: new Set([1]),
       resolutionVisibleNodeIds,
+      depthVisibleNodeIds: allIds(nodes),
     }));
 
     expect([...resolutionVisibleNodeIds]).toEqual([1, 2]);
@@ -58,6 +64,7 @@ describe("useMapDisplayState", () => {
       focusVisibleNodeIds: new Set([1, 2]),
       focusRootId: 1,
       resolutionVisibleNodeIds: new Set([2]),
+      depthVisibleNodeIds: allIds(nodes),
     }));
 
     expect([...result.current.visibleNodeIds]).toEqual([1, 2]);
@@ -77,6 +84,7 @@ describe("useMapDisplayState", () => {
       layoutMode: "auto",
       collapseVisibleNodeIds: new Set([1, 2, 3]),
       resolutionVisibleNodeIds: new Set([1, 3, 4]),
+      depthVisibleNodeIds: allIds(nodes),
     }));
 
     expect(result.current.displayNodes).toBe(nodes);
@@ -95,6 +103,7 @@ describe("useMapDisplayState", () => {
       layoutMode: "auto",
       collapseVisibleNodeIds,
       resolutionVisibleNodeIds,
+      depthVisibleNodeIds: allIds(nodes),
     }));
 
     expect(result.current.layoutFailed).toBe(false);
@@ -103,5 +112,27 @@ describe("useMapDisplayState", () => {
     expect(result.current.visibleNodeIds.size).toBe(5_000);
     expect(result.current.visibleNodeIds.has(5_000)).toBe(true);
     expect(result.current.visibleNodeIds.has(5_001)).toBe(false);
+  });
+
+  it("深さ集合が変わると visibleNodeIds だけが絞られる", () => {
+    const nodes = [node(1, null), node(2, 1), node(3, 2)];
+    const collapseVisibleNodeIds = allIds(nodes);
+    const resolutionVisibleNodeIds = allIds(nodes);
+    const { result, rerender } = renderHook(
+      ({ depthVisibleNodeIds }) => useMapDisplayState({
+        nodes,
+        layoutMode: "auto",
+        collapseVisibleNodeIds,
+        resolutionVisibleNodeIds,
+        depthVisibleNodeIds,
+      }),
+      { initialProps: { depthVisibleNodeIds: allIds(nodes) } },
+    );
+    const initialDisplayNodes = result.current.displayNodes;
+
+    rerender({ depthVisibleNodeIds: new Set([1, 2]) });
+
+    expect(result.current.displayNodes).toBe(initialDisplayNodes);
+    expect([...result.current.visibleNodeIds].sort((a, b) => a - b)).toEqual([1, 2]);
   });
 });

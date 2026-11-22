@@ -2,16 +2,18 @@ export type DisplayVisibilitySets = {
   collapseVisibleNodeIds?: ReadonlySet<number> | null;
   focusVisibleNodeIds?: ReadonlySet<number> | null;
   resolutionVisibleNodeIds: ReadonlySet<number>;
+  depthVisibleNodeIds: ReadonlySet<number>;
   focusRootId?: number | null;
 };
 
-/** 折りたたみ ∧ 集中 ∧ 解像度（集中先は解像度免除）の最終可視集合。 */
+/** 折りたたみ ∧ 集中 ∧ 解像度 ∧ 深さ（集中先は解像度免除）の最終可視集合。 */
 export function collectDisplayVisibleNodeIds(
   candidateIds: Iterable<number>,
   {
     collapseVisibleNodeIds,
     focusVisibleNodeIds,
     resolutionVisibleNodeIds,
+    depthVisibleNodeIds,
     focusRootId = null,
   }: DisplayVisibilitySets,
 ): Set<number> {
@@ -19,6 +21,7 @@ export function collectDisplayVisibleNodeIds(
   for (const id of candidateIds) {
     if ((collapseVisibleNodeIds?.has(id) ?? true)
       && (focusVisibleNodeIds?.has(id) ?? true)
+      && depthVisibleNodeIds.has(id)
       && (id === focusRootId || resolutionVisibleNodeIds.has(id))) {
       visible.add(id);
     }

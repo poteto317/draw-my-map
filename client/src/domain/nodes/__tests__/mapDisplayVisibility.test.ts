@@ -1,13 +1,18 @@
 import { collectDisplayVisibleNodeIds } from "@/domain/nodes/mapDisplayVisibility";
+import { collectVisibleMapKeys } from "@/components/map/pixi/mapVisibilityKeys";
+import { collectDepthVisibleNodeIds } from "@/domain/nodes/depthVisibility";
+import { createTestNode } from "@/testing/createTestNode";
 
 describe("collectDisplayVisibleNodeIds", () => {
   const candidates = [1, 2, 3, 4, 5];
+  const allDepth = new Set(candidates);
 
-  it("折りたたみ・集中・解像度の積集合を返し、集中先は解像度を免除する", () => {
+  it("折りたたみ・集中・解像度・深さの積集合を返し、集中先は解像度を免除する", () => {
     const visible = collectDisplayVisibleNodeIds(candidates, {
       collapseVisibleNodeIds: new Set([1, 2, 3, 4]),
       focusVisibleNodeIds: new Set([2, 3, 4, 5]),
       resolutionVisibleNodeIds: new Set([3, 4]),
+      depthVisibleNodeIds: allDepth,
       focusRootId: 2,
     });
 
@@ -18,11 +23,13 @@ describe("collectDisplayVisibleNodeIds", () => {
     const withoutFocus = collectDisplayVisibleNodeIds(candidates, {
       collapseVisibleNodeIds: new Set([1, 2]),
       resolutionVisibleNodeIds: new Set([1, 2, 3]),
+      depthVisibleNodeIds: allDepth,
       focusRootId: null,
     });
     const withoutCollapse = collectDisplayVisibleNodeIds(candidates, {
       focusVisibleNodeIds: new Set([2, 3]),
       resolutionVisibleNodeIds: new Set([2, 3, 4]),
+      depthVisibleNodeIds: allDepth,
       focusRootId: null,
     });
 
@@ -35,9 +42,43 @@ describe("collectDisplayVisibleNodeIds", () => {
       collapseVisibleNodeIds: new Set([10, 11]),
       focusVisibleNodeIds: new Set([10, 11]),
       resolutionVisibleNodeIds: new Set([11]),
+      depthVisibleNodeIds: new Set([10, 11]),
       focusRootId: 10,
     });
 
     expect([...visible]).toEqual([10, 11]);
+  });
+
+  it("深さ集合と他条件の積集合になる", () => {
+    const visible = collectDisplayVisibleNodeIds(candidates, {
+      collapseVisibleNodeIds: new Set([1, 2, 3, 4, 5]),
+      resolutionVisibleNodeIds: new Set([1, 2, 3, 4, 5]),
+      depthVisibleNodeIds: new Set([1, 2]),
+      focusRootId: null,
+    });
+
+    expect([...visible]).toEqual([1, 2]);
+  });
+
+  it("深さ制限後の論理可視では両端可視の辺だけが残る", () => {
+    const nodes = [
+      createTestNode({ id: 1, parentId: null }),
+      createTestNode({ id: 2, parentId: 1 }),
+      createTestNode({ id: 3, parentId: 2 }),
+    ];
+    const depthVisibleNodeIds = collectDepthVisibleNodeIds(nodes, 1);
+    const visible = collectDisplayVisibleNodeIds(nodes.map(({ id }) => id), {
+      collapseVisibleNodeIds: new Set([1, 2, 3]),
+      resolutionVisibleNodeIds: new Set([1, 2, 3]),
+      depthVisibleNodeIds,
+      focusRootId: null,
+    });
+
+    expect([...visible].sort((a, b) => a - b)).toEqual([1, 2]);
+    expect([...collectVisibleMapKeys(nodes, visible)]).toEqual([
+      "node:1",
+      "node:2",
+      "edge:2",
+    ]);
   });
 });

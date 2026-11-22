@@ -138,6 +138,7 @@ describe("resolveRestoredMapView", () => {
       collapseVisibleNodeIds: collapse.visibleNodeIds,
       focusVisibleNodeIds: focusIds,
       resolutionVisibleNodeIds: collectVisibleNodeIds(nestedNodes, level),
+      depthVisibleNodeIds: new Set(nestedNodes.map(({ id }) => id)),
       focusRootId: 2,
     });
 
