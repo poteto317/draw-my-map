@@ -10,13 +10,14 @@ import {
   type Ref,
 } from "react";
 import { DEFAULT_MAP_NAME, validateMapNameInput } from "@/domain/mapLibrary/mapName";
+import { listBuiltinTemplateSummaries } from "@/domain/templates/builtinTemplates";
 
 type MapLibraryNameFormProps = {
   mode: "create" | "rename";
   headingId: string;
   initialName: string; // 作成は ""、名前変更は今の名前
   inputRef: Ref<HTMLInputElement>;
-  onSubmit: (nameInput: string) => void; // 検証を通った入力だけ
+  onSubmit: (nameInput: string, templateId: string | null) => void; // 検証を通った入力だけ。作成の templateId は未選択時 null
   onCancel: () => void;
 };
 
@@ -26,6 +27,8 @@ const labels = {
   create: { heading: "新しいマップ", submit: "作成" },
   rename: { heading: "マップ名を変更", submit: "変更" },
 } as const;
+
+const EMPTY_TEMPLATE_VALUE = "";
 
 export function MapLibraryNameForm({
   mode,
@@ -38,8 +41,11 @@ export function MapLibraryNameForm({
   const inputId = useId();
   const hintId = useId();
   const errorId = useId();
+  const templateGroupId = useId();
   const [nameInput, setNameInput] = useState(initialName);
+  const [templateId, setTemplateId] = useState<string>(EMPTY_TEMPLATE_VALUE);
   const formRef = useRef<HTMLFormElement>(null);
+  const templates = mode === "create" ? listBuiltinTemplateSummaries() : [];
 
   // 開いたときだけ全選択する。フォーカスはダイアログが inputRef で当てる
   useLayoutEffect(() => {
@@ -58,7 +64,8 @@ export function MapLibraryNameForm({
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!validation.ok) return;
-    onSubmit(nameInput);
+    const selected = templateId === EMPTY_TEMPLATE_VALUE ? null : templateId;
+    onSubmit(nameInput, mode === "create" ? selected : null);
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -81,6 +88,41 @@ export function MapLibraryNameForm({
       <h2 id={headingId} className="text-base font-semibold">
         {labels[mode].heading}
       </h2>
+      {mode === "create" && (
+        <fieldset className="flex flex-col gap-1">
+          <legend id={templateGroupId} className="text-sm font-medium">
+            テンプレート
+          </legend>
+          <div
+            role="radiogroup"
+            aria-labelledby={templateGroupId}
+            className="flex flex-col gap-1"
+          >
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="map-template"
+                value={EMPTY_TEMPLATE_VALUE}
+                checked={templateId === EMPTY_TEMPLATE_VALUE}
+                onChange={() => setTemplateId(EMPTY_TEMPLATE_VALUE)}
+              />
+              空（テンプレートなし）
+            </label>
+            {templates.map((template) => (
+              <label key={template.id} className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="map-template"
+                  value={template.id}
+                  checked={templateId === template.id}
+                  onChange={() => setTemplateId(template.id)}
+                />
+                {template.name}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
       <div className="flex flex-col gap-1">
         <label htmlFor={inputId} className="text-sm font-medium">
           マップ名

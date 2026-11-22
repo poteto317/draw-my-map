@@ -110,6 +110,8 @@ import {
 import { planLibraryRestore, writeLibraryRestore } from "@/services/persistence/libraryRestoreTransaction";
 import { hasStoredMapViewBookmarks } from "@/services/persistence/mapViewBookmarkStorage";
 import { parseMapDocumentJson } from "@/domain/persistence/mapDocumentDecoder";
+import { serializeMapDocument } from "@/domain/persistence/mapDocumentEncoder";
+import { findBuiltinTemplate } from "@/domain/templates/builtinTemplates";
 import { isEligibleMapBackupSnapshot } from "@/domain/persistence/mapBackupSnapshot";
 import {
   runMapLibraryStartup,
@@ -147,6 +149,10 @@ export type UseMapLibraryResult = {
   previewRestore: (file: File) => Promise<MapDocumentResult<LibraryRestorePreview>>;
   confirmRestore: (preview: LibraryRestorePreview) => MapLibraryOperationResult;
   saveCurrentAsNewMap: (nameInput: string, snapshotJson: string) => MapLibraryOperationResult;
+  createMapFromTemplate: (input: {
+    name: string;
+    templateId: string | null;
+  }) => MapLibraryOperationResult;
   toggleFavorite: (mapId: string) => MapLibraryOperationResult;
   assignFolder: (mapId: string, folderId: string | null) => MapLibraryOperationResult;
   createFolder: (name: string) => MapLibraryOperationResult;
@@ -818,6 +824,70 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
     [commitNewSession, requirePersistent],
   );
 
+  const createMapFromTemplate = useCallback(
+    (input: { name: string; templateId: string | null }): MapLibraryOperationResult => {
+      const templateId = input.templateId;
+      if (templateId === null || templateId === "") {
+        return createMap(input.name);
+      }
+      const template = findBuiltinTemplate(templateId);
+      if (template === null) {
+        return failedOperation({
+          kind: "error",
+          message: "テンプレートが見つかりません。選び直してください。",
+        });
+      }
+      return requirePersistent(indexWriteFailedNotice("マップを作成"), () => {
+        const validation = validateMapNameInput(input.name);
+        if (!validation.ok) {
+          return failedOperation({ kind: "error", message: validation.message });
+        }
+        const createFlush = flushCurrentSession();
+        if (createFlush.status === "failed") {
+          return failedOperation(createFlushFailedNotice());
+        }
+        // flush で更新日時が変わるので、flush の後のインデックスを基準にする
+        const current = libraryRef.current;
+        if (current?.mode !== "persistent") {
+          return failedOperation(indexWriteFailedNotice("マップを作成"));
+        }
+        const { storage, index } = current;
+        const { generateId, now } = depsRef.current;
+        const nowIso = now().toISOString();
+        const id = pickNewMapId(storage, index, generateId, (candidate) =>
+          hasStoredMapViewBookmarks(storage, { id: candidate, createdAt: nowIso }));
+        if (id === null) {
+          return failedOperation(mapIdUnavailableNotice());
+        }
+
+        const snapshotJson = serializeMapDocument(template.document);
+        const writtenBody = writeMapBody(storage, id, snapshotJson);
+        if (!writtenBody.ok) {
+          return failedOperation(indexWriteFailedNotice("マップを作成"));
+        }
+
+        const entry = createMapIndexEntry(id, validation.name, nowIso);
+        const withEntry = addMapEntry(index, entry);
+        const next = setCurrentMap(withEntry, id);
+        if (next === null || !writeMapIndex(storage, next).ok) {
+          removeMapBody(storage, id);
+          return failedOperation(indexWriteFailedNotice("マップを作成"));
+        }
+
+        const { libraryMeta, notice } = persistMapOpenedMeta(
+          current,
+          id,
+          nowIso,
+          mapCreatedNotice(validation.name),
+          `「${validation.name}」を作成しました`,
+        );
+        commitNewSession(current, next, libraryMeta);
+        return succeededOperation(notice, true);
+      });
+    },
+    [commitNewSession, createMap, flushCurrentSession, requirePersistent],
+  );
+
   const applyMetaAction = useCallback(
     (
       run: (current: PersistentLibraryState) => LibraryMetaActionOutcome,
@@ -898,6 +968,7 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
     previewRestore,
     confirmRestore,
     saveCurrentAsNewMap,
+    createMapFromTemplate,
     toggleFavorite,
     assignFolder,
     createFolder,

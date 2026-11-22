@@ -75,7 +75,7 @@ describe("MapLibraryNameForm", () => {
     await user.click(screen.getByRole("button", { name: "作成" }));
 
     expect(props.onSubmit).toHaveBeenCalledTimes(1);
-    expect(props.onSubmit).toHaveBeenCalledWith("");
+    expect(props.onSubmit).toHaveBeenCalledWith("", null);
   });
 
   it("入力欄の Enter で送信する", async () => {
@@ -86,7 +86,7 @@ describe("MapLibraryNameForm", () => {
     await user.type(nameInput(), "  読書メモ {Enter}");
 
     expect(props.onSubmit).toHaveBeenCalledTimes(1);
-    expect(props.onSubmit).toHaveBeenCalledWith("  読書メモ ");
+    expect(props.onSubmit).toHaveBeenCalledWith("  読書メモ ", null);
   });
 
   it("絵文字で50文字なら送信でき、エラーを出さない", async () => {
@@ -98,7 +98,7 @@ describe("MapLibraryNameForm", () => {
     fireEvent.change(nameInput(), { target: { value: name } });
     await user.click(screen.getByRole("button", { name: "作成" }));
 
-    expect(props.onSubmit).toHaveBeenCalledWith(name);
+    expect(props.onSubmit).toHaveBeenCalledWith(name, null);
     expect(nameInput()).not.toHaveAttribute("aria-invalid");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
@@ -170,7 +170,31 @@ describe("MapLibraryNameForm", () => {
     expect(props.onSubmit).not.toHaveBeenCalled();
   });
 
+  it("作成ではテンプレ選択肢を出し、選択した templateId で onSubmit する", async () => {
+    const user = userEvent.setup();
+    const props = createProps();
+    render(<MapLibraryNameForm {...props} />);
+
+    expect(screen.getByRole("radiogroup", { name: "テンプレート" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "空（テンプレートなし）" })).toBeChecked();
+    await user.click(screen.getByRole("radio", { name: "学習" }));
+    await user.type(nameInput(), "ノート");
+    await user.click(screen.getByRole("button", { name: "作成" }));
+
+    expect(props.onSubmit).toHaveBeenCalledWith("ノート", "learning");
+  });
+
+  it("名前変更ではテンプレ選択肢を出さない", () => {
+    render(
+      <MapLibraryNameForm
+        {...createProps({ mode: "rename", initialName: "旅行の計画" })}
+      />,
+    );
+    expect(screen.queryByRole("radiogroup", { name: "テンプレート" })).not.toBeInTheDocument();
+  });
+
   it("「キャンセル」で onCancel を呼び、onSubmit は呼ばない", async () => {
+
     const user = userEvent.setup();
     const props = createProps({ mode: "rename", initialName: "旅行の計画" });
     render(<MapLibraryNameForm {...props} />);
