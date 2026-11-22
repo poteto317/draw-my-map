@@ -63,6 +63,8 @@ export function formatNodeIndentNotice(result: ChangeNodeIndentResult): Operatio
         case "invalid-structure":
         case "placement-failed":
           return { kind: "error", message: INDENT_FAILED_MESSAGE };
+        case "locked":
+          return { kind: "error", message: "ロックされたノードは編集できません。" };
         default: {
           const unreachable: never = result;
           return unreachable;

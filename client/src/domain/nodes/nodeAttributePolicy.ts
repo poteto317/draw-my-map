@@ -26,4 +26,5 @@ export const NODE_ATTRIBUTE_POLICY = {
   tags: { split: "original-only", merge: "union", parentInsert: "none" },
   sources: { split: "original-only", merge: "union", parentInsert: "none" },
   mapLinks: { split: "original-only", merge: "union", parentInsert: "none" },
+  locked: { split: "original-only", merge: "survivor-else-first", parentInsert: "none" },
 } satisfies Record<OptionalNodeKey, NodeAttributePolicy>;

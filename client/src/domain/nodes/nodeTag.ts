@@ -1,3 +1,4 @@
+import { assertNodesEditable } from "@/domain/nodes/nodeEditLock";
 import type { Node } from "@/types/node";
 
 // 1 ノードに付けられるタグの件数の上限
@@ -13,7 +14,12 @@ export type NodeTagNameResult =
   | { ok: true; name: string }
   | { ok: false; reason: NodeTagNameFailureReason };
 
-export type AddNodeTagFailureReason = NodeTagNameFailureReason | "node-missing" | "duplicate" | "too-many";
+export type AddNodeTagFailureReason =
+  | NodeTagNameFailureReason
+  | "node-missing"
+  | "duplicate"
+  | "too-many"
+  | "locked";
 
 export type AddNodeTagResult =
   | { ok: true; nodes: Node[] }
@@ -128,6 +134,8 @@ export function formatNodeTagFailure(reason: Exclude<AddNodeTagFailureReason, "e
       return `タグは 1 つのノードに ${NODE_TAGS_MAX_COUNT} 件まで追加できます。`;
     case "node-missing":
       return "ノードが見つかりません。";
+    case "locked":
+      return "ロックされたノードは編集できません。";
     default: {
       const unreachable: never = reason;
       return unreachable;
@@ -149,6 +157,8 @@ export function withNodeTags(node: Node, tags: readonly string[] | undefined): N
 export function addNodeTag(nodes: readonly Node[], id: number, input: string): AddNodeTagResult {
   const target = nodes.find((node) => node.id === id);
   if (target === undefined) return { ok: false, reason: "node-missing" };
+  const lockedCheck = assertNodesEditable([id], nodes);
+  if (!lockedCheck.ok && lockedCheck.reason === "locked") return { ok: false, reason: "locked" };
   const normalized = normalizeNodeTagName(input);
   if (!normalized.ok) return normalized;
   const current = target.tags ?? [];
@@ -162,6 +172,7 @@ export function addNodeTag(nodes: readonly Node[], id: number, input: string): A
 // 1 ノードからタグを 1 件消す。tag は保存されている名前と完全に一致するものだけを消す（表記違いは消さない）。
 // 対象が無い・そのタグを持たないときは null（何も変えない）。最後の 1 件を消すと tags のキーごと外す
 export function removeNodeTag(nodes: readonly Node[], id: number, tag: string): Node[] | null {
+  if (!assertNodesEditable([id], nodes).ok) return null;
   const target = nodes.find((node) => node.id === id);
   const tags = target?.tags;
   if (tags === undefined || !tags.includes(tag)) return null;

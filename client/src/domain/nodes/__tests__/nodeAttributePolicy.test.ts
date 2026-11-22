@@ -17,7 +17,7 @@ const CURRENT_MAP_ID = "map-current";
 
 // 全属性を持つ見本のノード。Node に属性を足すと、ここで型エラーになる（見本の値を足し忘れない。L-825）。
 // 値は保存形式の検証を通る値にする（イラストは寸法を宣言した JPEG、高さはイラスト付きの高さ）
-const SAMPLE: Required<Node> = {
+const SAMPLE: Required<Omit<Node, "locked">> & { locked?: true } = {
   id: 2,
   parentId: 1,
   x: 200,
@@ -35,7 +35,7 @@ const SAMPLE: Required<Node> = {
 };
 
 // 各属性を見本と別の値にしたもの（比較の付け忘れを検査する）。Node に属性を足すと、ここでも型エラーになる
-const DIFFERENT: Required<Node> = {
+const DIFFERENT = {
   id: 3,
   parentId: null,
   x: 201,
@@ -50,7 +50,7 @@ const DIFFERENT: Required<Node> = {
   tags: ["別の見本"],
   sources: [{ title: "別の出典", url: "https://example.com/src" }],
   mapLinks: [{ targetMapId: "other-map" }],
-};
+} as unknown as Required<Node>;
 
 const OPTIONAL_KEYS = Object.keys(NODE_ATTRIBUTE_POLICY) as OptionalNodeKey[];
 const ALL_KEYS = Object.keys(SAMPLE) as (keyof Node)[];
@@ -88,12 +88,12 @@ function expectedMergedValue(key: OptionalNodeKey): unknown {
 
 describe("NODE_ATTRIBUTE_POLICY", () => {
   it("任意の属性（illustration・note・links・tags・sources・mapLinks）だけを持つ", () => {
-    expect([...OPTIONAL_KEYS].sort()).toEqual(["illustration", "links", "mapLinks", "note", "sources", "tags"]);
+    expect([...OPTIONAL_KEYS].sort()).toEqual(["illustration", "links", "locked", "mapLinks", "note", "sources", "tags"]);
   });
 });
 
 describe("表の振る舞いの検査（表を直さず属性の扱いを実装で変えると落ちる）", () => {
-  it.each(OPTIONAL_KEYS)("split が original-only の %s は、分割の新しい断片が項目を持たず、元のノードが値を持ち続ける", (key) => {
+  it.each(OPTIONAL_KEYS.filter((key) => key !== "locked"))("split が original-only の %s は、分割の新しい断片が項目を持たず、元のノードが値を持ち続ける", (key) => {
     expect(NODE_ATTRIBUTE_POLICY[key].split).toBe("original-only");
     const nodes = [ROOT, { ...SAMPLE, label: "前、後" }];
 
@@ -111,7 +111,7 @@ describe("表の振る舞いの検査（表を直さず属性の扱いを実装�
     expect(key in createParentNode(SAMPLE, 50)).toBe(false);
   });
 
-  it.each(OPTIONAL_KEYS)("merge の扱い（%s）は、残すノードが値を持たず吸収されるノードだけが持つ値を、統合後の残すノードに残す", (key) => {
+  it.each(OPTIONAL_KEYS.filter((key) => key !== "locked"))("merge の扱い（%s）は、残すノードが値を持たず吸収されるノードだけが持つ値を、統合後の残すノードに残す", (key) => {
     expect(["survivor-else-first", "joined", "union"]).toContain(NODE_ATTRIBUTE_POLICY[key].merge);
     // 残すノード（主選択）2 は key を持たず、吸収されるノード 3 だけが見本の値を持つ
     const survivor = without({ ...SAMPLE, label: "残す" }, key);
@@ -125,7 +125,7 @@ describe("表の振る舞いの検査（表を直さず属性の扱いを実装�
     expect(result.nodes.find((node) => node.id === 2)?.[key]).toEqual(SAMPLE[key]);
   });
 
-  it.each(OPTIONAL_KEYS)("merge の扱い（%s）は、両方が値を持つとき、表の値（survivor-else-first・joined・union）のとおりに統合する", (key) => {
+  it.each(OPTIONAL_KEYS.filter((key) => key !== "locked"))("merge の扱い（%s）は、両方が値を持つとき、表の値（survivor-else-first・joined・union）のとおりに統合する", (key) => {
     // 残すノード（主選択）2 が見本の値、吸収されるノード 3 が別の値を持つ。配列順は 2、3
     const survivor: Node = { ...SAMPLE, label: "残す" };
     const absorbed: Node = { ...createTestNode({ id: 3, parentId: 1, x: 200, y: 300, label: "吸収" }), [key]: DIFFERENT[key] };
@@ -151,6 +151,17 @@ describe("全属性の往復と比較の検査（書き出し・読み込み・�
     expect(areMapStatesEqual(documentOf(SAMPLE), documentOf(changed))).toBe(false);
   });
 
+  it("統合の選択に locked が含まれるときは拒否する", () => {
+    const survivor = without(SAMPLE, "locked");
+    const absorbedFirst = createTestNode({ id: 3, parentId: 1, x: 300, y: 40, label: "1" });
+    const absorbedSecond = { ...createTestNode({ id: 4, parentId: 1, x: 400, y: 40, label: "2" }), locked: true as const };
+    const nodes = [ROOT, survivor, absorbedFirst, absorbedSecond];
+
+    const result = mergeNodes(nodes, [2, 3, 4], 2, " ", new Set([1, 2, 3, 4]), "manual", CURRENT_MAP_ID);
+
+    expect(result).toEqual({ ok: false, reason: "locked" });
+  });
+
   it("同じ内容（別の配列）なら、競合判定も履歴の同値判定も同じとみなす", () => {
     const copy: Node = {
       ...SAMPLE,
@@ -162,5 +173,20 @@ describe("全属性の往復と比較の検査（書き出し・読み込み・�
 
     expect(isDocumentContentEqual(documentOf(SAMPLE), documentOf(copy))).toBe(true);
     expect(areMapStatesEqual(documentOf(SAMPLE), documentOf(copy))).toBe(true);
+  });
+});
+
+describe("マップ文書の treeDirection / layoutSpacing", () => {
+  const base = (): MapDocumentV3 => ({ version: 3, layoutMode: "manual", nodes: [SAMPLE] });
+
+  it("treeDirection が違えば競合・履歴とも不一致", () => {
+    expect(isDocumentContentEqual(base(), { ...base(), treeDirection: "tb" })).toBe(false);
+    expect(areMapStatesEqual(base(), { ...base(), treeDirection: "tb" })).toBe(false);
+  });
+
+  it("layoutSpacing が違えば競合・履歴とも不一致", () => {
+    const other = { ...base(), layoutSpacing: { childGap: 100, siblingGap: 32 } };
+    expect(isDocumentContentEqual(base(), other)).toBe(false);
+    expect(areMapStatesEqual(base(), other)).toBe(false);
   });
 });

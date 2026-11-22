@@ -1,3 +1,4 @@
+import { assertNodesEditable } from "@/domain/nodes/nodeEditLock";
 import { keepFirstRootPosition } from "@/domain/nodes/nodeFirstRootPosition";
 import { hasInvalidNodeGeometry } from "@/domain/nodes/nodeGeometryValidation";
 import { indexNodeForest } from "@/domain/nodes/nodeLayoutForest";
@@ -8,7 +9,8 @@ export type NodeOnlyDeletionFailureReason =
   | "node-missing"
   | "node-hidden"
   | "invalid-structure"
-  | "placement-failed";
+  | "placement-failed"
+  | "locked";
 
 export type DeleteNodeOnlyResult =
   | { ok: true; deletedId: number }
@@ -35,6 +37,8 @@ export function deleteNodeOnly(
   const target = nodes.find((node) => node.id === nodeId);
   if (!target) return { ok: false, reason: "node-missing" };
   if (!visibleNodeIds.has(nodeId)) return { ok: false, reason: "node-hidden" };
+  const lockedCheck = assertNodesEditable([nodeId], nodes);
+  if (!lockedCheck.ok && lockedCheck.reason === "locked") return { ok: false, reason: "locked" };
   // 配置不能と構造不正を分類するため、geometryだけを森の検証より先に調べる。
   if (hasInvalidNodeGeometry(nodes)) return { ok: false, reason: "placement-failed" };
   if (!indexNodeForest(nodes)) return { ok: false, reason: "invalid-structure" };

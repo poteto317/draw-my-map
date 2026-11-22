@@ -1,3 +1,4 @@
+import { assertNodesEditable } from "@/domain/nodes/nodeEditLock";
 import type { Node } from "@/types/node";
 
 // 詳細メモの上限。数え方は string.length（UTF-16 のコード単位。textarea の maxLength と同じで、絵文字などは 2 文字分）
@@ -45,6 +46,7 @@ export function withNodeNote(node: Node, note: string | undefined): Node {
 export function replaceNodeNote(nodes: readonly Node[], id: number, note: string): Node[] | null {
   const target = nodes.find((node) => node.id === id);
   if (target === undefined) return null;
+  if (!assertNodesEditable([id], nodes).ok) return null;
   const normalized = normalizeNodeNote(note);
   if (normalized !== undefined && !isNodeNoteWithinLimit(normalized)) return null;
   if (normalized === target.note) return null;

@@ -1,4 +1,5 @@
 import { ILLUSTRATED_NODE_HEIGHT, RECT_HEIGHT } from "@/config/shapes";
+import { assertNodesEditable } from "@/domain/nodes/nodeEditLock";
 import { isIllustrationDataUrl } from "@/domain/illustration/illustrationDataUrl";
 import type { Node } from "@/types/node";
 
@@ -9,6 +10,7 @@ export function replaceNodeIllustration(
 ): Node[] | null {
   if (!isIllustrationDataUrl(dataUrl)) return null;
   if (!nodes.some((node) => node.id === id)) return null;
+  if (!assertNodesEditable([id], nodes).ok) return null;
 
   return nodes.map((node) => (
     node.id === id ? { ...node, illustration: dataUrl, height: ILLUSTRATED_NODE_HEIGHT } : node
@@ -23,6 +25,7 @@ export function clearNodeIllustration(
 ): Node[] | null {
   const target = nodes.find((node) => node.id === id);
   if (target === undefined || target.illustration === undefined) return null;
+  if (!assertNodesEditable([id], nodes).ok) return null;
 
   return nodes.map((node) => {
     if (node.id !== id) return node;

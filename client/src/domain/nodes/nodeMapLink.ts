@@ -1,4 +1,5 @@
 import { isValidMapId } from "@/domain/mapLibrary/mapIndex";
+import { assertNodesEditable } from "@/domain/nodes/nodeEditLock";
 import type { Node, NodeMapLink } from "@/types/node";
 
 export type { NodeMapLink };
@@ -19,7 +20,8 @@ export type NodeMapLinkFailureReason =
   | "node-missing"
   | "self-node"
   | "duplicate"
-  | "too-many";
+  | "too-many"
+  | "locked";
 
 export type AddNodeMapLinkResult =
   | { ok: true; nodes: Node[] }
@@ -127,6 +129,8 @@ export function addNodeMapLink(
 ): AddNodeMapLinkResult {
   const target = nodes.find((node) => node.id === nodeId);
   if (target === undefined) return { ok: false, reason: "node-missing" };
+  const lockedCheck = assertNodesEditable([nodeId], nodes);
+  if (!lockedCheck.ok && lockedCheck.reason === "locked") return { ok: false, reason: "locked" };
   const normalized = normalizeNodeMapLink(input);
   if (!normalized.ok) return normalized;
   if (isSelfNodeMapLink(normalized.link, currentMapId, nodeId)) {
@@ -153,6 +157,7 @@ export function removeNodeMapLink(
   nodeId: number,
   target: NodeMapLink,
 ): Node[] | null {
+  if (!assertNodesEditable([nodeId], nodes).ok) return null;
   const node = nodes.find((item) => item.id === nodeId);
   const current = node?.mapLinks;
   if (current === undefined) return null;
@@ -223,6 +228,8 @@ export function formatNodeMapLinkFailure(reason: NodeMapLinkFailureReason): stri
       return `マップ間リンクは 1 つのノードに ${NODE_MAP_LINKS_MAX_COUNT} 件まで追加できます。`;
     case "node-missing":
       return "ノードが見つかりません。";
+    case "locked":
+      return "ロックされたノードは編集できません。";
     default: {
       const unreachable: never = reason;
       return unreachable;

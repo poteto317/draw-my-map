@@ -33,6 +33,8 @@ export function formatNodeMergeFailureNotice(reason: NodeMergeFailureReason): Op
       return { kind: "error", message: `出典をまとめると件数の上限（${NODE_SOURCES_MAX_COUNT} 件）を超えるため、統合できません。` };
     case "map-links-too-many":
       return { kind: "error", message: `マップ間リンクをまとめると件数の上限（${NODE_MAP_LINKS_MAX_COUNT} 件）を超えるため、統合できません。` };
+    case "locked":
+      return { kind: "error", message: "ロックされたノードは編集できません。" };
     default: {
       const unreachable: never = reason;
       return unreachable;

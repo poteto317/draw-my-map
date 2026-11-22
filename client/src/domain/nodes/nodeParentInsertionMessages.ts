@@ -13,6 +13,7 @@ export function formatNodeParentInsertionFailureNotice(
     case "invalid-structure":
     case "id-conflict":
     case "placement-failed":
+    case "locked":
       return { kind: "error", message: FAILURE_MESSAGE };
     default: {
       const unreachable: never = reason;
