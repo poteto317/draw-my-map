@@ -24,6 +24,7 @@ const runtime = {
 const node = createTestNode({ id: 1 });
 const onNodePointerDown = jest.fn();
 const createNodePointerDownHandler = jest.fn(() => onNodePointerDown);
+const screenSize = { width: 800, height: 600 };
 
 function createOptions(
   nodes = [node],
@@ -38,7 +39,9 @@ function createOptions(
     siblingReorderSourceNodeId: null,
     siblingReorderIndicator: null,
     createNodePointerDownHandler,
-    visibleNodeIds: new Set([1]),
+    visibleNodeIds: new Set(nodes.map((n) => n.id)),
+    highlightNodeIds: new Set<number>(),
+    pinnedNodeIds: new Set<number>(),
   };
 }
 
@@ -61,6 +64,7 @@ describe("useRenderedMapScene", () => {
         options,
         viewport: INITIAL_VIEWPORT,
         viewportRef,
+        screenSize,
       }),
       { initialProps: { currentRuntime: null as PixiRuntime | null } },
     );
@@ -81,6 +85,8 @@ describe("useRenderedMapScene", () => {
         siblingReorderSourceNodeId: options.siblingReorderSourceNodeId,
         siblingReorderIndicator: options.siblingReorderIndicator,
         visibleNodeIds: options.visibleNodeIds,
+        highlightNodeIds: options.highlightNodeIds,
+        pinnedNodeIds: options.pinnedNodeIds ?? new Set<number>(),
         illustrationTextures: undefined,
         onNodePointerDown,
         viewport: INITIAL_VIEWPORT,
@@ -99,6 +105,7 @@ describe("useRenderedMapScene", () => {
         options,
         viewport: INITIAL_VIEWPORT,
         viewportRef,
+        screenSize,
       }),
       { initialProps: { options: initialOptions } },
     );
@@ -120,6 +127,7 @@ describe("useRenderedMapScene", () => {
         options,
         viewport,
         viewportRef,
+        screenSize,
       }),
       { initialProps: { viewport: INITIAL_VIEWPORT } },
     );
@@ -135,6 +143,52 @@ describe("useRenderedMapScene", () => {
     expect(mockedApplyViewportTransform).toHaveBeenCalledWith(scene?.worldContainer, nextViewport);
   });
 
+  it("画面外ノードを描画リストから外し、パンで集合が変わるとsceneを再生成する", () => {
+    const near = createTestNode({ id: 1, x: 0, y: 0, width: 40, height: 40 });
+    const far = createTestNode({ id: 2, x: 5000, y: 0, width: 40, height: 40 });
+    const options = createOptions([near, far]);
+    const compactScreen = { width: 200, height: 200 };
+    const viewportRef = { current: INITIAL_VIEWPORT };
+    const { rerender } = renderHook(
+      ({ viewport }: { viewport: Viewport }) => useRenderedMapScene({
+        runtime,
+        options,
+        viewport,
+        viewportRef,
+        screenSize: compactScreen,
+      }),
+      { initialProps: { viewport: INITIAL_VIEWPORT } },
+    );
+
+    expect(mockedRenderMapScene).toHaveBeenCalledTimes(1);
+    expect(mockedRenderMapScene.mock.calls[0][2].nodes.map((n: { id: number }) => n.id)).toEqual([1]);
+
+    // offsetX = -4900 → 画面 [4900, 5100] がワールドに見える（far が入る）
+    const nextViewport = { offsetX: -4900, offsetY: 0, scale: 1 };
+    viewportRef.current = nextViewport;
+    rerender({ viewport: nextViewport });
+
+    expect(mockedRenderMapScene).toHaveBeenCalledTimes(2);
+    expect(mockedRenderMapScene.mock.calls[1][2].nodes.map((n: { id: number }) => n.id)).toEqual([2]);
+  });
+
+  it("screenSize が null のときはカリングせず全ノードを渡す", () => {
+    const near = createTestNode({ id: 1, x: 0, y: 0, width: 40, height: 40 });
+    const far = createTestNode({ id: 2, x: 5000, y: 0, width: 40, height: 40 });
+    const options = createOptions([near, far]);
+    const viewportRef = { current: INITIAL_VIEWPORT };
+
+    renderHook(() => useRenderedMapScene({
+      runtime,
+      options,
+      viewport: INITIAL_VIEWPORT,
+      viewportRef,
+      screenSize: null,
+    }));
+
+    expect(mockedRenderMapScene.mock.calls[0][2].nodes.map((n: { id: number }) => n.id)).toEqual([1, 2]);
+  });
+
   it("古いeffect cleanupが新しいsceneを解除しない", () => {
     const viewportRef = { current: INITIAL_VIEWPORT };
     const initialOptions = createOptions();
@@ -145,6 +199,7 @@ describe("useRenderedMapScene", () => {
         options,
         viewport: INITIAL_VIEWPORT,
         viewportRef,
+        screenSize,
       }),
       { initialProps: { options: initialOptions } },
     );
@@ -163,6 +218,7 @@ describe("useRenderedMapScene", () => {
         options,
         viewport: INITIAL_VIEWPORT,
         viewportRef,
+        screenSize,
       }),
       { initialProps: { currentRuntime: runtime as PixiRuntime | null } },
     );
@@ -184,6 +240,7 @@ describe("useRenderedMapScene", () => {
           options: { ...baseOptions, illustrationTextures },
           viewport: INITIAL_VIEWPORT,
           viewportRef,
+          screenSize,
         }),
       { initialProps: { illustrationTextures: new Map() as ReadonlyMap<string, Texture> } },
     );
@@ -209,6 +266,7 @@ describe("useRenderedMapScene", () => {
           options: { ...baseOptions, siblingReorderSourceNodeId: 1, siblingReorderIndicator },
           viewport: INITIAL_VIEWPORT,
           viewportRef,
+          screenSize,
         }),
       { initialProps: { siblingReorderIndicator: null as SiblingReorderIndicator | null } },
     );
@@ -237,6 +295,7 @@ describe("useRenderedMapScene", () => {
           options: { ...baseOptions, siblingReorderSourceNodeId },
           viewport: INITIAL_VIEWPORT,
           viewportRef,
+          screenSize,
         }),
       { initialProps: { siblingReorderSourceNodeId: null as number | null } },
     );

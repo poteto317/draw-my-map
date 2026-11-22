@@ -1,4 +1,5 @@
 import type { Point } from "@/components/map/mapGeometry";
+import type { WorldRect } from "@/domain/nodes/cullNodesInViewport";
 import type { Node } from "@/types/node";
 import {
   clampViewportScale,
@@ -12,6 +13,7 @@ import {
 } from "@/types/viewport";
 
 export type { ScreenSize, Viewport };
+export type { WorldRect };
 export {
   clampViewportScale,
   INITIAL_VIEWPORT,
@@ -34,6 +36,18 @@ export function screenToWorld(point: Point, viewport: Viewport): Point {
   return {
     x: (point.x - viewport.offsetX) / viewport.scale,
     y: (point.y - viewport.offsetY) / viewport.scale,
+  };
+}
+
+/** 画面全体をワールド座標の AABB に変換する。 */
+export function getViewportWorldRect(viewport: Viewport, screen: ScreenSize): WorldRect {
+  const topLeft = screenToWorld({ x: 0, y: 0 }, viewport);
+  const bottomRight = screenToWorld({ x: screen.width, y: screen.height }, viewport);
+  return {
+    x: topLeft.x,
+    y: topLeft.y,
+    width: bottomRight.x - topLeft.x,
+    height: bottomRight.y - topLeft.y,
   };
 }
 

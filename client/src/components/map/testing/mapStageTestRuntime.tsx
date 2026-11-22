@@ -157,6 +157,10 @@ export function lastWorldContainer(): MockContainer | undefined {
   return mockContainers.findLast((container) => container.scale.set.mock.calls.length > 0);
 }
 
+import { setViewportCullingEnabled } from "@/components/map/viewportCullingPolicy";
+
+export { setViewportCullingEnabled } from "@/components/map/viewportCullingPolicy";
+
 export function resetMapStageTestRuntime() {
   jest.clearAllMocks();
   for (const event of Object.keys(mockStageHandlers) as StageEvent[]) {
@@ -164,4 +168,5 @@ export function resetMapStageTestRuntime() {
   }
   mockNodePointerHandlers.length = 0;
   mockContainers.length = 0;
+  setViewportCullingEnabled(false);
 }
