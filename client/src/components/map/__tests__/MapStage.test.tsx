@@ -58,6 +58,8 @@ const defaultProps = {
   onChangeNodeIndent: jest.fn(),
   onInsertParentNode: jest.fn(),
   labelEditRequest: null,
+  highlightNodeIds: new Set<number>(),
+  pinnedNodeIds: new Set<number>(),
 };
 
 const sampleNodes: Node[] = [
@@ -95,6 +97,8 @@ function KeyboardCreationHarness({ initiallySelected = true }: { initiallySelect
     <>
       <MapStage
         nodes={nodes}
+        highlightNodeIds={new Set<number>()}
+        pinnedNodeIds={new Set<number>()}
         focusRequest={null}
         selectedNodeId={selectedNodeId}
         onDoubleClick={addNode}
@@ -154,6 +158,8 @@ function MouseConnectionHarness() {
     <>
       <MapStage
         nodes={nodes}
+        highlightNodeIds={new Set<number>()}
+        pinnedNodeIds={new Set<number>()}
         focusRequest={null}
         selectedNodeId={selectedNodeId}
         onDoubleClick={addNode}
@@ -214,6 +220,8 @@ function SubtreeMoveHarness() {
     <>
       <MapStage
         nodes={nodes}
+        highlightNodeIds={new Set<number>()}
+        pinnedNodeIds={new Set<number>()}
         focusRequest={null}
         selectedNodeId={selectedNodeId}
         onDoubleClick={addNode}

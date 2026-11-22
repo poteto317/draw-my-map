@@ -44,6 +44,8 @@ const defaultProps = {
   onChangeNodeIndent: jest.fn(),
   onInsertParentNode: jest.fn(),
   labelEditRequest: null,
+  highlightNodeIds: new Set<number>(),
+  pinnedNodeIds: new Set<number>(),
 };
 
 const sampleNodes: Node[] = [

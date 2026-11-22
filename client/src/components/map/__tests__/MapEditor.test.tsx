@@ -13,6 +13,7 @@ import {
   pointer,
   renderReady,
   resetMapStageTestRuntime,
+  setViewportCullingEnabled,
 } from "@/components/map/testing/mapStageTestRuntime";
 import { createTestStorageSession, type TestStorageSession } from "@/testing/createTestStorageSession";
 import { mapBodyKey } from "@/services/persistence/mapLibraryStorage";
@@ -189,6 +190,7 @@ function openOutlinePreview(text: string) {
 
 beforeEach(() => {
   resetMapStageTestRuntime();
+  setViewportCullingEnabled(true);
   window.localStorage.clear();
   mockDownloadMapJson.mockReset();
   mockDownloadMapImage.mockReset();
@@ -304,10 +306,9 @@ it("選択フィットは単一選択と複数選択の範囲を中央へ移す"
   expect(lastWorldContainer()?.scale.set.mock.lastCall).toEqual([4]);
   expect(lastWorldContainer()?.position.set.mock.lastCall).toEqual([-200, -220]);
 
-  act(() => {
-    mockNodePointerHandlers.at(-2)?.pointerdown?.(pointer(300, 200, { ctrlKey: true }));
-    mockStageHandlers.pointerup?.(pointer(300, 200, { ctrlKey: true }));
-  });
+  // 単一フィットで画面外へ出たノードはカリングされるため、全体フィットで描画を戻してから複数選択する（045）
+  await user.click(screen.getByRole("button", { name: "全体に合わせる" }));
+  selectCanvasNodeByLabel("別のルート", true);
   expect(screen.getByRole("group", { name: /重要度（2件選択中/ })).toBeInTheDocument();
   await user.click(fitSelection);
   const world = lastWorldContainer()!;
@@ -1789,5 +1790,152 @@ describe("書き出し対象スコープの配線", () => {
     ]);
     expect(exported.nodes.find((node) => node.label === "集中する枝")?.parentId).toBeNull();
     expect(exported.nodes.find((node) => node.label === "内部ノード")?.parentId).not.toBeNull();
+  });
+});
+
+function canvasNodeContentAlpha(label: string): number | undefined {
+  const container = findInteractiveCanvasNode(label);
+  if (!container) return undefined;
+  const shape = container.addChild.mock.calls[0]?.[0] as { alpha?: number } | undefined;
+  return shape?.alpha ?? 1;
+}
+
+describe("一時強調表示", () => {
+  it("検索ヒットモードで非ヒットの論理可視ノードが薄くなる（ヒットテストは維持）", async () => {
+    const user = await renderViewNavigationEditor();
+    await user.selectOptions(screen.getByRole("combobox", { name: "一時強調" }), "検索ヒット");
+    const search = screen.getByRole("combobox", { name: "ノードを検索" });
+    await user.clear(search);
+    await user.type(search, "末端");
+
+    expect(canvasNodeContentAlpha("末端ノード")).toBe(1);
+    expect(canvasNodeContentAlpha("親ルート")).toBe(0.25);
+    expect(isCanvasNodeInteractive("親ルート")).toBe(true);
+  });
+
+  it("選択枝モードで選択部分木以外が薄くなり、オフに戻すと通常 alpha", async () => {
+    const user = await renderViewNavigationEditor();
+    await navigateBySearch(user, "集中する枝");
+    await user.selectOptions(screen.getByRole("combobox", { name: "一時強調" }), "選択枝");
+
+    expect(canvasNodeContentAlpha("集中する枝")).toBe(1);
+    expect(canvasNodeContentAlpha("末端ノード")).toBe(1);
+    expect(canvasNodeContentAlpha("別のルート")).toBe(0.25);
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "一時強調" }), "オフ");
+    expect(canvasNodeContentAlpha("別のルート")).toBe(1);
+  });
+});
+
+describe("深さによる表示制限", () => {
+  it("深さを変えると検索候補の表示／非表示が変わる", async () => {
+    const user = await renderViewNavigationEditor();
+    const depth = screen.getByRole("combobox", { name: "深さ" });
+    const search = screen.getByRole("combobox", { name: "ノードを検索" });
+
+    await user.selectOptions(depth, "0（ルート）");
+    await user.clear(search);
+    await user.type(search, "末端");
+    expect(screen.getByRole("option", { name: /末端ノード.*非表示/ })).toBeInTheDocument();
+    expect(isCanvasNodeInteractive("末端ノード")).toBe(false);
+    expect(isCanvasNodeInteractive("親ルート")).toBe(true);
+
+    await user.selectOptions(depth, "無制限");
+    await user.clear(search);
+    await user.type(search, "末端");
+    expect(screen.getByRole("option", { name: "末端ノード（親: 内部ノード）" })).toBeInTheDocument();
+    expect(isCanvasNodeInteractive("末端ノード")).toBe(true);
+  });
+
+  it("深さ制限で表示0件なら無制限へ戻せる", async () => {
+    const user = await renderViewNavigationEditor();
+    await navigateBySearch(user, "集中する枝");
+    await user.click(screen.getByRole("button", { name: "枝に集中" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "深さ" }), "0（ルート）");
+
+    expect(screen.getByRole("status", { name: "深さ制限の表示案内" })).toHaveTextContent(
+      "深さ制限により表示できるノードがありません。",
+    );
+    await user.click(screen.getByRole("button", { name: "深さを無制限に戻す" }));
+
+    expect(screen.queryByRole("button", { name: "深さを無制限に戻す" })).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "深さ" })).toHaveValue("unlimited");
+    expect(isCanvasNodeInteractive("集中する枝")).toBe(true);
+  });
+});
+
+describe("ミニマップの配線", () => {
+  beforeEach(() => {
+    // getContext は引数ごとのオーバーロードがあり、spyOn の型は最後のもの（webgpu）になる
+    jest.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      fillRect: jest.fn(),
+      strokeRect: jest.fn(),
+      clearRect: jest.fn(),
+      fillStyle: "",
+      strokeStyle: "",
+      lineWidth: 1,
+      globalAlpha: 1,
+    } as never);
+  });
+
+  it("マップ表示でミニマップを出し、ビューポート矩形がズームに追従する", async () => {
+    const user = userEvent.setup();
+    await renderEditor();
+    addNodeAt(300, 200);
+
+    const minimap = screen.getByRole("group", { name: "ミニマップ" });
+    expect(minimap).toHaveClass("absolute", "bottom-3", "left-3");
+    const rectBefore = screen.getByTestId("minimap-viewport-rect");
+    const styleBefore = {
+      left: rectBefore.style.left,
+      top: rectBefore.style.top,
+      width: rectBefore.style.width,
+      height: rectBefore.style.height,
+    };
+
+    await user.click(screen.getByRole("button", { name: "拡大" }));
+
+    const rectAfter = screen.getByTestId("minimap-viewport-rect");
+    expect({
+      left: rectAfter.style.left,
+      top: rectAfter.style.top,
+      width: rectAfter.style.width,
+      height: rectAfter.style.height,
+    }).not.toEqual(styleBefore);
+  });
+
+  it("ミニマップのクリックでキャンバスがパンする", async () => {
+    await renderEditor();
+    addNodeAt(300, 200);
+
+    const canvas = screen.getByRole("group", { name: "ミニマップ" }).querySelector("canvas")!;
+    jest.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 160,
+      bottom: 120,
+      width: 160,
+      height: 120,
+      toJSON: () => ({}),
+    });
+    const positionBefore = lastWorldContainer()?.position.set.mock.lastCall;
+
+    fireEvent.mouseDown(canvas, { clientX: 120, clientY: 90, button: 0 });
+
+    const positionAfter = lastWorldContainer()?.position.set.mock.lastCall;
+    expect(positionAfter).not.toEqual(positionBefore);
+  });
+
+  it("アウトライン表示ではミニマップを出さない", async () => {
+    const user = userEvent.setup();
+    await renderEditor();
+    addNodeAt(300, 200);
+    expect(screen.getByRole("group", { name: "ミニマップ" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "アウトライン" }));
+
+    expect(screen.queryByRole("group", { name: "ミニマップ" })).not.toBeInTheDocument();
   });
 });
