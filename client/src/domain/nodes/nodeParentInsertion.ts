@@ -55,7 +55,8 @@ function resolveInsertionTarget(
   const target = nodesById.get(nodeId);
   if (target === undefined) return { ok: false, reason: "node-missing" };
   if (!visibleNodeIds.has(target.id)) return { ok: false, reason: "node-hidden" };
-  const lockedCheck = assertNodesEditable([target.id], nodes);
+  const editableIds = target.parentId === null ? [target.id] : [target.id, target.parentId];
+  const lockedCheck = assertNodesEditable(editableIds, nodes);
   if (!lockedCheck.ok && lockedCheck.reason === "locked") return { ok: false, reason: "locked" };
   if (
     target.parentId === target.id ||

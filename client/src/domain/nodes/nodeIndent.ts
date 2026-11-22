@@ -143,6 +143,10 @@ function indentNode(
   if (parent === undefined || !canConnectNodes(nodes, parent.id, target.id)) {
     return { ok: false, reason: "invalid-structure" };
   }
+  const lockedCheck = assertNodesEditable([target.id, parent.id], nodes);
+  if (!lockedCheck.ok && lockedCheck.reason === "locked") {
+    return { ok: false, reason: "locked" };
+  }
 
   const placed = applyBranchPlacement(
     buildIndentedNodes(nodes, target, parent),
@@ -189,6 +193,10 @@ function outdentNode(
   if (target.parentId === null) return { ok: false, reason: "at-edge", direction: "outdent" };
   const parent = nodesById.get(target.parentId);
   if (parent === undefined) return { ok: false, reason: "invalid-structure" };
+  const lockedCheck = assertNodesEditable([target.id, parent.id], nodes);
+  if (!lockedCheck.ok && lockedCheck.reason === "locked") {
+    return { ok: false, reason: "locked" };
+  }
   let newParentLabel: string | null = null;
   if (parent.parentId !== null) {
     const grandparent = nodesById.get(parent.parentId);
@@ -223,10 +231,6 @@ export function changeNodeIndent(
   mode: NodeLayoutMode,
   spacing: LayoutSpacing = DEFAULT_LAYOUT_SPACING,
 ): NodeIndentResult {
-  const lockedCheck = assertNodesEditable([nodeId], nodes);
-  if (!lockedCheck.ok && lockedCheck.reason === "locked") {
-    return { ok: false, reason: "locked" };
-  }
   switch (direction) {
     case "indent":
       return indentNode(nodes, nodeId, visibleNodeIds, mode, spacing);

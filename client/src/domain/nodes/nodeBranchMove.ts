@@ -152,7 +152,8 @@ export function moveNodeBranch(
   const root = nodes.find((node) => node.id === rootId);
   if (root === undefined) return { ok: false, reason: "missing-node" };
   const branchIds = [...collectSubtreeIds(nodes, rootId)];
-  const lockedCheck = assertNodesEditable(branchIds, nodes);
+  const editableIds = parentId === null ? branchIds : [...branchIds, parentId];
+  const lockedCheck = assertNodesEditable(editableIds, nodes);
   if (!lockedCheck.ok && lockedCheck.reason === "locked") return { ok: false, reason: "locked" };
   if (root.parentId === parentId) return { ok: false, reason: "same-parent" };
 
@@ -185,6 +186,9 @@ export function transferNodeBranch(
 ): BranchTransferResult {
   const root = source.nodes.find((node) => node.id === rootId);
   if (root === undefined) return { ok: false, reason: "missing-node" };
+  const branchIds = [...collectSubtreeIds(source.nodes, rootId)];
+  const lockedCheck = assertNodesEditable(branchIds, source.nodes);
+  if (!lockedCheck.ok && lockedCheck.reason === "locked") return { ok: false, reason: "locked" };
 
   const split = splitValidBranch(source.nodes, rootId);
   if (split === null) return { ok: false, reason: "invalid-parent" };
