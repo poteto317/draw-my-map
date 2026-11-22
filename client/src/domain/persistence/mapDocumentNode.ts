@@ -2,6 +2,7 @@ import type { MapDocumentResult, MapDocumentVersion } from "@/types/mapDocument"
 import type { Node } from "@/types/node";
 import { getIllustratedNodeMinHeight } from "@/domain/nodes/nodeIllustration";
 import { normalizeMapDocumentNodeImportance } from "@/domain/persistence/mapDocumentNodeImportance";
+import { normalizeMapDocumentNodeLocked } from "@/domain/persistence/mapDocumentNodeLocked";
 import { normalizeMapDocumentNodeIllustration } from "@/domain/persistence/mapDocumentNodeIllustration";
 import { normalizeMapDocumentNodeLinks } from "@/domain/persistence/mapDocumentNodeLinks";
 import { normalizeMapDocumentNodeMapLinks } from "@/domain/persistence/mapDocumentNodeMapLinks";
@@ -97,6 +98,11 @@ export function normalizeMapDocumentNode(
     return mapLinksResult;
   }
   const mapLinks = mapLinksResult.value;
+  const lockedResult = normalizeMapDocumentNodeLocked(node.locked, index, version);
+  if (!lockedResult.ok) {
+    return lockedResult;
+  }
+  const locked = lockedResult.value;
   return {
     ok: true,
     value: projectMapDocumentNode({
@@ -114,6 +120,7 @@ export function normalizeMapDocumentNode(
       ...(tags === undefined ? {} : { tags }),
       ...(sources === undefined ? {} : { sources }),
       ...(mapLinks === undefined ? {} : { mapLinks }),
+      ...(locked === undefined ? {} : { locked }),
     }),
   };
 }

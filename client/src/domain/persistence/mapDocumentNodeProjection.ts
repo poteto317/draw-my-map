@@ -16,5 +16,6 @@ export function projectMapDocumentNode(node: Node): Node {
     ...(node.tags === undefined ? {} : { tags: node.tags }),
     ...(node.sources === undefined ? {} : { sources: node.sources }),
     ...(node.mapLinks === undefined ? {} : { mapLinks: node.mapLinks }),
+    ...(node.locked === undefined ? {} : { locked: node.locked }),
   };
 }
