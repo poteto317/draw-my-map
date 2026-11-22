@@ -7,12 +7,16 @@ type MapPersistenceControlsProps = {
   onExport: () => void;
   onImport: (file: File) => Promise<void>;
   exportButtonRef?: Ref<HTMLButtonElement>;
+  jsonExportEnabled?: boolean;
+  jsonExportDisabledReason?: string;
 };
 
 export function MapPersistenceControls({
   onExport,
   onImport,
   exportButtonRef,
+  jsonExportEnabled = true,
+  jsonExportDisabledReason,
 }: MapPersistenceControlsProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -30,13 +34,20 @@ export function MapPersistenceControls({
     }
   };
 
+  const jsonLabel = !jsonExportEnabled && jsonExportDisabledReason
+    ? `JSON書き出し（${jsonExportDisabledReason}）`
+    : "JSON書き出し";
+
   return (
     <div className="flex shrink-0 gap-2">
       <button
         ref={exportButtonRef}
         type="button"
-        className="rounded-md bg-zinc-100 px-3 py-1 text-sm text-zinc-700 transition-colors dark:bg-zinc-700 dark:text-zinc-200"
+        className="rounded-md bg-zinc-100 px-3 py-1 text-sm text-zinc-700 transition-colors disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-700 dark:text-zinc-200"
         onClick={onExport}
+        disabled={!jsonExportEnabled}
+        aria-label={jsonLabel}
+        title={!jsonExportEnabled ? jsonExportDisabledReason : undefined}
         // 保護モードへ移るとフォーカスがこのボタンへ来る。押し続けたEnter・Spaceのclick合成で書き出さない
         onKeyDown={preventRepeatedActivationClick}
       >
