@@ -501,8 +501,8 @@ describe("ページの親の挿入（失敗と通知の枠。L-001、L-166）", 
 
     await user.click(insertButton());
 
-    expect(exportedNodeCount()).toBe(6);
     expect(within(noticeBar()).getByText(INSERT_FAILED_MESSAGE)).toBeInTheDocument();
+    expect(exportedNodeCount()).toBe(6);
     expect(screen.queryByTestId("node-label-input")).not.toBeInTheDocument();
 
     selectNode(2, 6, 270, 230);
