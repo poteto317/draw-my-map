@@ -1,3 +1,4 @@
+import type { NodeMapLayoutContext } from "@/domain/nodes/resolveLayoutSpacing";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 
@@ -23,12 +24,22 @@ export function settleTreeChangeOutcome<R extends { ok: boolean }>(
 
 // 確定時点の最新の配列から compute で候補と結果を計算し、applyTreeChange で確定して、操作の結果を決める
 export function applyTreeChangeWithOutcome<R extends { ok: boolean }>(
-  applyTreeChange: (update: (currentNodes: readonly Node[], mode: NodeLayoutMode) => Node[] | null) => boolean,
-  compute: (currentNodes: readonly Node[], mode: NodeLayoutMode) => TreeChangeComputation<R>,
+  applyTreeChange: (
+    update: (
+      currentNodes: readonly Node[],
+      mode: NodeLayoutMode,
+      layout: NodeMapLayoutContext,
+    ) => Node[] | null,
+  ) => boolean,
+  compute: (
+    currentNodes: readonly Node[],
+    mode: NodeLayoutMode,
+    layout: NodeMapLayoutContext,
+  ) => TreeChangeComputation<R>,
 ): R | TreeChangePlacementFailure {
   let outcome: R | null = null;
-  const applied = applyTreeChange((currentNodes, mode) => {
-    const computation = compute(currentNodes, mode);
+  const applied = applyTreeChange((currentNodes, mode, layout) => {
+    const computation = compute(currentNodes, mode, layout);
     outcome = computation.outcome;
     return computation.nodes;
   });

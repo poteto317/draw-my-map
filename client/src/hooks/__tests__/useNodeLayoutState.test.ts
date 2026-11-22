@@ -8,8 +8,8 @@ import { createTestNode } from "@/testing/createTestNode";
 function node(
   id: number,
   parentId: number | null,
-  x: number,
-  y: number,
+  x = 0,
+  y = 0,
 ): Node {
   return createTestNode({
     id,
@@ -35,7 +35,7 @@ describe("useNodeLayoutState", () => {
     const imported = [node(10, null, 900, 800), node(11, 10, 15, 25)];
     const before = imported.map((item) => ({ ...item }));
 
-    act(() => result.current.replaceLayoutState(imported, "auto"));
+    act(() => result.current.replaceLayoutState({ layoutMode: "auto", nodes: imported }));
 
     expect(result.current.nodes).toBe(imported);
     expect(result.current.nodes).toEqual(before);
@@ -50,7 +50,7 @@ describe("useNodeLayoutState", () => {
     let moved!: boolean;
 
     act(() => {
-      replaceLayoutState(imported, "auto");
+      replaceLayoutState({ layoutMode: "auto", nodes: imported });
       applyNonStructuralChange((current) => {
         observedNodes = current;
         return null;
@@ -64,7 +64,7 @@ describe("useNodeLayoutState", () => {
     expect(result.current.replaceLayoutState).toBe(replaceLayoutState);
 
     act(() => {
-      replaceLayoutState(imported, "manual");
+      replaceLayoutState({ layoutMode: "manual", nodes: imported });
       moved = applyManualMove((current) => current.map((item) => ({ ...item, x: 50 })));
     });
 
@@ -127,6 +127,124 @@ describe("useNodeLayoutState", () => {
     expect(result.current.nodes[1].x).toBe(50);
     expect(result.current.nodes[1].y).toBeGreaterThan(70 + RECT_HEIGHT);
     expect(result.current.setLayoutMode).toBe(setLayoutMode);
+  });
+
+  it("マップの layoutSpacing を自動配置の間隔に使う", () => {
+    const { result } = renderHook(() => useNodeLayoutState());
+    const nodes = [node(1, null, 50, 70), node(2, null, 500, 300)];
+
+    act(() => {
+      result.current.replaceLayoutState({
+        layoutMode: "manual",
+        nodes,
+        layoutSpacing: { childGap: 120, siblingGap: 200 },
+      });
+      result.current.setLayoutMode("auto");
+    });
+
+    expect(result.current.nodes[1].y).toBe(70 + RECT_HEIGHT + 200 * 2);
+  });
+
+  it("manual から auto では保存済み treeDirection と layoutSpacing で1回再配置する", () => {
+    const { result } = renderHook(() => useNodeLayoutState());
+    const nodes = [node(1, null, 50, 70), node(2, 1), node(3, 1)];
+    act(() => {
+      result.current.replaceLayoutState({
+        layoutMode: "manual",
+        nodes,
+        treeDirection: "tb",
+        layoutSpacing: { childGap: 80, siblingGap: 24 },
+      });
+    });
+    act(() => { result.current.setLayoutMode("auto"); });
+
+    expect(result.current.layoutMode).toBe("auto");
+    expect(result.current.nodes).toHaveLength(3);
+    const root = result.current.nodes.find((item) => item.id === 1)!;
+    const first = result.current.nodes.find((item) => item.id === 2)!;
+    const second = result.current.nodes.find((item) => item.id === 3)!;
+    expect(first.y).toBe(root.y + RECT_HEIGHT + 80);
+    expect(second.x).toBe(first.x + RECT_WIDTH + 24);
+    expect(result.current.treeDirection).toBe("tb");
+  });
+
+  it("手動配置では treeDirection だけを保存し座標を変えない", () => {
+    const { result } = renderHook(() => useNodeLayoutState());
+    const nodes = [node(1, null, 50, 70), node(2, 1, 900, 900)];
+
+    act(() => {
+      result.current.replaceLayoutState({ layoutMode: "manual", nodes });
+      result.current.setTreeDirection("tb");
+    });
+
+    expect(result.current.treeDirection).toBe("tb");
+    expect(result.current.nodes).toEqual(nodes);
+  });
+
+  it("手動配置では layoutSpacing だけを保存し座標を変えない", () => {
+    const { result } = renderHook(() => useNodeLayoutState());
+    const nodes = [node(1, null, 50, 70), node(2, 1, 900, 900)];
+
+    act(() => {
+      result.current.replaceLayoutState({ layoutMode: "manual", nodes });
+      result.current.setLayoutSpacing({ childGap: 100, siblingGap: 80 });
+    });
+
+    expect(result.current.layoutSpacing).toEqual({ childGap: 100, siblingGap: 80 });
+    expect(result.current.nodes).toEqual(nodes);
+  });
+
+  it("自動配置で layoutSpacing を変えると1操作として再配置し Undo で戻せる", () => {
+    const { result } = renderHook(() => useNodeLayoutState());
+    const nodes = [node(1, null, 50, 70), node(2, 1), node(3, 1)];
+
+    act(() => {
+      result.current.replaceLayoutState({ layoutMode: "manual", nodes });
+      result.current.setLayoutMode("auto");
+    });
+    const before = result.current.nodes.map((item) => ({ ...item }));
+
+    act(() => {
+      result.current.setLayoutSpacing({ childGap: 120, siblingGap: 200 });
+    });
+    const after = result.current.nodes.map((item) => ({ ...item }));
+
+    expect(after).not.toEqual(before);
+    expect(result.current.layoutSpacing).toEqual({ childGap: 120, siblingGap: 200 });
+
+    act(() => { result.current.undo(); });
+
+    expect(result.current.layoutSpacing).toBeUndefined();
+    expect(result.current.nodes.map((item) => ({ ...item }))).toEqual(before);
+    expect(result.current.canRedo).toBe(true);
+
+    act(() => { result.current.redo(); });
+    expect(result.current.layoutSpacing).toEqual({ childGap: 120, siblingGap: 200 });
+    expect(result.current.nodes.map((item) => ({ ...item }))).toEqual(after);
+  });
+
+  it("自動配置で treeDirection を変えると1操作として再配置し Undo で戻せる", () => {
+    const { result } = renderHook(() => useNodeLayoutState());
+    const nodes = [node(1, null, 50, 70), node(2, 1), node(3, 1)];
+
+    act(() => {
+      result.current.replaceLayoutState({ layoutMode: "manual", nodes });
+      result.current.setLayoutMode("auto");
+    });
+    const beforeTb = result.current.nodes.map((item) => ({ ...item }));
+
+    act(() => { result.current.setTreeDirection("tb"); });
+    const afterTb = result.current.nodes.map((item) => ({ ...item }));
+
+    act(() => { result.current.undo(); });
+
+    expect(result.current.treeDirection).toBeUndefined();
+    expect(result.current.nodes.map((item) => ({ ...item }))).toEqual(beforeTb);
+    expect(result.current.canRedo).toBe(true);
+
+    act(() => { result.current.redo(); });
+    expect(result.current.treeDirection).toBe("tb");
+    expect(result.current.nodes.map((item) => ({ ...item }))).toEqual(afterTb);
   });
 
   it("無効なノードでは自動モードへの切り替えを原子的に拒否する", () => {
@@ -387,7 +505,7 @@ describe("useNodeLayoutState", () => {
 
     it("null候補・自動配置中の手動移動・配置失敗はfalseを返しRedoを維持する", () => {
       const { result } = renderHook(() => useNodeLayoutState());
-      act(() => result.current.replaceLayoutState([node(1, null, 50, 70)], "auto"));
+      act(() => result.current.replaceLayoutState({ layoutMode: "auto", nodes: [node(1, null, 50, 70)] }));
       act(() => { result.current.applyNonStructuralChange((current) => current.map((item) => ({ ...item, label: "a" }))); });
       act(() => { result.current.undo(); });
       const results: boolean[] = [];
@@ -409,7 +527,7 @@ describe("useNodeLayoutState", () => {
       act(() => { result.current.applyNonStructuralChange(() => [node(1, null, 60, 70)]); });
       act(() => { result.current.undo(); });
 
-      act(() => result.current.replaceLayoutState([node(5, null, 0, 0)], "manual"));
+      act(() => result.current.replaceLayoutState({ layoutMode: "manual", nodes: [node(5, null, 0, 0)] }));
 
       expect(result.current.canUndo).toBe(false);
       expect(result.current.canRedo).toBe(false);
@@ -456,7 +574,7 @@ describe("useNodeLayoutState", () => {
       it("グループ外では1操作として確定する", () => {
         const { result } = renderHook(() => useNodeLayoutState());
         const start = [node(1, null, 50, 70)];
-        act(() => result.current.replaceLayoutState(start, "manual"));
+        act(() => result.current.replaceLayoutState({ layoutMode: "manual", nodes: start }));
         let applied!: boolean;
 
         act(() => {
@@ -471,7 +589,7 @@ describe("useNodeLayoutState", () => {
 
       it("自動配置でも候補を受理し、再配置しない（applyManualMove と違い配置モードに依存しない）", () => {
         const { result } = renderHook(() => useNodeLayoutState());
-        act(() => result.current.replaceLayoutState([node(1, null, 900, 800)], "auto"));
+        act(() => result.current.replaceLayoutState({ layoutMode: "auto", nodes: [node(1, null, 900, 800)] }));
         let applied!: boolean;
 
         act(() => {
@@ -486,7 +604,7 @@ describe("useNodeLayoutState", () => {
       it("null の候補は false を返し、状態と履歴を変えない", () => {
         const { result } = renderHook(() => useNodeLayoutState());
         const start = [node(1, null, 50, 70)];
-        act(() => result.current.replaceLayoutState(start, "manual"));
+        act(() => result.current.replaceLayoutState({ layoutMode: "manual", nodes: start }));
         let applied!: boolean;
 
         act(() => { applied = result.current.applyNonStructuralPreview(() => null); });

@@ -40,7 +40,19 @@ import {
   type ChangeNodeIndentResult,
   type NodeIndentDirection,
 } from "@/domain/nodes/nodeIndent";
+import {
+  assertNodesEditable,
+  lockSubtree,
+  toggleNodeLock,
+  unlockSubtree,
+} from "@/domain/nodes/nodeEditLock";
+import { applyNodePositionUpdates } from "@/domain/nodes/selectionLayoutShared";
+import { applyManualPositionIfUnlocked } from "@/hooks/applyManualPositionIfUnlocked";
 import { deleteNodeOnly as computeNodeOnlyDeletion, type DeleteNodeOnlyResult } from "@/domain/nodes/nodeOnlyDeletion";
+import {
+  resolveLayoutNodeForestOptions,
+  resolveLayoutSpacing,
+} from "@/domain/nodes/resolveLayoutSpacing";
 import { applyTreeChangeWithOutcome } from "@/hooks/treeChangeOutcome";
 import { insertParentNode as computeParentInsertion, type InsertParentNodeResult } from "@/domain/nodes/nodeParentInsertion";
 import { replaceNodeImportance, replaceNodesImportance } from "@/domain/nodes/nodeImportanceUpdate";
@@ -93,6 +105,8 @@ import type { Node, NodeMapLink } from "@/types/node";
 import type { NodeImportance } from "@/types/nodeImportance";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 import type { NodeMapState } from "@/types/nodeMapState";
+import type { LayoutSpacing } from "@/types/layoutSpacing";
+import type { TreeDirection } from "@/types/treeDirection";
 import {
   addMarquee,
   addRange,
@@ -117,6 +131,8 @@ type UseNodesReturn = {
   selectedNodeId: number | null;
   selectedNodeIds: readonly number[];
   layoutMode: NodeLayoutMode;
+  treeDirection: NodeMapState["treeDirection"];
+  layoutSpacing: NodeMapState["layoutSpacing"];
   addNode: (x: number, y: number) => number;
   addChildNode: (parentId: number) => number | null;
   addSiblingNode: (nodeId: number) => number | null;
@@ -157,6 +173,13 @@ type UseNodesReturn = {
   addNodeMapLink: (nodeId: number, currentMapId: string, input: NodeMapLinkInput) => AddNodeMapLinkOutcome;
   // マップ間リンクの削除。値一致（nodeMapLinkKey）するリンクだけを消し、1操作として確定する。受理したかを返す
   removeNodeMapLink: (nodeId: number, target: NodeMapLink) => boolean;
+  // 手動配置での座標一括確定。layoutMode が auto のときは false
+  commitManualNodes: (nextNodes: Node[]) => boolean;
+  // 単一ノードの編集ロックを切り替え。1操作として確定する
+  toggleNodeEditLock: (nodeId: number) => boolean;
+  // 部分木をロック／解除。各 1 操作として確定する
+  lockNodeSubtree: (rootId: number) => boolean;
+  unlockNodeSubtree: (rootId: number) => boolean;
   moveNode: (id: number, x: number, y: number) => void;
   connectNodes: (parentId: number, childId: number) => boolean;
   // 成功時は複製根のIDを返して選択する。対象不在・配置不能・自動配置失敗ではnullを返し何も変えない
@@ -215,6 +238,8 @@ type UseNodesReturn = {
   deleteNode: (id: number) => void;
   deleteNodeOnly: (nodeId: number, visibleNodeIds: ReadonlySet<number>) => DeleteNodeOnlyResult;
   setLayoutMode: (mode: NodeLayoutMode) => void;
+  setTreeDirection: (direction: TreeDirection) => void;
+  setLayoutSpacing: (spacing: LayoutSpacing) => void;
   replaceMap: (state: NodeMapState) => void;
   // 成功したUndo／RedoとreplaceMapで増える。編集・ジェスチャー・生成結果の失効に使う
   documentRevision: number;
@@ -234,12 +259,16 @@ export function useNodes(): UseNodesReturn {
   const {
     nodes,
     layoutMode,
+    treeDirection,
+    layoutSpacing,
     getCurrentState,
     applyNonStructuralChange,
     applyNonStructuralPreview,
     applyManualMove,
     applyTreeChange,
     setLayoutMode,
+    setTreeDirection,
+    setLayoutSpacing,
     replaceLayoutState,
     canUndo,
     canRedo,
@@ -264,7 +293,7 @@ export function useNodes(): UseNodesReturn {
 
   const replaceMap = useCallback((state: NodeMapState) => {
     nodeIdAllocator.reset();
-    replaceLayoutState(state.nodes, state.layoutMode);
+    replaceLayoutState(state);
     markDocumentRestored();
   }, [nodeIdAllocator, replaceLayoutState, markDocumentRestored]);
 
@@ -294,13 +323,19 @@ export function useNodes(): UseNodesReturn {
   // 基点が無い・作れないときは何も変えずに null を返す。ID は確定時点の最新の配列から採番する
   const addNodeFromAnchor = useCallback((
     anchorId: number,
-    createNode: (currentNodes: readonly Node[], anchorId: number, id: number) => Node | null,
+    createNode: (
+      currentNodes: readonly Node[],
+      anchorId: number,
+      id: number,
+      spacing: ReturnType<typeof resolveLayoutSpacing>,
+    ) => Node | null,
   ) => {
     let createdId: number | null = null;
-    const applied = applyTreeChange((currentNodes) => {
-      if (!currentNodes.some((node) => node.id === anchorId)) return null;
+    const applied = applyTreeChange((currentNodes, _mode, layout) => {
+      if (!assertNodesEditable([anchorId], currentNodes).ok) return null;
       const id = nodeIdAllocator.nextAvailableId(currentNodes);
-      const created = createNode(currentNodes, anchorId, id);
+      const spacing = resolveLayoutSpacing(layout);
+      const created = createNode(currentNodes, anchorId, id, spacing);
       if (!created) return null;
 
       createdId = id;
@@ -313,11 +348,14 @@ export function useNodes(): UseNodesReturn {
   }, [nodeIdAllocator, applyTreeChange]);
 
   const addChildNode = useCallback((parentId: number) => (
-    addNodeFromAnchor(parentId, createChildNode)
+    addNodeFromAnchor(parentId, (nodes, parent, id, spacing) => createChildNode(nodes, parent, id, spacing))
   ), [addNodeFromAnchor]);
 
   const addSiblingNode = useCallback((nodeId: number) => (
-    addNodeFromAnchor(nodeId, createSiblingNode)
+    addNodeFromAnchor(
+      nodeId,
+      (nodes, anchor, id, spacing) => createSiblingNode(nodes, anchor, id, spacing),
+    )
   ), [addNodeFromAnchor]);
 
   const selectNode = useCallback((id: number | null) => {
@@ -350,11 +388,12 @@ export function useNodes(): UseNodesReturn {
   }, [getCurrentState]);
 
   const updateNodeLabel = useCallback((id: number, label: string) => {
-    applyNonStructuralChange((currentNodes) => (
-      currentNodes.map((node) => (
+    applyNonStructuralChange((currentNodes) => {
+      if (!assertNodesEditable([id], currentNodes).ok) return null;
+      return currentNodes.map((node) => (
         node.id === id ? { ...node, label } : node
-      ))
-    ));
+      ));
+    });
   }, [applyNonStructuralChange]);
 
   // 複数ノードのラベルを1回の更新関数でまとめて変え、1操作として履歴に記録する
@@ -439,8 +478,30 @@ export function useNodes(): UseNodesReturn {
     applyNonStructuralChange((currentNodes) => computeNodeMapLinkRemoval(currentNodes, nodeId, target))
   ), [applyNonStructuralChange]);
 
+  const commitManualNodes = useCallback((nextNodes: Node[]) => (
+    applyManualPositionIfUnlocked(applyManualMove, (currentNodes) => {
+      const updates = new Map<number, { x: number; y: number }>();
+      for (const node of nextNodes) {
+        updates.set(node.id, { x: node.x, y: node.y });
+      }
+      return applyNodePositionUpdates(currentNodes, updates);
+    })
+  ), [applyManualMove]);
+
+  const toggleNodeEditLock = useCallback((nodeId: number) => (
+    applyNonStructuralChange((currentNodes) => toggleNodeLock(currentNodes, nodeId))
+  ), [applyNonStructuralChange]);
+
+  const lockNodeSubtree = useCallback((rootId: number) => (
+    applyNonStructuralChange((currentNodes) => lockSubtree(currentNodes, rootId))
+  ), [applyNonStructuralChange]);
+
+  const unlockNodeSubtree = useCallback((rootId: number) => (
+    applyNonStructuralChange((currentNodes) => unlockSubtree(currentNodes, rootId))
+  ), [applyNonStructuralChange]);
+
   const moveNode = useCallback((id: number, x: number, y: number) => {
-    applyManualMove((currentNodes) => (
+    applyManualPositionIfUnlocked(applyManualMove, (currentNodes) => (
       moveNodeSubtree(currentNodes, id, x, y)
     ));
   }, [applyManualMove]);
@@ -462,14 +523,20 @@ export function useNodes(): UseNodesReturn {
       currentNodes: readonly Node[],
       mode: NodeLayoutMode,
       allocateIds: AllocateNodeIds,
+      spacing: ReturnType<typeof resolveLayoutSpacing>,
+      layoutOptions: ReturnType<typeof resolveLayoutNodeForestOptions>,
     ) => SubtreeInsertionResult | null,
   ) => {
     let insertedRootId: number | null = null;
-    const applied = applyTreeChange((currentNodes, mode) => {
+    const applied = applyTreeChange((currentNodes, mode, layout) => {
+      const spacing = resolveLayoutSpacing(layout);
+      const layoutOptions = resolveLayoutNodeForestOptions(layout);
       const inserted = insert(
         currentNodes,
         mode,
         (occupied, count) => nodeIdAllocator.nextAvailableIds(occupied, count),
+        spacing,
+        layoutOptions,
       );
       if (!inserted) return null;
 
@@ -483,8 +550,8 @@ export function useNodes(): UseNodesReturn {
   }, [nodeIdAllocator, applyTreeChange]);
 
   const duplicateSubtree = useCallback((sourceId: number) => (
-    applySubtreeInsertion((currentNodes, mode, allocateIds) => (
-      duplicateNodeSubtree(currentNodes, sourceId, mode, allocateIds)
+    applySubtreeInsertion((currentNodes, mode, allocateIds, spacing) => (
+      duplicateNodeSubtree(currentNodes, sourceId, mode, allocateIds, spacing)
     ))
   ), [applySubtreeInsertion]);
 
@@ -493,8 +560,8 @@ export function useNodes(): UseNodesReturn {
   ), [getCurrentState]);
 
   const pasteSubtree = useCallback((data: SubtreeClipboardData) => (
-    applySubtreeInsertion((currentNodes, mode, allocateIds) => (
-      insertNodeSubtree(currentNodes, data.nodes, data.rootId, null, mode, allocateIds, "paste")
+    applySubtreeInsertion((currentNodes, mode, allocateIds, spacing) => (
+      insertNodeSubtree(currentNodes, data.nodes, data.rootId, null, mode, allocateIds, "paste", spacing)
     ))
   ), [applySubtreeInsertion]);
 
@@ -504,7 +571,7 @@ export function useNodes(): UseNodesReturn {
     sourceRootId: number,
     targetParentId: number | null,
   ) => (
-    applySubtreeInsertion((currentNodes, mode, allocateIds) => (
+    applySubtreeInsertion((currentNodes, mode, allocateIds, spacing) => (
       insertNodeSubtree(
         currentNodes,
         sources,
@@ -513,6 +580,7 @@ export function useNodes(): UseNodesReturn {
         mode,
         allocateIds,
         "paste",
+        spacing,
       )
     ))
   ), [applySubtreeInsertion]);
@@ -522,8 +590,16 @@ export function useNodes(): UseNodesReturn {
     target: ForestInsertionTarget,
   ): InsertForestResult => {
     let failureReason: ForestInsertionFailureReason | null = null;
-    const rootId = applySubtreeInsertion((currentNodes, mode, allocateIds) => {
-      const inserted = insertNodeForest(currentNodes, items, target, mode, allocateIds);
+    const rootId = applySubtreeInsertion((currentNodes, mode, allocateIds, spacing, layoutOptions) => {
+      const inserted = insertNodeForest(
+        currentNodes,
+        items,
+        target,
+        mode,
+        allocateIds,
+        spacing,
+        layoutOptions,
+      );
       if (!inserted.ok) {
         failureReason = inserted.reason;
         return null;
@@ -542,7 +618,7 @@ export function useNodes(): UseNodesReturn {
     request: SiblingReorderRequest,
     visibleNodeIds: ReadonlySet<number>,
   ): ReorderSiblingResult => (
-    applyTreeChangeWithOutcome<ReorderSiblingResult>(applyTreeChange, (currentNodes, mode) => {
+    applyTreeChangeWithOutcome<ReorderSiblingResult>(applyTreeChange, (currentNodes, mode, _layout) => {
       const reordered = reorderSiblingByRequest(currentNodes, nodeId, request, visibleNodeIds, mode);
       if (!reordered.ok) return { nodes: null, outcome: reordered };
       const { nodes, ...position } = reordered;
@@ -557,8 +633,15 @@ export function useNodes(): UseNodesReturn {
     direction: NodeIndentDirection,
     visibleNodeIds: ReadonlySet<number>,
   ): ChangeNodeIndentResult => (
-    applyTreeChangeWithOutcome<ChangeNodeIndentResult>(applyTreeChange, (currentNodes, mode) => {
-      const changed = computeNodeIndent(currentNodes, nodeId, direction, visibleNodeIds, mode);
+    applyTreeChangeWithOutcome<ChangeNodeIndentResult>(applyTreeChange, (currentNodes, mode, layout) => {
+      const changed = computeNodeIndent(
+        currentNodes,
+        nodeId,
+        direction,
+        visibleNodeIds,
+        mode,
+        resolveLayoutSpacing(layout),
+      );
       if (!changed.ok) return { nodes: null, outcome: changed };
       const { nodes, ...summary } = changed;
       return { nodes, outcome: summary };
@@ -571,9 +654,16 @@ export function useNodes(): UseNodesReturn {
     nodeId: number,
     visibleNodeIds: ReadonlySet<number>,
   ): InsertParentNodeResult => {
-    const settled = applyTreeChangeWithOutcome<InsertParentNodeResult>(applyTreeChange, (currentNodes, mode) => {
+    const settled = applyTreeChangeWithOutcome<InsertParentNodeResult>(applyTreeChange, (currentNodes, mode, layout) => {
       const id = nodeIdAllocator.nextAvailableId(currentNodes);
-      const inserted = computeParentInsertion(currentNodes, nodeId, id, visibleNodeIds, mode);
+      const inserted = computeParentInsertion(
+        currentNodes,
+        nodeId,
+        id,
+        visibleNodeIds,
+        mode,
+        resolveLayoutSpacing(layout),
+      );
       if (!inserted.ok) return { nodes: null, outcome: inserted };
       const { nodes, ...summary } = inserted;
       return { nodes, outcome: summary };
@@ -612,7 +702,7 @@ export function useNodes(): UseNodesReturn {
     expected: NodeMergePlan,
     currentMapId: string,
   ): MergeNodesResult => {
-    const settled = applyTreeChangeWithOutcome<MergeNodesResult>(applyTreeChange, (currentNodes, mode) => {
+    const settled = applyTreeChangeWithOutcome<MergeNodesResult>(applyTreeChange, (currentNodes, mode, _layout) => {
       const fresh = planNodeMerge(currentNodes, ids, primaryId, joiner, visibleNodeIds, currentMapId);
       if (!fresh.ok) return { nodes: null, outcome: fresh };
       if (!isSameNodeMergePlan(fresh, expected)) return { nodes: null, outcome: { ok: false, reason: "plan-changed" } };
@@ -629,8 +719,10 @@ export function useNodes(): UseNodesReturn {
   }, [applyTreeChange]);
 
   const moveBranch = useCallback((rootId: number, parentId: number | null): MoveBranchResult => {
-    const settled = applyTreeChangeWithOutcome<MoveBranchResult>(applyTreeChange, (currentNodes, mode) => {
-      const moved = moveNodeBranch(currentNodes, rootId, parentId, mode);
+    const settled = applyTreeChangeWithOutcome<MoveBranchResult>(applyTreeChange, (currentNodes, mode, layout) => {
+      const spacing = resolveLayoutSpacing(layout);
+      const layoutOptions = resolveLayoutNodeForestOptions(layout);
+      const moved = moveNodeBranch(currentNodes, rootId, parentId, mode, spacing, layoutOptions);
       if (!moved.ok) return { nodes: null, outcome: moved };
       return { nodes: moved.nodes, outcome: { ok: true, rootId: moved.rootId } };
     });
@@ -643,7 +735,7 @@ export function useNodes(): UseNodesReturn {
     nodeId: number,
     visibleNodeIds: ReadonlySet<number>,
   ): DeleteNodeOnlyResult => {
-    const settled = applyTreeChangeWithOutcome<DeleteNodeOnlyResult>(applyTreeChange, (currentNodes, mode) => {
+    const settled = applyTreeChangeWithOutcome<DeleteNodeOnlyResult>(applyTreeChange, (currentNodes, mode, _layout) => {
       const deleted = computeNodeOnlyDeletion(currentNodes, nodeId, visibleNodeIds, mode);
       if (!deleted.ok) return { nodes: null, outcome: deleted };
       return { nodes: deleted.nodes, outcome: { ok: true, deletedId: deleted.deletedId } };
@@ -661,6 +753,7 @@ export function useNodes(): UseNodesReturn {
     let subtreeIds = new Set<number>();
     const applied = applyTreeChange((currentNodes) => {
       subtreeIds = collectSubtreeIds(currentNodes, id);
+      if (!assertNodesEditable([...subtreeIds], currentNodes).ok) return null;
       return currentNodes.filter((node) => !subtreeIds.has(node.id));
     });
     if (!applied) return;
@@ -676,6 +769,8 @@ export function useNodes(): UseNodesReturn {
     selectedNodeId,
     selectedNodeIds,
     layoutMode,
+    treeDirection,
+    layoutSpacing,
     addNode,
     addChildNode,
     addSiblingNode,
@@ -701,6 +796,10 @@ export function useNodes(): UseNodesReturn {
     removeNodeSource,
     addNodeMapLink,
     removeNodeMapLink,
+    commitManualNodes,
+    toggleNodeEditLock,
+    lockNodeSubtree,
+    unlockNodeSubtree,
     moveNode,
     connectNodes,
     duplicateSubtree,
@@ -717,6 +816,8 @@ export function useNodes(): UseNodesReturn {
     deleteNode,
     deleteNodeOnly,
     setLayoutMode,
+    setTreeDirection,
+    setLayoutSpacing,
     replaceMap,
     documentRevision,
     canUndo,

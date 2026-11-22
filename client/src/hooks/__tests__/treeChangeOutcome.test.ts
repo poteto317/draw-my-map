@@ -3,6 +3,7 @@ import {
   settleTreeChangeOutcome,
   type TreeChangeComputation,
 } from "@/hooks/treeChangeOutcome";
+import type { NodeMapLayoutContext } from "@/domain/nodes/resolveLayoutSpacing";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 
@@ -10,7 +11,11 @@ type Result =
   | { ok: true; insertedId: number }
   | { ok: false; reason: "node-missing" | "placement-failed" };
 
-type TreeUpdate = (currentNodes: readonly Node[], mode: NodeLayoutMode) => Node[] | null;
+type TreeUpdate = (
+  currentNodes: readonly Node[],
+  mode: NodeLayoutMode,
+  layout: { treeDirection?: "lr" | "tb"; layoutSpacing?: { childGap: number; siblingGap: number } },
+) => Node[] | null;
 
 const CURRENT_NODES: readonly Node[] = [];
 const NEXT_NODES: Node[] = [];
@@ -19,7 +24,7 @@ const NEXT_NODES: Node[] = [];
 function createApplyTreeChange(applyResult?: boolean) {
   const updateResults: (Node[] | null)[] = [];
   const applyTreeChange = (update: TreeUpdate): boolean => {
-    const nextNodes = update(CURRENT_NODES, "auto");
+    const nextNodes = update(CURRENT_NODES, "auto", {});
     updateResults.push(nextNodes);
     return applyResult ?? nextNodes !== null;
   };
@@ -107,7 +112,10 @@ describe("applyTreeChangeWithOutcome", () => {
   });
 
   it("applyTreeChange がコールバックを呼ばなければ、placement-failed を返し compute も呼ばない", () => {
-    const compute = jest.fn<TreeChangeComputation<Result>, [readonly Node[], NodeLayoutMode]>();
+    const compute = jest.fn<
+      TreeChangeComputation<Result>,
+      [readonly Node[], NodeLayoutMode, NodeMapLayoutContext]
+    >();
 
     const result = applyTreeChangeWithOutcome<Result>(() => true, compute);
 
@@ -115,17 +123,29 @@ describe("applyTreeChangeWithOutcome", () => {
     expect(compute).not.toHaveBeenCalled();
   });
 
-  it("compute に currentNodes と mode をそのまま渡す", () => {
+  it("compute に currentNodes と mode と layout をそのまま渡す", () => {
     const { applyTreeChange } = createApplyTreeChange();
-    const compute = jest.fn<TreeChangeComputation<Result>, [readonly Node[], NodeLayoutMode]>(() => ({
+    const layout: NodeMapLayoutContext = {
+      treeDirection: "tb",
+      layoutSpacing: { childGap: 100, siblingGap: 32 },
+    };
+    const compute = jest.fn<
+      TreeChangeComputation<Result>,
+      [readonly Node[], NodeLayoutMode, NodeMapLayoutContext]
+    >(() => ({
       nodes: NEXT_NODES,
       outcome: { ok: true, insertedId: 7 },
     }));
+    const applyTreeChangeWithLayout = (update: TreeUpdate): boolean => {
+      const nextNodes = update(CURRENT_NODES, "auto", layout);
+      return nextNodes !== null;
+    };
 
-    applyTreeChangeWithOutcome<Result>(applyTreeChange, compute);
+    applyTreeChangeWithOutcome<Result>(applyTreeChangeWithLayout, compute);
 
     expect(compute).toHaveBeenCalledTimes(1);
     expect(compute.mock.calls[0][0]).toBe(CURRENT_NODES);
     expect(compute.mock.calls[0][1]).toBe("auto");
+    expect(compute.mock.calls[0][2]).toBe(layout);
   });
 });

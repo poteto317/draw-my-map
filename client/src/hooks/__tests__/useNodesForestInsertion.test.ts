@@ -192,6 +192,17 @@ describe("useNodes の森の挿入", () => {
   };
   const failureCases: FailureCase[] = [
     {
+      name: "locked な親の子として追加",
+      initial: {
+        layoutMode: "manual",
+        nodes: [node(1, null, 0, 0, { locked: true }), node(2, null, 0, 200)],
+      },
+      items: THREE_TREES,
+      target: { kind: "child", parentId: 1 },
+      reason: "locked",
+      nextId: 1000,
+    },
+    {
       name: "存在しない親",
       initial: twoNodeMap("manual"),
       items: THREE_TREES,
