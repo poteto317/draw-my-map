@@ -6,6 +6,7 @@ import {
   buildPartFromSubtree,
   createPartId,
   MAX_PART_NAME,
+  MAX_PARTS,
   type Part,
   type PartsStore,
 } from "@/domain/parts/partsModel";
@@ -28,7 +29,8 @@ export type PartsLibraryFailureReason =
   | "part-missing"
   | "insert-failed"
   | "empty-name"
-  | "name-too-long";
+  | "name-too-long"
+  | "too-many";
 
 export type PartsLibraryResult =
   | { readonly ok: true }
@@ -68,6 +70,7 @@ const PART_MISSING_MESSAGE = "指定した部品が見つかりません。";
 const INSERT_FAILED_MESSAGE = "部品を挿入できませんでした。";
 const EMPTY_NAME_MESSAGE = "部品名を入力してください。";
 const NAME_TOO_LONG_MESSAGE = `部品名は ${MAX_PART_NAME} 文字以内で入力してください。`;
+const TOO_MANY_PARTS_MESSAGE = `部品は最大 ${MAX_PARTS} 件まで登録できます。`;
 
 type LatestStoreRead =
   | { readonly ok: true; readonly store: PartsStore; readonly repaired: boolean }
@@ -181,6 +184,10 @@ export function usePartsLibrary(options: UsePartsLibraryOptions): UsePartsLibrar
 
     const latest = readLatestStore(storage, publishNotice);
     if (!latest.ok) return latest;
+    if (latest.store.parts.length >= MAX_PARTS) {
+      publishNotice({ kind: "error", message: TOO_MANY_PARTS_MESSAGE });
+      return { ok: false, reason: "too-many" };
+    }
 
     const nextStore: PartsStore = {
       version: 1,
