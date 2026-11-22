@@ -8,6 +8,7 @@ import type { MapSaveStatus } from "@/domain/persistence/mapSaveStatus";
 type AppHeaderProps = {
   layoutMode: NodeLayoutMode;
   onLayoutModeChange: (mode: NodeLayoutMode) => void;
+  layoutDirectionControls?: ReactNode;
   mapControls: ReactNode;
   saveStatus: MapSaveStatus;
   viewControls: ReactNode;
@@ -22,6 +23,7 @@ type AppHeaderProps = {
 export function AppHeader({
   layoutMode,
   onLayoutModeChange,
+  layoutDirectionControls,
   mapControls,
   saveStatus,
   viewControls,
@@ -55,6 +57,7 @@ export function AppHeader({
           layoutMode={layoutMode}
           onLayoutModeChange={onLayoutModeChange}
         />
+        {layoutDirectionControls}
         {showCanvasHints && <LayoutModeOperationHint layoutMode={layoutMode} />}
       </div>
       {hasOperationsSection && (
