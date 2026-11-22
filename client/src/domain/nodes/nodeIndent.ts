@@ -143,7 +143,9 @@ function indentNode(
   if (parent === undefined || !canConnectNodes(nodes, parent.id, target.id)) {
     return { ok: false, reason: "invalid-structure" };
   }
-  const lockedCheck = assertNodesEditable([target.id, parent.id], nodes);
+  const editableIds = [target.id, parent.id];
+  if (target.parentId !== null) editableIds.push(target.parentId);
+  const lockedCheck = assertNodesEditable(editableIds, nodes);
   if (!lockedCheck.ok && lockedCheck.reason === "locked") {
     return { ok: false, reason: "locked" };
   }
@@ -193,7 +195,9 @@ function outdentNode(
   if (target.parentId === null) return { ok: false, reason: "at-edge", direction: "outdent" };
   const parent = nodesById.get(target.parentId);
   if (parent === undefined) return { ok: false, reason: "invalid-structure" };
-  const lockedCheck = assertNodesEditable([target.id, parent.id], nodes);
+  const editableIds = [target.id, parent.id];
+  if (parent.parentId !== null) editableIds.push(parent.parentId);
+  const lockedCheck = assertNodesEditable(editableIds, nodes);
   if (!lockedCheck.ok && lockedCheck.reason === "locked") {
     return { ok: false, reason: "locked" };
   }
