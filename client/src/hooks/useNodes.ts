@@ -166,6 +166,12 @@ type UseNodesReturn = {
   // dataはdecodeSubtreeClipboardの成功値。選択に依存せず独立した枝として追加し、成功時は新しい根のIDを返して選択する。
   // 配置不能・自動配置失敗ではnullを返し何も変えない
   pasteSubtree: (data: SubtreeClipboardData) => number | null;
+  // 任意の部分木を targetParentId（null なら新ルート）へ挿入する。成功時は新しい根の ID を返して選択する
+  insertSubtree: (
+    sources: readonly Node[],
+    sourceRootId: number,
+    targetParentId: number | null,
+  ) => number | null;
   // 箇条書きの項目を森として1回の操作で追加し、成功時は最初の根を選択する。失敗時は理由を返し何も変えない
   insertForest: (items: readonly ForestItem[], target: ForestInsertionTarget) => InsertForestResult;
   // 見えている兄弟の中で並べ替える。applyTreeChange を1回だけ呼び、選択と documentRevision は変えない。失敗時は何も変えない
@@ -492,6 +498,25 @@ export function useNodes(): UseNodesReturn {
     ))
   ), [applySubtreeInsertion]);
 
+  // 部品挿入など、任意の部分木を targetParentId（null なら新ルート）へ挿入する
+  const insertSubtree = useCallback((
+    sources: readonly Node[],
+    sourceRootId: number,
+    targetParentId: number | null,
+  ) => (
+    applySubtreeInsertion((currentNodes, mode, allocateIds) => (
+      insertNodeSubtree(
+        currentNodes,
+        sources,
+        sourceRootId,
+        targetParentId,
+        mode,
+        allocateIds,
+        "paste",
+      )
+    ))
+  ), [applySubtreeInsertion]);
+
   const insertForest = useCallback((
     items: readonly ForestItem[],
     target: ForestInsertionTarget,
@@ -681,6 +706,7 @@ export function useNodes(): UseNodesReturn {
     duplicateSubtree,
     copySubtree,
     pasteSubtree,
+    insertSubtree,
     insertForest,
     reorderSibling,
     changeNodeIndent,

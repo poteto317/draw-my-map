@@ -32,6 +32,9 @@ export type CommandPaletteDialogHandlers = {
   openNodeSplit: () => void;
   openNodeMerge: () => void;
   openCrossMapSearch: () => void;
+  openRegisterPart: () => void;
+  openInsertPart: () => void;
+  openDeletePart: () => void;
 };
 
 /**
@@ -129,6 +132,15 @@ export function openCommandPaletteDialog(
       return true;
     case "search.open-cross-map":
       handlers.openCrossMapSearch();
+      return true;
+    case "edit.register-part":
+      handlers.openRegisterPart();
+      return true;
+    case "edit.insert-part":
+      handlers.openInsertPart();
+      return true;
+    case "edit.delete-part":
+      handlers.openDeletePart();
       return true;
     default:
       return false;

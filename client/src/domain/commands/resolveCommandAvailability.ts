@@ -40,6 +40,9 @@ const MUTATING_IDS = new Set<CommandId>([
   "edit.open-branch-move",
   "edit.open-node-split",
   "edit.open-node-merge",
+  "edit.register-part",
+  "edit.insert-part",
+  "edit.delete-part",
   "outline.add-root",
   "outline.add-child",
   "outline.add-sibling",
@@ -146,6 +149,15 @@ function resolveOperationAvailability(
         context.canOpenNodeMerge,
         context.nodeMergeDisabledReason ?? "2 つ以上のノードを選択してください。",
       );
+    case "edit.register-part":
+      return fromFlag(
+        context.canRegisterPart,
+        "部品にするノードを 1 つだけ選んでください。",
+      );
+    case "edit.insert-part":
+      return fromFlag(context.canInsertPart, "挿入できる部品がありません。");
+    case "edit.delete-part":
+      return fromFlag(context.canDeletePart, "削除できる部品がありません。");
     case "search.focus-in-map":
       return fromFlag(context.canFocusInMapSearch, "マップ内検索を開けません");
     case "search.open-cross-map":

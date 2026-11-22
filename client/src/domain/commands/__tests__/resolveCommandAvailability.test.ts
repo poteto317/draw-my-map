@@ -29,6 +29,9 @@ function baseContext(overrides: Partial<CommandAvailabilityContext> = {}): Comma
     nodeSplitDisabledReason: null,
     canOpenNodeMerge: true,
     nodeMergeDisabledReason: null,
+    canRegisterPart: true,
+    canInsertPart: true,
+    canDeletePart: true,
     canFocusInMapSearch: true,
     canOpenCrossMapSearch: true,
     outlineCanAddRoot: true,
@@ -84,10 +87,32 @@ describe("resolveCommandAvailability", () => {
       expect(resolveCommandAvailability("edit.delete-node-only", ctx).modeMismatch).toBe(false);
       expect(resolveCommandAvailability("edit.move-sibling-up", ctx).modeMismatch).toBe(false);
       expect(resolveCommandAvailability("edit.indent", ctx).modeMismatch).toBe(false);
+      expect(resolveCommandAvailability("edit.register-part", ctx).modeMismatch).toBe(false);
+      expect(resolveCommandAvailability("edit.insert-part", ctx).modeMismatch).toBe(false);
+      expect(resolveCommandAvailability("edit.delete-part", ctx).modeMismatch).toBe(false);
       expect(resolveCommandAvailability("search.open-cross-map", ctx).modeMismatch).toBe(false);
       expect(resolveCommandAvailability("view.map", ctx).modeMismatch).toBe(false);
       expect(resolveCommandAvailability("view.outline", ctx).modeMismatch).toBe(false);
     }
+  });
+
+  it("部品コマンドは選択・一覧可否に従う", () => {
+    expect(resolveCommandAvailability("edit.register-part", baseContext({ canRegisterPart: false }))).toEqual({
+      enabled: false,
+      modeMismatch: false,
+      disabledReason: "部品にするノードを 1 つだけ選んでください。",
+    });
+    expect(resolveCommandAvailability("edit.insert-part", baseContext({ canInsertPart: false }))).toEqual({
+      enabled: false,
+      modeMismatch: false,
+      disabledReason: "挿入できる部品がありません。",
+    });
+    expect(resolveCommandAvailability("edit.delete-part", baseContext({ canDeletePart: false }))).toEqual({
+      enabled: false,
+      modeMismatch: false,
+      disabledReason: "削除できる部品がありません。",
+    });
+    expect(resolveCommandAvailability("edit.register-part", baseContext({ canRegisterPart: true })).enabled).toBe(true);
   });
 
   it("can* が偽のときは enabled=false と理由を返す（modeMismatch ではない）", () => {

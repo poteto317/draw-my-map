@@ -50,6 +50,18 @@ export const COMMAND_CATALOG: readonly CommandDefinition[] = Object.freeze([
   }),
   define("edit.open-node-split", "edit", "編集", "ノードを分割…", { opensDialog: true }),
   define("edit.open-node-merge", "edit", "編集", "ノードを統合…", { opensDialog: true }),
+  define("edit.register-part", "edit", "編集", "選択を部品に登録…", {
+    aliases: ["部品登録"],
+    opensDialog: true,
+  }),
+  define("edit.insert-part", "edit", "編集", "部品を挿入…", {
+    aliases: ["部品挿入"],
+    opensDialog: true,
+  }),
+  define("edit.delete-part", "edit", "編集", "部品を削除…", {
+    aliases: ["部品削除"],
+    opensDialog: true,
+  }),
 
   define("search.focus-in-map", "search", "検索", "マップ内検索へフォーカス"),
   define("search.open-cross-map", "search", "検索", "全マップ検索…", { opensDialog: true }),
