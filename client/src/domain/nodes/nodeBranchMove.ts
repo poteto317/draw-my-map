@@ -1,9 +1,17 @@
-import { layoutNodeForest } from "@/domain/nodes/nodeAutoLayout";
+import { assertNodesEditable } from "@/domain/nodes/nodeEditLock";
+import {
+  DEFAULT_LAYOUT_NODE_FOREST_OPTIONS,
+  layoutNodeForest,
+  type LayoutNodeForestOptions,
+} from "@/domain/nodes/nodeAutoLayout";
 import { calculateIndentTranslation, translateBranch, type BranchTranslation } from "@/domain/nodes/nodeIndentPlacement";
 import { calculateManualOffsetY } from "@/domain/nodes/nodeManualPlacement";
 import { remapMovedBranchMapLinks } from "@/domain/nodes/nodeMapLink";
 import { insertNodeSubtree, type AllocateNodeIds } from "@/domain/nodes/nodeSubtreeInsertion";
 import { collectSubtreeIds } from "@/domain/nodes/nodeTree";
+import { resolveLayoutNodeForestOptions, resolveLayoutSpacing } from "@/domain/nodes/resolveLayoutSpacing";
+import { DEFAULT_LAYOUT_SPACING } from "@/domain/persistence/mapDocumentLayoutSpacing";
+import type { LayoutSpacing } from "@/types/layoutSpacing";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 import type { NodeMapState } from "@/types/nodeMapState";
@@ -12,7 +20,8 @@ export type BranchMoveFailureReason =
   | "missing-node"
   | "invalid-parent"
   | "same-parent"
-  | "placement-failed";
+  | "placement-failed"
+  | "locked";
 
 export type BranchMoveResult =
   | { ok: true; nodes: Node[]; rootId: number }
@@ -66,8 +75,12 @@ function splitValidBranch(nodes: readonly Node[], rootId: number): SplitBranch |
   };
 }
 
-function layoutForMode(nodes: Node[], mode: NodeLayoutMode): Node[] | null {
-  return mode === "auto" ? layoutNodeForest(nodes) : nodes;
+function layoutForMode(
+  nodes: Node[],
+  mode: NodeLayoutMode,
+  layoutOptions: LayoutNodeForestOptions,
+): Node[] | null {
+  return mode === "auto" ? layoutNodeForest(nodes, layoutOptions) : nodes;
 }
 
 // 手動配置で根にする移動の平行移動。枝全体を残りのノードの下へ真下に移す
@@ -75,8 +88,9 @@ function calculateRootTranslation(
   branch: readonly Node[],
   remaining: readonly Node[],
   rootId: number,
+  spacing: LayoutSpacing,
 ): BranchTranslation | null {
-  const offsetY = calculateManualOffsetY(remaining, branch);
+  const offsetY = calculateManualOffsetY(remaining, branch, spacing);
   const root = branch.find((node) => node.id === rootId);
   if (offsetY === null || root === undefined || !Number.isFinite(root.x) || !Number.isFinite(root.y + offsetY)) {
     return null;
@@ -89,10 +103,11 @@ function placeBranchManually(
   { branch, remaining }: SplitBranch,
   rootId: number,
   parentId: number | null,
+  spacing: LayoutSpacing,
 ): Node[] | null {
   const translation = parentId === null
-    ? calculateRootTranslation(branch, remaining, rootId)
-    : calculateIndentTranslation(nodes, rootId, parentId);
+    ? calculateRootTranslation(branch, remaining, rootId, spacing)
+    : calculateIndentTranslation(nodes, rootId, parentId, spacing);
   const placed = translation === null ? null : translateBranch(nodes, rootId, translation);
   if (placed === null) return null;
 
@@ -112,10 +127,12 @@ function placeBranch(
   rootId: number,
   parentId: number | null,
   mode: NodeLayoutMode,
+  spacing: LayoutSpacing,
+  layoutOptions: LayoutNodeForestOptions,
 ): Node[] | null {
-  if (mode === "manual") return placeBranchManually(nodes, split, rootId, parentId);
+  if (mode === "manual") return placeBranchManually(nodes, split, rootId, parentId, spacing);
   const rootChanged = split.branch.map((node) => node.id === rootId ? { ...node, parentId } : node);
-  return layoutNodeForest([...split.remaining, ...rootChanged]);
+  return layoutNodeForest([...split.remaining, ...rootChanged], layoutOptions);
 }
 
 // 枝を移せる親。枝の中のノードと今の親は選べない
@@ -129,9 +146,14 @@ export function moveNodeBranch(
   rootId: number,
   parentId: number | null,
   mode: NodeLayoutMode,
+  spacing: LayoutSpacing = DEFAULT_LAYOUT_SPACING,
+  layoutOptions: LayoutNodeForestOptions = DEFAULT_LAYOUT_NODE_FOREST_OPTIONS,
 ): BranchMoveResult {
   const root = nodes.find((node) => node.id === rootId);
   if (root === undefined) return { ok: false, reason: "missing-node" };
+  const branchIds = [...collectSubtreeIds(nodes, rootId)];
+  const lockedCheck = assertNodesEditable(branchIds, nodes);
+  if (!lockedCheck.ok && lockedCheck.reason === "locked") return { ok: false, reason: "locked" };
   if (root.parentId === parentId) return { ok: false, reason: "same-parent" };
 
   const split = splitValidBranch(nodes, rootId);
@@ -142,7 +164,7 @@ export function moveNodeBranch(
     }
   }
 
-  const placed = placeBranch(nodes, split, rootId, parentId, mode);
+  const placed = placeBranch(nodes, split, rootId, parentId, mode, spacing, layoutOptions);
   return placed === null
     ? { ok: false, reason: "placement-failed" }
     : { ok: true, nodes: placed, rootId };
@@ -166,7 +188,11 @@ export function transferNodeBranch(
 
   const split = splitValidBranch(source.nodes, rootId);
   if (split === null) return { ok: false, reason: "invalid-parent" };
-  const nextSourceNodes = layoutForMode(split.remaining, source.layoutMode);
+  const sourceLayoutOptions = resolveLayoutNodeForestOptions(source);
+  const targetLayoutOptions = resolveLayoutNodeForestOptions(target);
+  const targetSpacing = resolveLayoutSpacing(target);
+
+  const nextSourceNodes = layoutForMode(split.remaining, source.layoutMode, sourceLayoutOptions);
   if (nextSourceNodes === null) return { ok: false, reason: "placement-failed" };
 
   const inserted = insertNodeSubtree(
@@ -177,6 +203,7 @@ export function transferNodeBranch(
     target.layoutMode,
     allocateIds,
     "paste",
+    targetSpacing,
   );
   if (inserted === null) return { ok: false, reason: "placement-failed" };
   // 写した枝は配列の末尾に、元の枝と同じ順で並ぶ
@@ -186,6 +213,7 @@ export function transferNodeBranch(
   const nextTargetNodes = layoutForMode(
     [...inserted.nodes.slice(0, target.nodes.length), ...remappedCopies],
     target.layoutMode,
+    targetLayoutOptions,
   );
   if (nextTargetNodes === null) return { ok: false, reason: "placement-failed" };
 

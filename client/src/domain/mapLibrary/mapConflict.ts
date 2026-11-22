@@ -1,3 +1,4 @@
+import { areLayoutSpacingEqual } from "@/domain/persistence/mapDocumentLayoutSpacing";
 import { MAX_MAP_NAME_LENGTH } from "@/domain/mapLibrary/mapName";
 import { areNodeLinksEqual } from "@/domain/nodes/nodeLink";
 import { areNodeMapLinksEqual } from "@/domain/nodes/nodeMapLink";
@@ -65,7 +66,8 @@ function areNodesEqual(a: Node, b: Node): boolean {
     areNodeLinksEqual(a.links, b.links) &&
     areNodeTagsEqual(a.tags, b.tags) &&
     areNodeSourcesEqual(a.sources, b.sources) &&
-    areNodeMapLinksEqual(a.mapLinks, b.mapLinks)
+    areNodeMapLinksEqual(a.mapLinks, b.mapLinks) &&
+    (a.locked === true) === (b.locked === true)
   );
 }
 
@@ -78,6 +80,12 @@ export function isDocumentContentEqual(
   docB: MapDocumentV3,
 ): boolean {
   if (docA.version !== docB.version || docA.layoutMode !== docB.layoutMode) {
+    return false;
+  }
+  if ((docA.treeDirection ?? "lr") !== (docB.treeDirection ?? "lr")) {
+    return false;
+  }
+  if (!areLayoutSpacingEqual(docA.layoutSpacing, docB.layoutSpacing)) {
     return false;
   }
 

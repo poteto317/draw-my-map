@@ -1,3 +1,4 @@
+import { assertNodesEditable } from "@/domain/nodes/nodeEditLock";
 import { hasInvalidNodeGeometry } from "@/domain/nodes/nodeGeometryValidation";
 import { indexNodeForest } from "@/domain/nodes/nodeLayoutForest";
 import { createSiblingNode } from "@/domain/nodes/nodePlacement";
@@ -14,6 +15,7 @@ export type NodeSplitFailureReason =
   | "too-many-fragments"
   | "id-conflict"
   | "placement-failed"
+  | "locked"
   // 確定時の再計画が、プレビューで見せた計画と違う（useNodes.splitNode が返す）
   | "plan-changed";
 
@@ -59,6 +61,8 @@ export function planNodeSplit(
   const target = nodes.find((node) => node.id === nodeId);
   if (target === undefined) return { ok: false, reason: "node-missing" };
   if (!visibleNodeIds.has(nodeId)) return { ok: false, reason: "node-hidden" };
+  const lockedCheck = assertNodesEditable([nodeId], nodes);
+  if (!lockedCheck.ok && lockedCheck.reason === "locked") return { ok: false, reason: "locked" };
   // 配置不能と構造不正を分類するため、座標・大きさだけを森の検証より先に調べる
   if (hasInvalidNodeGeometry(nodes)) return { ok: false, reason: "placement-failed" };
   if (indexNodeForest(nodes) === null) return { ok: false, reason: "invalid-structure" };

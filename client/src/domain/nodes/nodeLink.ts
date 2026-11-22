@@ -1,3 +1,4 @@
+import { assertNodesEditable } from "@/domain/nodes/nodeEditLock";
 import type { Node } from "@/types/node";
 
 // 1 ノードに付けられる URL の件数の上限
@@ -11,7 +12,12 @@ export type NodeLinkUrlResult =
   | { ok: true; url: string }
   | { ok: false; reason: NodeLinkUrlFailureReason };
 
-export type AddNodeLinkFailureReason = NodeLinkUrlFailureReason | "node-missing" | "duplicate" | "too-many";
+export type AddNodeLinkFailureReason =
+  | NodeLinkUrlFailureReason
+  | "node-missing"
+  | "duplicate"
+  | "too-many"
+  | "locked";
 
 export type AddNodeLinkResult =
   | { ok: true; nodes: Node[] }
@@ -79,6 +85,8 @@ export function formatNodeLinkFailure(reason: Exclude<AddNodeLinkFailureReason, 
       return `リンクは 1 つのノードに ${NODE_LINKS_MAX_COUNT} 件まで追加できます。`;
     case "node-missing":
       return "ノードが見つかりません。";
+    case "locked":
+      return "ロックされたノードは編集できません。";
     default: {
       const unreachable: never = reason;
       return unreachable;
@@ -100,6 +108,8 @@ export function withNodeLinks(node: Node, links: readonly string[] | undefined):
 export function addNodeLink(nodes: readonly Node[], id: number, input: string): AddNodeLinkResult {
   const target = nodes.find((node) => node.id === id);
   if (target === undefined) return { ok: false, reason: "node-missing" };
+  const lockedCheck = assertNodesEditable([id], nodes);
+  if (!lockedCheck.ok && lockedCheck.reason === "locked") return { ok: false, reason: "locked" };
   const normalized = normalizeNodeLinkUrl(input);
   if (!normalized.ok) return normalized;
   const current = target.links ?? [];
@@ -112,6 +122,7 @@ export function addNodeLink(nodes: readonly Node[], id: number, input: string): 
 // 1 ノードから URL を 1 件消す。url は保存されている値（正規化済み）と完全に一致するものだけを消す。
 // 対象が無い・その URL を持たないときは null（何も変えない）。最後の 1 件を消すと links のキーごと外す
 export function removeNodeLink(nodes: readonly Node[], id: number, url: string): Node[] | null {
+  if (!assertNodesEditable([id], nodes).ok) return null;
   const target = nodes.find((node) => node.id === id);
   const links = target?.links;
   if (links === undefined || !links.includes(url)) return null;

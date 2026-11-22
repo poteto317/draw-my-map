@@ -1,3 +1,4 @@
+import { assertNodesEditable } from "@/domain/nodes/nodeEditLock";
 import {
   applyBranchPlacement,
   calculateIndentTranslation,
@@ -5,6 +6,8 @@ import {
 } from "@/domain/nodes/nodeIndentPlacement";
 import { scanSiblingNeighbors } from "@/domain/nodes/nodeSiblingNeighbors";
 import { canConnectNodes, indexFirstNodes } from "@/domain/nodes/nodeTree";
+import { DEFAULT_LAYOUT_SPACING } from "@/domain/persistence/mapDocumentLayoutSpacing";
+import type { LayoutSpacing } from "@/types/layoutSpacing";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 
@@ -16,7 +19,8 @@ export type NodeIndentFailureReason =
   | "node-missing"
   | "node-hidden"
   | "invalid-structure"
-  | "placement-failed";
+  | "placement-failed"
+  | "locked";
 
 type NodeIndentSuccess = {
   ok: true;
@@ -111,6 +115,7 @@ function indentNode(
   nodeId: number,
   visibleNodeIds: ReadonlySet<number>,
   mode: NodeLayoutMode,
+  spacing: LayoutSpacing,
 ): NodeIndentResult {
   const scan = scanSiblingNeighbors(nodes, nodeId, visibleNodeIds);
   switch (scan.kind) {
@@ -143,7 +148,7 @@ function indentNode(
     buildIndentedNodes(nodes, target, parent),
     target.id,
     mode,
-    () => calculateIndentTranslation(nodes, target.id, parent.id),
+    () => calculateIndentTranslation(nodes, target.id, parent.id, spacing),
   );
   if (placed === null) return { ok: false, reason: "placement-failed" };
   const depth = measureDepth(placed, target.id);
@@ -175,6 +180,7 @@ function outdentNode(
   nodeId: number,
   visibleNodeIds: ReadonlySet<number>,
   mode: NodeLayoutMode,
+  spacing: LayoutSpacing,
 ): NodeIndentResult {
   const nodesById = indexFirstNodes(nodes);
   const target = nodesById.get(nodeId);
@@ -194,7 +200,7 @@ function outdentNode(
     buildOutdentedNodes(nodes, target, parent),
     target.id,
     mode,
-    () => calculateOutdentTranslation(nodes, target.id, parent.id),
+    () => calculateOutdentTranslation(nodes, target.id, parent.id, spacing),
   );
   if (placed === null) return { ok: false, reason: "placement-failed" };
   const depth = measureDepth(placed, target.id);
@@ -215,12 +221,17 @@ export function changeNodeIndent(
   direction: NodeIndentDirection,
   visibleNodeIds: ReadonlySet<number>,
   mode: NodeLayoutMode,
+  spacing: LayoutSpacing = DEFAULT_LAYOUT_SPACING,
 ): NodeIndentResult {
+  const lockedCheck = assertNodesEditable([nodeId], nodes);
+  if (!lockedCheck.ok && lockedCheck.reason === "locked") {
+    return { ok: false, reason: "locked" };
+  }
   switch (direction) {
     case "indent":
-      return indentNode(nodes, nodeId, visibleNodeIds, mode);
+      return indentNode(nodes, nodeId, visibleNodeIds, mode, spacing);
     case "outdent":
-      return outdentNode(nodes, nodeId, visibleNodeIds, mode);
+      return outdentNode(nodes, nodeId, visibleNodeIds, mode, spacing);
     default: {
       const unreachable: never = direction;
       return unreachable;

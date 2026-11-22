@@ -89,6 +89,7 @@ export function formatOutlineInsertFailure(
       return `選択していたノードが見つからないため、追加できませんでした。「${OUTLINE_ROOT_TARGET_LABEL}」を選び直してください。`;
     case "invalid-items":
     case "placement-failed":
+    case "locked":
       return "ノードを追加できませんでした。マップは変わっていません。";
     default: {
       const unreachable: never = reason;

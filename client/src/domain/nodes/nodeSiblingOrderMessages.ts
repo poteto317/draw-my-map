@@ -69,6 +69,7 @@ export function formatSiblingReorderNotice(result: ReorderSiblingResult): Operat
         case "node-hidden":
         case "invalid-target":
         case "placement-failed":
+        case "locked":
           return { kind: "error", message: REORDER_FAILED_MESSAGE };
         default: {
           const unreachable: never = result;

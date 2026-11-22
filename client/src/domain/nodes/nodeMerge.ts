@@ -1,4 +1,5 @@
 import { ILLUSTRATED_NODE_HEIGHT } from "@/config/shapes";
+import { assertNodesEditable } from "@/domain/nodes/nodeEditLock";
 import { keepFirstRootPosition } from "@/domain/nodes/nodeFirstRootPosition";
 import { hasInvalidNodeGeometry } from "@/domain/nodes/nodeGeometryValidation";
 import { maxNodeImportance } from "@/domain/nodes/nodeImportance";
@@ -41,6 +42,7 @@ export type NodeMergeFailureReason =
   | "sources-too-many"
   // 選択中のマップ間リンクを同じリンクとみなすもの（nodeMapLinkKey）を除いて連結すると上限（NODE_MAP_LINKS_MAX_COUNT）を超える。黙って切り詰めない
   | "map-links-too-many"
+  | "locked"
   // 確定時の再計画が、プレビューで見せた計画と違う（useNodes.mergeNodes が返す）
   | "plan-changed";
 
@@ -132,6 +134,9 @@ function validateMergeSelection(
   for (const id of idSet) {
     if (!visibleNodeIds.has(id)) return failed("node-hidden");
   }
+  const lockedCheck = assertNodesEditable([...idSet], nodes);
+  if (!lockedCheck.ok && lockedCheck.reason === "locked") return failed("locked");
+
   // 選択の ID はすべて配列にあるので、primaryId が選択に含まれていれば find は必ず見つかる
   const survivor = primaryId !== null && idSet.has(primaryId)
     ? nodes.find((node) => node.id === primaryId)
@@ -280,6 +285,12 @@ export function isSameNodeMergePlan(a: NodeMergePlan, b: NodeMergePlan): boolean
 // sources のキーを持たせない。マップ間リンクも同じく計画の連結結果で置き換え、無ければ mapLinks のキーを持たせない。
 // Node に属性を足したときは、ここで残すノードの値を残すか、吸収されるノードの値を引き継ぐかを決める
 // （何もしないと、吸収されるノードの値は警告なしに捨てられる）。計画・プレビュー・isSameNodeMergePlan も合わせて見直す
+function mergeNodeLocked(survivor: Node, absorbed: readonly Node[]): Node {
+  if (survivor.locked === true) return survivor;
+  if (absorbed[0]?.locked === true) return { ...survivor, locked: true };
+  return survivor;
+}
+
 function applyPlanToSurvivor(survivor: Node, plan: Extract<NodeMergePlan, { ok: true }>): Node {
   const updated = withNodeMapLinks(
     withNodeSources(
@@ -341,8 +352,10 @@ export function mergeNodes(
   const survivor = nodes.find((node) => node.id === plan.survivorId);
   // 計画が成功なら残すノードは必ず見つかる。型の絞り込みのため到達しない
   if (survivor === undefined) return failed("primary-missing");
+  const absorbed = nodes.filter((node) => plan.absorbedIds.includes(node.id));
+  const updatedSurvivor = mergeNodeLocked(applyPlanToSurvivor(survivor, plan), absorbed);
 
-  const reattached = reattachAbsorbedChildren(nodes, plan, applyPlanToSurvivor(survivor, plan));
+  const reattached = reattachAbsorbedChildren(nodes, plan, updatedSurvivor);
   // 先頭のルート（自動配置の列の基準）が吸収されて別のノードに変わるときだけ、旧先頭の座標を新しい先頭へ写す
   const next = mode === "auto" ? keepFirstRootPosition(nodes, reattached) : reattached;
   return { ok: true, nodes: next, survivorId: plan.survivorId, absorbedIds: plan.absorbedIds };

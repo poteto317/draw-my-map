@@ -1,3 +1,4 @@
+import { assertNodesEditable } from "@/domain/nodes/nodeEditLock";
 import {
   buildReorderedSiblings,
   findReorderEndpoints,
@@ -32,7 +33,8 @@ export type SiblingReorderFailureReason =
   | "node-missing"
   | "node-hidden"
   | "invalid-target"
-  | "placement-failed";
+  | "placement-failed"
+  | "locked";
 
 export type SiblingReorderResult =
   | {
@@ -119,6 +121,8 @@ export function reorderSiblingNodes(
   if (endpoints === null) return { ok: false, reason: "node-missing" };
   const { node, anchor, anchorFirst } = endpoints;
   if (!visibleNodeIds.has(node.id)) return { ok: false, reason: "node-hidden" };
+  const lockedCheck = assertNodesEditable([node.id], nodes);
+  if (!lockedCheck.ok && lockedCheck.reason === "locked") return { ok: false, reason: "locked" };
   if (
     anchor === null
     || anchor.id === node.id

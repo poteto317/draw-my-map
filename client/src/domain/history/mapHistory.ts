@@ -1,3 +1,4 @@
+import { areLayoutSpacingEqual } from "@/domain/persistence/mapDocumentLayoutSpacing";
 import { areNodeMapLinksEqual } from "@/domain/nodes/nodeMapLink";
 import { areNodeSourcesEqual } from "@/domain/nodes/nodeSource";
 import type { Node, NodeMapLink, NodeSource } from "@/types/node";
@@ -71,6 +72,8 @@ function areNodesEqual(a: Node, b: Node): boolean {
 export function areMapStatesEqual(a: NodeMapState, b: NodeMapState): boolean {
   if (a === b) return true;
   if (a.layoutMode !== b.layoutMode || a.nodes.length !== b.nodes.length) return false;
+  if ((a.treeDirection ?? "lr") !== (b.treeDirection ?? "lr")) return false;
+  if (!areLayoutSpacingEqual(a.layoutSpacing, b.layoutSpacing)) return false;
   return a.nodes.every((node, index) => areNodesEqual(node, b.nodes[index]));
 }
 

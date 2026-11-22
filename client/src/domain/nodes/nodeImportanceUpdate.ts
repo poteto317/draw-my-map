@@ -1,3 +1,4 @@
+import { assertNodesEditable } from "@/domain/nodes/nodeEditLock";
 import type { Node } from "@/types/node";
 import type { NodeImportance } from "@/types/nodeImportance";
 
@@ -7,6 +8,7 @@ export function replaceNodeImportance(
   importance: NodeImportance,
 ): Node[] | null {
   if (!nodes.some((node) => node.id === id)) return null;
+  if (!assertNodesEditable([id], nodes).ok) return null;
 
   return nodes.map((node) => (
     node.id === id ? { ...node, importance } : node
@@ -21,7 +23,9 @@ export function replaceNodesImportance(
   importance: NodeImportance,
 ): Node[] | null {
   const targetIds = new Set(ids);
-  if (!nodes.some((node) => targetIds.has(node.id))) return null;
+  const existingTargetIds = [...targetIds].filter((id) => nodes.some((node) => node.id === id));
+  if (existingTargetIds.length === 0) return null;
+  if (!assertNodesEditable(existingTargetIds, nodes).ok) return null;
 
   return nodes.map((node) => (
     targetIds.has(node.id) && node.importance !== importance

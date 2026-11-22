@@ -19,6 +19,8 @@ export function formatNodeSplitFailureNotice(reason: NodeSplitFailureReason): Op
     case "id-conflict":
     case "placement-failed":
       return { kind: "error", message: "ノードを分割できませんでした。" };
+    case "locked":
+      return { kind: "error", message: "ロックされたノードは編集できません。" };
     default: {
       const unreachable: never = reason;
       return unreachable;

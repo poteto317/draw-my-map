@@ -1,3 +1,4 @@
+import { assertNodesEditable } from "@/domain/nodes/nodeEditLock";
 import type { Node } from "@/types/node";
 
 // ID ごとに、配列で最初に出会ったノードを引けるようにする
@@ -81,6 +82,7 @@ export function connectNodeTree(
   childId: number,
 ): Node[] | null {
   if (!canConnectNodes(nodes, parentId, childId)) return null;
+  if (!assertNodesEditable([parentId, childId], nodes).ok) return null;
 
   return nodes.map((node) => (
     node.id === childId ? { ...node, parentId } : node
@@ -97,7 +99,9 @@ export function moveNodeSubtree(
 
   let root: Node | undefined;
   const childrenByParent = new Map<number, number[]>();
+  const nodesById = new Map<number, Node>();
   for (const current of nodes) {
+    nodesById.set(current.id, current);
     if (current.id === rootId) root = current;
     if (current.parentId !== null) {
       const children = childrenByParent.get(current.parentId);
@@ -116,6 +120,7 @@ export function moveNodeSubtree(
   for (let index = 0; index < queue.length; index += 1) {
     const id = queue[index];
     if (subtreeIds.has(id)) continue;
+    if (nodesById.get(id)?.locked === true) return null;
     subtreeIds.add(id);
     for (const childId of childrenByParent.get(id) ?? []) queue.push(childId);
   }

@@ -1,9 +1,12 @@
+import { assertNodesEditable } from "@/domain/nodes/nodeEditLock";
 import {
   applyBranchPlacement,
   calculateIndentTranslation,
 } from "@/domain/nodes/nodeIndentPlacement";
 import { createParentNode } from "@/domain/nodes/nodePlacement";
 import { indexFirstNodes } from "@/domain/nodes/nodeTree";
+import { DEFAULT_LAYOUT_SPACING } from "@/domain/persistence/mapDocumentLayoutSpacing";
+import type { LayoutSpacing } from "@/types/layoutSpacing";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 
@@ -12,7 +15,8 @@ export type NodeParentInsertionFailureReason =
   | "node-hidden"
   | "invalid-structure"
   | "id-conflict"
-  | "placement-failed";
+  | "placement-failed"
+  | "locked";
 
 export type NodeParentInsertionResult =
   | { ok: true; nodes: Node[]; insertedId: number }
@@ -51,6 +55,8 @@ function resolveInsertionTarget(
   const target = nodesById.get(nodeId);
   if (target === undefined) return { ok: false, reason: "node-missing" };
   if (!visibleNodeIds.has(target.id)) return { ok: false, reason: "node-hidden" };
+  const lockedCheck = assertNodesEditable([target.id], nodes);
+  if (!lockedCheck.ok && lockedCheck.reason === "locked") return { ok: false, reason: "locked" };
   if (
     target.parentId === target.id ||
     (target.parentId !== null && !nodesById.has(target.parentId))
@@ -86,6 +92,7 @@ export function insertParentNode(
   newNodeId: number,
   visibleNodeIds: ReadonlySet<number>,
   mode: NodeLayoutMode,
+  spacing: LayoutSpacing = DEFAULT_LAYOUT_SPACING,
 ): NodeParentInsertionResult {
   const resolved = resolveInsertionTarget(nodes, nodeId, newNodeId, visibleNodeIds);
   if (!resolved.ok) return resolved;
@@ -98,7 +105,7 @@ export function insertParentNode(
     reparentTarget(staged, target, newNodeId),
     target.id,
     mode,
-    () => calculateIndentTranslation(staged, target.id, newNodeId),
+    () => calculateIndentTranslation(staged, target.id, newNodeId, spacing),
   );
   if (placed === null) return { ok: false, reason: "placement-failed" };
   return { ok: true, nodes: placed, insertedId: newNodeId };

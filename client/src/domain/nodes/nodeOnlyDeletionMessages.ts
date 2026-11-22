@@ -6,6 +6,7 @@ const messages: Record<NodeOnlyDeletionFailureReason, string> = {
   "node-hidden": "表示されているノードを選択してください。",
   "invalid-structure": "ノードの構造を確認できないため削除できません。",
   "placement-failed": "配置できないため削除できません。",
+  locked: "ロックされたノードは削除できません。",
 };
 
 export function formatNodeOnlyDeletionFailureNotice(reason: NodeOnlyDeletionFailureReason): OperationNotice {

@@ -4,6 +4,7 @@ import {
   type NodeLinkUrlFailureReason,
 } from "@/domain/nodes/nodeLink";
 import { nodeTagKey } from "@/domain/nodes/nodeTag";
+import { assertNodesEditable } from "@/domain/nodes/nodeEditLock";
 import type { Node, NodeSource } from "@/types/node";
 
 export type { NodeSource };
@@ -46,7 +47,8 @@ export type AddNodeSourceFailureReason =
   | NodeSourceNormalizeFailureReason
   | "node-missing"
   | "duplicate"
-  | "too-many";
+  | "too-many"
+  | "locked";
 
 export type AddNodeSourceResult =
   | { ok: true; nodes: Node[] }
@@ -205,6 +207,8 @@ export function formatNodeSourceFailure(reason: Exclude<AddNodeSourceFailureReas
       return `出典は 1 つのノードに ${NODE_SOURCES_MAX_COUNT} 件まで追加できます。`;
     case "node-missing":
       return "ノードが見つかりません。";
+    case "locked":
+      return "ロックされたノードは編集できません。";
     default: {
       const unreachable: never = reason;
       return unreachable;
@@ -228,6 +232,8 @@ export function addNodeSource(
 ): AddNodeSourceResult {
   const target = nodes.find((node) => node.id === id);
   if (target === undefined) return { ok: false, reason: "node-missing" };
+  const lockedCheck = assertNodesEditable([id], nodes);
+  if (!lockedCheck.ok && lockedCheck.reason === "locked") return { ok: false, reason: "locked" };
   const normalized = normalizeNodeSource(input);
   if (!normalized.ok) return normalized;
   const current = target.sources ?? [];
@@ -240,6 +246,7 @@ export function addNodeSource(
 
 // 指定 index の出典を消す。範囲外・ノード無しは null。最後の 1 件なら sources キーを外す
 export function removeNodeSource(nodes: readonly Node[], id: number, index: number): Node[] | null {
+  if (!assertNodesEditable([id], nodes).ok) return null;
   const target = nodes.find((node) => node.id === id);
   const sources = target?.sources;
   if (sources === undefined || index < 0 || index >= sources.length) return null;
