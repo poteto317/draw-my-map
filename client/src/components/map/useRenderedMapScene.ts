@@ -1,7 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, type RefObject } from "react";
-import type { Viewport } from "@/components/map/mapViewport";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import {
+  type ScreenSize,
+  type Viewport,
+} from "@/components/map/mapViewport";
 import { applyViewportTransform } from "@/components/map/pixi/applyViewportTransform";
 import {
   renderMapScene,
@@ -9,6 +12,7 @@ import {
   type RenderMapSceneOptions,
 } from "@/components/map/pixi/renderMapScene";
 import type { PixiRuntime } from "@/components/map/pixi/pixiTypes";
+import { useViewportCulledRenderNodes } from "@/hooks/useViewportCulledRenderNodes";
 
 type UseRenderedMapSceneOptions = {
   runtime: PixiRuntime | null;
@@ -17,6 +21,8 @@ type UseRenderedMapSceneOptions = {
   };
   viewport: Viewport;
   viewportRef: RefObject<Viewport>;
+  /** 未計測時は null。必須（L-060: 省略でカリング配線漏れを隠さない） */
+  screenSize: ScreenSize | null;
 };
 
 export function useRenderedMapScene({
@@ -24,6 +30,7 @@ export function useRenderedMapScene({
   options,
   viewport,
   viewportRef,
+  screenSize,
 }: UseRenderedMapSceneOptions): RenderedMapScene | null {
   const {
     nodes,
@@ -35,18 +42,41 @@ export function useRenderedMapScene({
     siblingReorderIndicator,
     createNodePointerDownHandler,
     visibleNodeIds,
+    highlightNodeIds,
+    pinnedNodeIds,
     illustrationTextures,
   } = options;
   const sceneRef = useRef<RenderedMapScene | null>(null);
   const appliedViewportRef = useRef<Viewport | null>(null);
   const [scene, setScene] = useState<RenderedMapScene | null>(null);
 
+  const requiredCullNodeIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const id of selectedNodeIds) ids.add(id);
+    if (editingNodeId !== null) ids.add(editingNodeId);
+    if (connectionTargetNodeId !== null) ids.add(connectionTargetNodeId);
+    if (siblingReorderSourceNodeId !== null) ids.add(siblingReorderSourceNodeId);
+    return ids;
+  }, [
+    connectionTargetNodeId,
+    editingNodeId,
+    selectedNodeIds,
+    siblingReorderSourceNodeId,
+  ]);
+
+  const renderNodes = useViewportCulledRenderNodes(
+    nodes,
+    viewport,
+    screenSize,
+    requiredCullNodeIds,
+  );
+
   useEffect(() => {
     if (!runtime) return;
 
     const renderedViewport = viewportRef.current;
     const renderedScene = renderMapScene(runtime.app, runtime.constructors, {
-      nodes,
+      nodes: renderNodes,
       selectedNodeIds,
       editingNodeId,
       connectionTargetNodeId,
@@ -54,6 +84,8 @@ export function useRenderedMapScene({
       siblingReorderSourceNodeId,
       siblingReorderIndicator,
       visibleNodeIds,
+      highlightNodeIds,
+      pinnedNodeIds,
       illustrationTextures,
       onNodePointerDown: createNodePointerDownHandler(),
       viewport: renderedViewport,
@@ -70,7 +102,7 @@ export function useRenderedMapScene({
     };
   }, [
     runtime,
-    nodes,
+    renderNodes,
     selectedNodeIds,
     editingNodeId,
     connectionTargetNodeId,
@@ -79,8 +111,9 @@ export function useRenderedMapScene({
     siblingReorderIndicator,
     createNodePointerDownHandler,
     visibleNodeIds,
+    highlightNodeIds,
+    pinnedNodeIds,
     illustrationTextures,
-    viewportRef,
   ]);
 
   useEffect(() => {

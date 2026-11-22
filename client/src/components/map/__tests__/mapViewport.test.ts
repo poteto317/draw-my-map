@@ -3,6 +3,7 @@ import {
   MIN_VIEWPORT_SCALE,
   MAX_VIEWPORT_SCALE,
   fitViewportToNodes,
+  getViewportWorldRect,
   isValidViewport,
   panViewport,
   screenToWorld,
@@ -86,6 +87,25 @@ describe("map viewport", () => {
     const nearLimit = { ...INITIAL_VIEWPORT, offsetX: Number.MAX_VALUE };
 
     expect(panViewport(nearLimit, Number.MAX_VALUE, 0)).toBe(nearLimit);
+  });
+});
+
+describe("getViewportWorldRect", () => {
+  it("画面全体をワールド AABB に変換する", () => {
+    expect(getViewportWorldRect(INITIAL_VIEWPORT, { width: 200, height: 100 })).toEqual({
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 100,
+    });
+
+    const zoomed = { offsetX: 40, offsetY: -20, scale: 2 };
+    expect(getViewportWorldRect(zoomed, { width: 200, height: 100 })).toEqual({
+      x: (0 - 40) / 2,
+      y: (0 - (-20)) / 2,
+      width: 200 / 2,
+      height: 100 / 2,
+    });
   });
 });
 
