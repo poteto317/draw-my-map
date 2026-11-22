@@ -1,7 +1,8 @@
-import { focusViewportOnNode } from "@/components/map/nodeViewportFocus";
+import { focusViewportOnNode, focusViewportOnWorldPoint } from "@/components/map/nodeViewportFocus";
 import type { Viewport } from "@/components/map/mapViewport";
 import type { Node } from "@/types/node";
 import { createTestNode } from "@/testing/createTestNode";
+import { INITIAL_VIEWPORT } from "@/types/viewport";
 
 const viewport: Viewport = { offsetX: 10, offsetY: 20, scale: 2 };
 const node: Node = createTestNode({
@@ -12,6 +13,27 @@ const node: Node = createTestNode({
   width: 100,
   height: 60,
   label: "node",
+});
+
+describe("focusViewportOnWorldPoint", () => {
+  it("指定ワールド点を画面中央へパンする（倍率は維持）", () => {
+    const next = focusViewportOnWorldPoint(
+      INITIAL_VIEWPORT,
+      { x: 100, y: 50 },
+      { width: 400, height: 300 },
+    );
+    expect(next.scale).toBe(1);
+    expect(next.offsetX).toBe(100);
+    expect(next.offsetY).toBe(100);
+  });
+
+  it("無効な入力では元の viewport を返す", () => {
+    expect(focusViewportOnWorldPoint(
+      INITIAL_VIEWPORT,
+      { x: Number.NaN, y: 0 },
+      { width: 100, height: 100 },
+    )).toBe(INITIAL_VIEWPORT);
+  });
 });
 
 describe("focusViewportOnNode", () => {
