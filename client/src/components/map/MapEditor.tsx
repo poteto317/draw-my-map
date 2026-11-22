@@ -62,6 +62,7 @@ import { DepthLimitEmptyHint } from "@/components/layout/DepthLimitEmptyHint";
 import { HighlightModeControl } from "@/components/layout/HighlightModeControl";
 import { NodePinControls } from "@/components/layout/NodePinControls";
 import { ResolutionFilterSelector } from "@/components/layout/ResolutionFilterSelector";
+import { MapHeaderLayoutControls } from "@/components/layout/MapHeaderLayoutControls";
 import { WheelZoomSensitivityControl } from "@/components/layout/WheelZoomSensitivityControl";
 import { MapImageExportControls } from "@/components/layout/MapImageExportControls";
 import { OutlineExportControls } from "@/components/layout/OutlineExportControls";
@@ -103,6 +104,7 @@ import { buildCommandAvailabilityContext } from "@/domain/commands/buildCommandA
 import { filterCommandCatalog } from "@/domain/commands/filterCommandCatalog";
 import type { CommandId } from "@/domain/commands/commandTypes";
 import { useIllustrationGeneration } from "@/hooks/useIllustrationGeneration";
+import { useMapHeaderLayoutControls } from "@/hooks/useMapHeaderLayoutControls";
 import { useUiPrefs } from "@/hooks/useUiPrefs";
 import { useMapHistoryShortcuts } from "@/components/map/useMapHistoryShortcuts";
 import { useMapImageExport } from "@/hooks/useMapImageExport";
@@ -191,6 +193,8 @@ export function MapEditor({
     selectedNodeId,
     selectedNodeIds,
     layoutMode,
+    treeDirection,
+    layoutSpacing,
     addNode,
     addChildNode,
     addSiblingNode,
@@ -220,6 +224,8 @@ export function MapEditor({
     deleteNode,
     deleteNodeOnly,
     setLayoutMode,
+    setTreeDirection,
+    setLayoutSpacing,
     replaceMap,
     attachIllustration,
     removeIllustration,
@@ -232,6 +238,10 @@ export function MapEditor({
     removeNodeSource,
     addNodeMapLink,
     removeNodeMapLink,
+    commitManualNodes,
+    toggleNodeEditLock,
+    lockNodeSubtree,
+    unlockNodeSubtree,
     beginMoveHistory,
     documentRevision,
     canUndo,
@@ -261,6 +271,22 @@ export function MapEditor({
     return selectedNodeId === null ? [] : [selectedNodeId];
   }, [viewMode, selectedNodeIds, selectedNodeId]);
   const importanceSummary = summarizeSelectionImportance(nodes, importanceTargetIds);
+  const { headerLayoutControls, layoutSnapPrefs } = useMapHeaderLayoutControls({
+    viewMode,
+    nodes,
+    layoutMode,
+    treeDirection,
+    layoutSpacing,
+    selectedNodeId,
+    selectedNodeIds,
+    selectedNodeLocked: selectedNode?.locked === true,
+    setTreeDirection,
+    setLayoutSpacing,
+    commitManualNodes,
+    toggleNodeEditLock,
+    lockNodeSubtree,
+    unlockNodeSubtree,
+  });
   const branchCollapse = useBranchCollapse({ nodes, documentRevision });
   const { expandNodes, index: collapseIndex } = branchCollapse;
   const { focusRootId, setFocusRootId, focusVisibleNodeIds, clearFocusOutsideBranch } = useBranchFocus({
@@ -295,6 +321,8 @@ export function MapEditor({
   const displayState = useMapDisplayState({
     nodes,
     layoutMode,
+    treeDirection,
+    layoutSpacing,
     collapseVisibleNodeIds: branchCollapse.collapseVisibleNodeIds,
     resolutionVisibleNodeIds: resolutionFilter.visibleNodeIds,
     depthVisibleNodeIds,
@@ -966,6 +994,9 @@ export function MapEditor({
         <AppHeader
           layoutMode={layoutMode}
           onLayoutModeChange={setLayoutMode}
+          layoutDirectionControls={headerLayoutControls
+            ? <MapHeaderLayoutControls {...headerLayoutControls} />
+            : null}
           mapControls={mapControls}
           saveStatus={persistence.saveStatus}
           viewControls={<EditorViewModeControl mode={viewMode} onChange={changeViewMode} />}
@@ -1259,6 +1290,7 @@ export function MapEditor({
                 documentRevision={documentRevision}
                 shortcutsEnabled={editorShortcutsEnabled}
                 wheelZoomSensitivity={uiPrefs.wheelZoomSensitivity}
+                layoutSnapPrefs={layoutSnapPrefs}
                 dialogMouseClickedAtRef={dialogMouseClickedAtRef}
               />
               {viewportFrame !== null && (

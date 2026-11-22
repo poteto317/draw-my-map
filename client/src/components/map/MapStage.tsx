@@ -34,6 +34,7 @@ import { useNodeIndentShortcut } from "@/components/map/useNodeIndentShortcut";
 import { useNodeParentInsertionShortcut } from "@/components/map/useNodeParentInsertionShortcut";
 import { useNodeLabelEditRequest } from "@/components/map/useNodeLabelEditRequest";
 import { useIllustrationTextures } from "@/components/map/useIllustrationTextures";
+import { useSnapGridOverlay } from "@/components/map/useSnapGridOverlay";
 import { useViewportFrameNotification } from "@/components/map/useViewportFrameNotification";
 import { useViewportScaleNotification } from "@/components/map/useViewportScaleNotification";
 import type { ViewportFrame } from "@/components/map/useViewportFrameNotification";
@@ -45,6 +46,7 @@ import type {
   SubtreeClipboardResult,
 } from "@/domain/clipboard/subtreeClipboardCodec";
 import type { Node } from "@/types/node";
+import { DEFAULT_LAYOUT_SNAP_PREFS, type LayoutSnapPrefs } from "@/domain/nodes/snapGrid";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 import type { OperationNotice } from "@/types/operationNotice";
 import type { NodeFocusRequest } from "@/types/nodeFocusRequest";
@@ -114,6 +116,7 @@ type MapStageProps = {
   // false の間（ダイアログ表示中など）は、キーボード・クリップボードのショートカットとメニューを閉じる操作を止める
   shortcutsEnabled: boolean;
   wheelZoomSensitivity?: number;
+  layoutSnapPrefs?: LayoutSnapPrefs;
   // 画面の外のダイアログで最後にマウスでクリックした時刻。ダイアログが1回目のクリックで閉じると、
   // ダブルクリックの2回目と dblclick がこのキャンバスへ届くので、メニューの項目と同じ時間窓で無視する
   dialogMouseClickedAtRef: RefObject<number | null>;
@@ -162,6 +165,7 @@ export function MapStage({
   onGenerateIllustration,
   shortcutsEnabled,
   wheelZoomSensitivity = DEFAULT_WHEEL_ZOOM_SENSITIVITY,
+  layoutSnapPrefs = { ...DEFAULT_LAYOUT_SNAP_PREFS, enabled: false },
   dialogMouseClickedAtRef,
 }: MapStageProps) {
   const effectiveVisibleNodeIds = useMemo(
@@ -229,6 +233,10 @@ export function MapStage({
     onConnectNodes,
     layoutMode,
     onReorderSibling,
+    layoutSnapPrefs: {
+      enabled: layoutSnapPrefs.enabled,
+      gridStep: layoutSnapPrefs.gridStep,
+    },
     shouldIgnorePointerDown: isOverlayFollowUpClick,
   });
 
@@ -287,6 +295,15 @@ export function MapStage({
     viewport,
     viewportRef,
     screenSize,
+  });
+
+  useSnapGridOverlay({
+    runtime,
+    scene,
+    viewport,
+    screenSize,
+    layoutMode,
+    snapPrefs: layoutSnapPrefs,
   });
 
   useMapVisibilityTransition({

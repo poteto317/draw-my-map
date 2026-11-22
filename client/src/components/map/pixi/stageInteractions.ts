@@ -22,6 +22,7 @@ import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
 import type { SiblingReorderRequest } from "@/domain/nodes/nodeSiblingOrder";
 import { isApplePlatform as detectApplePlatform } from "@/domain/platform/isApplePlatform";
 import type { Node } from "@/types/node";
+import type { LayoutSnapGesturePrefs } from "@/components/map/pixi/nodeMoveGesture";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 import type { Container, FederatedPointerEvent } from "pixi.js";
 
@@ -43,6 +44,7 @@ type StageInteractionOptions = {
   onMarqueeRectChangeRef?: LatestValue<(rect: MarqueeRect | null) => void>;
   onMoveNodeRef: LatestValue<(id: number, x: number, y: number) => void>;
   onBeginNodeMoveRef: LatestValue<() => MapHistoryGroupLease>;
+  layoutSnapPrefsRef?: LatestValue<LayoutSnapGesturePrefs>;
   onConnectNodesRef: LatestValue<(parentId: number, childId: number) => void>;
   onConnectionTargetChangeRef: LatestValue<(id: number | null) => void>;
   onViewportChangeRef: LatestValue<(viewport: Viewport) => void>;
@@ -89,6 +91,7 @@ export function createStageInteractions({
   onMarqueeRectChangeRef = noopMarqueeRectChange,
   onMoveNodeRef,
   onBeginNodeMoveRef,
+  layoutSnapPrefsRef,
   onConnectNodesRef,
   onConnectionTargetChangeRef,
   onViewportChangeRef,
@@ -190,6 +193,7 @@ export function createStageInteractions({
       nodesRef,
       onMoveNodeRef,
       onBeginNodeMoveRef,
+      layoutSnapPrefsRef,
       dragThreshold: threshold,
     });
   };
