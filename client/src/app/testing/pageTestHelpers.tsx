@@ -83,6 +83,21 @@ export async function renderPage(ui: ReactElement = <Home />) {
   return rendered;
 }
 
+/** ビューポートカリング（045）で画面外ノードにハンドラが無いとき、全体フィットで描画対象を揃える */
+export function ensureCanvasNodesInteractive(expectedNodeCount: number) {
+  if (mockNodePointerHandlers.length >= expectedNodeCount) return;
+  const fitAll = screen.queryByRole("button", { name: "全体に合わせる" });
+  if (fitAll === null) return;
+  act(() => {
+    fireEvent.click(fitAll);
+  });
+  if (mockNodePointerHandlers.length < expectedNodeCount) {
+    act(() => {
+      fireEvent.click(fitAll);
+    });
+  }
+}
+
 export function undoButton(): HTMLElement {
   return screen.getByRole("button", { name: "元に戻す" });
 }
@@ -102,6 +117,7 @@ export function headerButton(name: string): HTMLElement {
 // 直近の描画で登録されたノードの pointerdown で選択し、同じ座標で離す（index は nodes 配列の順）。
 // 押した座標と離した座標が同じなのでドラッグにはならず、座標は選択の結果に影響しない
 export function selectNode(index: number, nodeCount: number, x = 0, y = 0) {
+  ensureCanvasNodesInteractive(nodeCount);
   act(() => {
     mockNodePointerHandlers.at(index - nodeCount)?.pointerdown?.(pointer(x, y));
     mockStageHandlers.pointerup?.(pointer(x, y));

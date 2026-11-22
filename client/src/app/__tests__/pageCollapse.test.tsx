@@ -12,6 +12,7 @@ import {
   renderReady,
   resetMapStageTestRuntime,
 } from "@/components/map/testing/mapStageTestRuntime";
+import { ensureCanvasNodesInteractive } from "@/app/testing/pageTestHelpers";
 import { readActiveMapJson, seedMapLibrary } from "@/testing/mapLibraryTestStorage";
 
 const mockPixiInit = jest.fn<Promise<void>, []>();
@@ -49,6 +50,7 @@ function mapJson(layoutMode = "manual", nodes = tree) {
 }
 function stage() { return document.querySelector<HTMLElement>(".cursor-crosshair")!; }
 function select(index: number, count = TREE_SIZE) {
+  ensureCanvasNodesInteractive(count);
   act(() => {
     mockNodePointerHandlers.at(-count + index)?.pointerdown?.(pointer(0, 0));
     mockStageHandlers.pointerup?.(pointer(0, 0));
