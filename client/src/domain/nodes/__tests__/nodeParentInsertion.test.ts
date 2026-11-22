@@ -406,6 +406,18 @@ describe("親の挿入とタグ", () => {
   });
 });
 
+describe("insertParentNode（locked）", () => {
+  it("対象が locked なら拒否する", () => {
+    const nodes = [n(1, null), { ...n(2, 1), locked: true as const }];
+    expect(insertParentNode(nodes, 2, 50, all(nodes), "auto")).toEqual({ ok: false, reason: "locked" });
+  });
+
+  it("対象の親が locked なら拒否する", () => {
+    const nodes = [{ ...n(1, null), locked: true as const }, n(2, 1)];
+    expect(insertParentNode(nodes, 2, 50, all(nodes), "auto")).toEqual({ ok: false, reason: "locked" });
+  });
+});
+
 describe("親の挿入と出典", () => {
   it("新しい親は出典を持たず、対象のノードの出典は変わらない", () => {
     const sources = [{ title: "出典A", page: "5" }];
