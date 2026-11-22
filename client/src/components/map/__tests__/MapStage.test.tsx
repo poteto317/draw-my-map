@@ -60,6 +60,11 @@ const defaultProps = {
   labelEditRequest: null,
   highlightNodeIds: new Set<number>(),
   pinnedNodeIds: new Set<number>(),
+  layoutSnapPrefs: {
+    enabled: false,
+    showGrid: false,
+    gridStep: 8,
+  },
 };
 
 const sampleNodes: Node[] = [

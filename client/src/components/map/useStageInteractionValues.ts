@@ -5,6 +5,7 @@ import type { Viewport } from "@/components/map/mapViewport";
 import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
 import type { SiblingReorderRequest } from "@/domain/nodes/nodeSiblingOrder";
 import type { Node } from "@/types/node";
+import type { LayoutSnapGesturePrefs } from "@/components/map/pixi/nodeMoveGesture";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 
 type UseStageInteractionValuesOptions = {
@@ -17,6 +18,7 @@ type UseStageInteractionValuesOptions = {
   onConnectNodes: (parentId: number, childId: number) => void;
   layoutMode: NodeLayoutMode;
   onReorderSibling: (nodeId: number, request: SiblingReorderRequest) => void;
+  layoutSnapPrefs?: LayoutSnapGesturePrefs;
 };
 
 export function resolveEffectiveVisibleNodeIds(
@@ -36,6 +38,7 @@ export function useStageInteractionValues({
   onConnectNodes,
   layoutMode,
   onReorderSibling,
+  layoutSnapPrefs = { enabled: false, gridStep: 8 },
 }: UseStageInteractionValuesOptions) {
   const nodesRef = useRef<readonly Node[]>(nodes);
   const visibleNodeIdsRef = useRef<ReadonlySet<number>>(
@@ -48,6 +51,7 @@ export function useStageInteractionValues({
   const onConnectNodesRef = useRef(onConnectNodes);
   const layoutModeRef = useRef(layoutMode);
   const onReorderSiblingRef = useRef(onReorderSibling);
+  const layoutSnapPrefsRef = useRef<LayoutSnapGesturePrefs>(layoutSnapPrefs);
 
   useLayoutEffect(() => {
     nodesRef.current = nodes;
@@ -59,6 +63,7 @@ export function useStageInteractionValues({
     onConnectNodesRef.current = onConnectNodes;
     layoutModeRef.current = layoutMode;
     onReorderSiblingRef.current = onReorderSibling;
+    layoutSnapPrefsRef.current = layoutSnapPrefs;
   }, [
     nodes,
     visibleNodeIds,
@@ -69,6 +74,7 @@ export function useStageInteractionValues({
     onConnectNodes,
     layoutMode,
     onReorderSibling,
+    layoutSnapPrefs,
   ]);
 
   return {
@@ -81,5 +87,6 @@ export function useStageInteractionValues({
     onConnectNodesRef,
     layoutModeRef,
     onReorderSiblingRef,
+    layoutSnapPrefsRef,
   };
 }

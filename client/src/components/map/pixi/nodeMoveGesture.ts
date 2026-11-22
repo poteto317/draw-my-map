@@ -2,7 +2,13 @@ import type { LatestValue, PointerGesture, PointerSample } from "@/components/ma
 import { createDragActivation } from "@/components/map/pixi/dragActivation";
 import { hasFinitePointerCoordinates } from "@/components/map/pixi/pointerSample";
 import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
+import { snapToGrid } from "@/domain/nodes/snapGrid";
 import type { Node } from "@/types/node";
+
+export type LayoutSnapGesturePrefs = {
+  readonly enabled: boolean;
+  readonly gridStep: number;
+};
 
 type NodeMoveGestureOptions = {
   nodeId: number;
@@ -10,6 +16,7 @@ type NodeMoveGestureOptions = {
   nodesRef: LatestValue<readonly Node[]>;
   onMoveNodeRef: LatestValue<(id: number, x: number, y: number) => void>;
   onBeginNodeMoveRef: LatestValue<() => MapHistoryGroupLease>;
+  layoutSnapPrefsRef?: LatestValue<LayoutSnapGesturePrefs>;
   dragThreshold: number;
 };
 
@@ -19,10 +26,11 @@ export function createNodeMoveGesture({
   nodesRef,
   onMoveNodeRef,
   onBeginNodeMoveRef,
+  layoutSnapPrefsRef,
   dragThreshold,
 }: NodeMoveGestureOptions): PointerGesture | null {
   const node = nodesRef.current.find((currentNode) => currentNode.id === nodeId);
-  if (!node || !hasFinitePointerCoordinates(startSample)) return null;
+  if (!node || node.locked === true || !hasFinitePointerCoordinates(startSample)) return null;
 
   const dragActivation = createDragActivation(startSample.screen, dragThreshold);
   const startWorld = { ...startSample.world };
@@ -30,10 +38,23 @@ export function createNodeMoveGesture({
   let finished = false;
   // 最初の有効な移動で取得する。クリックだけのジェスチャーでは履歴を開始しない
   let historyLease: MapHistoryGroupLease | null = null;
+  const snapNodeToGridIfNeeded = () => {
+    if (!historyLease?.isActive()) return;
+    const snapPrefs = layoutSnapPrefsRef?.current;
+    if (!snapPrefs?.enabled) return;
+    const current = nodesRef.current.find((entry) => entry.id === nodeId);
+    if (!current) return;
+    const nextX = snapToGrid(current.x, snapPrefs.gridStep);
+    const nextY = snapToGrid(current.y, snapPrefs.gridStep);
+    if (nextX === current.x && nextY === current.y) return;
+    onMoveNodeRef.current(nodeId, nextX, nextY);
+  };
+
   const finish = () => {
     active = false;
     if (finished) return;
     finished = true;
+    snapNodeToGridIfNeeded();
     historyLease?.finish();
   };
 

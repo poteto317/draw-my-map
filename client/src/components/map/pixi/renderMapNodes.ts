@@ -41,6 +41,7 @@ function resolveNodeContentAlpha(
   return contentAlpha;
 }
 const NODE_BORDER_COLOR = 0x3b82f6;
+const LOCKED_NODE_BORDER_COLOR = 0x71717a;
 
 // 「リンクあり」の印。ノードの右上の角に重ねる小さな円（枠の通常色 `NODE_BORDER_COLOR` と同じ青、白い縁）。キャンバス表示専用で、画像書き出しには出さない
 const LINK_MARKER_RADIUS = 6;
@@ -51,15 +52,22 @@ const LINK_MARKER_BORDER_COLOR = 0xffffff;
 function createNodeShape(
   constructors: PixiConstructors,
   node: Node,
-  state: { isSelected: boolean; isConnectionTarget: boolean },
+  state: { isSelected: boolean; isConnectionTarget: boolean; isLocked: boolean },
 ): Graphics {
-  const { isSelected, isConnectionTarget } = state;
+  const { isSelected, isConnectionTarget, isLocked } = state;
   const graphics = new constructors.Graphics();
+  const borderColor = isConnectionTarget
+    ? 0x10b981
+    : isSelected
+      ? 0x2563eb
+      : isLocked
+        ? LOCKED_NODE_BORDER_COLOR
+        : NODE_BORDER_COLOR;
   graphics.rect(node.x, node.y, node.width, node.height)
     .fill({ color: isConnectionTarget ? 0xecfdf5 : isSelected ? 0xeff6ff : 0xffffff })
     .stroke({
       width: isConnectionTarget || isSelected ? 3 : 2,
-      color: isConnectionTarget ? 0x10b981 : isSelected ? 0x2563eb : NODE_BORDER_COLOR,
+      color: borderColor,
     });
   return graphics;
 }
@@ -113,6 +121,21 @@ function createNodePinMarker(
   return marker;
 }
 
+// 編集ロックの印。右下の角を中心にした zinc 色の円（白い縁）。ピン・リンク印と位置で区別する
+const LOCK_MARKER_RADIUS = 6;
+const LOCK_MARKER_COLOR = LOCKED_NODE_BORDER_COLOR;
+const LOCK_MARKER_BORDER_WIDTH = 2;
+const LOCK_MARKER_BORDER_COLOR = 0xffffff;
+
+function createNodeLockMarker(constructors: PixiConstructors, node: Node): Graphics | null {
+  if (node.locked !== true) return null;
+  const marker = new constructors.Graphics();
+  marker.circle(node.x + node.width, node.y + node.height, LOCK_MARKER_RADIUS)
+    .fill({ color: LOCK_MARKER_COLOR })
+    .stroke({ width: LOCK_MARKER_BORDER_WIDTH, color: LOCK_MARKER_BORDER_COLOR });
+  return marker;
+}
+
 function createNodeLabelText(constructors: PixiConstructors, node: Node): Text {
   const text = new constructors.Text({
     text: getNodeDisplayLabel(node.label),
@@ -143,6 +166,7 @@ export function renderMapNodes(
     const isEditing = node.id === options.editingNodeId;
     const isSelected = selectedIds.has(node.id);
     const isConnectionTarget = node.id === options.connectionTargetNodeId;
+    const isLocked = node.locked === true;
     // Container の alpha は表示のフェードが使うので、子要素の alpha で半透明にする
     const contentAlpha = resolveNodeContentAlpha(node.id, options);
     const container = new constructors.Container();
@@ -154,7 +178,7 @@ export function renderMapNodes(
       options.onNodePointerDown(node.id, event);
     });
 
-    const shape = createNodeShape(constructors, node, { isSelected, isConnectionTarget });
+    const shape = createNodeShape(constructors, node, { isSelected, isConnectionTarget, isLocked });
     shape.alpha = contentAlpha;
     container.addChild(shape);
 
@@ -180,6 +204,12 @@ export function renderMapNodes(
     if (pinMarker !== null) {
       pinMarker.alpha = contentAlpha;
       container.addChild(pinMarker);
+    }
+
+    const lockMarker = createNodeLockMarker(constructors, node);
+    if (lockMarker !== null) {
+      lockMarker.alpha = contentAlpha;
+      container.addChild(lockMarker);
     }
 
     stage.addChild(container);

@@ -345,6 +345,46 @@ describe("renderMapNodes", () => {
     });
   });
 
+  describe("編集ロックのヒント", () => {
+    it("locked ノードは zinc 色の枠と右下の印を描く", () => {
+      const locked = createTestNode({
+        id: 2,
+        parentId: null,
+        x: 200,
+        y: 40,
+        width: 120,
+        height: 60,
+        label: "ロック",
+        locked: true,
+      });
+      const harness = createPixiTestHarness();
+      renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+        nodes: [node, locked],
+        selectedNodeIds: [],
+        editingNodeId: null,
+        connectionTargetNodeId: null,
+        siblingReorderSourceNodeId: null,
+        onNodePointerDown: jest.fn(),
+        visibleKeys: new Set(["node:1", "node:2"]),
+        highlightNodeIds: new Set<number>(),
+        pinnedNodeIds: new Set<number>(),
+      });
+
+      const secondShape = harness.Graphics.mock.results[1].value as {
+        stroke: jest.Mock;
+      };
+      expect(secondShape.stroke).toHaveBeenCalledWith({
+        width: 2,
+        color: 0x71717a,
+      });
+
+      const marker = harness.Graphics.mock.results[2].value;
+      expect(marker.circle).toHaveBeenCalledWith(320, 100, 6);
+      expect(marker.fill).toHaveBeenCalledWith({ color: 0x71717a });
+      expect(marker.stroke).toHaveBeenCalledWith({ width: 2, color: 0xffffff });
+    });
+  });
+
   describe("ノードピンの印", () => {
     it("ピン済みノードだけ左上に琥珀色の円（白い縁）を描く", () => {
       const pinned = createTestNode({

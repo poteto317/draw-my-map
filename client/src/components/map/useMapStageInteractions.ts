@@ -10,6 +10,7 @@ import { useStageInteractionValues } from "@/components/map/useStageInteractionV
 import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
 import type { SiblingReorderRequest } from "@/domain/nodes/nodeSiblingOrder";
 import type { Node } from "@/types/node";
+import type { LayoutSnapGesturePrefs } from "@/components/map/pixi/nodeMoveGesture";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 
 type UseMapStageInteractionsOptions = {
@@ -31,6 +32,7 @@ type UseMapStageInteractionsOptions = {
   onConnectNodes: (parentId: number, childId: number) => void;
   layoutMode: NodeLayoutMode;
   onReorderSibling: (nodeId: number, request: SiblingReorderRequest) => void;
+  layoutSnapPrefs?: LayoutSnapGesturePrefs;
   shouldIgnorePointerDown?: () => boolean;
 };
 
@@ -61,6 +63,7 @@ export function useMapStageInteractions({
   onConnectNodes,
   layoutMode,
   onReorderSibling,
+  layoutSnapPrefs,
   shouldIgnorePointerDown = () => false,
 }: UseMapStageInteractionsOptions) {
   const shouldIgnorePointerDownRef = useLatestRef(shouldIgnorePointerDown);
@@ -85,6 +88,7 @@ export function useMapStageInteractions({
     onViewportChangeRef,
     layoutModeRef,
     onReorderSiblingRef,
+    layoutSnapPrefsRef,
   } = useStageInteractionValues({
     nodes,
     visibleNodeIds,
@@ -95,6 +99,7 @@ export function useMapStageInteractions({
     onConnectNodes,
     layoutMode,
     onReorderSibling,
+    layoutSnapPrefs,
   });
 
   // ジェスチャー本体は一度だけ作る。渡す refs は保持するだけで、.current の読み取りはイベント／effect 側。
@@ -112,6 +117,7 @@ export function useMapStageInteractions({
       onMarqueeRectChangeRef,
       onMoveNodeRef,
       onBeginNodeMoveRef,
+      layoutSnapPrefsRef,
       onConnectNodesRef,
       onConnectionTargetChangeRef,
       onViewportChangeRef,

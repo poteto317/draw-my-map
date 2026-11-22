@@ -54,6 +54,17 @@ describe("createNodeMoveGesture", () => {
     })).toBeNull();
   });
 
+  it("returns null when the source node is locked", () => {
+    expect(createNodeMoveGesture({
+      nodeId: 1,
+      startSample: pointer(100, 60),
+      nodesRef: { current: [{ ...node, locked: true as const }] },
+      onMoveNodeRef: { current: jest.fn() },
+      onBeginNodeMoveRef: { current: createLease },
+      dragThreshold: 4,
+    })).toBeNull();
+  });
+
   it("ignores movement below the threshold", () => {
     const onMoveNode = jest.fn();
     const gesture = createNodeMoveGesture({
@@ -202,6 +213,57 @@ describe("createNodeMoveGesture", () => {
       expect(latest).toHaveBeenCalledTimes(1);
     },
   );
+
+  it("pointerup でスナップ有効時は gridStep の倍数へ丸めて移動する", () => {
+    let x = 21;
+    let y = 43;
+    const nodesRef = {
+      get current() {
+        return [{ ...node, x, y }];
+      },
+    };
+    const onMoveNode = jest.fn((_id: number, nextX: number, nextY: number) => {
+      x = nextX;
+      y = nextY;
+    });
+    const gesture = createNodeMoveGesture({
+      nodeId: 1,
+      startSample: pointer(100, 60),
+      nodesRef,
+      onMoveNodeRef: { current: onMoveNode },
+      onBeginNodeMoveRef: { current: createLease },
+      layoutSnapPrefsRef: { current: { enabled: true, gridStep: 8 } },
+      dragThreshold: 4,
+    });
+
+    gesture?.move(pointer(104, 64));
+    onMoveNode.mockClear();
+    gesture?.end(pointer(104, 64));
+
+    expect(onMoveNode).toHaveBeenCalledWith(1, 24, 48);
+  });
+
+  it("スナップ無効時は end で座標を変えない", () => {
+    const onMoveNode = jest.fn();
+    const nodesRef = {
+      current: [{ ...node, x: 21, y: 43 }],
+    };
+    const gesture = createNodeMoveGesture({
+      nodeId: 1,
+      startSample: pointer(100, 60),
+      nodesRef,
+      onMoveNodeRef: { current: onMoveNode },
+      onBeginNodeMoveRef: { current: createLease },
+      layoutSnapPrefsRef: { current: { enabled: false, gridStep: 8 } },
+      dragThreshold: 4,
+    });
+
+    gesture?.move(pointer(104, 64));
+    onMoveNode.mockClear();
+    gesture?.end(pointer(104, 64));
+
+    expect(onMoveNode).not.toHaveBeenCalled();
+  });
 
   describe("移動履歴のグループ", () => {
     it("閾値未満の移動ではグループを開始しない", () => {
