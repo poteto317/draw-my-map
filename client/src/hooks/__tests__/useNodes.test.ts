@@ -635,6 +635,28 @@ describe("useNodes", () => {
     expect(result.current.selectedNodeId).toBeNull();
   });
 
+  it("locked な基点には子・兄弟を作成しない", () => {
+    let id = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => ++id);
+    const { result } = renderHook(() => useNodes());
+
+    act(() => {
+      result.current.addNode(100, 100);
+      result.current.toggleNodeEditLock(1);
+    });
+    let childId!: number | null;
+    let siblingId!: number | null;
+    act(() => {
+      childId = result.current.addChildNode(1);
+      siblingId = result.current.addSiblingNode(1);
+    });
+
+    expect(childId).toBeNull();
+    expect(siblingId).toBeNull();
+    expect(result.current.nodes).toHaveLength(1);
+    expect(result.current.selectedNodeId).toBeNull();
+  });
+
   it("同じ batch のルート作成を後続の子・兄弟作成から参照する", () => {
     let id = 0;
     jest.spyOn(Date, "now").mockImplementation(() => ++id);

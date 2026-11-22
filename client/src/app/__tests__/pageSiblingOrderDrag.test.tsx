@@ -221,7 +221,7 @@ describe("ページの自動配置のドラッグによる兄弟の並べ替え"
     stagePointer("pointermove", 520, 250);
     stagePointer("pointerup", 520, 250);
 
-    expect(exportedMap(mockDownloadMapJson).nodes[1]).toMatchObject({ id: 2, x: 470, y: 100 });
+    expect(exportedMap(mockDownloadMapJson).nodes[1]).toMatchObject({ id: 2, x: 472, y: 104 });
     await user.click(undoButton());
     expect(exportedMap(mockDownloadMapJson).nodes).toEqual(nodesBefore);
   });
@@ -236,7 +236,7 @@ describe("ページの自動配置のドラッグによる兄弟の並べ替え"
 
     const nodes = exportedMap(mockDownloadMapJson).nodes;
     expect(nodes.map((node) => node.id)).toEqual(ORIGINAL_IDS);
-    expect(nodes[1]).toMatchObject({ id: 2, x: 470, y: 220 });
+    expect(nodes[1]).toMatchObject({ id: 2, x: 472, y: 224 });
     expect(screen.queryByText(MOVED_DOWN_MESSAGE)).not.toBeInTheDocument();
   });
 

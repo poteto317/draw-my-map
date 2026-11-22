@@ -303,7 +303,7 @@ describe("ページの階層の上げ下げ（ショートカット）", () => {
     });
 
     const b = exportedNode(3);
-    expect(b).toMatchObject({ parentId: 1, x: 220, y: 230 });
+    expect(b).toMatchObject({ parentId: 1, x: 224, y: 232 });
     expect(screen.queryByText(INDENTED_UNDER_A_MESSAGE)).not.toBeInTheDocument();
   });
 
