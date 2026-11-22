@@ -712,10 +712,28 @@ describe("changeNodeIndent（locked）", () => {
     expect(indent(nodes, T)).toEqual({ ok: false, reason: "locked" });
   });
 
+  it("下げるとき現在の親が locked なら拒否する", () => {
+    const nodes = [
+      { ...node(R, null), locked: true as const },
+      node(A, R),
+      node(T, R),
+    ];
+    expect(indent(nodes, T)).toEqual({ ok: false, reason: "locked" });
+  });
+
   it("上げるとき現在の親が locked なら拒否する", () => {
     const nodes = [
       node(R, null),
       { ...node(A, R), locked: true as const },
+      node(T, A),
+    ];
+    expect(outdent(nodes, T)).toEqual({ ok: false, reason: "locked" });
+  });
+
+  it("上げるとき祖父母が locked なら拒否する", () => {
+    const nodes = [
+      { ...node(R, null), locked: true as const },
+      node(A, R),
       node(T, A),
     ];
     expect(outdent(nodes, T)).toEqual({ ok: false, reason: "locked" });
