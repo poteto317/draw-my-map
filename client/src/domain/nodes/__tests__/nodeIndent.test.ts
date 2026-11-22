@@ -700,3 +700,24 @@ describe("changeNodeIndent（自動配置と先頭のルート）", () => {
     expect({ x: laidOutFirstRoot.x, y: laidOutFirstRoot.y }).toEqual({ x: 37, y: 51 });
   });
 });
+
+describe("changeNodeIndent（locked）", () => {
+  it("下げるとき新しい親が locked なら拒否する", () => {
+    const nodes = [
+      node(R, null),
+      node(A, R),
+      { ...node(B, R), locked: true as const },
+      node(T, R),
+    ];
+    expect(indent(nodes, T)).toEqual({ ok: false, reason: "locked" });
+  });
+
+  it("上げるとき現在の親が locked なら拒否する", () => {
+    const nodes = [
+      node(R, null),
+      { ...node(A, R), locked: true as const },
+      node(T, A),
+    ];
+    expect(outdent(nodes, T)).toEqual({ ok: false, reason: "locked" });
+  });
+});

@@ -100,6 +100,25 @@ describe("moveNodeBranch", () => {
     const cyclic = [node(1, 2, 0, 0), node(2, 1, 300, 0), node(3, null, 0, 300)];
     expect(moveNodeBranch(cyclic, 1, 3, "manual")).toEqual({ ok: false, reason: "invalid-parent" });
   });
+
+  it("移動先の親が locked なら拒否する", () => {
+    const lockedParent = [
+      node(1, null, 0, 0),
+      node(2, 1, 300, 20),
+      { ...node(4, null, 0, 300), locked: true as const },
+      node(5, 4, 300, 300),
+    ];
+    expect(moveNodeBranch(lockedParent, 2, 4, "manual")).toEqual({ ok: false, reason: "locked" });
+  });
+
+  it("枝の中に locked があるなら拒否する", () => {
+    const lockedChild = [
+      node(1, null, 0, 0),
+      node(2, 1, 300, 20),
+      { ...node(3, 2, 600, 80), locked: true as const },
+    ];
+    expect(moveNodeBranch(lockedChild, 2, null, "manual")).toEqual({ ok: false, reason: "locked" });
+  });
 });
 
 const MAP_IDS = { sourceMapId: "map-src", targetMapId: "map-dst" };
@@ -115,6 +134,18 @@ describe("transferNodeBranch", () => {
       "@/domain/nodes/nodeAutoLayout",
     );
     jest.mocked(layoutNodeForest).mockReset().mockImplementation(actual.layoutNodeForest);
+  });
+
+  it("枝に locked があるなら拒否する", () => {
+    const source = {
+      layoutMode: "manual" as const,
+      nodes: [
+        node(1, null, 0, 0),
+        { ...node(2, 1, 300, 0), locked: true as const },
+      ],
+    };
+    const target = { layoutMode: "manual" as const, nodes: [node(100, null, 0, 0)] };
+    expect(transferNodeBranch(source, target, 1, allocateIds, MAP_IDS)).toEqual({ ok: false, reason: "locked" });
   });
 
   it("IDは渡された採番で決まり、時計に依存しない", () => {
