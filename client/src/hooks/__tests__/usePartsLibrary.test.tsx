@@ -11,6 +11,7 @@ import {
   createEmptyPartsStore,
   MAX_PART_NAME,
   MAX_PART_NODES,
+  MAX_PARTS,
   type Part,
 } from "@/domain/parts/partsModel";
 import { resolveSelectionTargetIds } from "@/domain/exportScope/resolveSelectionTargetIds";
@@ -295,6 +296,41 @@ describe("usePartsLibrary", () => {
       kind: "error",
       message: expect.stringMatching(/容量|保存/),
     });
+  });
+
+  it("parts が MAX_PARTS 件のとき register 失敗しストアを変えない", () => {
+    const parts: Part[] = [];
+    for (let i = 0; i < MAX_PARTS; i += 1) {
+      parts.push(samplePart({ id: `part-${i}`, name: `部品${i}` }));
+    }
+    const { storage } = createRecordingStorage({
+      initial: {
+        [PARTS_STORAGE_KEY]: encodePartsStore({ version: 1, parts }),
+      },
+    });
+    const h = setup({
+      storage,
+      selectedNodeId: 1,
+      selectedNodeIds: [1],
+    });
+
+    act(() => {
+      expect(h.hook.result.current.registerPartFromSelection("追加分")).toEqual({
+        ok: false,
+        reason: "too-many",
+      });
+    });
+    expect(h.publishNotice).toHaveBeenCalledWith({
+      kind: "error",
+      message: `部品は最大 ${MAX_PARTS} 件まで登録できます。`,
+    });
+    const read = readParts(storage);
+    expect(read.status).toBe("ok");
+    if (read.status !== "ok") return;
+    expect(read.store.parts).toHaveLength(MAX_PARTS);
+    expect(read.store.parts.map((p) => p.name)).toEqual(
+      parts.map((part) => part.name),
+    );
   });
 
   it("単一選択で register すると最新読取へ append する", () => {
