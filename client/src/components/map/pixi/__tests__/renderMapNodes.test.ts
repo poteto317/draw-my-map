@@ -16,6 +16,8 @@ function render(overrides: Partial<{
   connectionTargetNodeId: number | null;
   onNodePointerDown: jest.Mock;
   visibleKeys: ReadonlySet<string>;
+  highlightNodeIds: ReadonlySet<number>;
+  pinnedNodeIds: ReadonlySet<number>;
 }> = {}) {
   const harness = createPixiTestHarness();
   const onNodePointerDown = overrides.onNodePointerDown ?? jest.fn();
@@ -27,6 +29,8 @@ function render(overrides: Partial<{
     siblingReorderSourceNodeId: null,
     onNodePointerDown,
     visibleKeys: overrides.visibleKeys ?? new Set(["node:1"]),
+    highlightNodeIds: overrides.highlightNodeIds ?? new Set<number>(),
+    pinnedNodeIds: overrides.pinnedNodeIds ?? new Set<number>(),
   });
   return { ...harness, onNodePointerDown };
 }
@@ -66,6 +70,8 @@ describe("renderMapNodes", () => {
       editingNodeId: null,
       connectionTargetNodeId: null,
       siblingReorderSourceNodeId: null,
+      highlightNodeIds: new Set<number>(),
+      pinnedNodeIds: new Set<number>(),
       onNodePointerDown: jest.fn(),
       visibleKeys: new Set(["node:1", "node:2", "node:3"]),
     });
@@ -127,11 +133,50 @@ describe("renderMapNodes", () => {
     });
   });
 
+  it("強調集合が空なら contentAlpha は通常のまま", () => {
+    const { stage, Graphics } = render({ highlightNodeIds: new Set<number>() });
+    const container = stage.addChild.mock.calls[0][0] as { addChild: jest.Mock; eventMode: string };
+    const shape = Graphics.mock.results[0].value as { alpha?: number };
+
+    expect(shape.alpha).toBe(1);
+    expect(container.eventMode).toBe("static");
+  });
+
+  it("非強調の論理可視ノードは contentAlpha を DIM にし、ヒットテストは維持する", () => {
+    const second = createTestNode({
+      id: 2, parentId: null, x: 200, y: 30, width: 100, height: 60, label: "他",
+    });
+    const harness = createPixiTestHarness();
+    renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+      nodes: [node, second],
+      selectedNodeIds: [],
+      editingNodeId: null,
+      connectionTargetNodeId: null,
+      siblingReorderSourceNodeId: null,
+      onNodePointerDown: jest.fn(),
+      visibleKeys: new Set(["node:1", "node:2"]),
+      highlightNodeIds: new Set([1]),
+      pinnedNodeIds: new Set<number>(),
+    });
+    const containers = harness.stage.addChild.mock.calls.map(
+      ([container]: [unknown]) => container as { addChild: jest.Mock; eventMode: string },
+    );
+    const shapeAlpha = (index: number) => (
+      containers[index].addChild.mock.calls[0][0] as { alpha: number }
+    ).alpha;
+
+    expect(shapeAlpha(0)).toBe(1);
+    expect(shapeAlpha(1)).toBe(0.25);
+    expect(containers[1].eventMode).toBe("static");
+  });
+
   it("node keyのvisibility targetでPixi表示とinteractionを制御する", () => {
     const harness = createPixiTestHarness();
     const targets = renderMapNodes(harness.app.stage as never, harness.constructors as never, {
       nodes: [node], selectedNodeIds: [], editingNodeId: null, connectionTargetNodeId: null,
       siblingReorderSourceNodeId: null, onNodePointerDown: jest.fn(), visibleKeys: new Set(["node:1"]),
+      highlightNodeIds: new Set<number>(),
+      pinnedNodeIds: new Set<number>(),
     });
     const container = harness.stage.addChild.mock.calls[0][0] as {
       alpha: number; visible: boolean; eventMode: string; cursor: string;
@@ -164,6 +209,8 @@ describe("renderMapNodes", () => {
       renderMapNodes(harness.app.stage as never, harness.constructors as never, {
         nodes: [illustratedNode], selectedNodeIds: [], editingNodeId: null, connectionTargetNodeId: null,
         siblingReorderSourceNodeId: null, onNodePointerDown: jest.fn(), illustrationTextures,
+        highlightNodeIds: new Set<number>(),
+        pinnedNodeIds: new Set<number>(),
       });
       return harness;
     }
@@ -203,6 +250,8 @@ describe("renderMapNodes", () => {
       renderMapNodes(harness.app.stage as never, harness.constructors as never, {
         nodes: [firstNode, draggedNode], selectedNodeIds: [2], editingNodeId: null,
         connectionTargetNodeId: null, siblingReorderSourceNodeId, onNodePointerDown: jest.fn(),
+        highlightNodeIds: new Set<number>(),
+        pinnedNodeIds: new Set<number>(),
         illustrationTextures: new Map([[IMAGE, {} as Texture]]),
       });
       const containers = harness.stage.addChild.mock.calls.map(
@@ -249,7 +298,10 @@ describe("renderMapNodes", () => {
       const harness = createPixiTestHarness();
       renderMapNodes(harness.app.stage as never, harness.constructors as never, {
         nodes: [node, linkedNode], selectedNodeIds: [], editingNodeId: null, connectionTargetNodeId: null,
-        siblingReorderSourceNodeId, onNodePointerDown: jest.fn(), visibleKeys: new Set(["node:1", "node:2"]),
+        siblingReorderSourceNodeId, onNodePointerDown: jest.fn(),
+        visibleKeys: new Set(["node:1", "node:2"]),
+        highlightNodeIds: new Set<number>(),
+        pinnedNodeIds: new Set<number>(),
       });
       const containers = harness.stage.addChild.mock.calls.map(
         ([container]: [unknown]) => container as { addChild: jest.Mock },
@@ -284,10 +336,39 @@ describe("renderMapNodes", () => {
       renderMapNodes(harness.app.stage as never, harness.constructors as never, {
         nodes: [linkedNode], selectedNodeIds: [2], editingNodeId: 2, connectionTargetNodeId: null,
         siblingReorderSourceNodeId: null, onNodePointerDown: jest.fn(), visibleKeys: new Set(["node:2"]),
+        highlightNodeIds: new Set<number>(),
+        pinnedNodeIds: new Set<number>(),
       });
 
       expect(harness.Graphics).toHaveBeenCalledTimes(2);
       expect(harness.Graphics.mock.results[1].value.circle).toHaveBeenCalledWith(320, 30, 6);
+    });
+  });
+
+  describe("ノードピンの印", () => {
+    it("ピン済みノードだけ左上に琥珀色の円（白い縁）を描く", () => {
+      const pinned = createTestNode({
+        id: 2, parentId: null, x: 200, y: 40, width: 120, height: 60, label: "ピン",
+      });
+      const harness = createPixiTestHarness();
+      renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+        nodes: [node, pinned],
+        selectedNodeIds: [],
+        editingNodeId: null,
+        connectionTargetNodeId: null,
+        siblingReorderSourceNodeId: null,
+        onNodePointerDown: jest.fn(),
+        visibleKeys: new Set(["node:1", "node:2"]),
+        highlightNodeIds: new Set<number>(),
+        pinnedNodeIds: new Set([2]),
+      });
+
+      // 枠 2 + ピン印 1
+      expect(harness.Graphics).toHaveBeenCalledTimes(3);
+      const marker = harness.Graphics.mock.results[2].value;
+      expect(marker.circle).toHaveBeenCalledWith(200, 40, 6);
+      expect(marker.fill).toHaveBeenCalledWith({ color: 0xf59e0b });
+      expect(marker.stroke).toHaveBeenCalledWith({ width: 2, color: 0xffffff });
     });
   });
 });

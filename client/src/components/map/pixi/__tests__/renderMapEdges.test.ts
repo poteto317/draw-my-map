@@ -16,7 +16,7 @@ describe("renderMapEdges", () => {
   it("draws each valid relationship as an addressable edge target", () => {
     const harness = createPixiTestHarness();
 
-    const targets = renderMapEdges(harness.app.stage as never, harness.constructors as never, [root, child]);
+    const targets = renderMapEdges(harness.app.stage as never, harness.constructors as never, [root, child], undefined, new Set<number>());
 
     const edges = harness.Graphics.mock.results[0].value;
     expect(harness.Graphics).toHaveBeenCalledTimes(1);
@@ -38,10 +38,44 @@ describe("renderMapEdges", () => {
       harness.app.stage as never,
       harness.constructors as never,
       [{ ...child, parentId: 999 }],
+      undefined,
+      new Set<number>(),
     );
 
     expect(harness.Graphics).not.toHaveBeenCalled();
     expect(harness.stage.addChild).not.toHaveBeenCalled();
+  });
+
+  it("強調集合があるとき非強調の可視エッジを DIM にする", () => {
+    const harness = createPixiTestHarness();
+
+    renderMapEdges(
+      harness.app.stage as never,
+      harness.constructors as never,
+      [root, child],
+      new Set(["node:1", "node:2", "edge:2"]),
+      new Set([1]),
+    );
+
+    expect(harness.Graphics.mock.results[0].value).toMatchObject({
+      alpha: 0.25,
+      visible: true,
+      eventMode: "none",
+    });
+  });
+
+  it("両端が強調ならエッジは通常 alpha", () => {
+    const harness = createPixiTestHarness();
+
+    renderMapEdges(
+      harness.app.stage as never,
+      harness.constructors as never,
+      [root, child],
+      new Set(["node:1", "node:2", "edge:2"]),
+      new Set([1, 2]),
+    );
+
+    expect(harness.Graphics.mock.results[0].value).toMatchObject({ alpha: 1, visible: true });
   });
 
   it("親子の両方が可視なエッジだけを初期表示する", () => {
@@ -53,6 +87,7 @@ describe("renderMapEdges", () => {
       harness.constructors as never,
       [root, child, hiddenChild],
       new Set(["node:1", "node:2", "edge:2"]),
+      new Set<number>(),
     );
 
     const visibleEdge = harness.Graphics.mock.results[0].value;
@@ -69,6 +104,20 @@ describe("renderMapEdges", () => {
       visible: false,
       eventMode: "none",
     });
+  });
+
+  it("カリング後ノード配列に両端が無い辺は描画しない", () => {
+    const harness = createPixiTestHarness();
+    // 親が画面外でカリングされた想定: 子だけが配列に残る
+    renderMapEdges(
+      harness.app.stage as never,
+      harness.constructors as never,
+      [child],
+      new Set(["node:2"]),
+      new Set<number>(),
+    );
+
+    expect(harness.Graphics).not.toHaveBeenCalled();
   });
 
   it("resolves parents with a linear number of node-array reads", () => {
@@ -93,6 +142,8 @@ describe("renderMapEdges", () => {
       harness.app.stage as never,
       harness.constructors as never,
       trackedNodes,
+      undefined,
+      new Set<number>(),
     );
 
     expect(indexedReads).toBeLessThan(manyNodes.length * 4);

@@ -29,6 +29,8 @@ describe("renderMapScene", () => {
       connectionTargetNodeId: null,
       siblingReorderSourceNodeId: null,
       siblingReorderIndicator: null,
+      highlightNodeIds: new Set<number>(),
+  pinnedNodeIds: new Set<number>(),
       onNodePointerDown: jest.fn(),
       viewport: INITIAL_VIEWPORT,
     });
@@ -56,6 +58,8 @@ describe("renderMapScene", () => {
       connectionTargetNodeId: null,
       siblingReorderSourceNodeId: null,
       siblingReorderIndicator: null,
+      highlightNodeIds: new Set<number>(),
+  pinnedNodeIds: new Set<number>(),
       onNodePointerDown: jest.fn(),
       viewport,
     });
@@ -76,6 +80,8 @@ describe("renderMapScene", () => {
       connectionTargetNodeId: null,
       siblingReorderSourceNodeId: null,
       siblingReorderIndicator: null,
+      highlightNodeIds: new Set<number>(),
+  pinnedNodeIds: new Set<number>(),
       onNodePointerDown: jest.fn(),
       viewport: INITIAL_VIEWPORT,
     });
@@ -90,6 +96,8 @@ describe("renderMapScene", () => {
     renderMapScene(harness.app as never, harness.constructors as never, {
       nodes, selectedNodeIds: [], editingNodeId: null, connectionTargetNodeId: null,
       siblingReorderSourceNodeId: null, siblingReorderIndicator: null, onNodePointerDown: jest.fn(), viewport: INITIAL_VIEWPORT, visibleNodeIds: new Set([2]),
+      highlightNodeIds: new Set<number>(),
+  pinnedNodeIds: new Set<number>(),
     });
 
     expect(harness.Graphics).toHaveBeenCalledTimes(3);
@@ -109,6 +117,8 @@ describe("renderMapScene", () => {
       connectionTargetNodeId: null,
       siblingReorderSourceNodeId: null,
       siblingReorderIndicator: null,
+      highlightNodeIds: new Set<number>(),
+  pinnedNodeIds: new Set<number>(),
       onNodePointerDown: jest.fn(),
       viewport: INITIAL_VIEWPORT,
       visibleNodeIds,
@@ -143,6 +153,8 @@ describe("renderMapScene", () => {
       connectionTargetNodeId: null,
       siblingReorderSourceNodeId: 2,
       siblingReorderIndicator: { left: 262, right: 378, y: 110 },
+      highlightNodeIds: new Set<number>(),
+  pinnedNodeIds: new Set<number>(),
       onNodePointerDown: jest.fn(),
       viewport: INITIAL_VIEWPORT,
     });
@@ -169,6 +181,8 @@ describe("renderMapScene", () => {
       connectionTargetNodeId: null,
       siblingReorderSourceNodeId: 2,
       siblingReorderIndicator: null,
+      highlightNodeIds: new Set<number>(),
+  pinnedNodeIds: new Set<number>(),
       onNodePointerDown: jest.fn(),
       viewport: INITIAL_VIEWPORT,
     });
@@ -188,6 +202,8 @@ describe("renderMapScene", () => {
       connectionTargetNodeId: null,
       siblingReorderSourceNodeId: null,
       siblingReorderIndicator: null,
+      highlightNodeIds: new Set<number>(),
+  pinnedNodeIds: new Set<number>(),
       marqueeRect: { x: 10, y: 20, width: 100, height: 40 },
       onNodePointerDown: jest.fn(),
       viewport: INITIAL_VIEWPORT,

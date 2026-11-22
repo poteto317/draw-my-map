@@ -35,7 +35,13 @@ export function renderMapScene(
   const visibleKeys = options.visibleNodeIds === undefined
     ? undefined
     : collectVisibleMapKeys(options.nodes, options.visibleNodeIds);
-  const edgeTargets = renderMapEdges(worldContainer, constructors, options.nodes, visibleKeys);
+  const edgeTargets = renderMapEdges(
+    worldContainer,
+    constructors,
+    options.nodes,
+    visibleKeys,
+    options.highlightNodeIds,
+  );
   const nodeTargets = renderMapNodes(worldContainer, constructors, { ...options, visibleKeys });
   // ノードと接続線の上に重ねる。可視性のターゲットには入れない
   renderSiblingReorderIndicator(worldContainer, constructors, options.siblingReorderIndicator);
