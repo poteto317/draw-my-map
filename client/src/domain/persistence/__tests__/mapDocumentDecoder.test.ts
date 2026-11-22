@@ -323,3 +323,87 @@ describe("version 3 の出典", () => {
     });
   });
 });
+
+describe("version 3 の treeDirection と layoutSpacing", () => {
+  const baseDoc = { version: 3, layoutMode: "manual", nodes: [node(1, null)] };
+
+  it("欠落は既定として読み込む", () => {
+    const result = parseMapDocumentJson(JSON.stringify(baseDoc));
+    expect(result).toEqual({
+      ok: true,
+      value: { version: 3, layoutMode: "manual", nodes: [node(1, null)] },
+    });
+    expect(result.ok && "treeDirection" in result.value).toBe(false);
+    expect(result.ok && "layoutSpacing" in result.value).toBe(false);
+  });
+
+  it("tbとlayoutSpacingを読み込む", () => {
+    const jsonValue = JSON.stringify({
+      ...baseDoc,
+      treeDirection: "tb",
+      layoutSpacing: { childGap: 100, siblingGap: 24 },
+    });
+    expect(parseMapDocumentJson(jsonValue)).toEqual({
+      ok: true,
+      value: {
+        version: 3,
+        layoutMode: "manual",
+        treeDirection: "tb",
+        layoutSpacing: { childGap: 100, siblingGap: 24 },
+        nodes: [node(1, null)],
+      },
+    });
+  });
+
+  it.each([1, 2] as const)("V%sではtreeDirectionとlayoutSpacingを無視する", (version) => {
+    const legacy = JSON.stringify({
+      version,
+      layoutMode: "manual",
+      treeDirection: "tb",
+      layoutSpacing: { childGap: 100, siblingGap: 24 },
+      nodes: [{
+        id: 1,
+        parentId: null,
+        x: 0,
+        y: 0,
+        width: 160,
+        height: 64,
+        label: "a",
+        ...(version === 1 ? {} : { importance: "medium" }),
+      }],
+    });
+    const parsed = parseMapDocumentJson(legacy);
+    expect(parsed.ok && "treeDirection" in parsed.value).toBe(false);
+    expect(parsed.ok && "layoutSpacing" in parsed.value).toBe(false);
+  });
+
+  it("V3の不正なtreeDirectionを拒否する", () => {
+    expect(parseMapDocumentJson(JSON.stringify({ ...baseDoc, treeDirection: "rl" }))).toEqual({
+      ok: false,
+      error: "treeDirectionはlrまたはtbである必要があります。",
+    });
+  });
+
+  it("V3の不正なlayoutSpacingを拒否する", () => {
+    expect(parseMapDocumentJson(JSON.stringify({ ...baseDoc, layoutSpacing: { childGap: 100 } }))).toEqual({
+      ok: false,
+      error: "layoutSpacingはchildGapとsiblingGapの両方を持つ必要があります。",
+    });
+  });
+});
+
+describe("version 3 の locked", () => {
+  it("trueだけを読み込み、falseは落とす", () => {
+    const jsonValue = JSON.stringify({
+      version: 3,
+      layoutMode: "manual",
+      nodes: [
+        { ...node(1, null), locked: true },
+        { ...node(2, 1), locked: false },
+      ],
+    });
+    const parsed = parseMapDocumentJson(jsonValue);
+    expect(parsed.ok && parsed.value.nodes[0].locked).toBe(true);
+    expect(parsed.ok && "locked" in parsed.value.nodes[1]).toBe(false);
+  });
+});

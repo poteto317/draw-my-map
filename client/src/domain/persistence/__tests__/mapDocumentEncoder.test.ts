@@ -82,4 +82,27 @@ describe("MapDocument Encoder", () => {
     expect("illustration" in document.nodes[1]).toBe(false);
     expect(JSON.parse(serializeMapDocument(document)).version).toBe(3);
   });
+
+  it("tbと非既定のlayoutSpacingだけを書き出す", () => {
+    const document = createMapDocument([node(1, null)], "auto", {
+      treeDirection: "tb",
+      layoutSpacing: { childGap: 100, siblingGap: 24 },
+    });
+    expect(JSON.parse(serializeMapDocument(document))).toEqual({
+      version: 3,
+      layoutMode: "auto",
+      treeDirection: "tb",
+      layoutSpacing: { childGap: 100, siblingGap: 24 },
+      nodes: [node(1, null)],
+    });
+  });
+
+  it("lockedがあるノードだけ項目を書き出す", () => {
+    const locked = { ...node(1, null), locked: true as const };
+    const unlocked = node(2, 1);
+    const document = createMapDocument([locked, unlocked], "manual");
+    const json = JSON.parse(serializeMapDocument(document));
+    expect(json.nodes[0].locked).toBe(true);
+    expect("locked" in json.nodes[1]).toBe(false);
+  });
 });

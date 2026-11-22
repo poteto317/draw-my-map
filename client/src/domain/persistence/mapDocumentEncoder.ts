@@ -1,29 +1,43 @@
+import { projectMapDocumentLayoutSpacing } from "@/domain/persistence/mapDocumentLayoutSpacing";
 import { projectMapDocumentNode } from "@/domain/persistence/mapDocumentNodeProjection";
+import { projectMapDocumentTreeDirection } from "@/domain/persistence/mapDocumentTreeDirection";
 import type { MapDocument, MapDocumentV3 } from "@/types/mapDocument";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
+import type { LayoutSpacing } from "@/types/layoutSpacing";
+import type { TreeDirection } from "@/types/treeDirection";
 
 function projectMapDocument(
   nodes: readonly Node[],
   layoutMode: NodeLayoutMode,
+  treeDirection?: TreeDirection,
+  layoutSpacing?: LayoutSpacing,
 ): MapDocumentV3 {
   return {
     version: 3,
     layoutMode,
     nodes: nodes.map(projectMapDocumentNode),
+    ...projectMapDocumentTreeDirection(treeDirection),
+    ...projectMapDocumentLayoutSpacing(layoutSpacing),
   };
 }
 
 export function createMapDocument(
   nodes: readonly Node[],
   layoutMode: NodeLayoutMode,
+  options?: Pick<MapDocumentV3, "treeDirection" | "layoutSpacing">,
 ): MapDocumentV3 {
-  return projectMapDocument(nodes, layoutMode);
+  return projectMapDocument(nodes, layoutMode, options?.treeDirection, options?.layoutSpacing);
 }
 
 export function serializeMapDocument(document: MapDocument): string {
   return `${JSON.stringify(
-    projectMapDocument(document.nodes, document.layoutMode),
+    projectMapDocument(
+      document.nodes,
+      document.layoutMode,
+      document.treeDirection,
+      document.layoutSpacing,
+    ),
     null,
     2,
   )}\n`;

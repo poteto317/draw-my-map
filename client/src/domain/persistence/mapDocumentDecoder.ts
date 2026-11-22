@@ -1,5 +1,7 @@
 import { validateMapDocumentGraph } from "@/domain/persistence/mapDocumentGraph";
+import { normalizeMapDocumentLayoutSpacing } from "@/domain/persistence/mapDocumentLayoutSpacing";
 import { normalizeMapDocumentNode } from "@/domain/persistence/mapDocumentNode";
+import { normalizeMapDocumentTreeDirection } from "@/domain/persistence/mapDocumentTreeDirection";
 import { isRecord } from "@/domain/shared/unknownRecord";
 import type { MapDocumentResult, MapDocumentV3, MapDocumentVersion } from "@/types/mapDocument";
 import type { Node } from "@/types/node";
@@ -44,6 +46,14 @@ export function parseMapDocumentJsonWithVersion(
   const graph = validateMapDocumentGraph(nodes);
   if (!graph.ok) return graph;
 
+  const treeDirectionResult = normalizeMapDocumentTreeDirection(record.treeDirection, record.version);
+  if (!treeDirectionResult.ok) return treeDirectionResult;
+  const layoutSpacingResult = normalizeMapDocumentLayoutSpacing(record.layoutSpacing, record.version);
+  if (!layoutSpacingResult.ok) return layoutSpacingResult;
+
+  const treeDirection = treeDirectionResult.value;
+  const layoutSpacing = layoutSpacingResult.value;
+
   return {
     ok: true,
     value: {
@@ -51,6 +61,8 @@ export function parseMapDocumentJsonWithVersion(
         version: 3,
         layoutMode: record.layoutMode,
         nodes: graph.value,
+        ...(treeDirection === "lr" ? {} : { treeDirection }),
+        ...(layoutSpacing === undefined ? {} : { layoutSpacing }),
       },
       sourceVersion: record.version,
     },
