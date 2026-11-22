@@ -28,6 +28,9 @@ export type CommandAvailabilityContextInput = {
   readonly nodeSplitDisabledReason: string | null;
   readonly canOpenNodeMerge: boolean;
   readonly nodeMergeDisabledReason: string | null;
+  readonly canRegisterPart: boolean;
+  readonly canInsertPart: boolean;
+  readonly canDeletePart: boolean;
   readonly canFocusInMapSearch: boolean;
   readonly canOpenCrossMapSearch: boolean;
   readonly outlineDuplicateIds: boolean;
@@ -66,6 +69,9 @@ export function buildCommandAvailabilityContext(
     nodeSplitDisabledReason: input.nodeSplitDisabledReason,
     canOpenNodeMerge: input.canOpenNodeMerge,
     nodeMergeDisabledReason: input.nodeMergeDisabledReason,
+    canRegisterPart: input.canRegisterPart,
+    canInsertPart: input.canInsertPart,
+    canDeletePart: input.canDeletePart,
     canFocusInMapSearch: input.canFocusInMapSearch,
     canOpenCrossMapSearch: input.canOpenCrossMapSearch,
     // パレット open 中も操作そのものの可否を出す（outlineActions.enabled の偽に畳み込まない）

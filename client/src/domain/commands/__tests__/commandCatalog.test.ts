@@ -23,6 +23,9 @@ const REQUIRED_V1_IDS: readonly CommandId[] = [
   "edit.open-branch-move",
   "edit.open-node-split",
   "edit.open-node-merge",
+  "edit.register-part",
+  "edit.insert-part",
+  "edit.delete-part",
   "search.focus-in-map",
   "search.open-cross-map",
   "outline.add-root",
@@ -36,6 +39,9 @@ const OPENS_DIALOG_IDS = new Set<CommandId>([
   "edit.open-branch-move",
   "edit.open-node-split",
   "edit.open-node-merge",
+  "edit.register-part",
+  "edit.insert-part",
+  "edit.delete-part",
   "search.open-cross-map",
 ]);
 
@@ -57,7 +63,7 @@ describe("COMMAND_CATALOG", () => {
     }
   });
 
-  it("opensDialog は必須 5 ID のみ true で、それ以外は false", () => {
+  it("opensDialog は必須ダイアログ ID のみ true で、それ以外は false", () => {
     for (const def of COMMAND_CATALOG) {
       expect(def.opensDialog).toBe(OPENS_DIALOG_IDS.has(def.id));
     }

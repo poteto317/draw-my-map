@@ -498,6 +498,90 @@ describe("MapEditor コマンドパレット配線", () => {
     expect(screen.getByRole("combobox", { name: "ノードを検索" })).toHaveFocus();
   });
 
+  it("選択 0 / 複数では edit.register-part を拒否し、単一選択では部品登録ダイアログを開く", async () => {
+    await renderEditor({
+      storage: createTestStorageSession({
+        initialJson: seedJson,
+        storage: window.localStorage,
+      }),
+    });
+
+    // 選択 0（背景クリック）
+    act(() => {
+      mockStageHandlers.pointerdown?.(pointer(10, 10));
+      mockStageHandlers.pointerup?.(pointer(10, 10));
+    });
+    await openPaletteViaHeader();
+    executePaletteQuery("選択を部品に登録");
+    expect(paletteDialog()).toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(paletteDialog()).getByRole("status")).toHaveTextContent(/1 つだけ/);
+    });
+    fireEvent.click(within(paletteDialog()).getByRole("button", { name: "閉じる" }));
+
+    // 単一選択
+    act(() => {
+      mockNodePointerHandlers.at(0)?.pointerdown?.(pointer(120, 120));
+      mockStageHandlers.pointerup?.(pointer(120, 120));
+    });
+    await openPaletteViaHeader();
+    executePaletteQuery("選択を部品に登録");
+    expect(screen.queryByRole("dialog", { name: "コマンドパレット" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "部品に登録" })).toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole("dialog", { name: "部品に登録" })).getByRole("button", { name: "キャンセル" }));
+
+    // 複数選択
+    act(() => {
+      mockNodePointerHandlers.at(0)?.pointerdown?.(pointer(120, 120));
+      mockStageHandlers.pointerup?.(pointer(120, 120));
+      mockNodePointerHandlers.at(1)?.pointerdown?.(pointer(240, 200, { ctrlKey: true }));
+      mockStageHandlers.pointerup?.(pointer(240, 200, { ctrlKey: true }));
+    });
+    expect(screen.getByRole("group", { name: /重要度（2件選択中/ })).toBeInTheDocument();
+    await openPaletteViaHeader();
+    executePaletteQuery("選択を部品に登録");
+    expect(paletteDialog()).toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(paletteDialog()).getByRole("status")).toHaveTextContent(/1 つだけ/);
+    });
+  });
+
+  it("部品の登録→挿入（新ルート）がコマンドパレットから完走する", async () => {
+    await renderEditor({
+      storage: createTestStorageSession({
+        initialJson: seedJson,
+        storage: window.localStorage,
+      }),
+    });
+    act(() => {
+      mockNodePointerHandlers.at(0)?.pointerdown?.(pointer(120, 120));
+      mockStageHandlers.pointerup?.(pointer(120, 120));
+    });
+
+    await openPaletteViaHeader();
+    executePaletteQuery("選択を部品に登録");
+    const registerDialog = screen.getByRole("dialog", { name: "部品に登録" });
+    fireEvent.change(within(registerDialog).getByLabelText("部品名"), {
+      target: { value: "再利用枝" },
+    });
+    fireEvent.click(within(registerDialog).getByRole("button", { name: "登録" }));
+    expect(screen.queryByRole("dialog", { name: "部品に登録" })).not.toBeInTheDocument();
+
+    await openPaletteViaHeader();
+    executePaletteQuery("部品を挿入");
+    const insertDialog = screen.getByRole("dialog", { name: "部品を挿入" });
+    expect(within(insertDialog).getByRole("combobox", { name: "部品" })).toHaveDisplayValue("再利用枝");
+    fireEvent.click(within(insertDialog).getByLabelText("新しいルートとして"));
+    fireEvent.click(within(insertDialog).getByRole("button", { name: "挿入" }));
+
+    const nodes = exportedMap().nodes;
+    const roots = nodes.filter((n) => n.parentId === null);
+    // 元ルート + 挿入した部品ルートの 2 本（ラベルは複製）
+    expect(roots).toHaveLength(2);
+    expect(roots.every((n) => n.label === "親ルート")).toBe(true);
+    expect(nodes.filter((n) => n.label === "子ノード")).toHaveLength(2);
+  });
+
   it("解像度でマップ非表示の選択でもアウトラインの兄弟移動可否はツールバーと一致する", async () => {
     const json = `${JSON.stringify({
       version: 3,

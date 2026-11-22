@@ -41,6 +41,9 @@ function dialogHandlers(
     openNodeSplit: jest.fn(),
     openNodeMerge: jest.fn(),
     openCrossMapSearch: jest.fn(),
+    openRegisterPart: jest.fn(),
+    openInsertPart: jest.fn(),
+    openDeletePart: jest.fn(),
     ...overrides,
   };
 }
@@ -72,6 +75,12 @@ describe("openCommandPaletteDialog", () => {
     expect(handlers.openLabelReplace).toHaveBeenCalledTimes(1);
     expect(openCommandPaletteDialog("search.open-cross-map", handlers)).toBe(true);
     expect(handlers.openCrossMapSearch).toHaveBeenCalledTimes(1);
+    expect(openCommandPaletteDialog("edit.register-part", handlers)).toBe(true);
+    expect(handlers.openRegisterPart).toHaveBeenCalledTimes(1);
+    expect(openCommandPaletteDialog("edit.insert-part", handlers)).toBe(true);
+    expect(handlers.openInsertPart).toHaveBeenCalledTimes(1);
+    expect(openCommandPaletteDialog("edit.delete-part", handlers)).toBe(true);
+    expect(handlers.openDeletePart).toHaveBeenCalledTimes(1);
   });
 
   it("未知 ID は false", () => {

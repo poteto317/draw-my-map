@@ -51,6 +51,9 @@ export type CommandAvailabilityContext = {
   readonly nodeSplitDisabledReason: string | null;
   readonly canOpenNodeMerge: boolean;
   readonly nodeMergeDisabledReason: string | null;
+  readonly canRegisterPart: boolean;
+  readonly canInsertPart: boolean;
+  readonly canDeletePart: boolean;
   readonly canFocusInMapSearch: boolean;
   readonly canOpenCrossMapSearch: boolean;
   readonly outlineCanAddRoot: boolean;
