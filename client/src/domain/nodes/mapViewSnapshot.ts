@@ -38,10 +38,13 @@ export function resolveRestoredMapView(snapshot: MapViewSnapshot, nodes: readonl
   const collapse = index ? deriveNodeCollapse(index, collapsedIds) : null;
   const level = resolveResolutionLevel(snapshot.resolutionMode, snapshot.viewport.scale, snapshot.autoResolutionLevel);
   const resolutionIds = collectVisibleNodeIds(nodes, level);
+  const allIds = new Set(nodes.map(({ id }) => id));
   const visibleIds = collectDisplayVisibleNodeIds(nodes.map(({ id }) => id), {
     collapseVisibleNodeIds: collapse?.visibleNodeIds ?? null,
     focusVisibleNodeIds: focusIds,
     resolutionVisibleNodeIds: resolutionIds,
+    // 深さ制限はセッション専用でブックマークに含めない
+    depthVisibleNodeIds: allIds,
     focusRootId,
   });
 

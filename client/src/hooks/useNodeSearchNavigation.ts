@@ -1,6 +1,10 @@
 import { useCallback } from "react";
 import { RESOLUTION_LEVEL_LABELS } from "@/config/resolutionLevelLabels";
 import type { NodeCollapseIndex } from "@/domain/nodes/nodeCollapse";
+import {
+  measureNodeDepth,
+  resolveDepthLimitForReveal,
+} from "@/domain/nodes/depthVisibility";
 import { resolveNodeSearchReveal } from "@/domain/search/nodeSearchReveal";
 import { useRevisionScopedNotice } from "@/hooks/useRevisionScopedNotice";
 import type { Node } from "@/types/node";
@@ -21,6 +25,8 @@ type UseNodeSearchNavigationOptions = {
   issueFocusRequest: (nodeId: number) => void;
   focusRootId?: number | null;
   onValidTarget?: (nodeId: number) => void;
+  maxDepth?: number | null;
+  setMaxDepth?: (maxDepth: number | null) => void;
 };
 
 const MISSING_NODE_NOTICE: OperationNotice = {
@@ -40,6 +46,8 @@ export function useNodeSearchNavigation({
   issueFocusRequest,
   focusRootId,
   onValidTarget,
+  maxDepth = null,
+  setMaxDepth,
 }: UseNodeSearchNavigationOptions) {
   const { notice, publishNotice } = useRevisionScopedNotice(documentRevision);
 
@@ -72,6 +80,14 @@ export function useNodeSearchNavigation({
       setResolutionMode(level);
       messages.push(`表示を『${RESOLUTION_LEVEL_LABELS[level]}』に切り替えました。ズームに連動させるには『自動』を選んでください。`);
     }
+    const nodeDepth = measureNodeDepth(nodes, nodeId);
+    const raisedDepth = nodeDepth === null
+      ? null
+      : resolveDepthLimitForReveal(maxDepth, nodeDepth);
+    if (raisedDepth !== null && setMaxDepth) {
+      setMaxDepth(raisedDepth);
+      messages.push(`検索結果を表示するため、深さを『${raisedDepth}』まで広げました。`);
+    }
     if (messages.length > 0) {
       publishNotice({ kind: "status", message: messages.join(" ") });
     }
@@ -85,10 +101,12 @@ export function useNodeSearchNavigation({
     expandNodes,
     focusRootId,
     issueFocusRequest,
+    maxDepth,
     nodes,
     onValidTarget,
     publishNotice,
     selectNode,
+    setMaxDepth,
     setResolutionMode,
     resolutionVisibleNodeIds,
   ]);

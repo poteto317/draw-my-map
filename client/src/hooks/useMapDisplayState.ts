@@ -10,6 +10,7 @@ type UseMapDisplayStateOptions = {
   layoutMode: NodeLayoutMode;
   collapseVisibleNodeIds: ReadonlySet<number>;
   resolutionVisibleNodeIds: ReadonlySet<number>;
+  depthVisibleNodeIds: ReadonlySet<number>;
   focusVisibleNodeIds?: ReadonlySet<number> | null;
   focusRootId?: number | null;
 };
@@ -26,6 +27,7 @@ export function useMapDisplayState({
   layoutMode,
   collapseVisibleNodeIds,
   resolutionVisibleNodeIds,
+  depthVisibleNodeIds,
   focusVisibleNodeIds,
   focusRootId,
 }: UseMapDisplayStateOptions): MapDisplayState {
@@ -42,10 +44,12 @@ export function useMapDisplayState({
       collapseVisibleNodeIds,
       focusVisibleNodeIds,
       resolutionVisibleNodeIds,
+      depthVisibleNodeIds,
       focusRootId,
     },
   ), [
     collapseVisibleNodeIds,
+    depthVisibleNodeIds,
     focusRootId,
     focusVisibleNodeIds,
     projection.nodes,
