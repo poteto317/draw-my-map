@@ -4,6 +4,10 @@ import {
   resolveMapExportTextMeasureStyle,
   type MeasureMapText,
 } from "@/domain/imageExport/mapExportText";
+import {
+  getNodeIconCenterX,
+  NODE_ICON_DISPLAY_SIZE_PX,
+} from "@/domain/nodes/nodeIcon";
 import { getNodeLabelCenterOffset } from "@/domain/nodes/nodeIllustration";
 import type { Node } from "@/types/node";
 
@@ -73,12 +77,21 @@ function getNodeExportExtent(
     resolveMapExportTextMeasureStyle(node),
   );
 
-  return {
-    left: Math.min(node.x, centerX - layout.width / 2),
-    top: Math.min(node.y, layout.top),
-    right: Math.max(nodeRight, centerX + layout.width / 2),
-    bottom: Math.max(nodeBottom, layout.bottom),
-  };
+  let left = Math.min(node.x, centerX - layout.width / 2);
+  let top = Math.min(node.y, layout.top);
+  let right = Math.max(nodeRight, centerX + layout.width / 2);
+  let bottom = Math.max(nodeBottom, layout.bottom);
+
+  if (node.icon !== undefined) {
+    const iconCenterX = getNodeIconCenterX(centerX, layout.width);
+    const halfIcon = NODE_ICON_DISPLAY_SIZE_PX / 2;
+    left = Math.min(left, iconCenterX - halfIcon);
+    right = Math.max(right, iconCenterX + halfIcon);
+    top = Math.min(top, centerY - halfIcon);
+    bottom = Math.max(bottom, centerY + halfIcon);
+  }
+
+  return { left, top, right, bottom };
 }
 
 export function getMapExportBounds(
