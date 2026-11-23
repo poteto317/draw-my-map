@@ -14,6 +14,7 @@
 | 整列・等間隔 048 | 選択に locked 含む | `client/src/domain/nodes/selectionAlign.ts`、`client/src/domain/nodes/selectionDistribute.ts`、`client/src/domain/nodes/selectionLayoutShared.ts`、`client/src/hooks/useSelectionLayoutActions.ts` |
 | ラベル書式変更 | 対象 locked | `LabelTextStyleControl` → `client/src/components/layout/LabelTextStyleControl.tsx`（ヘッダー。`MapHeaderLayoutControls` / `useMapHeaderLayoutControls` / `MapEditor` で配線）、`useNodes` setters → `client/src/hooks/useNodes.ts` / `client/src/domain/nodes/nodeLabelTextStyleUpdate.ts`。コマンドパレット登録は未実装。UI 側の拒否条件は `2026-11-23-label-text-style-inventory.md` を参照 |
 | 見た目（icon/kind・illustration アップロード） | 対象 locked | `NodeAppearanceSection`（`client/src/components/layout/NodeAppearanceSection.tsx`）、`IllustrationPanel` の「画像を添付」／生成／削除（`disabled`）、`useNodes` `setNodeIcon`・`setNodeKind`・`attachIllustration`。domain の illustration 更新は上表「重要度・属性パネル更新」行を参照。UI 入口・主選択≠1／保護モード等は `2026-11-23-phase26-appearance-inventory.md` |
+| 枝切り出し（別マップ化） | 枝内全 ID ∪ 離脱元親のいずれか locked（ルート直下は親検査なし） | 切り出し UI／assert は phase27 表（Task 2/3）。アーカイブは lock 対象外。詳細は `2026-11-23-phase27-extract-archive-inventory.md` |
 
 共通ヘルパー: `client/src/domain/nodes/nodeEditLock.ts`（`assertNodesEditable`、`lockSubtree`、`unlockSubtree`、`toggleNodeLock`）
 
