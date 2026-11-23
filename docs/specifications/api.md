@@ -336,6 +336,8 @@ API から返却された高解像度画像（約 1024x1024）をそのままノ
   └── Data URL JPEG (128x128, 約 5〜15 KB) ───> Node.illustration に保存
 ```
 
+右パネル「画像を添付」（Phase 26・候補052）も、ファイルを Data URL 化したあと **同じ** `createIllustrationThumbnail` → `isIllustrationDataUrl`（`.length` ≤ `MAX_ILLUSTRATION_DATA_URL_LENGTH`）→ `attachIllustration` 経路を使う。新属性は追加しない（AI 生成と同一の `illustration` キー）。既存イラストがあるときは上書き確認。
+
 ### 5.1 主要パラメータ（`config/illustration.ts`）
 
 | 定数名 | 設定値 | 目的・根拠 |
