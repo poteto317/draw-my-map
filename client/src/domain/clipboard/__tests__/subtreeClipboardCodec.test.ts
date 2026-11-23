@@ -153,6 +153,25 @@ describe("encodeSubtreeClipboard / decodeSubtreeClipboard", () => {
     expect("labelUnderline" in child).toBe(false);
   });
 
+  it("見た目（icon・kind）もコピーに含めて往復する（無いノードは項目を持たない）", () => {
+    const withAppearance: Node[] = [
+      node(1, null),
+      node(2, 1, { icon: "😀", kind: "question" }),
+      node(3, 2),
+    ];
+
+    const decoded = encodeAndDecode(withAppearance, 2);
+
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) return;
+    const styled = decoded.value.nodes.find((item) => item.id === 2)!;
+    expect(styled.icon).toBe("😀");
+    expect(styled.kind).toBe("question");
+    const child = decoded.value.nodes.find((item) => item.id === 3)!;
+    expect("icon" in child).toBe(false);
+    expect("kind" in child).toBe(false);
+  });
+
   it("専用の形式で書き出し、元の配列にない項目を持ち込まない", () => {
     const source = [{ ...node(1, null), extra: "x" } as Node];
 

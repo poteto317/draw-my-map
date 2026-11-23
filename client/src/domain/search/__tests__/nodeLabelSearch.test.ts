@@ -62,6 +62,24 @@ describe("nodeLabelSearch", () => {
     expect(searchNodeLabels(index, "新しい")).toEqual({ matches: [], total: 0 });
   });
 
+  it("検索結果に icon / kind を含めない（プレーン）", () => {
+    const index = createNodeSearchIndex([
+      createTestNode({
+        id: 1,
+        label: "見た目付き",
+        icon: "🎯",
+        kind: "idea",
+      }),
+    ]);
+
+    const result = searchNodeLabels(index, "見た目");
+    expect(result.matches).toEqual([
+      { nodeId: 1, label: "見た目付き", parentLabel: null, matchedBy: "label" },
+    ]);
+    expect(result.matches[0]).not.toHaveProperty("icon");
+    expect(result.matches[0]).not.toHaveProperty("kind");
+  });
+
   it("入力順と元ラベルを保ち、親の表示ラベルを事前計算する", () => {
     const child = createTestNode({ id: 2, parentId: 1, label: "Child" });
     const parent = createTestNode({ id: 1, label: "" });

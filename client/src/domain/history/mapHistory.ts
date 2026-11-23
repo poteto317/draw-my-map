@@ -28,6 +28,7 @@ export function createMapHistory(initial: NodeMapState): MapHistoryState {
 
 // 配列の値（links・tags）は要素ごとに比べる。sources は areNodeSourcesEqual、mapLinks は areNodeMapLinksEqual。
 // labelFontSize / labelBold / labelUnderline は areLabelTextStylesEqual（欠落＝標準）で比べる。
+// icon / kind はキー有無ごと（欠落＝無し）に比べる。
 // 別の配列でも内容が同じなら、実変更の無い履歴を積まない（L-135）
 function areArrayValuesEqual(a: readonly unknown[], b: readonly unknown[]): boolean {
   return a.length === b.length && a.every((value, index) => value === b[index]);
@@ -37,7 +38,7 @@ function areNodesEqual(a: Node, b: Node): boolean {
   if (a === b) return true;
   // 書式キーは欠落＝標準としてまとめて比べる（キー有無の差だけでは履歴を積まない）
   if (!areLabelTextStylesEqual(a, b)) return false;
-  // Node は型エイリアスのため、キャストなしで任意のキーを読める型へ代入できる（illustration・links・tags・sources・mapLinks・labelFontSize・labelBold・labelUnderline の有無も比較する）
+  // Node は型エイリアスのため、キャストなしで任意のキーを読める型へ代入できる（illustration・links・tags・sources・mapLinks・labelFontSize・labelBold・labelUnderline・icon・kind の有無も比較する）
   const left: Readonly<Record<string, unknown>> = a;
   const right: Readonly<Record<string, unknown>> = b;
   const keys = new Set([...Object.keys(left), ...Object.keys(right)]);

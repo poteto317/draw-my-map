@@ -69,7 +69,9 @@ function areNodesEqual(a: Node, b: Node): boolean {
     areNodeSourcesEqual(a.sources, b.sources) &&
     areNodeMapLinksEqual(a.mapLinks, b.mapLinks) &&
     (a.locked === true) === (b.locked === true) &&
-    areLabelTextStylesEqual(a, b)
+    areLabelTextStylesEqual(a, b) &&
+    (a.icon ?? "") === (b.icon ?? "") &&
+    (a.kind ?? "") === (b.kind ?? "")
   );
 }
 

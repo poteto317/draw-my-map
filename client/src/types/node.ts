@@ -1,5 +1,6 @@
 import type { LabelFontSize } from "@/types/labelFontSize";
 import type { NodeImportance } from "@/types/nodeImportance";
+import type { NodeKind } from "@/types/nodeKind";
 
 // マップのノード。属性を足すときは、ノードの分割・統合での扱いを決めて見直す
 // （domain/nodes/nodeSplit.ts の断片のノード、domain/nodes/nodeMerge.ts の applyPlanToSurvivor・planNodeMerge・isSameNodeMergePlan）。
@@ -68,6 +69,14 @@ export type Node = {
   labelBold?: true;
   // ラベル下線。true のみキーを持つ（欠落＝下線なし）。規則は labelFontSize と同じ（policy・投影）
   labelUnderline?: true;
+  // 絵文字アイコン（書記素ちょうど1・CP1–16・Extended_Pictographic 必須。domain/nodes/nodeIcon.ts）。
+  // 欠落＝無し。不正はキー削除。分割では元のノードにだけ残し、統合では survivor-else-first、親の挿入では新しい親に持たせない。
+  // 描画・アウトライン・画像書き出しでラベル左に表示。検索一覧には出さない
+  icon?: string;
+  // ノード種別（types/nodeKind.ts の NodeKind）。欠落＝種別なし。不正はキー削除。
+  // 分割では元のノードにだけ残し、統合では survivor-else-first、親の挿入では新しい親に持たせない。
+  // 描画・アウトライン・画像書き出しで左端色バー。検索一覧には出さない
+  kind?: NodeKind;
 };
 
 // 出典 1 件。任意の page / url は無いときキーごと持たない。規則は domain/nodes/nodeSource.ts
