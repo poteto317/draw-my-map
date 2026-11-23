@@ -15,6 +15,7 @@ function createDefaultCorpus(): CrossMapCorpus {
         mapId: "map-current",
         mapName: "学習ノート",
         isCurrent: true,
+        isArchived: false,
         nodes: [
           createTestNode({ id: 1, parentId: null, label: "TypeScript 入門" }),
           createTestNode({
@@ -35,6 +36,7 @@ function createDefaultCorpus(): CrossMapCorpus {
         mapId: "map-other",
         mapName: "設計メモ",
         isCurrent: false,
+        isArchived: true,
         nodes: [
           createTestNode({
             id: 10,
@@ -107,8 +109,9 @@ describe("CrossMapSearchDialog", () => {
     expect(items[0]).toHaveTextContent("ラベル");
     expect(items[0]).not.toHaveTextContent("親:");
 
-    // 2 件目: 他マップ・リンク一致・スニペットあり
+    // 2 件目: 他マップ・リンク一致・スニペットあり・アーカイブ印
     expect(items[1]).toHaveTextContent("設計メモ");
+    expect(items[1]).toHaveTextContent("アーカイブ");
     expect(items[1]).not.toHaveTextContent("現在");
     expect(items[1]).toHaveTextContent("参考サイト集");
     expect(items[1]).toHaveTextContent("リンク");
@@ -178,6 +181,7 @@ describe("CrossMapSearchDialog", () => {
           mapId: "map-big",
           mapName: "大規模マップ",
           isCurrent: true,
+        isArchived: false,
           nodes: Array.from({ length: totalCount }, (_, index) =>
             createTestNode({ id: index + 1, label: `共通キーワード ${index + 1}` }),
           ),
@@ -262,6 +266,7 @@ describe("CrossMapSearchDialog", () => {
           mapId: "map-current",
           mapName: "学習ノート",
           isCurrent: true,
+        isArchived: false,
           nodes: [createTestNode({ id: 1, label: "TypeScript 入門" })],
         },
       ],

@@ -17,6 +17,7 @@ function createBrokenCorpus(): CrossMapCorpus {
         mapId: "map-current",
         mapName: "現在のマップ",
         isCurrent: true,
+        isArchived: false,
         nodes: [
           createTestNode({
             id: 1,
@@ -32,6 +33,7 @@ function createBrokenCorpus(): CrossMapCorpus {
         mapId: "map-other",
         mapName: "別マップ",
         isCurrent: false,
+        isArchived: false,
         nodes: [
           createTestNode({
             id: 20,
@@ -67,6 +69,7 @@ describe("BrokenMapLinksDialog", () => {
           mapId: "map-current",
           mapName: "現在のマップ",
           isCurrent: true,
+        isArchived: false,
           nodes: [createTestNode({ id: 1, label: "正常ノード" })],
         },
       ],
@@ -160,6 +163,7 @@ describe("BrokenMapLinksDialog", () => {
             mapId: "map-current",
             mapName: "現在のマップ",
             isCurrent: true,
+        isArchived: false,
             nodes: currentNodes,
           },
         ],
@@ -220,6 +224,7 @@ describe("BrokenMapLinksDialog", () => {
           mapId: "map-current",
           mapName: "現在のマップ",
           isCurrent: true,
+        isArchived: false,
           nodes: [createTestNode({ id: 1, label: "ノード" })],
         },
       ],

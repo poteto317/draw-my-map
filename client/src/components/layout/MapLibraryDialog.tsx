@@ -57,6 +57,8 @@ type MapLibraryDialogProps = {
   onOpenFolderRename: (folderId: string) => void;
   onOpenFolderDelete: (folderId: string) => void;
   onToggleFavorite: (mapId: string) => void;
+  onArchiveMap: (mapId: string) => void;
+  onUnarchiveMap: (mapId: string) => void;
   onAssignFolder: (mapId: string, folderId: string | null) => void;
   onCreateFolder: (nameInput: string) => boolean;
   onSubmitRenameFolder: (folderId: string, nameInput: string) => void;
@@ -221,6 +223,8 @@ export function MapLibraryDialog({
   onOpenFolderRename,
   onOpenFolderDelete,
   onToggleFavorite,
+  onArchiveMap,
+  onUnarchiveMap,
   onAssignFolder,
   onCreateFolder,
   onSubmitRenameFolder,
@@ -352,6 +356,8 @@ export function MapLibraryDialog({
             onChangeFolderFilter={onChangeFolderFilter}
             onOpenFolders={onOpenFolders}
             onToggleFavorite={onToggleFavorite}
+            onArchiveMap={onArchiveMap}
+            onUnarchiveMap={onUnarchiveMap}
             onAssignFolder={onAssignFolder}
             onResetLibraryMeta={onResetLibraryMeta}
             onOpenCreate={onOpenCreate}

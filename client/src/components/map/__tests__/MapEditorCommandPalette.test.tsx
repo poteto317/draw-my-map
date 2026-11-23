@@ -10,6 +10,7 @@ import {
   renderReady,
   resetMapStageTestRuntime,
 } from "@/components/map/testing/mapStageTestRuntime";
+import { createEmptyMapLibraryMeta } from "@/domain/mapLibrary/mapLibraryMeta";
 import { createTestStorageSession, type TestStorageSession } from "@/testing/createTestStorageSession";
 
 jest.mock("pixi.js", () => {
@@ -77,6 +78,7 @@ async function renderEditor({
           updatedAt: "2026-10-31T00:00:00.000Z",
         },
       ]}
+      libraryMeta={createEmptyMapLibraryMeta()}
       onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "移動先がありません。" } })}
       mapName={mapName}
       storageSession={storage.session}
@@ -196,7 +198,8 @@ describe("MapEditor コマンドパレット配線", () => {
           createdAt: "2026-10-31T00:00:00.000Z",
           updatedAt: "2026-10-31T00:00:00.000Z",
         }]}
-        onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "移動先がありません。" } })}
+      libraryMeta={createEmptyMapLibraryMeta()}
+      onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "移動先がありません。" } })}
         mapName="テストのマップ"
         storageSession={storage.session}
         storageMode="persistent"
@@ -362,7 +365,8 @@ describe("MapEditor コマンドパレット配線", () => {
           createdAt: "2026-10-31T00:00:00.000Z",
           updatedAt: "2026-10-31T00:00:00.000Z",
         }]}
-        onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "移動先がありません。" } })}
+      libraryMeta={createEmptyMapLibraryMeta()}
+      onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "移動先がありません。" } })}
         mapName="別マップ"
         storageSession={storage.session}
         storageMode="persistent"

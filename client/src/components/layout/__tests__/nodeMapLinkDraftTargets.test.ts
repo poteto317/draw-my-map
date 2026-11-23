@@ -17,8 +17,8 @@ const currentNodes = [createTestNode({ id: 1, label: "自分" }), createTestNode
 const otherNodes = [createTestNode({ id: 10, label: "参考" })];
 const corpus: CrossMapCorpus = {
   readableMaps: [
-    { mapId: "current", mapName: "マップ current", isCurrent: true, nodes: currentNodes },
-    { mapId: "other", mapName: "マップ other", isCurrent: false, nodes: otherNodes },
+    { mapId: "current", mapName: "マップ current", isCurrent: true, isArchived: false, nodes: currentNodes },
+    { mapId: "other", mapName: "マップ other", isCurrent: false, isArchived: false, nodes: otherNodes },
   ],
   unreadableMaps: [{ mapId: "broken", mapName: "マップ broken", reason: "corrupt" }],
 };

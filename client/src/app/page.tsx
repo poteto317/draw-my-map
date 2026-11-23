@@ -92,6 +92,7 @@ export default function Home() {
             mapId={view.currentMap.id}
             mapCreatedAt={view.currentMap.createdAt}
             mapMoveTargets={view.maps}
+            libraryMeta={view.libraryMeta}
             onMoveBranchToMap={(rootId, targetMapId) => {
               clearPendingNavigation();
               return dialog.moveBranchToMap(view.storageSession, targetMapId, rootId);
@@ -140,6 +141,8 @@ export default function Home() {
               onOpenFolderRename={dialog.openFolderRename}
               onOpenFolderDelete={dialog.openFolderDelete}
               onToggleFavorite={dialog.toggleFavorite}
+              onArchiveMap={dialog.archiveMap}
+              onUnarchiveMap={dialog.unarchiveMap}
               onAssignFolder={dialog.assignFolder}
               onCreateFolder={dialog.submitCreateFolder}
               onSubmitRenameFolder={dialog.submitRenameFolder}

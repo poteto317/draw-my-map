@@ -28,6 +28,8 @@ import {
   RELOAD_CONFIRM_ACTION_LABEL,
 } from "@/domain/mapLibrary/mapConflictMessages";
 import { createConflictCopyName } from "@/domain/mapLibrary/mapConflict";
+import { createEmptyMapLibraryMeta } from "@/domain/mapLibrary/mapLibraryMeta";
+import { createEmptyMapLibraryMeta } from "@/domain/mapLibrary/mapLibraryMeta";
 import type { MapLibraryOperationResult } from "@/hooks/useMapLibrary";
 import { DEFAULT_WHEEL_ZOOM_SENSITIVITY } from "@/domain/uiPrefs/uiPrefs";
 
@@ -130,6 +132,7 @@ async function renderEditor({
           updatedAt: "2026-10-31T00:00:00.000Z",
         },
       ]}
+      libraryMeta={createEmptyMapLibraryMeta()}
       onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "移動先がありません。" } })}
       mapName={mapName}
       storageSession={storage.session} storageMode={storageMode}

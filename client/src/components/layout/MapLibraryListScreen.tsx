@@ -28,6 +28,8 @@ type MapLibraryListScreenProps = {
   onChangeFolderFilter: (filter: MapListFolderFilter) => void;
   onOpenFolders: () => void;
   onToggleFavorite: (mapId: string) => void;
+  onArchiveMap: (mapId: string) => void;
+  onUnarchiveMap: (mapId: string) => void;
   onAssignFolder: (mapId: string, folderId: string | null) => void;
   onResetLibraryMeta: () => void;
   onOpenCreate: () => void;
@@ -68,6 +70,8 @@ export function MapLibraryListScreen({
   onChangeFolderFilter,
   onOpenFolders,
   onToggleFavorite,
+  onArchiveMap,
+  onUnarchiveMap,
   onAssignFolder,
   onResetLibraryMeta,
   onOpenCreate,
@@ -175,6 +179,8 @@ export function MapLibraryListScreen({
                 buttonClassName={buttonClassName}
                 selectClassName={selectClassName}
                 onToggleFavorite={onToggleFavorite}
+                onArchive={onArchiveMap}
+                onUnarchive={onUnarchiveMap}
                 onAssignFolder={onAssignFolder}
                 onSwitch={onSwitch}
                 onOpenRename={onOpenRename}

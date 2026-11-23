@@ -64,6 +64,8 @@ function createProps(overrides: Partial<Props> = {}): Props {
     onOpenFolderRename: jest.fn(),
     onOpenFolderDelete: jest.fn(),
     onToggleFavorite: jest.fn(),
+    onArchiveMap: jest.fn(),
+    onUnarchiveMap: jest.fn(),
     onAssignFolder: jest.fn(),
     onCreateFolder: jest.fn(() => true),
     onSubmitRenameFolder: jest.fn(),

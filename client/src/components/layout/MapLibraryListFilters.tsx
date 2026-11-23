@@ -14,6 +14,7 @@ const LIST_TABS: readonly { readonly id: MapListTab; readonly label: string }[] 
   { id: "all", label: "すべて" },
   { id: "favorites", label: "お気に入り" },
   { id: "recent", label: "最近使用" },
+  { id: "archived", label: "アーカイブ" },
 ];
 
 const activeTabButtonClassName =
