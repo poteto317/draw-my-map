@@ -24,16 +24,26 @@ export function createPixiTestHarness() {
     fill: jest.fn().mockReturnThis(),
     stroke: jest.fn().mockReturnThis(),
     moveTo: jest.fn().mockReturnThis(),
+    lineTo: jest.fn().mockReturnThis(),
     bezierCurveTo: jest.fn().mockReturnThis(),
     destroy: jest.fn(),
   }));
-  const Text = jest.fn().mockImplementation((options: unknown) => ({
-    options,
-    anchor: { set: jest.fn() },
-    x: 0,
-    y: 0,
-    destroy: jest.fn(),
-  }));
+  const Text = jest.fn().mockImplementation((
+    options: { style?: { fontSize?: number; wordWrapWidth?: number } } | unknown,
+  ) => {
+    const style = options !== null && typeof options === "object" && "style" in options
+      ? (options as { style?: { fontSize?: number; wordWrapWidth?: number } }).style
+      : undefined;
+    return {
+      options,
+      anchor: { set: jest.fn() },
+      x: 0,
+      y: 0,
+      width: style?.wordWrapWidth ?? 50,
+      height: style?.fontSize ?? 14,
+      destroy: jest.fn(),
+    };
+  });
   const Sprite = jest.fn().mockImplementation((texture: unknown) => ({
     texture,
     x: 0,

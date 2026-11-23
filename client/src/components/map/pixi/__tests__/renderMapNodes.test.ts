@@ -47,12 +47,114 @@ describe("renderMapNodes", () => {
     expect(rectangle.stroke).toHaveBeenCalledWith({ width: 2, color: 0x3b82f6 });
     expect(Text).toHaveBeenCalledWith({
       text: "新しいノード",
-      style: { fontSize: 14, fill: 0x27272a, wordWrap: true, wordWrapWidth: 84, align: "center" },
+      style: {
+        fontSize: 14,
+        fontWeight: "normal",
+        fill: 0x27272a,
+        wordWrap: true,
+        wordWrapWidth: 84,
+        align: "center",
+      },
     });
     expect(text.anchor.set).toHaveBeenCalledWith(0.5);
     expect(text).toMatchObject({ x: 100, y: 60 });
     expect(container.addChild.mock.calls.map(([child]: [unknown]) => child))
       .toEqual([rectangle, text]);
+  });
+
+  it("labelFontSize / Bold を Text に反映し、Underline は Graphics 水平線をラベル直下に描く", () => {
+    const styled = createTestNode({
+      id: 1,
+      parentId: null,
+      x: 50,
+      y: 30,
+      width: 100,
+      height: 60,
+      label: "装飾",
+      labelFontSize: 18,
+      labelBold: true,
+      labelUnderline: true,
+    });
+    const harness = createPixiTestHarness();
+    renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+      nodes: [styled],
+      selectedNodeIds: [],
+      editingNodeId: null,
+      connectionTargetNodeId: null,
+      siblingReorderSourceNodeId: null,
+      onNodePointerDown: jest.fn(),
+      visibleKeys: new Set(["node:1"]),
+      highlightNodeIds: new Set<number>(),
+      pinnedNodeIds: new Set<number>(),
+    });
+
+    expect(harness.Text).toHaveBeenCalledWith({
+      text: "装飾",
+      style: {
+        fontSize: 18,
+        fontWeight: "bold",
+        fill: 0x27272a,
+        wordWrap: true,
+        wordWrapWidth: 84,
+        align: "center",
+      },
+    });
+
+    const text = harness.Text.mock.results[0].value as {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    };
+    const underline = harness.Graphics.mock.results[1].value;
+    const container = harness.stage.addChild.mock.calls[0][0] as { addChild: jest.Mock };
+    expect(container.addChild.mock.calls.map(([child]: [unknown]) => child))
+      .toEqual([harness.Graphics.mock.results[0].value, text, underline]);
+    expect(underline.moveTo).toHaveBeenCalledWith(
+      text.x - text.width / 2,
+      text.y + text.height / 2 + 1,
+    );
+    expect(underline.lineTo).toHaveBeenCalledWith(
+      text.x + text.width / 2,
+      text.y + text.height / 2 + 1,
+    );
+    expect(underline.stroke).toHaveBeenCalledWith({ width: 1, color: 0x27272a });
+  });
+
+  it("空ラベルのフォールバックにも fontSize / Bold / Underline を適用する", () => {
+    const emptyStyled = createTestNode({
+      id: 1,
+      parentId: null,
+      x: 50,
+      y: 30,
+      width: 100,
+      height: 60,
+      label: "",
+      labelFontSize: 24,
+      labelBold: true,
+      labelUnderline: true,
+    });
+    const harness = createPixiTestHarness();
+    renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+      nodes: [emptyStyled],
+      selectedNodeIds: [],
+      editingNodeId: null,
+      connectionTargetNodeId: null,
+      siblingReorderSourceNodeId: null,
+      onNodePointerDown: jest.fn(),
+      visibleKeys: new Set(["node:1"]),
+      highlightNodeIds: new Set<number>(),
+      pinnedNodeIds: new Set<number>(),
+    });
+
+    expect(harness.Text).toHaveBeenCalledWith({
+      text: "新しいノード",
+      style: expect.objectContaining({
+        fontSize: 24,
+        fontWeight: "bold",
+      }),
+    });
+    expect(harness.Graphics).toHaveBeenCalledTimes(2);
   });
 
 

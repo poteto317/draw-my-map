@@ -1,6 +1,10 @@
 import {
+  formatMapExportCanvasFont,
   getMapExportLabel,
+  getMapExportLineHeight,
   getMapExportTextLayout,
+  MAP_EXPORT_FONT_FAMILY,
+  resolveMapExportTextMeasureStyle,
   wrapMapExportText,
 } from "../mapExportText";
 
@@ -211,6 +215,48 @@ describe("getMapExportLabel", () => {
   });
 });
 
+describe("getMapExportLineHeight", () => {
+  it("標準14に対して18、サイズに比例する", () => {
+    expect(getMapExportLineHeight(14)).toBe(18);
+    expect(getMapExportLineHeight(28)).toBe(36);
+  });
+});
+
+describe("resolveMapExportTextMeasureStyle", () => {
+  it("欠落は標準サイズ・非太字", () => {
+    expect(resolveMapExportTextMeasureStyle({})).toEqual({
+      fontSize: 14,
+      bold: false,
+    });
+  });
+
+  it("ノードの labelFontSize / labelBold を測定スタイルへ写す", () => {
+    expect(
+      resolveMapExportTextMeasureStyle({
+        labelFontSize: 18,
+        labelBold: true,
+      }),
+    ).toEqual({ fontSize: 18, bold: true });
+  });
+});
+
+describe("formatMapExportCanvasFont", () => {
+  it("省略時は標準サイズの通常ウェイト", () => {
+    expect(formatMapExportCanvasFont()).toBe(
+      `14px ${MAP_EXPORT_FONT_FAMILY}`,
+    );
+  });
+
+  it("太字・任意サイズを canvas font 文字列にする", () => {
+    expect(formatMapExportCanvasFont({ fontSize: 24, bold: true })).toBe(
+      `bold 24px ${MAP_EXPORT_FONT_FAMILY}`,
+    );
+    expect(formatMapExportCanvasFont({ fontSize: 12, bold: false })).toBe(
+      `12px ${MAP_EXPORT_FONT_FAMILY}`,
+    );
+  });
+});
+
 describe("getMapExportTextLayout", () => {
   it("XML禁止文字を置換後の文字幅で描画範囲を計算する", () => {
     const replacementAwareMeasure = (text: string) => (
@@ -237,6 +283,46 @@ describe("getMapExportTextLayout", () => {
       width: 70,
     });
     expect(layout.firstBaseline).toBeCloseTo(36.66666666666667);
+  });
+
+  it("fontSize に応じて行高と baseline を変える", () => {
+    const layout = getMapExportTextLayout(
+      "A\nB",
+      100,
+      50,
+      measure,
+      { fontSize: 28, bold: false },
+    );
+    const lineHeight = getMapExportLineHeight(28);
+
+    expect(layout).toMatchObject({
+      lines: ["A", "B"],
+      top: 50 - lineHeight,
+      bottom: 50 + lineHeight,
+    });
+    expect(layout.firstBaseline).toBeCloseTo(
+      50 - lineHeight / 2 + 28 / 3,
+    );
+  });
+
+  it("測定時に style（fontSize / bold）を渡す", () => {
+    const styles: Array<{ fontSize: number; bold: boolean } | undefined> = [];
+    const recordingMeasure = (
+      text: string,
+      style?: { fontSize: number; bold: boolean },
+    ) => {
+      styles.push(style);
+      return measure(text);
+    };
+
+    getMapExportTextLayout("ab", 100, 50, recordingMeasure, {
+      fontSize: 18,
+      bold: true,
+    });
+
+    expect(styles.length).toBeGreaterThan(0);
+    expect(styles.every((style) => style?.fontSize === 18 && style.bold === true))
+      .toBe(true);
   });
 
   it("大量の折り返し行でも引数上限に依存せず最大幅を計算する", () => {

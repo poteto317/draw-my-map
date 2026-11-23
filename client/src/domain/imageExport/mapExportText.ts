@@ -1,7 +1,27 @@
 import { getNodeDisplayLabel } from "@/domain/nodes/nodeDisplayLabel";
 import { normalizeMapXmlText } from "@/domain/imageExport/mapXmlText";
+import {
+  DEFAULT_LABEL_FONT_SIZE,
+  resolveLabelBold,
+  resolveLabelFontSize,
+  type LabelTextStyleFields,
+} from "@/domain/nodes/labelTextStyle";
 
-export type MeasureMapText = (text: string) => number;
+export const MAP_EXPORT_FONT_SIZE = DEFAULT_LABEL_FONT_SIZE;
+export const MAP_EXPORT_LINE_HEIGHT = 18;
+export const MAP_EXPORT_HORIZONTAL_INSET = 8;
+/** SVG と canvas 測定で共有するフォント族（I/O 層は formatMapExportCanvasFont 経由） */
+export const MAP_EXPORT_FONT_FAMILY = "Arial, Helvetica, sans-serif";
+
+export type MapExportTextMeasureStyle = {
+  fontSize: number;
+  bold: boolean;
+};
+
+export type MeasureMapText = (
+  text: string,
+  style?: MapExportTextMeasureStyle,
+) => number;
 
 export type MapExportTextLayout = {
   lines: string[];
@@ -11,9 +31,28 @@ export type MapExportTextLayout = {
   width: number;
 };
 
-export const MAP_EXPORT_FONT_SIZE = 14;
-export const MAP_EXPORT_LINE_HEIGHT = 18;
-export const MAP_EXPORT_HORIZONTAL_INSET = 8;
+export function getMapExportLineHeight(fontSize: number): number {
+  return (fontSize * MAP_EXPORT_LINE_HEIGHT) / MAP_EXPORT_FONT_SIZE;
+}
+
+/** ノード書式 → 書き出し測定スタイル（純関数。bounds / SVG が共用） */
+export function resolveMapExportTextMeasureStyle(
+  node: Pick<LabelTextStyleFields, "labelFontSize" | "labelBold">,
+): MapExportTextMeasureStyle {
+  return {
+    fontSize: resolveLabelFontSize(node),
+    bold: resolveLabelBold(node),
+  };
+}
+
+/** canvas `context.font` 用。測定 I/O からフォント文字列組み立てを分離 */
+export function formatMapExportCanvasFont(
+  style?: MapExportTextMeasureStyle,
+): string {
+  const fontSize = style?.fontSize ?? DEFAULT_LABEL_FONT_SIZE;
+  const weightPrefix = style?.bold === true ? "bold " : "";
+  return `${weightPrefix}${fontSize}px ${MAP_EXPORT_FONT_FAMILY}`;
+}
 
 function measureCodePointRange(
   codePoints: string[],
@@ -218,23 +257,29 @@ export function getMapExportTextLayout(
   maxWidth: number,
   centerY: number,
   measureText: MeasureMapText,
+  style: MapExportTextMeasureStyle = {
+    fontSize: MAP_EXPORT_FONT_SIZE,
+    bold: false,
+  },
 ): MapExportTextLayout {
+  const boundMeasure: MeasureMapText = (text) => measureText(text, style);
   const lines = wrapMapExportText(
     getMapExportLabel(label),
     maxWidth,
-    measureText,
+    boundMeasure,
   );
-  const blockHeight = lines.length * MAP_EXPORT_LINE_HEIGHT;
+  const lineHeight = getMapExportLineHeight(style.fontSize);
+  const blockHeight = lines.length * lineHeight;
 
   return {
     lines,
     firstBaseline: centerY
-      - ((lines.length - 1) * MAP_EXPORT_LINE_HEIGHT) / 2
-      + MAP_EXPORT_FONT_SIZE / 3,
+      - ((lines.length - 1) * lineHeight) / 2
+      + style.fontSize / 3,
     top: centerY - blockHeight / 2,
     bottom: centerY + blockHeight / 2,
     width: lines.reduce(
-      (widest, line) => Math.max(widest, measureText(line)),
+      (widest, line) => Math.max(widest, boundMeasure(line)),
       0,
     ),
   };

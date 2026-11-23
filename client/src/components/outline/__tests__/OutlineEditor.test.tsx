@@ -40,6 +40,40 @@ it("rendersAllRowsAndRovingEntry", () => {
   expect(scroll).toHaveBeenCalledTimes(2);
 });
 
+it("ラベル行に fontSize / weight / underline を反映し、空ラベルのフォールバックにも書式を付ける", () => {
+  const nodes = [
+    createTestNode({
+      id: 1,
+      label: "装飾",
+      labelFontSize: 18,
+      labelBold: true,
+      labelUnderline: true,
+    }),
+    createTestNode({
+      id: 2,
+      label: "",
+      labelFontSize: 24,
+      labelBold: true,
+      labelUnderline: true,
+    }),
+  ];
+  render(<OutlineEditor {...props({ nodes, model: buildOutlineRows(nodes), selectedNodeId: 1 })} />);
+
+  const decorated = within(row("階層1・装飾")).getByText("装飾");
+  expect(decorated).toHaveStyle({
+    fontSize: "18px",
+    fontWeight: "bold",
+    textDecoration: "underline",
+  });
+
+  const fallback = within(row("階層1・新しいノード")).getByText("新しいノード");
+  expect(fallback).toHaveStyle({
+    fontSize: "24px",
+    fontWeight: "bold",
+    textDecoration: "underline",
+  });
+});
+
 function Harness({ nodes: supplied = initial, enabled = true, revision = 0, update = jest.fn() }: { nodes?: Node[]; enabled?: boolean; revision?: number; update?: (id: number, text: string) => void }) {
   const [nodes, setNodes] = useState(supplied);
   const [selected, selectNode] = useState<number | null>(1);

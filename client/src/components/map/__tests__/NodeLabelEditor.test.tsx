@@ -140,6 +140,33 @@ describe("NodeLabelEditor", () => {
       height: "120px",
       lineHeight: "120px",
       fontSize: "28px",
+      fontWeight: "normal",
+      textDecoration: "none",
+    });
+  });
+
+  it("ノードの書式をインライン編集欄の style に適用する", () => {
+    const styled = createTestNode({
+      ...node,
+      labelFontSize: 18,
+      labelBold: true,
+      labelUnderline: true,
+    });
+    render(
+      <NodeLabelEditor
+        node={styled}
+        viewport={{ offsetX: 0, offsetY: 0, scale: 1 }}
+        value="下書き"
+        onChange={jest.fn()}
+        onCommit={jest.fn()}
+        onCancel={jest.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("node-label-input")).toHaveStyle({
+      fontSize: "18px",
+      fontWeight: "bold",
+      textDecoration: "underline",
     });
   });
 

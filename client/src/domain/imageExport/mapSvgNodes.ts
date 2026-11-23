@@ -1,13 +1,15 @@
 import type { MapExportBounds } from "@/domain/imageExport/mapExportBounds";
 import {
+  getMapExportLineHeight,
   getMapExportTextLayout,
-  MAP_EXPORT_FONT_SIZE,
+  MAP_EXPORT_FONT_FAMILY,
   MAP_EXPORT_HORIZONTAL_INSET,
-  MAP_EXPORT_LINE_HEIGHT,
+  resolveMapExportTextMeasureStyle,
   type MeasureMapText,
 } from "@/domain/imageExport/mapExportText";
 import { escapeMapXmlText } from "@/domain/imageExport/mapXmlText";
 import { isIllustrationDataUrl } from "@/domain/illustration/illustrationDataUrl";
+import { resolveLabelUnderline } from "@/domain/nodes/labelTextStyle";
 import { getNodeIllustrationRect, getNodeLabelCenterOffset } from "@/domain/nodes/nodeIllustration";
 import type { Node } from "@/types/node";
 
@@ -29,17 +31,23 @@ function createNodeImageMarkup(node: Node, bounds: MapExportBounds): string | nu
 }
 
 function createNodeLabelMarkup(node: Node, bounds: MapExportBounds, measureText: MeasureMapText): string {
+  const measureStyle = resolveMapExportTextMeasureStyle(node);
+  const underline = resolveLabelUnderline(node);
+  const lineHeight = getMapExportLineHeight(measureStyle.fontSize);
   const centerX = node.x + bounds.offsetX + node.width / 2;
   const layout = getMapExportTextLayout(
     node.label,
     node.width - MAP_EXPORT_HORIZONTAL_INSET * 2,
     node.y + bounds.offsetY + getNodeLabelCenterOffset(node),
     measureText,
+    measureStyle,
   );
   const tspans = layout.lines.map((line, index) => (
-    `<tspan x="${centerX}" y="${layout.firstBaseline + index * MAP_EXPORT_LINE_HEIGHT}">${escapeMapXmlText(line)}</tspan>`
+    `<tspan x="${centerX}" y="${layout.firstBaseline + index * lineHeight}">${escapeMapXmlText(line)}</tspan>`
   )).join("");
-  return `<text xml:space="preserve" text-anchor="middle" font-size="${MAP_EXPORT_FONT_SIZE}" font-family="Arial, Helvetica, sans-serif" fill="#27272a">${tspans}</text>`;
+  const weightAttr = measureStyle.bold ? ' font-weight="bold"' : "";
+  const decorationAttr = underline ? ' text-decoration="underline"' : "";
+  return `<text xml:space="preserve" text-anchor="middle" font-size="${measureStyle.fontSize}"${weightAttr}${decorationAttr} font-family="${MAP_EXPORT_FONT_FAMILY}" fill="#27272a">${tspans}</text>`;
 }
 
 export function createMapSvgNodes(

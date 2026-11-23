@@ -24,6 +24,8 @@ describe("getNodeLabelEditorLayout", () => {
       height: 120,
       lineHeight: "120px",
       fontSize: 28,
+      fontWeight: "normal",
+      textDecoration: "none",
     });
   });
 
@@ -42,6 +44,29 @@ describe("getNodeLabelEditorLayout", () => {
       height: 60 * 2,
       lineHeight: "120px",
       fontSize: 28,
+      fontWeight: "normal",
+      textDecoration: "none",
+    });
+  });
+
+  it("ノードの labelFontSize / Bold / Underline を編集欄スタイルに反映する", () => {
+    const node: Node = createTestNode({
+      id: 1,
+      parentId: null,
+      x: 10,
+      y: 20,
+      width: 100,
+      height: 60,
+      label: "node",
+      labelFontSize: 18,
+      labelBold: true,
+      labelUnderline: true,
+    });
+
+    expect(getNodeLabelEditorLayout(node, { offsetX: 0, offsetY: 0, scale: 2 })).toMatchObject({
+      fontSize: 36,
+      fontWeight: "bold",
+      textDecoration: "underline",
     });
   });
 });

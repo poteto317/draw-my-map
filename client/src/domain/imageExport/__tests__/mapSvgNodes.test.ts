@@ -141,3 +141,57 @@ it("URL の有無で画像書き出しの内容は変わらない（リンクあ
   expect(createMapSvgNodes([{ ...plain, links: ["https://example.com/"] }], bounds, measureText))
     .toEqual(createMapSvgNodes([plain], bounds, measureText));
 });
+
+it("labelFontSize / Bold / Underline を SVG の font-size / weight / text-decoration に出す", () => {
+  const nodes = [
+    createTestNode({
+      label: "装飾",
+      labelFontSize: 18,
+      labelBold: true,
+      labelUnderline: true,
+    }),
+  ];
+  const bounds = { minX: 0, minY: 0, width: 164, height: 124, offsetX: 32, offsetY: 32 };
+
+  const markup = createMapSvgNodes(nodes, bounds, measureText);
+  const parsed = new DOMParser().parseFromString(`<svg>${markup.labels}</svg>`, "image/svg+xml");
+  const text = parsed.querySelector("text");
+
+  expect(text?.getAttribute("font-size")).toBe("18");
+  expect(text?.getAttribute("font-weight")).toBe("bold");
+  expect(text?.getAttribute("text-decoration")).toBe("underline");
+});
+
+it("空ラベルのフォールバック表示にも書式を適用する", () => {
+  const nodes = [
+    createTestNode({
+      label: "",
+      labelFontSize: 24,
+      labelBold: true,
+      labelUnderline: true,
+    }),
+  ];
+  const bounds = { minX: 0, minY: 0, width: 164, height: 124, offsetX: 32, offsetY: 32 };
+
+  const markup = createMapSvgNodes(nodes, bounds, measureText);
+  const parsed = new DOMParser().parseFromString(`<svg>${markup.labels}</svg>`, "image/svg+xml");
+  const text = parsed.querySelector("text");
+
+  expect(text?.textContent).toBe("新しいノード");
+  expect(text?.getAttribute("font-size")).toBe("24");
+  expect(text?.getAttribute("font-weight")).toBe("bold");
+  expect(text?.getAttribute("text-decoration")).toBe("underline");
+});
+
+it("書式なしのラベルは font-weight / text-decoration を付けない（font-size は 14）", () => {
+  const nodes = [createTestNode({ label: "普通" })];
+  const bounds = { minX: 0, minY: 0, width: 164, height: 124, offsetX: 32, offsetY: 32 };
+
+  const markup = createMapSvgNodes(nodes, bounds, measureText);
+  const parsed = new DOMParser().parseFromString(`<svg>${markup.labels}</svg>`, "image/svg+xml");
+  const text = parsed.querySelector("text");
+
+  expect(text?.getAttribute("font-size")).toBe("14");
+  expect(text?.getAttribute("font-weight")).toBeNull();
+  expect(text?.getAttribute("text-decoration")).toBeNull();
+});

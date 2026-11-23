@@ -1,4 +1,5 @@
 import { worldToScreen, type Viewport } from "@/components/map/mapViewport";
+import { resolveLabelTextPresentation } from "@/domain/nodes/labelTextStyle";
 import { getNodeLabelCenterOffset } from "@/domain/nodes/nodeIllustration";
 import type { Node } from "@/types/node";
 
@@ -9,6 +10,8 @@ export type NodeLabelEditorLayout = {
   height: number;
   lineHeight: string;
   fontSize: number;
+  fontWeight: "bold" | "normal";
+  textDecoration: "underline" | "none";
 };
 
 export function getNodeLabelEditorLayout(
@@ -21,12 +24,15 @@ export function getNodeLabelEditorLayout(
   const position = worldToScreen({ x: node.x, y: node.y + topInset }, viewport);
   const width = node.width * viewport.scale;
   const height = (node.height - topInset) * viewport.scale;
+  const presentation = resolveLabelTextPresentation(node);
   return {
     left: position.x,
     top: position.y,
     width,
     height,
     lineHeight: `${height}px`,
-    fontSize: 14 * viewport.scale,
+    fontSize: presentation.fontSize * viewport.scale,
+    fontWeight: presentation.fontWeight,
+    textDecoration: presentation.textDecoration,
   };
 }

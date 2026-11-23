@@ -1,9 +1,23 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { Node } from "@/types/node";
 import type { OutlineRows } from "@/domain/outline/outlineRows";
+import { resolveLabelTextPresentation } from "@/domain/nodes/labelTextStyle";
 import { getNodeDisplayLabel } from "@/domain/nodes/nodeDisplayLabel";
 import type { OutlineEditorUiActions } from "@/hooks/useOutlineEditorActions";
 import { OutlineToolbar } from "./OutlineToolbar";
+
+function getOutlineLabelTextStyle(node: Node): {
+  fontSize: string;
+  fontWeight: "bold" | "normal";
+  textDecoration: "underline" | "none";
+} {
+  const presentation = resolveLabelTextPresentation(node);
+  return {
+    fontSize: `${presentation.fontSize}px`,
+    fontWeight: presentation.fontWeight,
+    textDecoration: presentation.textDecoration,
+  };
+}
 
 export type OutlineEditorProps = {
   nodes: readonly Node[];
@@ -118,7 +132,8 @@ export function OutlineEditor({ model, selectedNodeId, documentRevision, enabled
               onClick={() => { if (interactive) actions.select(row.nodeId); }}
               onDoubleClick={() => { if (interactive) actions.beginEdit(row.nodeId); }}
               onKeyDown={event => handleRowKey(event, index)}>
-              <span className="mr-2 text-xs text-slate-500">階層{row.depth}</span>{label}
+              <span className="mr-2 text-xs text-slate-500">階層{row.depth}</span>
+              <span style={getOutlineLabelTextStyle(node)}>{label}</span>
             </button>
             {draft?.nodeId === row.nodeId && <textarea aria-label="ラベル編集" ref={textareaRef} value={draft.text}
               className="mt-1 block min-h-24 w-full min-w-0 rounded border border-blue-500 p-2"
