@@ -513,4 +513,70 @@ describe("renderMapNodes", () => {
       expect(marker.stroke).toHaveBeenCalledWith({ width: 2, color: 0xffffff });
     });
   });
+
+  describe("icon / kind", () => {
+    it("kind があるとき左端 4px の色バーを描き、glow（filter 等）は付けない", () => {
+      const withKind = createTestNode({
+        id: 1, parentId: null, x: 50, y: 30, width: 100, height: 60, label: "疑問", kind: "question",
+      });
+      const harness = createPixiTestHarness();
+      renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+        nodes: [withKind],
+        selectedNodeIds: [],
+        editingNodeId: null,
+        connectionTargetNodeId: null,
+        siblingReorderSourceNodeId: null,
+        onNodePointerDown: jest.fn(),
+        visibleKeys: new Set(["node:1"]),
+        highlightNodeIds: new Set<number>(),
+        pinnedNodeIds: new Set<number>(),
+      });
+
+      const bar = harness.Graphics.mock.results[1].value;
+      expect(bar.rect).toHaveBeenCalledWith(50, 30, 4, 60);
+      expect(bar.fill).toHaveBeenCalledWith({ color: 0x3b82f6 });
+      expect(bar.stroke).not.toHaveBeenCalled();
+      expect(bar).not.toHaveProperty("filters");
+    });
+
+    it("icon を約 16px でラベル左に描く", () => {
+      const withIcon = createTestNode({
+        id: 1, parentId: null, x: 50, y: 30, width: 100, height: 60, label: "目標", icon: "🎯",
+      });
+      const harness = createPixiTestHarness();
+      renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+        nodes: [withIcon],
+        selectedNodeIds: [],
+        editingNodeId: null,
+        connectionTargetNodeId: null,
+        siblingReorderSourceNodeId: null,
+        onNodePointerDown: jest.fn(),
+        visibleKeys: new Set(["node:1"]),
+        highlightNodeIds: new Set<number>(),
+        pinnedNodeIds: new Set<number>(),
+      });
+
+      expect(harness.Text).toHaveBeenCalledWith({
+        text: "🎯",
+        style: expect.objectContaining({ fontSize: 16 }),
+      });
+      const label = harness.Text.mock.results[0].value as {
+        x: number; y: number; width: number;
+      };
+      const icon = harness.Text.mock.results[1].value as {
+        x: number; y: number; anchor: { set: jest.Mock };
+      };
+      // ラベル Text が先、icon はラベル左（中央基準）
+      expect(harness.Text.mock.calls[0][0]).toMatchObject({ text: "目標" });
+      expect(icon.anchor.set).toHaveBeenCalledWith(0.5);
+      expect(icon.x).toBe(label.x - label.width / 2 - 4 - 8);
+      expect(icon.y).toBe(label.y);
+    });
+
+    it("icon も kind も無いときは追加の Text / バーを作らない", () => {
+      const { Graphics, Text } = render();
+      expect(Graphics).toHaveBeenCalledTimes(1);
+      expect(Text).toHaveBeenCalledTimes(1);
+    });
+  });
 });

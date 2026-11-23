@@ -8,13 +8,26 @@ import {
   resolveLabelUnderline,
 } from "@/domain/nodes/labelTextStyle";
 import { getNodeDisplayLabel } from "@/domain/nodes/nodeDisplayLabel";
+import {
+  getNodeIconCenterX,
+  NODE_ICON_DISPLAY_SIZE_PX,
+} from "@/domain/nodes/nodeIcon";
 import { getNodeIllustrationRect, getNodeLabelCenterOffset } from "@/domain/nodes/nodeIllustration";
 import type { Node } from "@/types/node";
+import {
+  NODE_KIND_BAR_FALLBACK_COLORS,
+  NODE_KIND_BAR_WIDTH_PX,
+  type NodeKind,
+} from "@/types/nodeKind";
 import type { Container, FederatedPointerEvent, Graphics, Sprite, Text, Texture } from "pixi.js";
 
 const NODE_LABEL_FILL = 0x27272a;
 const NODE_LABEL_UNDERLINE_STROKE_WIDTH = 1;
 const NODE_LABEL_UNDERLINE_GAP = 1;
+
+function nodeKindBarPixiColor(kind: NodeKind): number {
+  return Number.parseInt(NODE_KIND_BAR_FALLBACK_COLORS[kind].slice(1), 16);
+}
 
 export type RenderMapNodesOptions = {
   nodes: readonly Node[];
@@ -163,6 +176,34 @@ function createNodeLabelText(constructors: PixiConstructors, node: Node): Text {
   return text;
 }
 
+function createNodeKindBar(constructors: PixiConstructors, node: Node): Graphics | null {
+  if (node.kind === undefined) return null;
+  const bar = new constructors.Graphics();
+  // glow なし（fill のみ）
+  bar.rect(node.x, node.y, NODE_KIND_BAR_WIDTH_PX, node.height)
+    .fill({ color: nodeKindBarPixiColor(node.kind) });
+  return bar;
+}
+
+function createNodeIconText(
+  constructors: PixiConstructors,
+  node: Node,
+  labelText: Text,
+): Text | null {
+  if (node.icon === undefined) return null;
+  const icon = new constructors.Text({
+    text: node.icon,
+    style: {
+      fontSize: NODE_ICON_DISPLAY_SIZE_PX,
+      fill: NODE_LABEL_FILL,
+    },
+  });
+  icon.anchor.set(0.5);
+  icon.x = getNodeIconCenterX(labelText.x, labelText.width);
+  icon.y = labelText.y;
+  return icon;
+}
+
 function createNodeLabelUnderline(
   constructors: PixiConstructors,
   node: Node,
@@ -207,6 +248,12 @@ export function renderMapNodes(
     shape.alpha = contentAlpha;
     container.addChild(shape);
 
+    const kindBar = createNodeKindBar(constructors, node);
+    if (kindBar !== null) {
+      kindBar.alpha = contentAlpha;
+      container.addChild(kindBar);
+    }
+
     const sprite = createNodeIllustrationSprite(constructors, node, options.illustrationTextures);
     if (sprite !== null) {
       sprite.alpha = contentAlpha;
@@ -217,6 +264,11 @@ export function renderMapNodes(
       const text = createNodeLabelText(constructors, node);
       text.alpha = contentAlpha;
       container.addChild(text);
+      const icon = createNodeIconText(constructors, node, text);
+      if (icon !== null) {
+        icon.alpha = contentAlpha;
+        container.addChild(icon);
+      }
       const underline = createNodeLabelUnderline(constructors, node, text);
       if (underline !== null) {
         underline.alpha = contentAlpha;

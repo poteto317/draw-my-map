@@ -195,3 +195,57 @@ it("書式なしのラベルは font-weight / text-decoration を付けない（
   expect(text?.getAttribute("font-weight")).toBeNull();
   expect(text?.getAttribute("text-decoration")).toBeNull();
 });
+
+describe("icon / kind", () => {
+  const bounds = { minX: 0, minY: 0, width: 164, height: 124, offsetX: 32, offsetY: 32 };
+
+  it("kind の左端 4px 色バーを矩形として出し、glow 属性は付けない", () => {
+    const nodes = [createTestNode({ x: 0, y: 0, label: "疑問", kind: "question" })];
+    const markup = createMapSvgNodes(nodes, bounds, measureText);
+    const parsed = new DOMParser().parseFromString(
+      `<svg>${markup.rectangles}</svg>`,
+      "image/svg+xml",
+    );
+    const rects = Array.from(parsed.querySelectorAll("rect"));
+    expect(rects).toHaveLength(2);
+    const bar = rects[1];
+    expect(bar?.getAttribute("x")).toBe("32");
+    expect(bar?.getAttribute("y")).toBe("32");
+    expect(bar?.getAttribute("width")).toBe("4");
+    expect(bar?.getAttribute("height")).toBe("60");
+    expect(bar?.getAttribute("fill")).toBe("#3b82f6");
+    expect(bar?.getAttribute("filter")).toBeNull();
+    expect(bar?.getAttribute("style")).toBeNull();
+  });
+
+  it("icon を約 16px の text としてラベル左に出す", () => {
+    const nodes = [createTestNode({ x: 0, y: 0, label: "目標", icon: "🎯" })];
+    const markup = createMapSvgNodes(nodes, bounds, measureText);
+    const parsed = new DOMParser().parseFromString(
+      `<svg>${markup.labels}</svg>`,
+      "image/svg+xml",
+    );
+    const texts = Array.from(parsed.querySelectorAll("text"));
+    expect(texts.length).toBeGreaterThanOrEqual(2);
+    const icon = texts.find((el) => el.textContent === "🎯");
+    expect(icon).toBeTruthy();
+    expect(icon?.getAttribute("font-size")).toBe("16");
+    const label = texts.find((el) => el.textContent?.includes("目標"));
+    expect(label).toBeTruthy();
+    const iconX = Number(icon?.getAttribute("x"));
+    const labelCenterX = Number(label?.querySelector("tspan")?.getAttribute("x"));
+    expect(iconX).toBeLessThan(labelCenterX);
+  });
+
+  it("PNG は SVG ラスタ化経路のため、このマークアップに icon/kind があれば足りる", () => {
+    // useMapPngExport: createSvgExport(nodes) → rasterizePng(svg, …)
+    const nodes = [
+      createTestNode({ label: "資料", icon: "📎", kind: "evidence" }),
+    ];
+    const markup = createMapSvgNodes(nodes, bounds, measureText);
+    expect(markup.rectangles).toContain('width="4"');
+    expect(markup.rectangles).toContain("#f97316");
+    expect(markup.labels).toContain("📎");
+    expect(markup.labels).toContain('font-size="16"');
+  });
+});

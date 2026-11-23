@@ -4,6 +4,7 @@ import type { OutlineRows } from "@/domain/outline/outlineRows";
 import { resolveLabelTextPresentation } from "@/domain/nodes/labelTextStyle";
 import { getNodeDisplayLabel } from "@/domain/nodes/nodeDisplayLabel";
 import type { OutlineEditorUiActions } from "@/hooks/useOutlineEditorActions";
+import { OutlineRowAppearance } from "./OutlineRowAppearance";
 import { OutlineToolbar } from "./OutlineToolbar";
 
 function getOutlineLabelTextStyle(node: Node): {
@@ -128,12 +129,13 @@ export function OutlineEditor({ model, selectedNodeId, documentRevision, enabled
             <button type="button" aria-label={`階層${row.depth}・${label}`} aria-pressed={selectedNodeId === row.nodeId}
               tabIndex={interactive && entryId === row.nodeId ? 0 : -1} disabled={!interactive}
               ref={element => { if (element) rowButtons.current.set(row.nodeId, element); else rowButtons.current.delete(row.nodeId); }}
-              className="w-full min-w-0 whitespace-pre-wrap break-words rounded border border-slate-200 px-3 py-2 text-left aria-pressed:bg-blue-50"
+              className="flex w-full min-w-0 items-stretch gap-2 whitespace-pre-wrap break-words rounded border border-slate-200 px-3 py-2 text-left aria-pressed:bg-blue-50"
               onClick={() => { if (interactive) actions.select(row.nodeId); }}
               onDoubleClick={() => { if (interactive) actions.beginEdit(row.nodeId); }}
               onKeyDown={event => handleRowKey(event, index)}>
-              <span className="mr-2 text-xs text-slate-500">階層{row.depth}</span>
-              <span style={getOutlineLabelTextStyle(node)}>{label}</span>
+              <OutlineRowAppearance node={node} />
+              <span className="mr-2 shrink-0 self-center text-xs text-slate-500">階層{row.depth}</span>
+              <span className="min-w-0 self-center" style={getOutlineLabelTextStyle(node)}>{label}</span>
             </button>
             {draft?.nodeId === row.nodeId && <textarea aria-label="ラベル編集" ref={textareaRef} value={draft.text}
               className="mt-1 block min-h-24 w-full min-w-0 rounded border border-blue-500 p-2"
