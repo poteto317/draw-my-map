@@ -3,7 +3,9 @@ import type { Node } from "@/types/node";
 import { getIllustratedNodeMinHeight } from "@/domain/nodes/nodeIllustration";
 import { normalizeMapDocumentNodeImportance } from "@/domain/persistence/mapDocumentNodeImportance";
 import { normalizeMapDocumentNodeLocked } from "@/domain/persistence/mapDocumentNodeLocked";
+import { normalizeMapDocumentNodeIcon } from "@/domain/persistence/mapDocumentNodeIcon";
 import { normalizeMapDocumentNodeIllustration } from "@/domain/persistence/mapDocumentNodeIllustration";
+import { normalizeMapDocumentNodeKind } from "@/domain/persistence/mapDocumentNodeKind";
 import {
   normalizeMapDocumentNodeLabelBold,
   normalizeMapDocumentNodeLabelFontSize,
@@ -123,6 +125,16 @@ export function normalizeMapDocumentNode(
     return labelUnderlineResult;
   }
   const labelUnderline = labelUnderlineResult.value;
+  const iconResult = normalizeMapDocumentNodeIcon(node.icon, index, version);
+  if (!iconResult.ok) {
+    return iconResult;
+  }
+  const icon = iconResult.value;
+  const kindResult = normalizeMapDocumentNodeKind(node.kind, index, version);
+  if (!kindResult.ok) {
+    return kindResult;
+  }
+  const kind = kindResult.value;
   return {
     ok: true,
     value: projectMapDocumentNode({
@@ -144,6 +156,8 @@ export function normalizeMapDocumentNode(
       ...(labelFontSize === undefined ? {} : { labelFontSize }),
       ...(labelBold === undefined ? {} : { labelBold }),
       ...(labelUnderline === undefined ? {} : { labelUnderline }),
+      ...(icon === undefined ? {} : { icon }),
+      ...(kind === undefined ? {} : { kind }),
     }),
   };
 }

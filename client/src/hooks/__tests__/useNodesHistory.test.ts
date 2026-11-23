@@ -144,6 +144,22 @@ const operationCases: OperationCase[] = [
     },
   },
   {
+    name: "setNodeIcon",
+    initial: baseMap("manual"),
+    run: (current) => { current.setNodeIcon(2, "🔥"); },
+    verifyAfter: (_before, after) => {
+      expect(after.nodes.find((item) => item.id === 2)!.icon).toBe("🔥");
+    },
+  },
+  {
+    name: "setNodeKind",
+    initial: baseMap("manual"),
+    run: (current) => { current.setNodeKind(2, "question"); },
+    verifyAfter: (_before, after) => {
+      expect(after.nodes.find((item) => item.id === 2)!.kind).toBe("question");
+    },
+  },
+  {
     name: "attachIllustration（自動配置）",
     initial: baseMap("auto"),
     run: (current) => { current.attachIllustration(2, ILLUSTRATION); },

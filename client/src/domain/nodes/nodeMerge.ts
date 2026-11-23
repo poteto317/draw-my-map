@@ -5,6 +5,8 @@ import { hasInvalidNodeGeometry } from "@/domain/nodes/nodeGeometryValidation";
 import { maxNodeImportance } from "@/domain/nodes/nodeImportance";
 import { applyProjectedLabelTextStyle } from "@/domain/nodes/labelTextStyle";
 import { indexNodeForest } from "@/domain/nodes/nodeLayoutForest";
+import { applyProjectedNodeIcon, normalizeNodeIcon } from "@/domain/nodes/nodeIcon";
+import { applyProjectedNodeKind, normalizeNodeKind } from "@/domain/nodes/nodeKindUpdate";
 import { NODE_LINKS_MAX_COUNT, areNodeLinksEqual, withNodeLinks } from "@/domain/nodes/nodeLink";
 import {
   NODE_MAP_LINKS_MAX_COUNT,
@@ -313,6 +315,22 @@ function mergeNodeLabelTextStyle(survivor: Node, absorbed: readonly Node[]): Nod
   });
 }
 
+// icon / kind: survivor-else-first
+function mergeNodeAppearance(survivor: Node, absorbed: readonly Node[]): Node {
+  const iconRaw =
+    survivor.icon !== undefined
+      ? survivor.icon
+      : absorbed.find((node) => node.icon !== undefined)?.icon;
+  const kindRaw =
+    survivor.kind !== undefined
+      ? survivor.kind
+      : absorbed.find((node) => node.kind !== undefined)?.kind;
+  return applyProjectedNodeKind(
+    applyProjectedNodeIcon(survivor, normalizeNodeIcon(iconRaw)),
+    normalizeNodeKind(kindRaw),
+  );
+}
+
 function applyPlanToSurvivor(survivor: Node, plan: Extract<NodeMergePlan, { ok: true }>): Node {
   const updated = withNodeMapLinks(
     withNodeSources(
@@ -375,8 +393,11 @@ export function mergeNodes(
   // 計画が成功なら残すノードは必ず見つかる。型の絞り込みのため到達しない
   if (survivor === undefined) return failed("primary-missing");
   const absorbed = nodes.filter((node) => plan.absorbedIds.includes(node.id));
-  const updatedSurvivor = mergeNodeLabelTextStyle(
-    mergeNodeLocked(applyPlanToSurvivor(survivor, plan), absorbed),
+  const updatedSurvivor = mergeNodeAppearance(
+    mergeNodeLabelTextStyle(
+      mergeNodeLocked(applyPlanToSurvivor(survivor, plan), absorbed),
+      absorbed,
+    ),
     absorbed,
   );
 
