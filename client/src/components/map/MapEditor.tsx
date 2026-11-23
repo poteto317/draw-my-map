@@ -242,6 +242,9 @@ export function MapEditor({
     toggleNodeEditLock,
     lockNodeSubtree,
     unlockNodeSubtree,
+    setLabelFontSize,
+    toggleLabelBold,
+    toggleLabelUnderline,
     beginMoveHistory,
     documentRevision,
     canUndo,
@@ -273,6 +276,7 @@ export function MapEditor({
   const importanceSummary = summarizeSelectionImportance(nodes, importanceTargetIds);
   const { headerLayoutControls, layoutSnapPrefs } = useMapHeaderLayoutControls({
     viewMode,
+    isProtectedMode: storageMode === "protected",
     nodes,
     layoutMode,
     treeDirection,
@@ -286,6 +290,9 @@ export function MapEditor({
     toggleNodeEditLock,
     lockNodeSubtree,
     unlockNodeSubtree,
+    setLabelFontSize,
+    toggleLabelBold,
+    toggleLabelUnderline,
   });
   const branchCollapse = useBranchCollapse({ nodes, documentRevision });
   const { expandNodes, index: collapseIndex } = branchCollapse;
