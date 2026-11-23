@@ -195,7 +195,7 @@ describe("MapStage context menu boundary", () => {
 
     fireEvent.contextMenu(container, { clientX: 790, clientY: 590 });
 
-    expect(getByRole("menu")).toHaveStyle({ left: "624px", top: "556px" });
+    expect(getByRole("menu")).toHaveStyle({ left: "580px", top: "520px" });
   });
 
   it("開いているメニュー上の右クリックではメニューを維持し再選択しない", async () => {

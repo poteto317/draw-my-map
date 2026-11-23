@@ -51,6 +51,7 @@ import type { NodeLayoutMode } from "@/types/nodeLayout";
 import type { OperationNotice } from "@/types/operationNotice";
 import type { NodeFocusRequest } from "@/types/nodeFocusRequest";
 import type { NodeLabelEditRequest } from "@/types/nodeLabelEditRequest";
+import { resolveBranchExtractContextMenu } from "@/domain/nodes/nodeBranchExtractAvailability";
 
 const EMPTY_SELECTED_NODE_IDS: readonly number[] = [];
 
@@ -113,6 +114,10 @@ type MapStageProps = {
   onPasteSubtree: (data: SubtreeClipboardData) => number | null;
   onClipboardNotice: (notice: OperationNotice) => void;
   onGenerateIllustration?: (nodeId: number) => void;
+  onBeginBranchExtract?: () => void;
+  isProtectedMode?: boolean;
+  hasMapConflict?: boolean;
+  isExternallyDeleted?: boolean;
   // false の間（ダイアログ表示中など）は、キーボード・クリップボードのショートカットとメニューを閉じる操作を止める
   shortcutsEnabled: boolean;
   wheelZoomSensitivity?: number;
@@ -163,6 +168,10 @@ export function MapStage({
   onPasteSubtree,
   onClipboardNotice,
   onGenerateIllustration,
+  onBeginBranchExtract,
+  isProtectedMode = false,
+  hasMapConflict = false,
+  isExternallyDeleted = false,
   shortcutsEnabled,
   wheelZoomSensitivity = DEFAULT_WHEEL_ZOOM_SENSITIVITY,
   layoutSnapPrefs = { ...DEFAULT_LAYOUT_SNAP_PREFS, enabled: false },
@@ -504,6 +513,18 @@ export function MapStage({
 
   const menu = contextMenu.menu;
   const menuNode = menu === null ? undefined : nodes.find((node) => node.id === menu.nodeId);
+  const branchExtractMenu = menu === null
+    ? { visible: false, disabled: false }
+    : resolveBranchExtractContextMenu({
+      viewMode: "map",
+      selectedNodeId,
+      selectedNodeIds: resolvedSelectedNodeIds,
+      nodes,
+      contextMenuNodeId: menu.nodeId,
+      isProtectedMode,
+      hasConflict: hasMapConflict,
+      isExternallyDeleted,
+    });
 
   return (
     <div
@@ -533,6 +554,13 @@ export function MapStage({
             menuActivatedAtRef.current = Date.now();
             contextMenu.close();
             onGenerateIllustration(menu.nodeId);
+          }}
+          extractVisible={branchExtractMenu.visible}
+          extractDisabled={branchExtractMenu.disabled}
+          onBeginBranchExtract={onBeginBranchExtract === undefined ? undefined : () => {
+            menuActivatedAtRef.current = Date.now();
+            contextMenu.close();
+            onBeginBranchExtract();
           }}
         />
       )}

@@ -7,6 +7,7 @@ import {
   renderReady,
   resetMapStageTestRuntime,
 } from "@/components/map/testing/mapStageTestRuntime";
+import { createEmptyMapLibraryMeta } from "@/domain/mapLibrary/mapLibraryMeta";
 import { createTestStorageSession, type TestStorageSession } from "@/testing/createTestStorageSession";
 
 // ページのテストと同じく、Pixi・画像化・ダウンロードだけを差し替える
@@ -77,7 +78,9 @@ async function renderEditor({
           updatedAt: "2026-10-31T00:00:00.000Z",
         },
       ]}
+      libraryMeta={createEmptyMapLibraryMeta()}
       onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "移動先がありません。" } })}
+      onExtractBranchToNewMap={() => ({ ok: false, notice: { kind: "error", message: "切り出せません。" } })}
       mapName={mapName}
       storageSession={storage.session} storageMode="persistent"
       mapControls={mapControls}
@@ -246,7 +249,7 @@ it("dialogとdisabledはoutline操作を止め、共通選択をイラストパ�
   await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "キャンセル" }));
   expect(screen.getByRole("button", { name: "階層2・子B" })).not.toBeDisabled();
   rerender(<MapEditor mapId={storage.session.mapId} mapName="別" storageSession={storage.session} storageMode="persistent"
-    mapControls={null} exportButtonRef={{ current: null }} mapMoveTargets={[]} onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "なし" } })}
+    mapControls={null} exportButtonRef={{ current: null }} mapMoveTargets={[]} libraryMeta={createEmptyMapLibraryMeta()} onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "なし" } })} onExtractBranchToNewMap={() => ({ ok: false, notice: { kind: "error", message: "なし" } })}
     shortcutsEnabled={false} dialogMouseClickedAtRef={{ current: null }}
     pendingNavigation={null} onConsumePendingNavigation={() => {}} onSwitchToMapTarget={() => {}}
     brokenLinksDialogRequest={0} onBrokenLinksDialogClosed={() => {}} />);
@@ -274,7 +277,7 @@ it("同じ表示ボタンは要求を再発行せず、map key変更では初期
   expect(mockFocusRequests.mock.lastCall?.[0]?.sequence).toBe(1);
   await switchTo("アウトライン");
   rerender(<MapEditor key="other-map" mapId="other-map" mapName="別" storageSession={storage.session} storageMode="persistent"
-    mapControls={null} exportButtonRef={{ current: null }} mapMoveTargets={[]} onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "なし" } })}
+    mapControls={null} exportButtonRef={{ current: null }} mapMoveTargets={[]} libraryMeta={createEmptyMapLibraryMeta()} onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "なし" } })} onExtractBranchToNewMap={() => ({ ok: false, notice: { kind: "error", message: "なし" } })}
     shortcutsEnabled={true} dialogMouseClickedAtRef={{ current: null }}
     pendingNavigation={null} onConsumePendingNavigation={() => {}} onSwitchToMapTarget={() => {}}
     brokenLinksDialogRequest={0} onBrokenLinksDialogClosed={() => {}} />);

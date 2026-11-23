@@ -34,6 +34,7 @@ import { CommandPaletteControl } from "@/components/layout/CommandPaletteControl
 import { CommandPaletteDialog } from "@/components/layout/CommandPaletteDialog";
 import { MapViewBookmarkControls } from "@/components/layout/MapViewBookmarkControls";
 import { BranchMoveDialog } from "@/components/layout/BranchMoveDialog";
+import { BranchExtractDialog } from "@/components/layout/BranchExtractDialog";
 import { LabelReplaceControl } from "@/components/layout/LabelReplaceControl";
 import { LabelReplaceDialog } from "@/components/layout/LabelReplaceDialog";
 import { NodeMergeControl } from "@/components/layout/NodeMergeControl";
@@ -45,6 +46,7 @@ import {
   type PartsLibraryDialogMode,
 } from "@/components/layout/PartsLibraryDialog";
 import { useBranchMoveDialog } from "@/hooks/useBranchMoveDialog";
+import { useBranchExtractDialog } from "@/hooks/useBranchExtractDialog";
 import { useCommandPalette } from "@/hooks/useCommandPalette";
 import { useHeaderFocusReturn } from "@/hooks/useHeaderFocusReturn";
 import { useLabelReplaceDialog } from "@/hooks/useLabelReplaceDialog";
@@ -156,6 +158,7 @@ type MapEditorProps = {
   mapMoveTargets: readonly MapIndexEntry[];
   libraryMeta: MapLibraryMetaV1;
   onMoveBranchToMap: (rootId: number, targetMapId: string) => MapLibraryOperationResult;
+  onExtractBranchToNewMap: (rootId: number) => MapLibraryOperationResult;
   onSaveCurrentAsNewMap?: (name: string, snapshotJson: string) => MapLibraryOperationResult;
   shortcutsEnabled: boolean;
   // 画面の外のダイアログで最後にマウスでクリックした時刻。ダイアログが1回目のクリックで閉じると、
@@ -182,6 +185,7 @@ export function MapEditor({
   mapMoveTargets,
   libraryMeta,
   onMoveBranchToMap,
+  onExtractBranchToNewMap,
   onSaveCurrentAsNewMap,
   shortcutsEnabled,
   dialogMouseClickedAtRef,
@@ -593,6 +597,19 @@ export function MapEditor({
     deleteNodeOnly,
     publishNotice: publishTreeEditNotice,
   });
+  const branchExtract = useBranchExtractDialog({
+    nodes,
+    selectedNodeId,
+    documentRevision,
+    onExtractBranchToNewMap,
+  });
+  const branchExtractFocusFallbacks = useMemo(() => [] as const satisfies readonly RefObject<HTMLButtonElement | null>[], []);
+  useHeaderFocusReturn({
+    focusRequest: branchExtract.focusRequest,
+    consumeFocusRequest: branchExtract.consumeFocusRequest,
+    buttonRef: exportButtonRef,
+    fallbackRefs: branchExtractFocusFallbacks,
+  });
   const branchMove = useBranchMoveDialog({
     mapId,
     mapMoveTargets,
@@ -699,6 +716,7 @@ export function MapEditor({
     && commandPalette.screen === "closed"
     && outlineImport.screen === "closed"
     && branchMove.screen === "closed"
+    && branchExtract.screen === "closed"
     && labelReplace.screen === "closed"
     && nodeSplit.screen === "closed"
     && nodeMerge.screen === "closed"
@@ -1299,6 +1317,10 @@ export function MapEditor({
                 onPasteSubtree={pasteSubtree}
                 onClipboardNotice={publishClipboardNotice}
                 onGenerateIllustration={generateIllustration}
+                onBeginBranchExtract={branchExtract.open}
+                isProtectedMode={storageMode === "protected"}
+                hasMapConflict={persistence.conflictState === "conflict"}
+                isExternallyDeleted={persistence.conflictState === "externallyDeleted"}
                 resetRevision={resetRevision}
                 documentRevision={documentRevision}
                 shortcutsEnabled={editorShortcutsEnabled}
@@ -1356,6 +1378,20 @@ export function MapEditor({
           )}
         />
       </div>
+      {branchExtract.screen === "open" && (
+        <BranchExtractDialog
+          displayLabel={branchExtract.displayLabel}
+          canSubmit={branchExtract.canSubmit}
+          error={branchExtract.error}
+          focusRequest={branchExtract.focusRequest}
+          onFocusRequestApplied={branchExtract.consumeFocusRequest}
+          onCancel={branchExtract.close}
+          onSubmit={branchExtract.submit}
+          onMouseClick={() => {
+            dialogMouseClickedAtRef.current = Date.now();
+          }}
+        />
+      )}
       {branchMove.screen === "open" && (
         <BranchMoveDialog
           mapMoveTargets={mapMoveTargets}

@@ -101,6 +101,7 @@ export type UseMapLibraryDialogStateResult = {
   selectRestoreFile: (file: File) => Promise<void>;
   confirmRestore: () => void;
   moveBranchToMap: UseMapLibraryResult["moveBranchToMap"];
+  extractBranchToNewMap: UseMapLibraryResult["extractBranchToNewMap"];
   consumeFocusTarget: () => void;
   consumeHeaderFocusRequest: () => void;
 };
@@ -118,6 +119,7 @@ type MapLibraryOperations = Pick<
   | "permanentlyDeleteFromTrash"
   | "emptyTrash"
   | "moveBranchToMap"
+  | "extractBranchToNewMap"
   | "prepareBackup"
   | "downloadBackup"
   | "previewRestore"
@@ -584,6 +586,19 @@ export function useMapLibraryDialogState(options: {
     return result;
   }, [transition]);
 
+  const extractBranchToNewMap = useCallback((
+    sourceSession: MapStorageSession,
+    rootId: number,
+  ): MapLibraryOperationResult => {
+    const result = libraryRef.current.extractBranchToNewMap(sourceSession, rootId);
+    if (result.ok || result.enteredProtectedMode) transition({ kind: "closed" });
+    setState((prev) => {
+      if (result.ok) return closeAfterSuccess(prev, result);
+      return result.enteredProtectedMode ? closeAfterEnteringProtectedMode(prev, result.notice) : prev;
+    });
+    return result;
+  }, [transition]);
+
   const consumeFocusTarget = useCallback(() => {
     setState((prev) => (prev.focusTarget === null ? prev : { ...prev, focusTarget: null }));
   }, []);
@@ -640,6 +655,7 @@ export function useMapLibraryDialogState(options: {
     selectRestoreFile,
     confirmRestore,
     moveBranchToMap,
+    extractBranchToNewMap,
     consumeFocusTarget,
     consumeHeaderFocusRequest,
   };
