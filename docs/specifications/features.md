@@ -229,6 +229,8 @@ Pixi.js による高速な 2D キャンバス描画と、React 19 による宣�
     labelFontSize?: 12 | 14 | 18 | 24; // ラベル文字サイズ（欠落＝14。31.7 節）
     labelBold?: true;           // ラベル太字（true のみ。31.7 節）
     labelUnderline?: true;      // ラベル下線（true のみ。31.7 節）
+    icon?: string;              // 絵文字アイコン（書記素1・Extended_Pictographic。Phase 26）
+    kind?: "question" | "conclusion" | "evidence" | "idea"; // ノード種別（左端色バー。Phase 26）
   };
   ```
 - **ノード寸法定数**: `client/src/config/shapes.ts`
@@ -268,7 +270,7 @@ Pixi.js による高速な 2D キャンバス描画と、React 19 による宣�
 | **親ノードの挿入** | ノード選択中にヘッダーの **「親を挿入」**、または **`Alt`（`Option`）+ `Enter`** | 選択ノード T と、その親の間に入れる（T がいた兄弟の位置に入り、T と子孫が新しいノードの唯一の子になる。T がルートなら新しいルート）。手動配置では T の位置に置き、T の枝を右へ平行移動する（16 章） | 新しいノードを選択し、直ちに空のラベルのインライン編集を開始（`Tab` / `Enter` と同じ入力欄） |
 
 - **初期配置座標計算** (`client/src/domain/nodes/nodePlacement.ts`):
-  - 新規ノードの初期プロパティは `width: 100` (`RECT_WIDTH`)、`height: 60` (`RECT_HEIGHT`)、`label: ""`、`importance: "medium"` (`DEFAULT_NODE_IMPORTANCE`) です。ただし親ノードの挿入（`createParentNode`）では、重要度だけを T から引き継ぎ、座標は T と同じ `(T.x, T.y)`、`parentId` は T の元の親にします（大きさは T を写さず 100 × 60。`illustration`・`note`（詳細メモ）・`links`（URL）・`tags`（タグ）・`sources`（出典）・`mapLinks`・`locked`・`labelFontSize`・`labelBold`・`labelUnderline` も持たない。16.2 節）。
+  - 新規ノードの初期プロパティは `width: 100` (`RECT_WIDTH`)、`height: 60` (`RECT_HEIGHT`)、`label: ""`、`importance: "medium"` (`DEFAULT_NODE_IMPORTANCE`) です。ただし親ノードの挿入（`createParentNode`）では、重要度だけを T から引き継ぎ、座標は T と同じ `(T.x, T.y)`、`parentId` は T の元の親にします（大きさは T を写さず 100 × 60。`illustration`・`note`（詳細メモ）・`links`（URL）・`tags`（タグ）・`sources`（出典）・`mapLinks`・`locked`・`labelFontSize`・`labelBold`・`labelUnderline`・`icon`・`kind` も持たない。16.2 節）。
   - **ルートノード (`createRootNode`)**: ダブルクリックされた World 座標 `(centerX, centerY)` に対し、矩形の中心が一致するよう `(centerX - 50, centerY - 30)`（`centerX - RECT_WIDTH / 2`, `centerY - RECT_HEIGHT / 2`）に配置されます。
   - **子ノード (`createChildNode`)**:
     - X 座標: `parent.x + parent.width + 120`（`CHILD_HORIZONTAL_GAP = 120`、標準幅 100px の親なら `parent.x + 220`）
@@ -609,6 +611,7 @@ flowchart TD
   - V3 の任意項目 `tags`（タグ。文字列の配列、最大 10 件、各 30 文字以内。読み込みでは各要素の前後の空白を削り、連続する空白を半角スペース 1 個にまとめ、同じタグとみなすもの（`U+200D`・`U+FE0E`・`U+FE0F` の除去 → NFKC → 空白のまとめと trim → 小文字化 → NFKC）は後のものを捨て、空なら項目ごと持たない。V1 / V2 の `tags` は無視。配列でない・11 件以上・文字列でない要素・前後の空白を削る前に 256 文字を超える要素・空・制御文字などの使えない文字を含む（`U+200D`・`U+FE0E`・`U+FE0F` と空白だけの要素（見た目が空）を含む）・まとめて 30 文字を超える要素は `node[i].tagsは、30文字以内のタグ名の配列（最大10件）である必要があります。` で読み込み失敗。26 章）。
   - V3 の任意項目 `sources`（出典。オブジェクトの配列、最大 10 件。各要素は `title`（必須）と任意の `page`・`url`。読み込みでは件数・未知キー・各文字列の長さを正規化より先に判定し、タイトル・ページ・URL を正規化し、同じ出典とみなすもの（`nodeSourceKey`）は後のものを捨て、空なら項目ごと持たない。V1 / V2 の `sources` は無視。配列でない・11 件以上・要素がオブジェクトでない・未知キーあり・必須 `title` 欠落・各フィールドの型不正・入力長の先行超過・正規化失敗は `node[i].sourcesは、タイトル（200文字以内）・ページ（80文字以内）・http/https の URL からなる出典の配列（最大10件）である必要があります。` で読み込み失敗。27 章）。
   - V3 の任意項目 `labelFontSize` / `labelBold` / `labelUnderline`（ラベル書式。サイズは `12 | 14 | 18 | 24`、太字・下線は `true` のみ。欠落時は標準 14・通常・下線なし。不正値はキー削除で文書は成功。encode 時 14 はキー省略。詳細は 31.7 節）。
+  - V3 の任意項目 `icon` / `kind`（Phase 26。icon は Extended_Pictographic の書記素 1 つ、kind は `question` / `conclusion` / `evidence` / `idea`。不正値はキー削除で文書は成功。欠落キー省略。検索一覧には出さない）。
 - **保存待ちの書き込み（flush）**: マップの切り替えと新規作成の前に、300ms の待ちの途中にある変更を、待たずにその場で書き込みます。この書き込みに失敗したときは、切り替え・作成を中止してエラーを通知します（12.3 節）。このとき、エディタの操作通知バーにも自動保存の失敗の通知を出します。ページを閉じる直前（300ms 以内）の変更は、これまでどおり保存されません。
 - **保存先の照合**: 切り替え・削除の後に、前のマップの編集画面に残っていた保存の予約が届いても、何も書き込まず、通知もしません。保存先の照合はマップ id ではなく、切り替えのたびに進む番号（セッション番号）で行います。そのため、A → B → A と切り替えても、最初に開いた A の編集画面の保存が、2回目に開いた A へ紛れ込みません。
 - **枝の折りたたみ**: 折りたたみ状態は保存せず、自動復元の後は全展開になります。自動配置で折りたたみ中も、保存するのは正本の座標です（10.3 節）。
@@ -776,7 +779,7 @@ sequenceDiagram
 右サイドパネル（`IllustrationPanel.tsx`, `illustrationPanelView.ts`, `useIllustrationGeneration.ts`）およびキャンバス上のテクスチャ管理（`useIllustrationTextures.ts`）の仕様は以下の通りです。
 
 - **パネルレイアウトと同時生成制限**:
-  - 右サイドパネル「ノードの詳細」（`NodeDetailPanel.tsx`。`<aside aria-label="ノードの詳細">`）は固定幅 **288px**（Tailwind `w-72`）で常時表示され、上から詳細メモ（24 章）、タグ（26 章）、リンク（25 章）、出典（27 章）、マップ間リンク（28.2 節）、被リンク（28.3 節）、イラスト（`IllustrationPanel.tsx`。`<section aria-label="イラスト">`）の全 7 節を縦に積みます。内容が高さを超えたらパネルの中で縦にスクロールします。ノード未選択時は「ノードを選択してください」と案内し、生成ボタンは無効化（`disabled`）されます。
+  - 右サイドパネル「ノードの詳細」（`NodeDetailPanel.tsx`。`<aside aria-label="ノードの詳細">`）は固定幅 **288px**（Tailwind `w-72`）で常時表示され、上から詳細メモ（24 章）、見た目（icon / kind。主選択ちょうど 1・マップ・非保護のとき）、タグ（26 章）、リンク（25 章）、出典（27 章）、マップ間リンク（28.2 節）、被リンク（28.3 節）、イラスト（`IllustrationPanel.tsx`。`<section aria-label="イラスト">`）の全 8 節を縦に積みます。内容が高さを超えたらパネルの中で縦にスクロールします。ノード未選択時は「ノードを選択してください」と案内し、生成・画像添付ボタンは無効化（`disabled`）されます。locked のときは見た目・イラストの操作も無効です。
   - アプリケーション全体で**同時に実行できるイラスト生成は 1 件まで**です（`controllerRef.current !== null` の間は新規リクエストを無視し、`view.isGenerating === true` により他のノードに切り替えても生成ボタンは「生成中…」として `disabled` になります）。
   - マップ全体が置換された際や成功した Undo／Redo の後（いずれも `documentRevision` 更新時）、およびアンマウント時には、`AbortController.abort()` により進行中の生成リクエストが即座に中断・破棄されます。
 - **プレビュー表示とラベル一致チェック (`getIllustrationPanelView`)**:
@@ -785,6 +788,10 @@ sequenceDiagram
   - 生成完了後に別のノードを選択するとプレビューは一時的に非表示になりますが、元のノードを再選択すれば（ラベルを変更していない限り）再びプレビューと「ノードに設定」ボタンが表示されます。一方、ノードのテキストを編集して変更した場合は古いテキスト向けのプレビューは表示されず、設定済みイラストがあればそちらが表示されます。
 - **ノードへの適用**:
   - 右パネルの「**ノードに設定**」ボタンをクリックすると、`attachIllustration(nodeId, dataUrl)` により `node.illustration` に Data URL が保存され、`dismissGeneration()` によりプレビュー状態はクリアされて「設定済みのイラスト」表示へ切り替わります。
+- **画像ファイルの添付（Phase 26・候補052）**:
+  - 「**画像を添付**」ボタンから `accept="image/*"` のファイル選択を開き、選択画像を既存の `createIllustrationThumbnail` で 128×128 JPEG に縮小してから `attachIllustration` します（新属性なし。AI 生成と同じ `illustration` キー）。
+  - 設定済みイラストがあるときは置き換え確認（`window.confirm`）。キャンセルでは何も変えません。
+  - サムネイル後の data URL が既存上限（`MAX_ILLUSTRATION_DATA_URL_LENGTH` = 100,000 文字）を超える・形式不正のときは添付せずエラーを出します。
 - **ノード高さの更新仕様（UI 操作時と JSON 復元・インポート時の使い分け）**:
   - **UI からのイラスト設定・削除時** (`replaceNodeIllustration`, `clearNodeIllustration` in `nodeIllustrationUpdate.ts`): `attachIllustration`（`replaceNodeIllustration`）を実行した際は、対象ノードの既存の高さに関わらず `height: ILLUSTRATED_NODE_HEIGHT`（**`116px` 固定**）に設定されます。対になる `removeIllustration`（`clearNodeIllustration`）実行時は `height: RECT_HEIGHT`（**`60px` 固定**）に戻ります。
   - **JSON 復元・インポート時の正規化** (`normalizeMapDocumentNode` in `mapDocumentNode.ts`, `getIllustratedNodeMinHeight` in `nodeIllustration.ts`): 保存データや外部 JSON のデコード時には、イラストを持つノードに対して `getIllustratedNodeMinHeight(height)`（`Math.max(height, ILLUSTRATED_NODE_HEIGHT)`）が適用されます。これにより `116px` 未満の高さは `116px` に引き上げられる一方、JSON 内で `116px` を超えるカスタム高さが指定されていた場合はその高さが維持されます。
@@ -1815,7 +1822,7 @@ sequenceDiagram
 
 ### 16.2 挿入の規則
 
-- **N の値**（`createParentNode(T, id)`）: `{ id, parentId: T の元の親, x: T.x, y: T.y, width: 100, height: 60, label: "", importance: T.importance }`。重要度だけを T から引き継ぎ、大きさは新しいノードの既定値（`RECT_WIDTH`・`RECT_HEIGHT`）です。T がイラストを持っていても大きさを写さず、`illustration`・`note`（詳細メモ）・`links`（URL）・`tags`（タグ）・`sources`（出典）も持ちません。
+- **N の値**（`createParentNode(T, id)`）: `{ id, parentId: T の元の親, x: T.x, y: T.y, width: 100, height: 60, label: "", importance: T.importance }`。重要度だけを T から引き継ぎ、大きさは新しいノードの既定値（`RECT_WIDTH`・`RECT_HEIGHT`）です。T がイラストを持っていても大きさを写さず、`illustration`・`note`（詳細メモ）・`links`（URL）・`tags`（タグ）・`sources`（出典）・`mapLinks`・`locked`・`labelFontSize`・`labelBold`・`labelUnderline`・`icon`・`kind` も持ちません。
 - **ID**: N の ID は、`applyTreeChange` のコールバックの中で、最新のノード配列から既存の `nodeIdAllocator.nextAvailableId` で採ります。T もその配列から解決します。純関数は ID を引数で受け取り、既存のノードと重なれば `id-conflict` で拒否します（呼び出し元の誤りを黙って通さないため。採番器は重ならない値を返すので、通常は起きません）。
 - **配列の位置**: `nodes` を1回走査し、T に出会ったら N を積んでから T を積みます（T の元の位置に N が入り、T は1つ後ろへずれます）。兄弟の順は同じ `parentId` 同士の配列の相対順で決まるので、元の親の子の並びで N が T のいた位置を占めます。親を子より前に積むので、描画の順（配列の順）でも親が子の下に描かれます。
 - **段階**: 座標の計算は、N を足して T の親をまだ変えていない配列（N に子が無い状態）で行い、その後で T の `parentId` を N の ID に変えます。どちらの段階も1回の走査で新しい配列を作ります。
@@ -2674,7 +2681,7 @@ Phase 18・候補023。親子関係とは別の分類軸（「重要」「資料
 
 ### 26.6 属性の追加漏れを防ぐ守り
 
-- ノードの任意の属性（`illustration`・`note`・`links`・`tags`・`sources`・`mapLinks`・`locked`・`labelFontSize`・`labelBold`・`labelUnderline`）の分割・統合・親の挿入での扱いを、`domain/nodes/nodeAttributePolicy.ts` の表（`NODE_ATTRIBUTE_POLICY`）に宣言します。任意の属性を足して表を更新しないと型エラーになります。表は宣言で、各操作の実装を置き換えません。最新の表は 27.6 節にもあります。
+- ノードの任意の属性（`illustration`・`note`・`links`・`tags`・`sources`・`mapLinks`・`locked`・`labelFontSize`・`labelBold`・`labelUnderline`・`icon`・`kind`）の分割・統合・親の挿入での扱いを、`domain/nodes/nodeAttributePolicy.ts` の表（`NODE_ATTRIBUTE_POLICY`）に宣言します。任意の属性を足して表を更新しないと型エラーになります。表は宣言で、各操作の実装を置き換えません。最新の表は 27.6 節にもあります。
 
 | 属性 | 分割 | 統合 | 親の挿入 |
 | :--- | :--- | :--- | :--- |
@@ -2688,6 +2695,8 @@ Phase 18・候補023。親子関係とは別の分類軸（「重要」「資料
 | `labelFontSize` | 元のノードにだけ残す | 残すノードの値、無ければ吸収されるノードのうち配列順で最初の値 | 持たない |
 | `labelBold` | 元のノードにだけ残す | 残すノードの値、無ければ吸収されるノードのうち配列順で最初の値 | 持たない |
 | `labelUnderline` | 元のノードにだけ残す | 残すノードの値、無ければ吸収されるノードのうち配列順で最初の値 | 持たない |
+| `icon` | 元のノードにだけ残す | 残すノードの値、無ければ吸収されるノードのうち配列順で最初の値 | 持たない |
+| `kind` | 元のノードにだけ残す | 残すノードの値、無ければ吸収されるノードのうち配列順で最初の値 | 持たない |
 
 - `nodeAttributePolicy.test.ts` が、表と実際の振る舞い（分割・親の挿入・統合）の一致と、全属性を持つ見本のノードの書き出し・読み込みの往復、各属性の違いを競合判定と履歴の同値判定が見分けることを検査します（見本は `Required<Node>` 型なので、属性を足すと型エラーになります）。
 
@@ -2767,7 +2776,7 @@ Phase 18・候補054。短いノード名の裏側に、書籍名・ページ・
 
 ### 27.6 属性の追加漏れを防ぐ守り
 
-- ノードの任意の属性（`illustration`・`note`・`links`・`tags`・`sources`・`mapLinks`・`locked`・`labelFontSize`・`labelBold`・`labelUnderline`）の分割・統合・親の挿入での扱いを、`domain/nodes/nodeAttributePolicy.ts` の表（`NODE_ATTRIBUTE_POLICY`）に宣言します。任意の属性を足して表を更新しないと型エラーになります。表は宣言で、各操作の実装を置き換えません。
+- ノードの任意の属性（`illustration`・`note`・`links`・`tags`・`sources`・`mapLinks`・`locked`・`labelFontSize`・`labelBold`・`labelUnderline`・`icon`・`kind`）の分割・統合・親の挿入での扱いを、`domain/nodes/nodeAttributePolicy.ts` の表（`NODE_ATTRIBUTE_POLICY`）に宣言します。任意の属性を足して表を更新しないと型エラーになります。表は宣言で、各操作の実装を置き換えません。
 
 | 属性 | 分割 | 統合 | 親の挿入 |
 | :--- | :--- | :--- | :--- |
@@ -2781,6 +2790,8 @@ Phase 18・候補054。短いノード名の裏側に、書籍名・ページ・
 | `labelFontSize` | 元のノードにだけ残す | 残すノードの値、無ければ吸収されるノードのうち配列順で最初の値 | 持たない |
 | `labelBold` | 元のノードにだけ残す | 残すノードの値、無ければ吸収されるノードのうち配列順で最初の値 | 持たない |
 | `labelUnderline` | 元のノードにだけ残す | 残すノードの値、無ければ吸収されるノードのうち配列順で最初の値 | 持たない |
+| `icon` | 元のノードにだけ残す | 残すノードの値、無ければ吸収されるノードのうち配列順で最初の値 | 持たない |
+| `kind` | 元のノードにだけ残す | 残すノードの値、無ければ吸収されるノードのうち配列順で最初の値 | 持たない |
 
 - `nodeAttributePolicy.test.ts` が、表と実際の振る舞い（分割・親の挿入・統合）の一致と、全属性を持つ見本のノードの書き出し・読み込みの往復、各属性の違いを競合判定と履歴の同値判定が見分けることを検査します（見本は `Required<Node>` 型なので、属性を足すと型エラーになります）。
 
