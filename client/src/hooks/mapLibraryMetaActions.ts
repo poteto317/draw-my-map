@@ -34,7 +34,14 @@ import {
   type MapLibraryMetaWriteResult,
 } from "@/services/persistence/mapLibraryMetaStorage";
 import type { MapLibraryStorage } from "@/services/persistence/mapLibraryStorage";
+import {
+  metaProtectedUnavailableNotice,
+  metaStatusBlockedNotice,
+  metaWriteFailedNotice,
+} from "@/domain/mapLibrary/mapLibraryMessages";
 import type { OperationNotice } from "@/types/operationNotice";
+
+export { metaProtectedUnavailableNotice } from "@/domain/mapLibrary/mapLibraryMessages";
 
 export type StartupLibraryMetaResult = {
   readonly libraryMeta: MapLibraryMetaV1;
@@ -49,45 +56,6 @@ export type LibraryMetaActionOutcome = {
     readonly libraryMetaStatus: MapLibraryMetaStatus;
   };
 };
-
-export function metaProtectedUnavailableNotice(): OperationNotice {
-  return {
-    kind: "error",
-    message: "保護モード中は、お気に入りやフォルダー情報を変更できません。",
-  };
-}
-
-function metaStatusBlockedNotice(
-  status: Exclude<MapLibraryMetaStatus, "ready">,
-): OperationNotice {
-  if (status === "corrupt") {
-    return {
-      kind: "error",
-      message:
-        "お気に入り・フォルダー情報が破損しているため操作できません。メタデータを初期化してから再試行してください。",
-    };
-  }
-  return {
-    kind: "error",
-    message: "お気に入り・フォルダー情報を読み込めなかったため操作できません。",
-  };
-}
-
-function metaWriteFailedNotice(
-  reason: Extract<MapLibraryMetaWriteResult, { ok: false }>["reason"],
-): OperationNotice {
-  if (reason === "quota") {
-    return {
-      kind: "error",
-      message:
-        "保存領域の空きが足りず、お気に入り・フォルダー情報を保存できませんでした。不要なデータを減らして再試行してください。",
-    };
-  }
-  return {
-    kind: "error",
-    message: "お気に入り・フォルダー情報を保存できませんでした。再試行してください。",
-  };
-}
 
 function startupMetaWriteWarningNotice(
   reason: Extract<MapLibraryMetaWriteResult, { ok: false }>["reason"],
