@@ -3782,7 +3782,7 @@ describe("useMapLibrary のメタデータの複数タブ（別タブの更新�
     });
     expect(toggled?.ok).toBe(false);
     expect(toggled?.notice?.message).toBe(
-      "お気に入り・フォルダー情報が破損しているため操作できません。メタデータを初期化してから再試行してください。",
+      "お気に入り・フォルダー・アーカイブ情報が破損しているため操作できません。メタデータを初期化してから再試行してください。",
     );
     expect(readyView(hook.result.current.view).libraryMetaStatus).toBe("corrupt");
     expect(hook.entries()[MAP_LIBRARY_META_STORAGE_KEY]).toBe("{corrupt");
@@ -3864,7 +3864,9 @@ describe("useMapLibrary のメタデータの複数タブ（別タブの更新�
     });
 
     expect(reset?.ok).toBe(false);
-    expect(reset?.notice?.message).toBe("お気に入り・フォルダー情報を読み込めなかったため操作できません。");
+    expect(reset?.notice?.message).toBe(
+      "お気に入り・フォルダー・アーカイブ情報を読み込めなかったため操作できません。",
+    );
     expect(hook.entries()[MAP_LIBRARY_META_STORAGE_KEY]).toBe("{corrupt");
     expect(hook.operations.filter((op) => op.key === MAP_LIBRARY_META_STORAGE_KEY)).toHaveLength(writesBefore);
     expect(readyView(hook.result.current.view).libraryMetaStatus).toBe("unavailable");
@@ -3990,7 +3992,9 @@ describe("useMapLibrary のメタデータの複数タブ（別タブの更新�
     expect(readyView(hook.result.current.view).libraryMetaStatus).toBe("unavailable");
 
     expect(toggled?.ok).toBe(false);
-    expect(toggled?.notice?.message).toBe("お気に入り・フォルダー情報を読み込めなかったため操作できません。");
+    expect(toggled?.notice?.message).toBe(
+      "お気に入り・フォルダー・アーカイブ情報を読み込めなかったため操作できません。",
+    );
     expect(switched?.ok).toBe(true);
     expect(switched?.notice?.kind).toBe("warning");
     expect(hook.entries()[MAP_LIBRARY_META_STORAGE_KEY]).toBe(before);

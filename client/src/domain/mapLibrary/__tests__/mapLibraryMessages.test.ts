@@ -7,6 +7,14 @@ import {
   branchMoveFlushFailedNotice,
   branchMoveRejectedNotice,
   conflictBranchExtractRejectedNotice,
+  META_PROTECTED_UNAVAILABLE_MESSAGE,
+  META_STATUS_CORRUPT_BLOCKED_MESSAGE,
+  META_STATUS_UNAVAILABLE_BLOCKED_MESSAGE,
+  META_WRITE_FAILED_MESSAGE,
+  META_WRITE_FAILED_QUOTA_MESSAGE,
+  metaProtectedUnavailableNotice,
+  metaStatusBlockedNotice,
+  metaWriteFailedNotice,
   AUTO_SAVE_FAILURE_MESSAGE,
   autoSaveFailedNotice,
   bodyRemovalFailedNotice,
@@ -152,6 +160,32 @@ describe("mapLibraryMessages", () => {
     expect(branchExtractStoredErrorMessage()).toBe(
       "枝を別マップに切り出せませんでした。保存データを確認してやり直してください。",
     );
+  });
+
+  it("ライブラリーメタデータの拒否メッセージ", () => {
+    expect(META_PROTECTED_UNAVAILABLE_MESSAGE).toBe(
+      "保護モード中は、お気に入り・フォルダー・アーカイブ情報を変更できません。",
+    );
+    expect(metaProtectedUnavailableNotice()).toEqual({
+      kind: "error",
+      message: META_PROTECTED_UNAVAILABLE_MESSAGE,
+    });
+    expect(metaStatusBlockedNotice("corrupt")).toEqual({
+      kind: "error",
+      message: META_STATUS_CORRUPT_BLOCKED_MESSAGE,
+    });
+    expect(metaStatusBlockedNotice("unavailable")).toEqual({
+      kind: "error",
+      message: META_STATUS_UNAVAILABLE_BLOCKED_MESSAGE,
+    });
+    expect(metaWriteFailedNotice("quota")).toEqual({
+      kind: "error",
+      message: META_WRITE_FAILED_QUOTA_MESSAGE,
+    });
+    expect(metaWriteFailedNotice("write-error")).toEqual({
+      kind: "error",
+      message: META_WRITE_FAILED_MESSAGE,
+    });
   });
 
   it("id を決められないときは error", () => {

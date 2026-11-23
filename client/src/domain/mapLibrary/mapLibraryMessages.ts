@@ -1,5 +1,41 @@
+import type { MapLibraryMetaStatus } from "@/domain/mapLibrary/mapLibraryMeta";
 import type { OperationNotice } from "@/types/operationNotice";
 import { DEFAULT_MAP_NAME } from "./mapName";
+
+export const META_PROTECTED_UNAVAILABLE_MESSAGE =
+  "保護モード中は、お気に入り・フォルダー・アーカイブ情報を変更できません。";
+
+export const META_STATUS_CORRUPT_BLOCKED_MESSAGE =
+  "お気に入り・フォルダー・アーカイブ情報が破損しているため操作できません。メタデータを初期化してから再試行してください。";
+
+export const META_STATUS_UNAVAILABLE_BLOCKED_MESSAGE =
+  "お気に入り・フォルダー・アーカイブ情報を読み込めなかったため操作できません。";
+
+export const META_WRITE_FAILED_QUOTA_MESSAGE =
+  "保存領域の空きが足りず、お気に入り・フォルダー・アーカイブ情報を保存できませんでした。不要なデータを減らして再試行してください。";
+
+export const META_WRITE_FAILED_MESSAGE =
+  "お気に入り・フォルダー・アーカイブ情報を保存できませんでした。再試行してください。";
+
+export function metaProtectedUnavailableNotice(): OperationNotice {
+  return { kind: "error", message: META_PROTECTED_UNAVAILABLE_MESSAGE };
+}
+
+export function metaStatusBlockedNotice(
+  status: Exclude<MapLibraryMetaStatus, "ready">,
+): OperationNotice {
+  if (status === "corrupt") {
+    return { kind: "error", message: META_STATUS_CORRUPT_BLOCKED_MESSAGE };
+  }
+  return { kind: "error", message: META_STATUS_UNAVAILABLE_BLOCKED_MESSAGE };
+}
+
+export function metaWriteFailedNotice(reason: "quota" | "write-error"): OperationNotice {
+  if (reason === "quota") {
+    return { kind: "error", message: META_WRITE_FAILED_QUOTA_MESSAGE };
+  }
+  return { kind: "error", message: META_WRITE_FAILED_MESSAGE };
+}
 
 // 自動保存と削除後の再試行の失敗で使う。
 export const AUTO_SAVE_FAILURE_MESSAGE =
