@@ -1,6 +1,7 @@
 import {
   getMapExportTextLayout,
   MAP_EXPORT_HORIZONTAL_INSET,
+  resolveMapExportTextMeasureStyle,
   type MeasureMapText,
 } from "@/domain/imageExport/mapExportText";
 import { getNodeLabelCenterOffset } from "@/domain/nodes/nodeIllustration";
@@ -69,6 +70,7 @@ function getNodeExportExtent(
     node.width - MAP_EXPORT_HORIZONTAL_INSET * 2,
     centerY,
     measureText,
+    resolveMapExportTextMeasureStyle(node),
   );
 
   return {

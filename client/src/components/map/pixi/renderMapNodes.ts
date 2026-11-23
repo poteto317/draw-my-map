@@ -3,10 +3,18 @@ import type { MapVisibilityTarget } from "@/components/map/pixi/mapVisibilityAni
 import { nodeVisibilityKey } from "@/components/map/pixi/mapVisibilityKeys";
 import { createNodeVisibilityTarget } from "@/components/map/pixi/pixiVisibilityTarget";
 import { HIGHLIGHT_DIM_ALPHA } from "@/domain/nodes/highlightSets";
+import {
+  resolveLabelTextPresentation,
+  resolveLabelUnderline,
+} from "@/domain/nodes/labelTextStyle";
 import { getNodeDisplayLabel } from "@/domain/nodes/nodeDisplayLabel";
 import { getNodeIllustrationRect, getNodeLabelCenterOffset } from "@/domain/nodes/nodeIllustration";
 import type { Node } from "@/types/node";
 import type { Container, FederatedPointerEvent, Graphics, Sprite, Text, Texture } from "pixi.js";
+
+const NODE_LABEL_FILL = 0x27272a;
+const NODE_LABEL_UNDERLINE_STROKE_WIDTH = 1;
+const NODE_LABEL_UNDERLINE_GAP = 1;
 
 export type RenderMapNodesOptions = {
   nodes: readonly Node[];
@@ -137,11 +145,13 @@ function createNodeLockMarker(constructors: PixiConstructors, node: Node): Graph
 }
 
 function createNodeLabelText(constructors: PixiConstructors, node: Node): Text {
+  const presentation = resolveLabelTextPresentation(node);
   const text = new constructors.Text({
     text: getNodeDisplayLabel(node.label),
     style: {
-      fontSize: 14,
-      fill: 0x27272a,
+      fontSize: presentation.fontSize,
+      fontWeight: presentation.fontWeight,
+      fill: NODE_LABEL_FILL,
       wordWrap: true,
       wordWrapWidth: node.width - 16,
       align: "center",
@@ -151,6 +161,21 @@ function createNodeLabelText(constructors: PixiConstructors, node: Node): Text {
   text.x = node.x + node.width / 2;
   text.y = node.y + getNodeLabelCenterOffset(node);
   return text;
+}
+
+function createNodeLabelUnderline(
+  constructors: PixiConstructors,
+  node: Node,
+  text: Text,
+): Graphics | null {
+  if (!resolveLabelUnderline(node)) return null;
+  const underline = new constructors.Graphics();
+  const y = text.y + text.height / 2 + NODE_LABEL_UNDERLINE_GAP;
+  underline
+    .moveTo(text.x - text.width / 2, y)
+    .lineTo(text.x + text.width / 2, y)
+    .stroke({ width: NODE_LABEL_UNDERLINE_STROKE_WIDTH, color: NODE_LABEL_FILL });
+  return underline;
 }
 
 export function renderMapNodes(
@@ -192,6 +217,11 @@ export function renderMapNodes(
       const text = createNodeLabelText(constructors, node);
       text.alpha = contentAlpha;
       container.addChild(text);
+      const underline = createNodeLabelUnderline(constructors, node, text);
+      if (underline !== null) {
+        underline.alpha = contentAlpha;
+        container.addChild(underline);
+      }
     }
 
     const marker = createNodeLinkMarker(constructors, node);
