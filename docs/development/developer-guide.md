@@ -49,7 +49,7 @@ cp -n .env.example .env.local
 
 ### 1.4 作業の進め方
 
-- 作業は `.worktrees/<ブランチ名>` の git worktree で行います（[AGENTS.md](../../AGENTS.md) の「実装完了後のブランチの扱い」）。
+- 作業はメインのチェックアウトで feature ブランチを切って進めます。git worktree は、同じリポジトリを別作業が実装中で使っている場合などの例外だけです（[AGENTS.md](../../AGENTS.md) の「実装完了後のブランチの扱い」）。
 - 実装の前にテストを書き、失敗（RED）を確かめてから実装します（TDD）。
 - コミットメッセージは Conventional Commits 形式（例: `feat(map): ...`、`test(server): ...`）です。
 - 機能を実装し終えたら、同じブランチで `ROADMAP.md` のチェックと「現在地」を更新します。実装していない項目は完了にしません。
