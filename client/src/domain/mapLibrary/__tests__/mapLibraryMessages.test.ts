@@ -1,7 +1,12 @@
 import {
+  branchExtractedToMapNotice,
+  branchExtractFlushFailedNotice,
+  branchExtractRejectedNotice,
+  branchExtractStoredErrorMessage,
   branchMovedToMapNotice,
   branchMoveFlushFailedNotice,
   branchMoveRejectedNotice,
+  conflictBranchExtractRejectedNotice,
   AUTO_SAVE_FAILURE_MESSAGE,
   autoSaveFailedNotice,
   bodyRemovalFailedNotice,
@@ -124,6 +129,29 @@ describe("mapLibraryMessages", () => {
       kind: "status",
       message: "枝を移動し、移動先のマップを開きました。",
     });
+  });
+
+  it("枝の切り出しの通知", () => {
+    expect(branchExtractFlushFailedNotice()).toEqual({
+      kind: "error",
+      message: "編集中のマップを保存できないため、枝を別マップに切り出せませんでした。",
+    });
+    expect(branchExtractRejectedNotice()).toEqual({
+      kind: "error",
+      message: "枝を別マップに切り出せませんでした。切り出すノードとマップの状態を確認してやり直してください。",
+    });
+    expect(branchExtractedToMapNotice()).toEqual({
+      kind: "status",
+      message: "枝を別マップに切り出し、新しいマップを開きました。",
+    });
+    expect(conflictBranchExtractRejectedNotice()).toEqual({
+      kind: "error",
+      message:
+        "別タブでマップが更新または削除されているため、枝を別マップに切り出せませんでした。",
+    });
+    expect(branchExtractStoredErrorMessage()).toBe(
+      "枝を別マップに切り出せませんでした。保存データを確認してやり直してください。",
+    );
   });
 
   it("id を決められないときは error", () => {

@@ -1,0 +1,1 @@
+export type EditorViewMode = "map" | "outline";

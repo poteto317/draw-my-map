@@ -1,4 +1,6 @@
-export type EditorViewMode = "map" | "outline";
+import type { EditorViewMode } from "@/domain/view/editorViewMode";
+
+export type { EditorViewMode };
 
 type Props = { mode: EditorViewMode; onChange: (mode: EditorViewMode) => void };
 

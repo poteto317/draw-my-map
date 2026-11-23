@@ -26,10 +26,13 @@ export function decodeBranchMoveJournal(raw: string): BranchMoveJournal | null {
     typeof value.indexBefore !== "string")
     return null;
   const decoded = decodeMapIndex(value.indexBefore);
+  const targetInIndex = decoded.kind === "ok"
+    && decoded.index.maps.some((map) => map.id === value.targetId);
   // 補正が要るインデックスも原文のまま持つので、戻すときは補正前の文字列に戻る
+  // 移動先が一覧に無いのは、本体未作成かつ targetBefore が null の枝切り出しだけ許す
   if (decoded.kind !== "ok" ||
     decoded.index.currentMapId !== value.sourceId ||
-    !decoded.index.maps.some(map => map.id === value.targetId))
+    (!targetInIndex && value.targetBefore !== null))
     return null;
   return { version: 1, sourceId: value.sourceId, targetId: value.targetId,
     sourceBefore: value.sourceBefore, targetBefore: value.targetBefore, indexBefore: value.indexBefore };
