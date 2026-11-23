@@ -245,6 +245,8 @@ export function MapEditor({
     setLabelFontSize,
     toggleLabelBold,
     toggleLabelUnderline,
+    setNodeIcon,
+    setNodeKind,
     beginMoveHistory,
     documentRevision,
     canUndo,
@@ -1322,6 +1324,7 @@ export function MapEditor({
               // アウトライン表示では主選択だけ（キャンバスで残った複数選択の件数を見せない）
               selectionCount={importanceTargetIds.length}
               documentRevision={documentRevision}
+              viewMode={viewMode}
               currentMapId={mapId}
               maps={mapMoveTargets}
               corpus={corpus}
@@ -1337,6 +1340,8 @@ export function MapEditor({
               onAddMapLink={handleAddMapLink}
               onRemoveMapLink={removeNodeMapLink}
               onNavigateToMapTarget={navigateToMapTarget}
+              onSetNodeIcon={setNodeIcon}
+              onSetNodeKind={setNodeKind}
               generation={generation}
               onGenerate={generateIllustration}
               onAttach={(nodeId, dataUrl) => {
