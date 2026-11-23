@@ -1,3 +1,4 @@
+import type { LabelFontSize } from "@/types/labelFontSize";
 import type { NodeImportance } from "@/types/nodeImportance";
 
 // マップのノード。属性を足すときは、ノードの分割・統合での扱いを決めて見直す
@@ -58,6 +59,15 @@ export type Node = {
   mapLinks?: readonly NodeMapLink[];
   // 編集ロック。値があるノードでは true のみキーを持つ
   locked?: true;
+  // ラベル文字サイズ（許可値は types/labelFontSize.ts の LABEL_FONT_SIZES: 12 | 14 | 18 | 24）。
+  // 欠落・不正は標準 14（キー削除）。encode 時 14 はキー省略必須（projectLabelTextStyle）。
+  // 分割では元のノードにだけ残し、統合では survivor-else-first、親の挿入では新しい親に持たせない。
+  // 描画・アウトライン・画像書き出し・インライン編集で使う
+  labelFontSize?: LabelFontSize;
+  // ラベル太字。true のみキーを持つ（欠落＝通常）。規則は labelFontSize と同じ（policy・投影）
+  labelBold?: true;
+  // ラベル下線。true のみキーを持つ（欠落＝下線なし）。規則は labelFontSize と同じ（policy・投影）
+  labelUnderline?: true;
 };
 
 // 出典 1 件。任意の page / url は無いときキーごと持たない。規則は domain/nodes/nodeSource.ts
