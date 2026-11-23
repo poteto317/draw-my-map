@@ -73,7 +73,6 @@ import {
 import {
   failedOperation,
   failedPermanentDeleteOperation,
-  isActiveBranchMoveSource,
   isSameTrashState,
   protectedModeFailure,
   succeededOperation,
@@ -128,7 +127,7 @@ import {
   resolveBranchStorageFailure,
 } from "@/hooks/mapLibraryBranchMutation";
 import { extractStoredBranch } from "@/services/persistence/mapBranchExtract";
-import { readBranchMoveIndex, transferStoredBranch } from "@/services/persistence/mapBranchTransfer";
+import { transferStoredBranch } from "@/services/persistence/mapBranchTransfer";
 import { createProtectedStorageSession } from "@/services/persistence/protectedStorageSession";
 import type { MapFlushResult, MapStorageSession } from "@/types/mapStorageSession";
 import type { MapDocumentResult } from "@/types/mapDocument";
@@ -635,32 +634,41 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
     sourceSession: MapStorageSession,
     targetId: string,
     rootId: number,
-  ): MapLibraryOperationResult =>
-    requirePersistent(branchMoveRejectedNotice(), (before) => {
-      if (!isActiveBranchMoveSource(before, sourceSession)
-        || before.index.currentMapId === targetId || findMapEntry(before.index, targetId) === null) {
-        return failedOperation(branchMoveRejectedNotice());
-      }
-      const moveFlush = flushCurrentSession();
-      if (moveFlush.status === "conflict") {
-        return failedOperation(conflictBranchMoveRejectedNotice());
-      }
-      if (moveFlush.status === "failed") {
-        return failedOperation(branchMoveFlushFailedNotice());
-      }
-      // flush による更新・再入を反映し、保存領域の最新インデックスも読み直す。
-      const current = libraryRef.current;
-      if (!isActiveBranchMoveSource(current, sourceSession)) return failedOperation(branchMoveRejectedNotice());
-      const stored = readBranchMoveIndex(current.storage);
-      if (stored === null || stored.index.currentMapId !== sourceSession.mapId) {
-        return failedOperation(branchMoveRejectedNotice());
-      }
-      const moved = transferStoredBranch(current.storage, stored.index, sourceSession.mapId, targetId, rootId, depsRef.current.now());
+  ): MapLibraryOperationResult => {
+    const rejected = branchMoveRejectedNotice();
+    return requirePersistent(rejected, (before) => {
+      const flush = flushCurrentSession();
+      const prepared = prepareBranchMutation({
+        before,
+        current: libraryRef.current,
+        sourceSession,
+        flush,
+        notices: {
+          conflict: conflictBranchMoveRejectedNotice(),
+          failed: branchMoveFlushFailedNotice(),
+          rejected,
+        },
+        validateBeforeFlush: (state) => (
+          state.index.currentMapId === targetId || findMapEntry(state.index, targetId) === null
+            ? failedOperation(rejected)
+            : null
+        ),
+      });
+      if (!("stored" in prepared)) return prepared;
+      const { current, stored } = prepared;
+      const moved = transferStoredBranch(
+        current.storage,
+        stored.index,
+        sourceSession.mapId,
+        targetId,
+        rootId,
+        depsRef.current.now(),
+      );
       if (!moved.ok) {
-        const notice: OperationNotice = { kind: "error", message: moved.error };
-        if (!moved.recoveryRequired) return failedOperation(notice);
-        protectAfterBranchMove(current, moved.sourceJson, notice);
-        return protectedModeFailure(notice);
+        return resolveBranchStorageFailure(moved, (sourceJson, notice) => {
+          protectAfterBranchMove(current, sourceJson, notice);
+          return protectedModeFailure(notice);
+        });
       }
       const { libraryMeta, notice } = persistMapOpenedMeta(
         current,
@@ -671,7 +679,8 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
       );
       commitNewSession(current, moved.index, libraryMeta);
       return succeededOperation(notice, true);
-    }), [commitNewSession, flushCurrentSession, protectAfterBranchMove, requirePersistent]);
+    });
+  }, [commitNewSession, flushCurrentSession, protectAfterBranchMove, requirePersistent]);
 
   const extractBranchToNewMap = useCallback((
     sourceSession: MapStorageSession,

@@ -226,6 +226,22 @@ export function closeAfterEnteringProtectedMode(
   return { ...closeDialog(state, "export"), shellNotice: nextShellNotice(state, notice) };
 }
 
+export function shouldCloseScreenAfterBranchMapOperation(
+  result: MapLibraryOperationResult,
+): boolean {
+  return result.ok || result.enteredProtectedMode === true;
+}
+
+export function nextStateAfterBranchMapOperation(
+  state: DialogState,
+  result: MapLibraryOperationResult,
+): DialogState {
+  if (result.ok) return closeAfterSuccess(state, result);
+  return result.enteredProtectedMode
+    ? closeAfterEnteringProtectedMode(state, result.notice)
+    : state;
+}
+
 // 指定した画面に戻る成功。status 以外の通知と保存の再試行の失敗は alert に出す
 function returnToScreen(
   state: DialogState,

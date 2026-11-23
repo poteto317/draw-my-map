@@ -15,6 +15,8 @@ import {
   closeAfterEnteringProtectedMode,
   closeAfterSuccess,
   closeDialog,
+  nextStateAfterBranchMapOperation,
+  shouldCloseScreenAfterBranchMapOperation,
   closeDialogSilently,
   INITIAL_STATE,
   nextScreenAfterActiveDeletion,
@@ -571,33 +573,33 @@ export function useMapLibraryDialogState(options: {
     setState((prev) => returnToList(prev, result, { kind: "folderButton" }));
   }, [transition]);
 
+  const applyBranchMapOperationResult = useCallback((
+    result: MapLibraryOperationResult,
+  ): MapLibraryOperationResult => {
+    if (shouldCloseScreenAfterBranchMapOperation(result)) transition({ kind: "closed" });
+    setState((prev) => nextStateAfterBranchMapOperation(prev, result));
+    return result;
+  }, [transition]);
+
   // ダイアログは MapEditor が持つ。再マウントしない失敗は結果を返すだけで、そちらのエラー表示に任せる
   const moveBranchToMap = useCallback((
     sourceSession: MapStorageSession,
     targetId: string,
     rootId: number,
-  ): MapLibraryOperationResult => {
-    const result = libraryRef.current.moveBranchToMap(sourceSession, targetId, rootId);
-    if (result.ok || result.enteredProtectedMode) transition({ kind: "closed" });
-    setState((prev) => {
-      if (result.ok) return closeAfterSuccess(prev, result);
-      return result.enteredProtectedMode ? closeAfterEnteringProtectedMode(prev, result.notice) : prev;
-    });
-    return result;
-  }, [transition]);
+  ): MapLibraryOperationResult =>
+    applyBranchMapOperationResult(
+      libraryRef.current.moveBranchToMap(sourceSession, targetId, rootId),
+    ),
+  [applyBranchMapOperationResult]);
 
   const extractBranchToNewMap = useCallback((
     sourceSession: MapStorageSession,
     rootId: number,
-  ): MapLibraryOperationResult => {
-    const result = libraryRef.current.extractBranchToNewMap(sourceSession, rootId);
-    if (result.ok || result.enteredProtectedMode) transition({ kind: "closed" });
-    setState((prev) => {
-      if (result.ok) return closeAfterSuccess(prev, result);
-      return result.enteredProtectedMode ? closeAfterEnteringProtectedMode(prev, result.notice) : prev;
-    });
-    return result;
-  }, [transition]);
+  ): MapLibraryOperationResult =>
+    applyBranchMapOperationResult(
+      libraryRef.current.extractBranchToNewMap(sourceSession, rootId),
+    ),
+  [applyBranchMapOperationResult]);
 
   const consumeFocusTarget = useCallback(() => {
     setState((prev) => (prev.focusTarget === null ? prev : { ...prev, focusTarget: null }));
