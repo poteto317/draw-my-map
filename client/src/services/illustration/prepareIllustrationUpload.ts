@@ -3,6 +3,7 @@ import {
   MAX_ILLUSTRATION_UPLOAD_DIMENSION,
 } from "@/config/illustration";
 import { getJpegDimensions } from "@/domain/illustration/jpegDimensions";
+import { getPngDimensions } from "@/domain/illustration/pngDimensions";
 import { isIllustrationDataUrl } from "@/domain/illustration/illustrationDataUrl";
 
 export type PrepareIllustrationUploadResult =
@@ -12,8 +13,6 @@ export type PrepareIllustrationUploadResult =
 export type PrepareIllustrationUploadDeps = {
   readImageFile: (file: File) => Promise<string>;
   createThumbnail: (dataUrl: string) => Promise<string>;
-  /** 非 JPEG などヘッダ寸法が取れないとき、デコード直後の縦横を返す */
-  loadImageDimensions: (dataUrl: string) => Promise<{ width: number; height: number }>;
 };
 
 export function defaultReadImageFile(file: File): Promise<string> {
@@ -28,15 +27,6 @@ export function defaultReadImageFile(file: File): Promise<string> {
   });
 }
 
-export async function defaultLoadImageDimensions(
-  dataUrl: string,
-): Promise<{ width: number; height: number }> {
-  const image = new Image();
-  image.src = dataUrl;
-  await image.decode();
-  return { width: image.naturalWidth, height: image.naturalHeight };
-}
-
 function isWithinUploadDimension(width: number, height: number): boolean {
   return (
     width >= 1
@@ -47,27 +37,13 @@ function isWithinUploadDimension(width: number, height: number): boolean {
 }
 
 /**
- * アップロード元の縦横が上限内か。JPEG は SOF ヘッダのみ（デコードしない）。
- * それ以外は loadImageDimensions（デコード直後）で判定する。
+ * アップロード元の縦横が上限内か。JPEG SOF / PNG IHDR などデコード前ヘッダのみ。
+ * ヘッダ寸法が取れない形式は拒否（Image.decode しない）。
  */
-export async function isUploadSourceDimensionsAllowed(
-  dataUrl: string,
-  loadImageDimensions: (dataUrl: string) => Promise<{ width: number; height: number }>,
-): Promise<boolean> {
-  const jpegDimensions = getJpegDimensions(dataUrl);
-  if (jpegDimensions !== null) {
-    return isWithinUploadDimension(jpegDimensions.width, jpegDimensions.height);
-  }
-  if (dataUrl.startsWith("data:image/jpeg;base64,")) {
-    // JPEG なのに SOF が読めない → 寸法不明として拒否
-    return false;
-  }
-  try {
-    const { width, height } = await loadImageDimensions(dataUrl);
-    return isWithinUploadDimension(width, height);
-  } catch {
-    return false;
-  }
+export function isUploadSourceDimensionsAllowed(dataUrl: string): boolean {
+  const dimensions = getJpegDimensions(dataUrl) ?? getPngDimensions(dataUrl);
+  if (dimensions === null) return false;
+  return isWithinUploadDimension(dimensions.width, dimensions.height);
 }
 
 /**
@@ -85,11 +61,7 @@ export async function prepareIllustrationUpload(
 
   try {
     const sourceDataUrl = await deps.readImageFile(file);
-    const dimensionsOk = await isUploadSourceDimensionsAllowed(
-      sourceDataUrl,
-      deps.loadImageDimensions,
-    );
-    if (!dimensionsOk) {
+    if (!isUploadSourceDimensionsAllowed(sourceDataUrl)) {
       return { ok: false, reason: "invalid" };
     }
 

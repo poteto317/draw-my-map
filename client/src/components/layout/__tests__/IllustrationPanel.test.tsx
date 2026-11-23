@@ -10,6 +10,7 @@ import {
 import { IllustrationPanel } from "@/components/layout/IllustrationPanel";
 import { createIllustrationThumbnail } from "@/services/illustration/illustrationThumbnail";
 import { createJpegDataUrl } from "@/testing/jpegFixture";
+import { createPngDataUrl } from "@/testing/pngFixture";
 
 jest.mock("@/services/illustration/illustrationThumbnail", () => {
   const actual = jest.requireActual("@/services/illustration/illustrationThumbnail");
@@ -327,8 +328,7 @@ describe("IllustrationPanel", () => {
   });
 
   describe("画像ファイルの添付", () => {
-    const SOURCE_DATA_URL = "data:image/png;base64,SRC";
-    const okDimensions = async () => ({ width: 200, height: 100 });
+    const SOURCE_DATA_URL = createPngDataUrl(200, 100);
 
     function mockReadImageFile() {
       return jest.fn(async () => SOURCE_DATA_URL);
@@ -337,10 +337,7 @@ describe("IllustrationPanel", () => {
     function renderUploadPanel(
       props: Partial<ComponentProps<typeof IllustrationPanel>> = {},
     ) {
-      return renderPanel({
-        loadImageDimensions: okDimensions,
-        ...props,
-      });
+      return renderPanel(props);
     }
 
     it("「画像を添付」と accept=image/* のファイル入力を持つ", () => {
@@ -453,6 +450,25 @@ describe("IllustrationPanel", () => {
       await user.upload(
         imageFileInput(container),
         new File(["jpeg"], "wide.jpg", { type: "image/jpeg" }),
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole("alert")).toHaveTextContent("画像を添付できませんでした");
+      });
+      expect(mockCreateThumbnail).not.toHaveBeenCalled();
+      expect(onAttach).not.toHaveBeenCalled();
+    });
+
+    it("PNG の IHDR 寸法が上限超過ならサムネイルせずエラーを出す", async () => {
+      const user = userEvent.setup();
+      const over = MAX_ILLUSTRATION_UPLOAD_DIMENSION + 1;
+      const pngSource = createPngDataUrl(over, 100);
+      const readImageFile = jest.fn(async () => pngSource);
+      const { container, onAttach } = renderUploadPanel({ readImageFile });
+
+      await user.upload(
+        imageFileInput(container),
+        new File(["png"], "wide.png", { type: "image/png" }),
       );
 
       await waitFor(() => {
