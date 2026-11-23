@@ -14,6 +14,7 @@ function createCorpus(overrides: Partial<CrossMapCorpus> = {}): CrossMapCorpus {
         mapId: CURRENT_MAP_ID,
         mapName: "現在のマップ",
         isCurrent: true,
+        isArchived: false,
         nodes: [
           createTestNode({ id: 1, label: "ターゲット" }),
           createTestNode({
@@ -27,6 +28,7 @@ function createCorpus(overrides: Partial<CrossMapCorpus> = {}): CrossMapCorpus {
         mapId: OTHER_MAP_ID,
         mapName: "別マップ",
         isCurrent: false,
+        isArchived: false,
         nodes: [
           createTestNode({
             id: 10,
@@ -88,6 +90,7 @@ describe("NodeBacklinksSection", () => {
               mapId: CURRENT_MAP_ID,
               mapName: "現在のマップ",
               isCurrent: true,
+        isArchived: false,
               nodes: [createTestNode({ id: 2, label: "孤立ノード" })],
             },
           ],
@@ -177,6 +180,7 @@ describe("NodeBacklinksSection", () => {
               mapId: CURRENT_MAP_ID,
               mapName: "現在のマップ",
               isCurrent: true,
+        isArchived: false,
               nodes: [createTestNode({ id: 2, label: "孤立ノード" })],
             },
           ],

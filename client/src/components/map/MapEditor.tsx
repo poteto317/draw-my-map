@@ -7,6 +7,7 @@ import { EditorViewModeControl, type EditorViewMode } from "@/components/layout/
 import { ExportScopeControl } from "@/components/layout/ExportScopeControl";
 import { OutlineEditor } from "@/components/outline/OutlineEditor";
 import type { MapIndexEntry } from "@/domain/mapLibrary/mapIndex";
+import type { MapLibraryMetaV1 } from "@/domain/mapLibrary/mapLibraryMeta";
 import {
   canUseSelectionScope,
   resolveExportFormatControls,
@@ -153,6 +154,7 @@ type MapEditorProps = {
   // シェルが保護モードへ移ったときのフォーカスの戻し先。ボタンはこの編集画面が描画する
   exportButtonRef: RefObject<HTMLButtonElement | null>;
   mapMoveTargets: readonly MapIndexEntry[];
+  libraryMeta: MapLibraryMetaV1;
   onMoveBranchToMap: (rootId: number, targetMapId: string) => MapLibraryOperationResult;
   onSaveCurrentAsNewMap?: (name: string, snapshotJson: string) => MapLibraryOperationResult;
   shortcutsEnabled: boolean;
@@ -178,6 +180,7 @@ export function MapEditor({
   mapControls,
   exportButtonRef,
   mapMoveTargets,
+  libraryMeta,
   onMoveBranchToMap,
   onSaveCurrentAsNewMap,
   shortcutsEnabled,
@@ -509,6 +512,7 @@ export function MapEditor({
     currentNodes: nodes,
     storage: storageSession.storage,
     storageMode,
+    libraryMeta,
   });
   const { navigationNotice, navigateToMapTarget } = useCrossMapNavigation({
     mapId,

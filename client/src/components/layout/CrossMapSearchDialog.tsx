@@ -257,6 +257,11 @@ export function CrossMapSearchDialog({
                         現在
                       </span>
                     )}
+                    {match.isMapArchived && (
+                      <span className="rounded bg-zinc-200 px-1.5 py-0.5 font-medium text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">
+                        アーカイブ
+                      </span>
+                    )}
                     <span className="rounded bg-zinc-200 px-1.5 py-0.5 font-medium text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">
                       {matchFieldBadgeLabel(match.matchedBy)}
                     </span>

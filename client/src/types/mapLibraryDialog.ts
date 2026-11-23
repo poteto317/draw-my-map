@@ -22,7 +22,7 @@ export type OpenMapLibraryDialogScreen = Exclude<
   { kind: "closed" }
 >;
 
-export type MapLibraryRowAction = "open" | "rename" | "delete";
+export type MapLibraryRowAction = "open" | "rename" | "delete" | "archive" | "unarchive";
 
 export type MapLibraryTrashRowAction = "restore" | "permanentDelete";
 

@@ -31,6 +31,8 @@ describe("MapLibraryListFilters", () => {
     expect(screen.getByRole("button", { name: "最近使用" })).toHaveAttribute("aria-pressed", "true");
     await user.click(screen.getByRole("button", { name: "お気に入り" }));
     expect(props.onChangeListTab).toHaveBeenCalledWith("favorites");
+    await user.click(screen.getByRole("button", { name: "アーカイブ" }));
+    expect(props.onChangeListTab).toHaveBeenCalledWith("archived");
   });
 
   it("フォルダーの選択肢を並べ、選んだ絞り込みを通知する", async () => {

@@ -17,11 +17,12 @@ function setup() {
     createMap: jest.fn(), createMapFromTemplate: jest.fn(), switchMap: jest.fn(), renameMap: jest.fn(), deleteMap: jest.fn(), permanentlyDeleteMap: jest.fn(),
     refreshTrash: jest.fn(), restoreFromTrash: jest.fn(), permanentlyDeleteFromTrash: jest.fn(), emptyTrash: jest.fn(),
     moveBranchToMap: jest.fn(),
+    extractBranchToNewMap: jest.fn(),
     prepareBackup: jest.fn(() => ({ ok: true, value: backup })),
     downloadBackup: jest.fn<MapLibraryOperationResult, [LibraryBackupPreview]>(() => ({ ok: true, remounted: false, notice: { kind: "status", message: "ダウンロードを開始しました。" }, saveRetryNotice: null })),
     previewRestore: jest.fn<Promise<MapDocumentResult<LibraryRestorePreview>>, [File]>(async () => ({ ok: true, value: restore })),
     confirmRestore: jest.fn<MapLibraryOperationResult, [LibraryRestorePreview]>(() => ({ ok: true, remounted: false, notice: { kind: "status", message: "追加しました。" }, saveRetryNotice: null })),
-    toggleFavorite: jest.fn(), assignFolder: jest.fn(), createFolder: jest.fn(), renameFolder: jest.fn(), deleteFolder: jest.fn(), resetLibraryMeta: jest.fn(),
+    toggleFavorite: jest.fn(), archiveMap: jest.fn(), unarchiveMap: jest.fn(), assignFolder: jest.fn(), createFolder: jest.fn(), renameFolder: jest.fn(), deleteFolder: jest.fn(), resetLibraryMeta: jest.fn(),
   };
   const hook = renderHook(() => useMapLibraryDialogState({ library, maps, trashEntries: [], libraryMeta: createEmptyMapLibraryMeta(), startupNotice: null }));
   act(() => hook.result.current.openList());

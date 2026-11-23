@@ -42,6 +42,8 @@ function renderList(overrides: Partial<Props> = {}) {
     onChangeFolderFilter: jest.fn(),
     onOpenFolders: jest.fn(),
     onToggleFavorite: jest.fn(),
+    onArchiveMap: jest.fn(),
+    onUnarchiveMap: jest.fn(),
     onAssignFolder: jest.fn(),
     onResetLibraryMeta: jest.fn(),
     onOpenCreate: jest.fn(),

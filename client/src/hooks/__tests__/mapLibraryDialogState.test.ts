@@ -21,6 +21,7 @@ import {
   returnToFoldersAfterAction,
   returnToList,
   returnToTrashAfterAction,
+  selectFocusAfterArchiveToggle,
   selectFocusAfterFavoriteToggle,
   selectFocusAfterFolderAssign,
   selectFocusAfterFolderRemoval,
@@ -79,6 +80,51 @@ describe("mapLibraryDialogState", () => {
       expect(selectFocusAfterRemoval(maps, "missing")).toEqual({
         kind: "listCreateButton",
       });
+    });
+  });
+
+  describe("selectFocusAfterArchiveToggle", () => {
+    const maps = [mapEntry("a", "A"), mapEntry("b", "B"), mapEntry("c", "C")];
+    const meta: MapLibraryMetaV1 = {
+      ...createEmptyMapLibraryMeta(),
+      mapMeta: {
+        a: { archivedAt: "2026-11-01T00:00:00.000Z" },
+        b: { archivedAt: "2026-11-02T00:00:00.000Z" },
+        c: { lastOpenedAt: "2026-11-01T00:00:00.000Z" },
+      },
+    };
+
+    it("アーカイブタブで解除すると、消える行の次行へフォーカスする", () => {
+      expect(
+        selectFocusAfterArchiveToggle(maps, meta, "archived", "a", false),
+      ).toEqual({
+        kind: "row",
+        mapId: "b",
+        action: "open",
+      });
+    });
+
+    it("アーカイブ以外のタブでアーカイブすると、消える行の次行へフォーカスする", () => {
+      expect(selectFocusAfterArchiveToggle(maps, meta, "all", "c", true)).toEqual({
+        kind: "row",
+        mapId: "b",
+        action: "open",
+      });
+    });
+
+    it("行が消えない操作では null を返す", () => {
+      expect(selectFocusAfterArchiveToggle(maps, meta, "archived", "a", true)).toBeNull();
+      expect(selectFocusAfterArchiveToggle(maps, meta, "all", "c", false)).toBeNull();
+      expect(selectFocusAfterArchiveToggle(maps, meta, "recent", "c", false)).toBeNull();
+    });
+
+    it("アーカイブ済みでないマップ・表示されていないマップでは null を返す", () => {
+      expect(
+        selectFocusAfterArchiveToggle(maps, meta, "archived", "c", false),
+      ).toBeNull();
+      expect(
+        selectFocusAfterArchiveToggle([mapEntry("b", "B")], meta, "archived", "a", false),
+      ).toBeNull();
     });
   });
 

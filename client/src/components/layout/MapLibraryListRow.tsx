@@ -2,12 +2,13 @@
 
 import { mapLibraryListButtonAttributes } from "@/components/layout/mapLibraryListButtons";
 import type { MapIndexEntry } from "@/domain/mapLibrary/mapIndex";
-import type {
-  MapFolder,
-  MapListTab,
-  MapUserMeta,
+import {
+  type MapFolder,
+  type MapListTab,
+  type MapUserMeta,
 } from "@/domain/mapLibrary/mapLibraryMeta";
 import {
+  formatMapArchivedAt,
   formatMapLastOpenedAt,
   formatMapUpdatedAt,
 } from "@/domain/mapLibrary/mapTimestamp";
@@ -27,6 +28,8 @@ type MapLibraryListRowProps = {
   onSwitch: (mapId: string) => void;
   onOpenRename: (mapId: string) => void;
   onOpenDelete: (mapId: string) => void;
+  onArchive: (mapId: string) => void;
+  onUnarchive: (mapId: string) => void;
 };
 
 export function MapLibraryListRow({
@@ -44,13 +47,17 @@ export function MapLibraryListRow({
   onSwitch,
   onOpenRename,
   onOpenDelete,
+  onArchive,
+  onUnarchive,
 }: MapLibraryListRowProps) {
   const isFavorite = userMeta?.favorite === true;
   const folderId = userMeta?.folderId;
   const timestampText =
-    listTab === "recent" && userMeta?.lastOpenedAt !== undefined
-      ? formatMapLastOpenedAt(userMeta.lastOpenedAt)
-      : formatMapUpdatedAt(map.updatedAt);
+    listTab === "archived" && userMeta?.archivedAt !== undefined
+      ? formatMapArchivedAt(userMeta.archivedAt)
+      : listTab === "recent" && userMeta?.lastOpenedAt !== undefined
+        ? formatMapLastOpenedAt(userMeta.lastOpenedAt)
+        : formatMapUpdatedAt(map.updatedAt);
 
   return (
     <li className="flex flex-col gap-1 rounded-md border border-zinc-200 p-2 dark:border-zinc-700">
@@ -122,6 +129,37 @@ export function MapLibraryListRow({
         >
           名前を変更
         </button>
+        {listTab === "archived" ? (
+          <button
+            type="button"
+            className={buttonClassName}
+            disabled={isMetaWriteDisabled}
+            aria-label={`アーカイブ解除: ${map.name}`}
+            {...mapLibraryListButtonAttributes({
+              kind: "row",
+              mapId: map.id,
+              action: "unarchive",
+            })}
+            onClick={() => onUnarchive(map.id)}
+          >
+            アーカイブ解除
+          </button>
+        ) : (
+          <button
+            type="button"
+            className={buttonClassName}
+            disabled={isMetaWriteDisabled}
+            aria-label={`アーカイブ: ${map.name}`}
+            {...mapLibraryListButtonAttributes({
+              kind: "row",
+              mapId: map.id,
+              action: "archive",
+            })}
+            onClick={() => onArchive(map.id)}
+          >
+            アーカイブ
+          </button>
+        )}
         <button
           type="button"
           className={buttonClassName}

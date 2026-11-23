@@ -1,12 +1,14 @@
 import type { LibraryBackupV1 } from "@/domain/mapLibrary/libraryBackupCodec";
 import { findMapEntry } from "@/domain/mapLibrary/mapIndex";
 import {
+  archiveMapMeta,
   assignMapFolder,
   createEmptyMapLibraryMeta,
   createMapFolder,
   deleteMapFolder,
   formatMapFolderFailure,
   getMapUserMeta,
+  unarchiveMapMeta,
   MAX_MAP_FOLDERS,
   mergeLibraryMetaForRestore,
   pickUnusedMapFolderId,
@@ -312,6 +314,67 @@ function resolveReadyMeta(
     };
   }
   return { ok: true, meta: latest.meta };
+}
+
+export function runArchiveMap(
+  current: PersistentLibraryState,
+  mapId: string,
+  nowIso: string,
+): LibraryMetaActionOutcome {
+  const resolved = resolveReadyMeta(current);
+  if (!resolved.ok) return resolved.outcome;
+  const latestMeta = resolved.meta;
+  const target = findMapEntry(current.index, mapId);
+  if (target === null) {
+    return {
+      result: failedOperation({ kind: "error", message: "対象のマップが見つかりませんでした。" }),
+    };
+  }
+  if (getMapUserMeta(latestMeta, mapId)?.archivedAt !== undefined) {
+    return { result: UNCHANGED_OPERATION_RESULT };
+  }
+  const nextMeta = archiveMapMeta(latestMeta, mapId, nowIso);
+  const written = writeMapLibraryMeta(current.storage, nextMeta);
+  if (!written.ok) {
+    return { result: failedOperation(metaWriteFailedNotice(written.reason)) };
+  }
+  return {
+    nextState: { libraryMeta: nextMeta, libraryMetaStatus: "ready" },
+    result: succeededOperation(
+      { kind: "status", message: `「${target.name}」をアーカイブしました。` },
+      false,
+    ),
+  };
+}
+
+export function runUnarchiveMap(
+  current: PersistentLibraryState,
+  mapId: string,
+): LibraryMetaActionOutcome {
+  const resolved = resolveReadyMeta(current);
+  if (!resolved.ok) return resolved.outcome;
+  const latestMeta = resolved.meta;
+  const target = findMapEntry(current.index, mapId);
+  if (target === null) {
+    return {
+      result: failedOperation({ kind: "error", message: "対象のマップが見つかりませんでした。" }),
+    };
+  }
+  if (getMapUserMeta(latestMeta, mapId)?.archivedAt === undefined) {
+    return { result: UNCHANGED_OPERATION_RESULT };
+  }
+  const nextMeta = unarchiveMapMeta(latestMeta, mapId);
+  const written = writeMapLibraryMeta(current.storage, nextMeta);
+  if (!written.ok) {
+    return { result: failedOperation(metaWriteFailedNotice(written.reason)) };
+  }
+  return {
+    nextState: { libraryMeta: nextMeta, libraryMetaStatus: "ready" },
+    result: succeededOperation(
+      { kind: "status", message: `「${target.name}」のアーカイブを解除しました。` },
+      false,
+    ),
+  };
 }
 
 export function runToggleFavorite(

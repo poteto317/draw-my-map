@@ -1,6 +1,8 @@
 import { act, renderHook } from "@testing-library/react";
 import type { MapIndexEntry } from "@/domain/mapLibrary/mapIndex";
+import { archiveMapMeta, createEmptyMapLibraryMeta } from "@/domain/mapLibrary/mapLibraryMeta";
 import { useCrossMapCorpus } from "@/hooks/useCrossMapCorpus";
+import { searchCrossMapCorpus } from "@/domain/search/crossMapSearch";
 import { mapBodyKey, type MapLibraryStorage } from "@/services/persistence/mapLibraryStorage";
 import type { Node } from "@/types/node";
 
@@ -78,6 +80,7 @@ describe("useCrossMapCorpus", () => {
           currentNodes: props.currentNodes,
           storage,
           storageMode: "persistent",
+          libraryMeta: createEmptyMapLibraryMeta(),
         }),
       { initialProps: { currentNodes: initialNodes } },
     );
@@ -119,6 +122,7 @@ describe("useCrossMapCorpus", () => {
         currentNodes: [makeNode(1, "現在A")],
         storage,
         storageMode: "protected",
+        libraryMeta: createEmptyMapLibraryMeta(),
       }),
     );
 
@@ -128,6 +132,7 @@ describe("useCrossMapCorpus", () => {
       mapId: "map-a",
       mapName: "マップA",
       isCurrent: true,
+        isArchived: false,
     });
     expect(result.current.corpus.unreadableMaps).toEqual([]);
 
@@ -163,6 +168,7 @@ describe("useCrossMapCorpus", () => {
             currentNodes,
             storage,
             storageMode: "persistent",
+            libraryMeta: createEmptyMapLibraryMeta(),
           }),
         { initialProps: { maps: [...maps, mapC] } },
       );
@@ -201,5 +207,41 @@ describe("useCrossMapCorpus", () => {
       expect(view.getItemSpy).toHaveBeenCalledTimes(3);
       expect(view.result.current.corpus.readableMaps.map((m) => m.mapId)).toEqual(["map-a", "map-b", "map-c"]);
     });
+  });
+
+  it("libraryMeta のアーカイブ切替だけで readableMaps の isArchived と検索印が更新される", () => {
+    const storage = createMemoryStorage({
+      [mapBodyKey("map-b")]: makeMapJson([makeNode(10, "検索キーワードB")]),
+    });
+    const getItemSpy = jest.spyOn(storage, "getItem");
+    const libraryMeta = createEmptyMapLibraryMeta();
+    const currentNodes = [makeNode(1, "現在A")];
+
+    const { result, rerender } = renderHook(
+      (props: { libraryMeta: ReturnType<typeof createEmptyMapLibraryMeta> }) =>
+        useCrossMapCorpus({
+          maps,
+          currentMapId: "map-a",
+          currentMapName: "マップA",
+          currentNodes,
+          storage,
+          storageMode: "persistent",
+          libraryMeta: props.libraryMeta,
+        }),
+      { initialProps: { libraryMeta } },
+    );
+
+    expect(getItemSpy).toHaveBeenCalledTimes(1);
+    const mapBBefore = result.current.corpus.readableMaps.find((m) => m.mapId === "map-b");
+    expect(mapBBefore?.isArchived).toBe(false);
+    expect(searchCrossMapCorpus(result.current.corpus, "検索").matches[0]?.isMapArchived).toBe(false);
+
+    const archivedMeta = archiveMapMeta(libraryMeta, "map-b", "2026-11-01T00:00:00.000Z");
+    rerender({ libraryMeta: archivedMeta });
+
+    expect(getItemSpy).toHaveBeenCalledTimes(1);
+    const mapBAfter = result.current.corpus.readableMaps.find((m) => m.mapId === "map-b");
+    expect(mapBAfter?.isArchived).toBe(true);
+    expect(searchCrossMapCorpus(result.current.corpus, "検索").matches[0]?.isMapArchived).toBe(true);
   });
 });

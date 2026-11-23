@@ -2660,6 +2660,46 @@ describe("useMapLibrary のライブラリバックアップ境界", () => {
     });
 
     describe("メタデータ操作アクションと鮮度同期", () => {
+      it("アーカイブ・解除・お気に入り切替後も archivedAt を保持し、現在マップもアーカイブできる", () => {
+        const { result, entries } = setup({ initial: twoMapsInitial() });
+        const currentId = readyView(result.current.view).currentMap.id;
+
+        let archived: ReturnType<typeof result.current.archiveMap> | undefined;
+        act(() => {
+          archived = result.current.archiveMap(currentId);
+        });
+        expect(archived?.ok).toBe(true);
+        expect(readyView(result.current.view).currentMap.id).toBe(currentId);
+        expect(readyView(result.current.view).libraryMeta.mapMeta[currentId]?.archivedAt).toBe(NOW);
+        expect(storedLibraryMeta(entries()).mapMeta[currentId]?.archivedAt).toBe(NOW);
+
+        act(() => {
+          expect(result.current.toggleFavorite(currentId).ok).toBe(true);
+        });
+        expect(readyView(result.current.view).libraryMeta.mapMeta[currentId]?.archivedAt).toBe(NOW);
+
+        let unarchived: ReturnType<typeof result.current.unarchiveMap> | undefined;
+        act(() => {
+          unarchived = result.current.unarchiveMap(currentId);
+        });
+        expect(unarchived?.ok).toBe(true);
+        expect(readyView(result.current.view).libraryMeta.mapMeta[currentId]?.archivedAt).toBeUndefined();
+      });
+
+      it("アーカイブのメタ書込失敗時はメモリ状態を変更せず ok: false を返す", () => {
+        let failMetaWrite = false;
+        const { result } = setup({
+          initial: twoMapsInitial(),
+          failSetItem: (key) => failMetaWrite && key === MAP_LIBRARY_META_STORAGE_KEY,
+        });
+        const viewBefore = result.current.view;
+        failMetaWrite = true;
+        act(() => {
+          expect(result.current.archiveMap("map-1").ok).toBe(false);
+        });
+        expect(result.current.view).toBe(viewBefore);
+      });
+
       it("お気に入り切替・フォルダー作成/名前変更/割当/削除が保存とメモリ状態へ反映される", () => {
         const { result, entries } = setup({
           initial: twoMapsInitial(),

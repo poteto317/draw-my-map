@@ -64,6 +64,24 @@ export function selectFocusAfterTrashRemoval(
     : { kind: "trashRow", trashId: neighbor.id, action: "restore" };
 }
 
+// アーカイブ／解除で一覧の行が消えるときの戻し先。行が残るなら null（L-460）
+export function selectFocusAfterArchiveToggle(
+  visibleMaps: readonly MapIndexEntry[],
+  meta: MapLibraryMetaV1,
+  listTab: MapListTab,
+  mapId: string,
+  willArchive: boolean,
+): MapLibraryDialogFocusTarget | null {
+  const userMeta = getMapUserMeta(meta, mapId);
+  const willRowDisappear =
+    (listTab !== "archived" && willArchive && visibleMaps.some((map) => map.id === mapId))
+    || (listTab === "archived"
+      && !willArchive
+      && userMeta?.archivedAt !== undefined
+      && visibleMaps.some((map) => map.id === mapId));
+  return willRowDisappear ? selectFocusAfterRemoval(visibleMaps, mapId) : null;
+}
+
 // お気に入りの切り替えで一覧の行が消える（お気に入りタブで解除する）ときの戻し先。
 // visibleMaps は操作前の絞り込み済み表示配列。行が残るなら null（L-460）
 export function selectFocusAfterFavoriteToggle(

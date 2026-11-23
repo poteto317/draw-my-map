@@ -26,6 +26,7 @@ import {
   returnToFoldersAfterAction,
   returnToList,
   returnToTrashAfterAction,
+  selectFocusAfterArchiveToggle,
   selectFocusAfterFavoriteToggle,
   selectFocusAfterFolderAssign,
   selectFocusAfterFolderRemoval,
@@ -88,6 +89,8 @@ export type UseMapLibraryDialogStateResult = {
   openEmptyTrash: () => void;
   confirmEmptyTrash: () => void;
   toggleFavorite: (mapId: string) => void;
+  archiveMap: (mapId: string) => void;
+  unarchiveMap: (mapId: string) => void;
   assignFolder: (mapId: string, folderId: string | null) => void;
   submitCreateFolder: (nameInput: string) => boolean;
   submitRenameFolder: (folderId: string, nameInput: string) => void;
@@ -120,6 +123,8 @@ type MapLibraryOperations = Pick<
   | "previewRestore"
   | "confirmRestore"
   | "toggleFavorite"
+  | "archiveMap"
+  | "unarchiveMap"
   | "assignFolder"
   | "createFolder"
   | "renameFolder"
@@ -467,6 +472,30 @@ export function useMapLibraryDialogState(options: {
     finishListRowMetaAction(result, focusAfterRemoval);
   }, [currentVisibleMaps, finishListRowMetaAction]);
 
+  const archiveMap = useCallback((mapId: string) => {
+    const focusAfterRemoval = selectFocusAfterArchiveToggle(
+      currentVisibleMaps(),
+      libraryMetaRef.current,
+      listTabRef.current,
+      mapId,
+      true,
+    );
+    const result = libraryRef.current.archiveMap(mapId);
+    finishListRowMetaAction(result, focusAfterRemoval);
+  }, [currentVisibleMaps, finishListRowMetaAction]);
+
+  const unarchiveMap = useCallback((mapId: string) => {
+    const focusAfterRemoval = selectFocusAfterArchiveToggle(
+      currentVisibleMaps(),
+      libraryMetaRef.current,
+      listTabRef.current,
+      mapId,
+      false,
+    );
+    const result = libraryRef.current.unarchiveMap(mapId);
+    finishListRowMetaAction(result, focusAfterRemoval);
+  }, [currentVisibleMaps, finishListRowMetaAction]);
+
   const assignFolder = useCallback((mapId: string, folderId: string | null) => {
     const focusAfterRemoval = selectFocusAfterFolderAssign(
       currentVisibleMaps(),
@@ -599,6 +628,8 @@ export function useMapLibraryDialogState(options: {
     openEmptyTrash,
     confirmEmptyTrash,
     toggleFavorite,
+    archiveMap,
+    unarchiveMap,
     assignFolder,
     submitCreateFolder,
     submitRenameFolder,

@@ -54,7 +54,9 @@ import {
   runDeleteFolder,
   runRenameFolder,
   runResetLibraryMeta,
+  runArchiveMap,
   runToggleFavorite,
+  runUnarchiveMap,
   type LibraryMetaActionOutcome,
   type StartupLibraryMetaResult,
 } from "@/hooks/mapLibraryMetaActions";
@@ -154,6 +156,8 @@ export type UseMapLibraryResult = {
     templateId: string | null;
   }) => MapLibraryOperationResult;
   toggleFavorite: (mapId: string) => MapLibraryOperationResult;
+  archiveMap: (mapId: string) => MapLibraryOperationResult;
+  unarchiveMap: (mapId: string) => MapLibraryOperationResult;
   assignFolder: (mapId: string, folderId: string | null) => MapLibraryOperationResult;
   createFolder: (name: string) => MapLibraryOperationResult;
   renameFolder: (folderId: string, name: string) => MapLibraryOperationResult;
@@ -912,6 +916,20 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
     [applyMetaAction],
   );
 
+  const archiveMap = useCallback(
+    (mapId: string): MapLibraryOperationResult =>
+      applyMetaAction((current) =>
+        runArchiveMap(current, mapId, depsRef.current.now().toISOString()),
+      ),
+    [applyMetaAction],
+  );
+
+  const unarchiveMap = useCallback(
+    (mapId: string): MapLibraryOperationResult =>
+      applyMetaAction((current) => runUnarchiveMap(current, mapId)),
+    [applyMetaAction],
+  );
+
   const assignFolder = useCallback(
     (mapId: string, folderId: string | null): MapLibraryOperationResult =>
       applyMetaAction((current) => runAssignFolder(current, mapId, folderId)),
@@ -970,6 +988,8 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
     saveCurrentAsNewMap,
     createMapFromTemplate,
     toggleFavorite,
+    archiveMap,
+    unarchiveMap,
     assignFolder,
     createFolder,
     renameFolder,

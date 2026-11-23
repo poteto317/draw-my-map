@@ -36,6 +36,7 @@ const DEFAULT_CORPUS: CrossMapCorpus = {
       mapId: "map-a",
       mapName: "マップA",
       isCurrent: true,
+        isArchived: false,
       nodes: [
         {
           id: 1,
@@ -64,6 +65,7 @@ const DEFAULT_CORPUS: CrossMapCorpus = {
       mapId: "map-b",
       mapName: "マップB",
       isCurrent: false,
+        isArchived: false,
       nodes: [
         {
           id: 20,
