@@ -24,6 +24,7 @@ export type CrossMapSearchMatch = {
   readonly mapId: string;
   readonly mapName: string;
   readonly isCurrentMap: boolean;
+  readonly isMapArchived: boolean;
   readonly nodeId: number;
   readonly label: string;
   readonly parentLabel: string | null;
@@ -260,6 +261,7 @@ export function searchCrossMapCorpus(
           mapId: map.mapId,
           mapName: map.mapName,
           isCurrentMap: map.isCurrent,
+          isMapArchived: map.isArchived,
           nodeId: node.id,
           label,
           parentLabel,

@@ -87,6 +87,7 @@ function mergeBackupMapMeta(
       favorite: entry.favorite,
       lastOpenedAt: entry.lastOpenedAt,
       folderId: mappedFolderId,
+      archivedAt: entry.archivedAt,
     });
     if (built !== null) {
       setOwnMapUserMeta(nextMapMeta, newMapId, built);

@@ -27,6 +27,7 @@ describe("crossMapSearch", () => {
           mapId: "map-1",
           mapName: "現在マップ",
           isCurrent: true,
+        isArchived: false,
           nodes: [createTestNode({ id: 1, label: "テスト" })],
         },
       ],
@@ -60,6 +61,7 @@ describe("crossMapSearch", () => {
           mapId: "map-1",
           mapName: "メイン",
           isCurrent: true,
+        isArchived: false,
           nodes: [
             createTestNode({ id: 1, label: "アルファ計画" }),
             createTestNode({ id: 2, label: "ノード2", note: "ベータ仕様のメモ" }),
@@ -87,6 +89,7 @@ describe("crossMapSearch", () => {
         mapId: "map-1",
         mapName: "メイン",
         isCurrentMap: true,
+        isMapArchived: false,
         nodeId: 1,
         label: "アルファ計画",
         parentLabel: null,
@@ -100,6 +103,7 @@ describe("crossMapSearch", () => {
         mapId: "map-1",
         mapName: "メイン",
         isCurrentMap: true,
+        isMapArchived: false,
         nodeId: 2,
         label: "ノード2",
         parentLabel: null,
@@ -113,6 +117,7 @@ describe("crossMapSearch", () => {
         mapId: "map-1",
         mapName: "メイン",
         isCurrentMap: true,
+        isMapArchived: false,
         nodeId: 3,
         label: "ノード3",
         parentLabel: null,
@@ -126,6 +131,7 @@ describe("crossMapSearch", () => {
         mapId: "map-1",
         mapName: "メイン",
         isCurrentMap: true,
+        isMapArchived: false,
         nodeId: 4,
         label: "ノード4",
         parentLabel: null,
@@ -139,6 +145,7 @@ describe("crossMapSearch", () => {
         mapId: "map-1",
         mapName: "メイン",
         isCurrentMap: true,
+        isMapArchived: false,
         nodeId: 5,
         label: "ノード5",
         parentLabel: null,
@@ -166,6 +173,7 @@ describe("crossMapSearch", () => {
           mapId: "map-1",
           mapName: "優先順テスト",
           isCurrent: true,
+        isArchived: false,
           nodes: [
             createTestNode({
               id: 1,
@@ -226,6 +234,7 @@ describe("crossMapSearch", () => {
           mapId: "map-1",
           mapName: "正規化",
           isCurrent: true,
+        isArchived: false,
           nodes: [
             createTestNode({ id: 1, label: "ＡＢＣ１ガイド" }),
             createTestNode({ id: 2, label: "別", tags: ["ｶﾞｲﾄﾞ"] }),
@@ -246,6 +255,7 @@ describe("crossMapSearch", () => {
           mapId: "map-1",
           mapName: "親ラベル",
           isCurrent: true,
+        isArchived: false,
           nodes: [
             createTestNode({ id: 1, parentId: null, label: "" }),
             createTestNode({ id: 2, parentId: 1, label: "", note: "ヒットするメモ" }),
@@ -263,6 +273,7 @@ describe("crossMapSearch", () => {
         mapId: "map-1",
         mapName: "親ラベル",
         isCurrentMap: true,
+        isMapArchived: false,
         nodeId: 2,
         label: "新しいノード",
         parentLabel: "新しいノード",
@@ -283,6 +294,7 @@ describe("crossMapSearch", () => {
           mapId: "map-1",
           mapName: "URL照合",
           isCurrent: true,
+        isArchived: false,
           nodes: [
             createTestNode({ id: 1, label: "リンク", links: [JAPANESE_URL] }),
             createTestNode({ id: 2, label: "壊れリンク", links: [brokenPercentUrl] }),
@@ -323,7 +335,7 @@ describe("crossMapSearch", () => {
       expect(Array.from(note)).toHaveLength(80);
       const corpus = makeCorpus({
         readableMaps: [
-          { mapId: "map-1", mapName: "境界", isCurrent: true, nodes: [createTestNode({ id: 1, label: "境界", note })] },
+          { mapId: "map-1", mapName: "境界", isCurrent: true, isArchived: false, nodes: [createTestNode({ id: 1, label: "境界", note })] },
         ],
       });
 
@@ -338,7 +350,7 @@ describe("crossMapSearch", () => {
       expect(codePoints).toHaveLength(81);
       const corpus = makeCorpus({
         readableMaps: [
-          { mapId: "map-1", mapName: "境界", isCurrent: true, nodes: [createTestNode({ id: 1, label: "境界", note })] },
+          { mapId: "map-1", mapName: "境界", isCurrent: true, isArchived: false, nodes: [createTestNode({ id: 1, label: "境界", note })] },
         ],
       });
 
@@ -357,6 +369,7 @@ describe("crossMapSearch", () => {
             mapId: "map-1",
             mapName: "長文メモ",
             isCurrent: true,
+        isArchived: false,
             nodes: [
               createTestNode({ id: 1, label: "先頭", note: longNoteHead }),
               createTestNode({ id: 2, label: "中央", note: longNoteMid }),
@@ -394,6 +407,7 @@ describe("crossMapSearch", () => {
             mapId: "map-1",
             mapName: "絵文字メモ",
             isCurrent: true,
+        isArchived: false,
             nodes: [createTestNode({ id: 1, label: "絵文字", note })],
           },
         ],
@@ -417,6 +431,7 @@ describe("crossMapSearch", () => {
             mapId: "map-1",
             mapName: "改行メモ",
             isCurrent: true,
+        isArchived: false,
             nodes: [
               createTestNode({ id: 1, label: "短文", note: shortNote }),
               createTestNode({ id: 2, label: "長文", note: longNote }),
@@ -457,24 +472,28 @@ describe("crossMapSearch", () => {
           mapId: "map-current",
           mapName: "現在マップ",
           isCurrent: true,
+        isArchived: false,
           nodes: currentNodes,
         },
         {
           mapId: "map-other-1",
           mapName: "他マップ 1",
           isCurrent: false,
+        isArchived: false,
           nodes: otherMap1Nodes,
         },
         {
           mapId: "map-other-2",
           mapName: "他マップ 2",
           isCurrent: false,
+        isArchived: false,
           nodes: otherMap2Nodes,
         },
         {
           mapId: "map-other-3",
           mapName: "他マップ 3",
           isCurrent: false,
+        isArchived: false,
           nodes: otherMap3Nodes,
         },
       ],
@@ -491,21 +510,25 @@ describe("crossMapSearch", () => {
     expect(result.matches[0]).toMatchObject({
       mapId: "map-current",
       isCurrentMap: true,
+      isMapArchived: false,
       nodeId: 1,
     });
     expect(result.matches[59]).toMatchObject({
       mapId: "map-current",
       isCurrentMap: true,
+      isMapArchived: false,
       nodeId: 60,
     });
     expect(result.matches[60]).toMatchObject({
       mapId: "map-other-1",
       isCurrentMap: false,
+      isMapArchived: false,
       nodeId: 1,
     });
     expect(result.matches[99]).toMatchObject({
       mapId: "map-other-1",
       isCurrentMap: false,
+      isMapArchived: false,
       nodeId: 40,
     });
     expect(result.unreadableMaps).toEqual([
@@ -516,5 +539,21 @@ describe("crossMapSearch", () => {
     expect(limited.matches).toHaveLength(2);
     expect(limited.total).toBe(111);
     expect(limited.matchedMapCount).toBe(3);
+  });
+
+  it("アーカイブ済みマップの一致結果に isMapArchived: true を付与する", () => {
+    const corpus = makeCorpus({
+      readableMaps: [
+        {
+          mapId: "map-archived",
+          mapName: "アーカイブ済み",
+          isCurrent: false,
+          isArchived: true,
+          nodes: [createTestNode({ id: 1, label: "検索キーワード" })],
+        },
+      ],
+    });
+    const result = searchCrossMapCorpus(corpus, "検索");
+    expect(result.matches[0]?.isMapArchived).toBe(true);
   });
 });

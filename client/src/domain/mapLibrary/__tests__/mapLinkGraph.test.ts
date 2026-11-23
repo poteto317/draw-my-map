@@ -13,6 +13,7 @@ function makeSampleCorpus(): CrossMapCorpus {
         mapId: "map-current",
         mapName: "現在のマップ",
         isCurrent: true,
+        isArchived: false,
         nodes: [
           createTestNode({ id: 1, label: "現在ルート" }),
           createTestNode({ id: 2, parentId: 1, label: "" }),
@@ -22,6 +23,7 @@ function makeSampleCorpus(): CrossMapCorpus {
         mapId: "map-other",
         mapName: "他マップ",
         isCurrent: false,
+        isArchived: false,
         nodes: [
           createTestNode({ id: 10, label: "ターゲットノード" }),
           createTestNode({ id: 11, parentId: 10, label: "" }),
@@ -123,6 +125,7 @@ describe("mapLinkGraph", () => {
             mapId: "map-current",
             mapName: "現在のマップ",
             isCurrent: true,
+        isArchived: false,
             nodes: [createTestNode({ id: 1, label: "ルート" })],
           },
         ],
@@ -185,6 +188,7 @@ describe("mapLinkGraph", () => {
             mapId: "map-current",
             mapName: "現在マップ",
             isCurrent: true,
+        isArchived: false,
             nodes: [
               createTestNode({
                 id: 1,
@@ -210,6 +214,7 @@ describe("mapLinkGraph", () => {
             mapId: "map-other",
             mapName: "他マップ",
             isCurrent: false,
+        isArchived: false,
             nodes: [
               createTestNode({
                 id: 20,
@@ -292,6 +297,7 @@ describe("mapLinkGraph", () => {
             mapId: "map-current",
             mapName: "現在マップ",
             isCurrent: true,
+        isArchived: false,
             nodes: [
               createTestNode({ id: 1, label: "対象ノード" }),
               createTestNode({
@@ -305,6 +311,7 @@ describe("mapLinkGraph", () => {
             mapId: "map-other",
             mapName: "他マップ",
             isCurrent: false,
+        isArchived: false,
             nodes: [
               createTestNode({
                 id: 20,
@@ -350,6 +357,7 @@ describe("mapLinkGraph", () => {
             mapId: "map-current",
             mapName: "現在マップ",
             isCurrent: true,
+        isArchived: false,
             nodes: [
               createTestNode({
                 id: 1,
@@ -367,6 +375,7 @@ describe("mapLinkGraph", () => {
             mapId: "map-other",
             mapName: "他マップ",
             isCurrent: false,
+        isArchived: false,
             nodes: [
               createTestNode({
                 id: 10,

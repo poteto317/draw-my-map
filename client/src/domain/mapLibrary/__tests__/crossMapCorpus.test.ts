@@ -5,7 +5,10 @@ import {
   type OtherMapsCorpus,
 } from "@/domain/mapLibrary/crossMapCorpus";
 import type { MapIndexEntry } from "@/domain/mapLibrary/mapIndex";
+import { archiveMapMeta, createEmptyMapLibraryMeta } from "@/domain/mapLibrary/mapLibraryMeta";
 import { createTestNode } from "@/testing/createTestNode";
+
+const emptyMeta = createEmptyMapLibraryMeta();
 
 describe("crossMapCorpus", () => {
   describe("createEmptyOtherMapsCorpus", () => {
@@ -47,6 +50,7 @@ describe("crossMapCorpus", () => {
         currentMapId: "map-1",
         currentMapName: "現在のマップ",
         currentNodes,
+        libraryMeta: emptyMeta,
       });
 
       expect(corpus).toEqual({
@@ -55,12 +59,14 @@ describe("crossMapCorpus", () => {
             mapId: "map-1",
             mapName: "現在のマップ",
             isCurrent: true,
+        isArchived: false,
             nodes: currentNodes,
           },
           {
             mapId: "map-2",
             mapName: "マップ 2",
             isCurrent: false,
+        isArchived: false,
             nodes: otherNodes,
           },
         ],
@@ -102,6 +108,7 @@ describe("crossMapCorpus", () => {
         currentMapId: "map-1",
         currentMapName: "現在",
         currentNodes,
+        libraryMeta: emptyMeta,
       });
 
       expect(corpus.readableMaps.map((m) => [m.mapId, m.isCurrent])).toEqual([
@@ -111,6 +118,33 @@ describe("crossMapCorpus", () => {
       expect(corpus.unreadableMaps).toEqual([
         { mapId: "map-3", mapName: "読込失敗", reason: "read-error" },
       ]);
+    });
+
+    it("アーカイブ印は libraryMeta からだけ付与する（読込結果に含まれなくても compose で刻印）", () => {
+      const currentNodes = [createTestNode({ id: 1, label: "現在" })];
+      const otherMapsCorpus: OtherMapsCorpus = {
+        readableMaps: [
+          {
+            mapId: "map-2",
+            mapName: "他マップ",
+            isCurrent: false,
+            nodes: [createTestNode({ id: 1, label: "他" })],
+          },
+        ],
+        unreadableMaps: [],
+      };
+      const libraryMeta = archiveMapMeta(emptyMeta, "map-2", "2026-11-01T00:00:00.000Z");
+
+      const corpus = composeCrossMapCorpus({
+        otherMapsCorpus,
+        currentMapId: "map-1",
+        currentMapName: "現在",
+        currentNodes,
+        libraryMeta,
+      });
+
+      expect(corpus.readableMaps[0].isArchived).toBe(false);
+      expect(corpus.readableMaps[1].isArchived).toBe(true);
     });
   });
 

@@ -98,7 +98,7 @@ describe("libraryBackupCodec", () => {
       { id: "folder-empty", name: "空フォルダー", createdAt: timestamp, updatedAt: timestamp },
     ];
     const mapMeta: Record<string, MapUserMeta> = {
-      "source-a": { favorite: true, lastOpenedAt: timestamp, folderId: "folder-1" },
+      "source-a": { favorite: true, lastOpenedAt: timestamp, folderId: "folder-1", archivedAt: timestamp },
       "source-b": { lastOpenedAt: "2026-11-06T00:00:00.000Z" },
     };
     const created = createLibraryBackup([map, mapB], "source-a", timestamp, { folders, mapMeta });

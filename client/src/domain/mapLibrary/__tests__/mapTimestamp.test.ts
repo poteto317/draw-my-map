@@ -1,6 +1,7 @@
 process.env.TZ = "Asia/Tokyo";
 
 import {
+  formatMapArchivedAt,
   formatMapDeletedAt,
   formatMapLastOpenedAt,
   formatMapUpdatedAt,
@@ -36,6 +37,19 @@ describe("formatMapDeletedAt", () => {
   it("不明な日時や不正な文字列は「削除: 不明」にする", () => {
     expect(formatMapDeletedAt(UNKNOWN_MAP_TIMESTAMP)).toBe("削除: 不明");
     expect(formatMapDeletedAt("not-a-date")).toBe("削除: 不明");
+  });
+});
+
+describe("formatMapArchivedAt", () => {
+  it("ローカル時刻で日付をまたぐ値を「アーカイブ: ...」として組み立てる", () => {
+    expect(formatMapArchivedAt("2026-10-21T15:04:00.000Z")).toBe(
+      "アーカイブ: 2026/10/22 00:04",
+    );
+  });
+
+  it("不明な日時や不正な文字列は「アーカイブ: 不明」にする", () => {
+    expect(formatMapArchivedAt(UNKNOWN_MAP_TIMESTAMP)).toBe("アーカイブ: 不明");
+    expect(formatMapArchivedAt("not-a-date")).toBe("アーカイブ: 不明");
   });
 });
 

@@ -1,11 +1,20 @@
 import { sortMapEntriesForDisplay, type MapIndexEntry } from "@/domain/mapLibrary/mapIndex";
+import {
+  getMapUserMeta,
+  isMapArchived,
+  type MapLibraryMetaV1,
+} from "./mapLibraryMetaModel";
 import type { Node } from "@/types/node";
 
-export type ReadableMapSnapshot = {
+export type ReadableMapBodySnapshot = {
   readonly mapId: string;
   readonly mapName: string;
   readonly isCurrent: boolean;
   readonly nodes: readonly Node[];
+};
+
+export type ReadableMapSnapshot = ReadableMapBodySnapshot & {
+  readonly isArchived: boolean;
 };
 
 export type UnreadableMapInfo = {
@@ -15,7 +24,7 @@ export type UnreadableMapInfo = {
 };
 
 export type OtherMapsCorpus = {
-  readonly readableMaps: readonly ReadableMapSnapshot[];
+  readonly readableMaps: readonly ReadableMapBodySnapshot[];
   readonly unreadableMaps: readonly UnreadableMapInfo[];
 };
 
@@ -29,6 +38,7 @@ export type ComposeCrossMapCorpusInput = {
   readonly currentMapId: string;
   readonly currentMapName: string;
   readonly currentNodes: readonly Node[];
+  readonly libraryMeta: MapLibraryMetaV1;
 };
 
 // 呼び出しごとに新しいオブジェクトと配列参照を返す（L-461）
@@ -51,20 +61,26 @@ export function otherMapsCorpusKey(maps: readonly MapIndexEntry[], currentMapId:
 export function composeCrossMapCorpus(
   input: ComposeCrossMapCorpusInput,
 ): CrossMapCorpus {
-  const { otherMapsCorpus, currentMapId, currentMapName, currentNodes } = input;
+  const { otherMapsCorpus, currentMapId, currentMapName, currentNodes, libraryMeta } = input;
   const currentSnapshot: ReadableMapSnapshot = {
     mapId: currentMapId,
     mapName: currentMapName,
     isCurrent: true,
+    isArchived: isMapArchived(getMapUserMeta(libraryMeta, currentMapId)),
     nodes: currentNodes,
   };
+
+  const otherReadable = otherMapsCorpus.readableMaps
+    .filter((snapshot) => snapshot.mapId !== currentMapId)
+    .map((snapshot) => ({
+      ...snapshot,
+      isArchived: isMapArchived(getMapUserMeta(libraryMeta, snapshot.mapId)),
+    }));
 
   return {
     readableMaps: [
       currentSnapshot,
-      ...otherMapsCorpus.readableMaps.filter(
-        (snapshot) => snapshot.mapId !== currentMapId,
-      ),
+      ...otherReadable,
     ],
     unreadableMaps: otherMapsCorpus.unreadableMaps.filter(
       (info) => info.mapId !== currentMapId,
