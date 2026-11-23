@@ -1,5 +1,6 @@
 "use client";
 
+import { LabelTextStyleControl } from "@/components/layout/LabelTextStyleControl";
 import { LayoutSpacingControl } from "@/components/layout/LayoutSpacingControl";
 import { LockControls } from "@/components/layout/LockControls";
 import { SelectionAlignMenu } from "@/components/layout/SelectionAlignMenu";
@@ -9,6 +10,7 @@ import type { LayoutSnapPrefs } from "@/domain/nodes/snapGrid";
 import type { SelectionLayoutActionOutcome } from "@/hooks/useSelectionLayoutActions";
 import type { SelectionAlignOp } from "@/domain/nodes/selectionAlign";
 import type { SelectionDistributeAxis } from "@/domain/nodes/selectionDistribute";
+import type { LabelFontSize } from "@/types/labelFontSize";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 import type { LayoutSpacing } from "@/types/layoutSpacing";
 import type { NodeMapState } from "@/types/nodeMapState";
@@ -34,6 +36,14 @@ export type MapHeaderLayoutControlsProps = {
   onToggleNodeLock: () => void;
   onLockSubtree: () => void;
   onUnlockSubtree: () => void;
+  labelTextStyleVisible: boolean;
+  labelTextStyleDisabled: boolean;
+  labelFontSize: LabelFontSize;
+  labelBold: boolean;
+  labelUnderline: boolean;
+  onLabelFontSizeChange: (size: LabelFontSize) => void;
+  onToggleLabelBold: () => void;
+  onToggleLabelUnderline: () => void;
 };
 
 export function MapHeaderLayoutControls({
@@ -56,6 +66,14 @@ export function MapHeaderLayoutControls({
   onToggleNodeLock,
   onLockSubtree,
   onUnlockSubtree,
+  labelTextStyleVisible,
+  labelTextStyleDisabled,
+  labelFontSize,
+  labelBold,
+  labelUnderline,
+  onLabelFontSizeChange,
+  onToggleLabelBold,
+  onToggleLabelUnderline,
 }: MapHeaderLayoutControlsProps) {
   return (
     <div className="flex flex-wrap items-center gap-4">
@@ -91,6 +109,16 @@ export function MapHeaderLayoutControls({
         onToggleLock={onToggleNodeLock}
         onLockSubtree={onLockSubtree}
         onUnlockSubtree={onUnlockSubtree}
+      />
+      <LabelTextStyleControl
+        visible={labelTextStyleVisible}
+        disabled={labelTextStyleDisabled}
+        fontSize={labelFontSize}
+        bold={labelBold}
+        underline={labelUnderline}
+        onFontSizeChange={onLabelFontSizeChange}
+        onToggleBold={onToggleLabelBold}
+        onToggleUnderline={onToggleLabelUnderline}
       />
     </div>
   );
