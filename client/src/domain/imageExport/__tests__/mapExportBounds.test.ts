@@ -208,3 +208,26 @@ it("イラストがあるノードのテキストは、ノード上端から86px
     offsetY: 32,
   });
 });
+
+it("icon があるときラベル左のはみ出しを出力範囲に含める", () => {
+  // 折り返し幅いっぱいのラベルだと icon 左縁がノード左端より左になる
+  const label = "ABCDEFGH"; // measureText: 80px、maxWidth = 100 - 16 = 84 → layout.width 80
+  const nodes = [createTestNode({
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 60,
+    label,
+    icon: "🎯",
+  })];
+  const withoutIcon = getMapExportBounds(
+    [createTestNode({ x: 0, y: 0, width: 100, height: 60, label })],
+    measureText,
+  );
+  const withIcon = getMapExportBounds(nodes, measureText);
+
+  expect(withoutIcon?.minX).toBe(0);
+  // iconCenterX = 50 - 40 - 4 - 8 = -2 → iconLeft = -10
+  expect(withIcon?.minX).toBe(-10);
+  expect(withIcon?.offsetX).toBe(42);
+});
