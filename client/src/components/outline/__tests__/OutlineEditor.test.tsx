@@ -74,6 +74,26 @@ it("ラベル行に fontSize / weight / underline を反映し、空ラベルの
   });
 });
 
+it("行に icon と kind 色バーを表示する", () => {
+  const nodes = [
+    createTestNode({
+      id: 1,
+      label: "疑問ノード",
+      icon: "❓",
+      kind: "question",
+    }),
+  ];
+  render(<OutlineEditor {...props({ nodes, model: buildOutlineRows(nodes), selectedNodeId: 1 })} />);
+
+  const button = row("階層1・疑問ノード");
+  expect(within(button).getByText("❓")).toHaveStyle({ fontSize: "16px" });
+  const bar = within(button).getByTestId("node-kind-bar");
+  expect(bar).toHaveStyle({
+    width: "4px",
+    backgroundColor: "var(--node-kind-question)",
+  });
+});
+
 function Harness({ nodes: supplied = initial, enabled = true, revision = 0, update = jest.fn() }: { nodes?: Node[]; enabled?: boolean; revision?: number; update?: (id: number, text: string) => void }) {
   const [nodes, setNodes] = useState(supplied);
   const [selected, selectNode] = useState<number | null>(1);

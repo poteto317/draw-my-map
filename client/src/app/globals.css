@@ -3,6 +3,11 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* ノード種別の左端色バー（glow なし。Pixi/SVG フォールバックと一致） */
+  --node-kind-question: #3b82f6;
+  --node-kind-conclusion: #22c55e;
+  --node-kind-evidence: #f97316;
+  --node-kind-idea: #a855f7;
 }
 
 @theme inline {
