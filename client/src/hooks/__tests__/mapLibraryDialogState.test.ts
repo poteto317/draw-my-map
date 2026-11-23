@@ -13,6 +13,8 @@ import {
   closeDialogSilently,
   INITIAL_STATE,
   nextNotices,
+  nextStateAfterBranchMapOperation,
+  shouldCloseScreenAfterBranchMapOperation,
   nextScreenAfterActiveDeletion,
   nextScreenOnBack,
   openScreen,
@@ -402,6 +404,35 @@ describe("mapLibraryDialogState", () => {
         sequence: 1,
         notice: { kind: "error", message: "保護モードへ移行しました" },
       });
+    });
+  });
+
+  describe("branch map operation helpers", () => {
+    it("shouldCloseScreenAfterBranchMapOperation は成功と保護モード移行だけ閉じる", () => {
+      expect(shouldCloseScreenAfterBranchMapOperation({
+        ok: true,
+        remounted: true,
+        notice: null,
+        saveRetryNotice: null,
+      })).toBe(true);
+      expect(shouldCloseScreenAfterBranchMapOperation({
+        ok: false,
+        notice: { kind: "error", message: "保護" },
+        enteredProtectedMode: true,
+      })).toBe(true);
+      expect(shouldCloseScreenAfterBranchMapOperation({
+        ok: false,
+        notice: { kind: "error", message: "拒否" },
+      })).toBe(false);
+    });
+
+    it("nextStateAfterBranchMapOperation は失敗時は状態を変えない", () => {
+      const opened = openScreen(INITIAL_STATE, { kind: "list" });
+      const unchanged = nextStateAfterBranchMapOperation(opened, {
+        ok: false,
+        notice: { kind: "error", message: "拒否" },
+      });
+      expect(unchanged).toBe(opened);
     });
   });
 
