@@ -71,9 +71,11 @@ outline/OutlineEditor      icon + kind
 
 | 入口 | 拒否／無効条件 |
 |------|----------------|
-| `IllustrationPanel` 添付・削除・生成 | 主選択≠1、locked、保護モード |
-| `NodeAppearanceSection` icon / kind | 同上 |
+| `IllustrationPanel` 添付・削除・生成 | `disabled`: 主選択≠1・locked・保護モード（節は常時表示） |
+| `NodeAppearanceSection` icon / kind | `visible=false`: マップ以外・件数≠1・保護（アウトラインでは非表示）。`disabled`: locked のみ |
 | `useNodes` setters | locked → `null` |
+
+Illustration の `disabled` 一括無効と、見た目節の `visible`／`disabled` 分担を混同しない。詳細は `2026-11-23-phase26-appearance-inventory.md`。
 
 Phase25 lock-inventory に「見た目（icon/kind/illustration アップロード）」行を追記。
 

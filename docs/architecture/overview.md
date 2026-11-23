@@ -304,7 +304,7 @@ client/src/
     - `illustrationClient.ts`: `POST /api/illustrations` への `fetch` 通信、HTTP ステータスコード別の `IllustrationRequestError`（エラー種別型 `IllustrationErrorKind`）分類、およびユーザー向けエラー文言変換（`describeIllustrationError`）。
     - `illustrationThumbnail.ts`: オフスクリーン `<canvas>` と `HTMLImageElement` を用いた中央正方形クロップ、128×128px リサイズ、JPEG（品質 `0.85`）圧縮。
     - `illustrationGeneration.ts`: API リクエスト（`requestIllustration`）とサムネイル生成（`createIllustrationThumbnail`）を連結する統合ファサード（`generateIllustrationThumbnail`）。
-    - `prepareIllustrationUpload.ts`: ローカル画像の添付（読取 → 元画像の縦横・`File.size` 検査 → サムネイル → illustration 受理判定）。上書き確認は UI 側。
+    - `prepareIllustrationUpload.ts`: ローカル画像の添付（`File.size` → 読取 → JPEG SOF／PNG IHDR 等のデコード前ヘッダ寸法検査 → サムネイル → illustration 受理判定）。上書き確認は UI 側。
   - `services/imageExport/` (8 ファイル):
     - `createMapSvgExport.ts`, `mapSvgArtifact.ts`, `mapImageDownload.ts`, `mapImageFileName.ts`: テキスト計測とバウンディングボックス算出に基づく SVG ドキュメント生成、SVG XML の `Blob` 変換（`createMapSvgBlob`）、ファイル名生成（`createMapImageFileName(extension, mapName, now?)`。`<マップ名>-YYYYMMDD-HHmmss.png` / `.svg`）、およびブラウザダウンロード発火（`downloadMapImage`）。
     - `mapPngRasterizer.ts`, `loadMapSvgImage.ts`, `mapCanvasPngEncoder.ts`: `createMapPngEncoder` によるオフスクリーン Canvas 寸法の上限検証（`MAX_CANVAS_ATTRIBUTE_DIMENSION`）と 2倍スケール PNG エンコード、`withLoadedMapSvgImage` による SVG `Blob` Object URL の `HTMLImageElement` 読み込みと完了/失敗時の確実な `URL.revokeObjectURL` 解放。
@@ -388,12 +388,13 @@ client/src/
     - `nodeLabelSearch.ts`: ラベルと検索語のNFKC正規化・小文字化、現在のノード配列順を保つ索引作成、部分一致検索、最大50件への表示制限と一致総数の集計。空ラベルの代替表示は検索対象にしない。ノードの URL も検索し（`decodeURI` で戻した形も照合。結果の `matchedBy` はラベル優先で `"label"` / `"link"`）、URL の正規化の結果は `links` の配列を鍵にした `WeakMap` で使い回す。
     - `crossMapSearch.ts`: 全マップ横断検索（`searchCrossMapCorpus`、`MAX_CROSS_MAP_SEARCH_RESULTS = 100`）。`CrossMapCorpus` 全体を対象に、ラベル > メモ（一致周辺最大 80 文字の抜粋） > タグ > リンク（`decodeURI` 含む） > 出典（`title`/`page`/`url`）の優先順で NFKC＋小文字化の部分一致検索を行い、現在マップ先頭・他マップ表示順・各マップ内配列順で先頭 100 件と総件数・該当マップ数・読込不可マップ一覧を返す。
     - `nodeSearchReveal.ts`: `resolveNodeSearchReveal` で、検索対象の閉じた祖先と解像度表示変更の要否を純粋計算し、無関係な枝と対象自身の折りたたみを維持する。
-  - `domain/illustration/` (5 ファイル):
+  - `domain/illustration/` (6 ファイル):
     - `illustrationPrompt.ts`: 入力ラベルの検証（`validateIllustrationLabel`: トリム後 1〜200 文字）、日本語文字判定（`needsTranslation`）、FLUX.1 用英語プロンプト合成（`buildIllustrationPrompt`）。
     - `illustrationActionLabel.ts`: イラスト有無に応じたアクション文言（`"イラストを生成"` / `"イラストを再生成"`）の解決（`getIllustrationActionLabel`）。
     - `illustrationCrop.ts`: 画像の中央正方形トリミング領域算出（`calculateCoverCrop`）。
     - `illustrationDataUrl.ts`: Base64 JPEG Data URL フォーマットおよび文字長上限（`100,000` 文字）の検証（`isIllustrationDataUrl`）。
     - `jpegDimensions.ts`: JPEG ヘッダー（SOF0〜SOF15 マーカー）バイナリ解析によるデコードレス画像幅・高さ抽出（`getJpegDimensions`）および画像寸法上限（`512×512px`）の検証（`isAcceptableIllustrationSize`）。
+    - `pngDimensions.ts`: PNG 先頭 IHDR からのデコードレス画像幅・高さ抽出（`getPngDimensions`。アップロード入口の寸法ガード用）。
   - `domain/persistence/` (19 ファイル):
     - `mapDocumentCodec.ts`, `mapDocumentEncoder.ts`, `mapDocumentDecoder.ts`: マップドキュメント（JSON Version 1, 2, 3）のエンコード（`createMapDocument`, `serializeMapDocument`）・デコード（`parseMapDocumentJson`, `parseMapDocumentJsonWithVersion`）・Version 3 マイグレーション。
     - `mapDocumentNodeNote.ts`: V3 の任意項目 `note` の検証（`normalizeMapDocumentNodeNote`。上限は正規化より先に判定し、超過・文字列以外は読み込み失敗）。
@@ -448,18 +449,23 @@ client/src/
   - `config/shapes.ts`: ノード矩形サイズ（`RECT_WIDTH = 100`, `RECT_HEIGHT = 60`）、ノード配置間隔（`CHILD_HORIZONTAL_GAP = 120`, `SIBLING_VERTICAL_GAP = 40`, `TREE_VERTICAL_GAP = 80`）、およびイラスト配置寸法（`ILLUSTRATION_SIZE = 48`, `ILLUSTRATION_TOP_PADDING = 8`, `ILLUSTRATION_AREA_HEIGHT = 56`, `ILLUSTRATED_NODE_HEIGHT = 116`）。
   - `config/nodeLabel.ts`: 空ラベル時のフォールバックノードラベル定義（`FALLBACK_NODE_LABEL = "新しいノード"`）。
   - `config/resolutionLevelLabels.ts`: 表示レベルの表示名（`RESOLUTION_LEVEL_LABELS`: `高のみ` / `中以上` / `すべて`）。検索で表示を切り替えたときの通知文に使う。
-  - `config/illustration.ts`: 保存・縮小用サムネイル解像度と品質（`ILLUSTRATION_THUMBNAIL_SIZE = 128`, `ILLUSTRATION_THUMBNAIL_QUALITY = 0.85`）、`localStorage` 容量制限用上限値（`MAX_ILLUSTRATION_DATA_URL_LENGTH = 100_000`）、画像デコード時の保護上限値（`MAX_ILLUSTRATION_IMAGE_DIMENSION = 512`）。
+  - `config/illustration.ts`: 保存・縮小用サムネイル解像度と品質（`ILLUSTRATION_THUMBNAIL_SIZE = 128`, `ILLUSTRATION_THUMBNAIL_QUALITY = 0.85`）、`localStorage` 容量制限用上限値（`MAX_ILLUSTRATION_DATA_URL_LENGTH = 100_000`）、画像デコード時の保護上限値（`MAX_ILLUSTRATION_IMAGE_DIMENSION = 512`）、任意画像アップロード入口の `File.size`／ヘッダ寸法上限（`MAX_ILLUSTRATION_UPLOAD_BYTES`、`MAX_ILLUSTRATION_UPLOAD_DIMENSION`）。
 - **依存可能レイヤー**: Types
 
 #### 8. Types Layer (`src/types/`)
 - **責務**: アプリケーション横断で共有される TypeScript 型定義、インターフェース、ユニオン型。
-- **構成ファイル（全 16 ファイル完全網羅）**:
+- **構成ファイル（全 22 ファイル完全網羅）**:
   - `types/node.ts`: `Node`（`id`, `parentId`, `x`, `y`, `width`, `height`, `label`, `importance`, `illustration?`, `note?`, `links?`, `tags?`, `sources?`, `mapLinks?`, `locked?`, `labelFontSize?`, `labelBold?`, `labelUnderline?`, `icon?`, `kind?`）、`NodeSource`、`NodeMapLink`。
-  - `types/nodeKind.ts`: `NodeKind`（`"question" | "conclusion" | "evidence" | "idea"`）、`NODE_KIND_BAR_CSS_VARS`。
+  - `types/nodeKind.ts`: `NodeKind`（`"question" | "conclusion" | "evidence" | "idea"`）、`NODE_KINDS`、`NODE_KIND_BAR_WIDTH_PX`、`NODE_KIND_BAR_CSS_VARS`、`NODE_KIND_BAR_FALLBACK_COLORS`（Pixi／SVG 用。DOM は CSS 変数）。
   - `types/nodeImportance.ts`: `NodeImportance`（`"high" | "medium" | "low"`）。
   - `types/nodeLayout.ts`: `NodeLayoutMode`（`"manual" | "auto"`）。
   - `types/nodeMapState.ts`: `NodeMapState`（`layoutMode`, `nodes`）。
   - `types/nodeResolution.ts`: `ResolutionLevel`（`"high" | "medium" | "all"`）、`ResolutionFilterMode`（`"auto" | ResolutionLevel`）。
+  - `types/labelFontSize.ts`: `LABEL_FONT_SIZES`、`LabelFontSize`。
+  - `types/treeDirection.ts`: `TreeDirection`（`"lr" | "tb"`）。
+  - `types/layoutSpacing.ts`: `LayoutSpacing`（`childGap`, `siblingGap`）。
+  - `types/viewport.ts`: `Viewport`、`ScreenSize`、`INITIAL_VIEWPORT`、倍率上下限、妥当性判定。
+  - `types/mapViewSnapshot.ts`: `MapViewSnapshot`（viewport・選択・折りたたみ・解像度モードのメモリ上スナップショット）。
   - `types/mapDocument.ts`: `MapDocumentVersion`（`1 | 2 | 3`）、`MapDocumentV1`、`MapDocumentV3`、`MapDocument`、`MapDocumentResult<T>`。
   - `types/mapImageExport.ts`: 画像エクスポート関数シグネチャ型（`CreateSvgExport`, `DownloadImage`, `RasterizePng`）。※戻り値型参照のため `domain/imageExport/mapSvgDocument` の `MapSvgDocument` 型のみを `import type`（コンパイル時のみの型参照・実行時依存ゼロ）しています。
   - `types/illustrationGeneration.ts`: `IllustrationGenerationState`（`idle` / `generating` / `succeeded` / `failed` の判別共用体）。

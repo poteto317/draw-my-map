@@ -789,9 +789,10 @@ sequenceDiagram
 - **ノードへの適用**:
   - 右パネルの「**ノードに設定**」ボタンをクリックすると、`attachIllustration(nodeId, dataUrl)` により `node.illustration` に Data URL が保存され、`dismissGeneration()` によりプレビュー状態はクリアされて「設定済みのイラスト」表示へ切り替わります。
 - **画像ファイルの添付（Phase 26・候補052）**:
-  - 「**画像を添付**」ボタンから `accept="image/*"` のファイル選択を開き、選択画像を既存の `createIllustrationThumbnail` で 128×128 JPEG に縮小してから `attachIllustration` します（新属性なし。AI 生成と同じ `illustration` キー）。
+  - 「**画像を添付**」ボタンから `accept="image/*"` のファイル選択を開き、`prepareIllustrationUpload` 経由で **読取 → 寸法／size 検査 → サムネイル → 受理** したあと `attachIllustration` します（新属性なし。AI 生成と同じ `illustration` キー）。
+  - **事前拒否（サムネイル／`Image.decode` の前）**: `File.size` が `MAX_ILLUSTRATION_UPLOAD_BYTES`（5 MiB）超、または JPEG SOF／PNG IHDR などデコード前ヘッダから読んだ縦横が `MAX_ILLUSTRATION_UPLOAD_DIMENSION`（4096）超／読めない形式は添付せずエラーを出します（巨大入力によるタブ OOM 防止）。
   - 設定済みイラストがあるときは置き換え確認（`window.confirm`）。キャンセルでは何も変えません。
-  - サムネイル後の data URL が既存上限（`MAX_ILLUSTRATION_DATA_URL_LENGTH` = 100,000 文字）を超える・形式不正のときは添付せずエラーを出します。
+  - サムネイル後の data URL が既存上限（`MAX_ILLUSTRATION_DATA_URL_LENGTH` = 100,000 文字）を超える・形式不正のときも添付せずエラーを出します。
 - **ノード高さの更新仕様（UI 操作時と JSON 復元・インポート時の使い分け）**:
   - **UI からのイラスト設定・削除時** (`replaceNodeIllustration`, `clearNodeIllustration` in `nodeIllustrationUpdate.ts`): `attachIllustration`（`replaceNodeIllustration`）を実行した際は、対象ノードの既存の高さに関わらず `height: ILLUSTRATED_NODE_HEIGHT`（**`116px` 固定**）に設定されます。対になる `removeIllustration`（`clearNodeIllustration`）実行時は `height: RECT_HEIGHT`（**`60px` 固定**）に戻ります。
   - **JSON 復元・インポート時の正規化** (`normalizeMapDocumentNode` in `mapDocumentNode.ts`, `getIllustratedNodeMinHeight` in `nodeIllustration.ts`): 保存データや外部 JSON のデコード時には、イラストを持つノードに対して `getIllustratedNodeMinHeight(height)`（`Math.max(height, ILLUSTRATED_NODE_HEIGHT)`）が適用されます。これにより `116px` 未満の高さは `116px` に引き上げられる一方、JSON 内で `116px` を超えるカスタム高さが指定されていた場合はその高さが維持されます。

@@ -64,13 +64,15 @@ client/
 │   │   ├── illustrationCrop.ts            # カバースクエアクロップ計算（正方形中央トリミング）
 │   │   ├── illustrationDataUrl.ts         # Data URL フォーマット・サイズ検証
 │   │   ├── illustrationActionLabel.ts     # ノードイラスト状態に応じた操作ボタンラベル決定（getIllustrationActionLabel）
-│   │   └── jpegDimensions.ts              # JPEG バイナリ（SOF マーカー）からの画像サイズ抽出・寸法上限検証（getJpegDimensions, isAcceptableIllustrationSize）
+│   │   ├── jpegDimensions.ts              # JPEG バイナリ（SOF マーカー）からの画像サイズ抽出・寸法上限検証（getJpegDimensions, isAcceptableIllustrationSize）
+│   │   └── pngDimensions.ts               # PNG バイナリ（IHDR）からの画像サイズ抽出（getPngDimensions。デコードしない）
 │   ├── config/
-│   │   └── illustration.ts                # イラスト関連定数（サムネイルサイズ、品質、文字数上限）
+│   │   └── illustration.ts                # イラスト関連定数（サムネイルサイズ、品質、文字数上限、アップロード size／寸法上限）
 │   ├── services/illustration/
 │   │   ├── illustrationClient.ts          # フロントエンド用 API クライアント & エラー分類
 │   │   ├── illustrationThumbnail.ts       # Canvas を用いた 128x128 JPEG サムネイル生成
-│   │   └── illustrationGeneration.ts      # 生成・サムネイル化の統合パイプラインファサード
+│   │   ├── illustrationGeneration.ts      # 生成・サムネイル化の統合パイプラインファサード
+│   │   └── prepareIllustrationUpload.ts   # 任意画像添付（File.size・ヘッダ寸法検査 → サムネイル → 受理）
 │   └── components/map/
 │       ├── useIllustrationTextures.ts     # Pixi.js テクスチャのセッションキャッシュ・重複ロード防止フック
 │       └── pixi/
@@ -336,7 +338,7 @@ API から返却された高解像度画像（約 1024x1024）をそのままノ
   └── Data URL JPEG (128x128, 約 5〜15 KB) ───> Node.illustration に保存
 ```
 
-右パネル「画像を添付」（Phase 26・候補052）も、ファイルを Data URL 化したあと **同じ** `createIllustrationThumbnail` → `isIllustrationDataUrl`（`.length` ≤ `MAX_ILLUSTRATION_DATA_URL_LENGTH`）→ `attachIllustration` 経路を使う。新属性は追加しない（AI 生成と同一の `illustration` キー）。既存イラストがあるときは上書き確認。
+右パネル「画像を添付」（Phase 26・候補052）は `prepareIllustrationUpload` で **読取 → File.size／ヘッダ寸法検査 → `createIllustrationThumbnail` → `isIllustrationDataUrl`（`.length` ≤ `MAX_ILLUSTRATION_DATA_URL_LENGTH`）→ `attachIllustration`** の順に進む。新属性は追加しない（AI 生成と同一の `illustration` キー）。既存イラストがあるときは上書き確認。寸法は JPEG SOF／PNG IHDR などデコード前ヘッダのみで判定し、読めない形式や上限超過はサムネイル前に拒否する。
 
 ### 5.1 主要パラメータ（`config/illustration.ts`）
 
@@ -346,6 +348,8 @@ API から返却された高解像度画像（約 1024x1024）をそのままノ
 | `ILLUSTRATION_THUMBNAIL_QUALITY` | `0.85` | 画質劣化を目立たせず、ファイルサイズを劇的に削減する JPEG 圧縮品質。 |
 | `MAX_ILLUSTRATION_DATA_URL_LENGTH` | `100_000` | localStorage の容量（約 5MB）枯渇を防ぐため、1ノードあたりの Data URL 長さを 100KB 以内に制限。 |
 | `MAX_ILLUSTRATION_IMAGE_DIMENSION` | `512` | 復元時に改ざんされた巨大画像によってブラウザメモリが枯渇するのを防ぐデコード上限値。 |
+| `MAX_ILLUSTRATION_UPLOAD_BYTES` | `5 * 1024 * 1024` | 任意画像添付入口。`FileReader` 前に `File.size` で拒否し、巨大ファイルの読取・展開を防ぐ。 |
+| `MAX_ILLUSTRATION_UPLOAD_DIMENSION` | `4096` | アップロード元の縦横上限。JPEG SOF／PNG IHDR 等のヘッダ寸法でサムネイル／`Image.decode` 前に拒否する。 |
 
 ### 5.2 カバースクエアクロッピング (`calculateCoverCrop`)
 
