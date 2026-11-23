@@ -1,5 +1,6 @@
 import { areLayoutSpacingEqual } from "@/domain/persistence/mapDocumentLayoutSpacing";
 import { MAX_MAP_NAME_LENGTH } from "@/domain/mapLibrary/mapName";
+import { areLabelTextStylesEqual } from "@/domain/nodes/labelTextStyle";
 import { areNodeLinksEqual } from "@/domain/nodes/nodeLink";
 import { areNodeMapLinksEqual } from "@/domain/nodes/nodeMapLink";
 import { areNodeSourcesEqual } from "@/domain/nodes/nodeSource";
@@ -67,7 +68,8 @@ function areNodesEqual(a: Node, b: Node): boolean {
     areNodeTagsEqual(a.tags, b.tags) &&
     areNodeSourcesEqual(a.sources, b.sources) &&
     areNodeMapLinksEqual(a.mapLinks, b.mapLinks) &&
-    (a.locked === true) === (b.locked === true)
+    (a.locked === true) === (b.locked === true) &&
+    areLabelTextStylesEqual(a, b)
   );
 }
 

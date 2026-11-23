@@ -1,3 +1,4 @@
+import { projectLabelTextStyle } from "@/domain/nodes/labelTextStyle";
 import type { Node } from "@/types/node";
 
 export function projectMapDocumentNode(node: Node): Node {
@@ -17,5 +18,6 @@ export function projectMapDocumentNode(node: Node): Node {
     ...(node.sources === undefined ? {} : { sources: node.sources }),
     ...(node.mapLinks === undefined ? {} : { mapLinks: node.mapLinks }),
     ...(node.locked === undefined ? {} : { locked: node.locked }),
+    ...projectLabelTextStyle(node),
   };
 }
