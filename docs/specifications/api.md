@@ -20,6 +20,7 @@
 12. [保存状態表示のクライアントAPI](#12-保存状態表示のクライアントapi)
 13. [一括バックアップ・追加復元のクライアントAPI](#13-一括バックアップ追加復元のクライアントapi)
 14. [複数タブの編集競合検出のクライアントAPI](#14-複数タブの編集競合検出のクライアントapi)
+15. [枝の別マップ化とマップアーカイブのクライアントAPI](#15-枝の別マップ化とマップアーカイブのクライアントapi)
 
 ---
 
@@ -726,3 +727,48 @@ export interface MapStorageSession {
   - `suppressBackupRestoreActionKey` と同様のキーリピート連打抑止を適用。
 - `MapSaveStatus.tsx`:
   - `"conflict"`（赤色「競合が発生しました」）および `"externallyDeleted"`（赤色「削除されました」）の常設バッジを描画。
+
+## 15. 枝の別マップ化とマップアーカイブのクライアントAPI
+
+Phase 27 前半（候補058・060）で追加した `useMapLibrary` 公開操作と関連ドメイン API です。
+
+### 15.1 ドメイン（`domain/nodes/extractBranchToMap.ts`）
+
+```typescript
+export function extractBranchToNewMap(input: ExtractBranchToNewMapInput): ExtractBranchToNewMapResult;
+```
+
+- 枝内 ∪ 離脱元親に対して `assertNodesEditable` を適用（ルート直下の枝は親を検査しない。ルート切り出しは `root-not-allowed`）。
+- 新マップ側は `transferNodeBranch` 相当で単一ルート化。元マップ側はスタブ 1 件（`mapLinks` のみ）を兄弟 index に挿入。
+- 副作用なし。永続化は `services/persistence/mapBranchExtract.ts` の `extractStoredBranch` が担当。
+
+### 15.2 メタデータ（`domain/mapLibrary/mapLibraryMeta.ts`）
+
+```typescript
+export function archiveMapMeta(meta: MapLibraryMetaV1, mapId: string, nowIso: string): MapLibraryMetaV1;
+export function unarchiveMapMeta(meta: MapLibraryMetaV1, mapId: string): MapLibraryMetaV1;
+```
+
+- `MapUserMeta.archivedAt` は厳密 ISO 8601。解除時はキー削除。
+- `toggleMapFavorite` / `recordMapOpened` / `assignMapFolder` は既存の `archivedAt` を保持する。
+
+### 15.3 `mapLibraryMetaActions.ts`
+
+- `runArchiveMap(current, mapId, nowIso)` / `runUnarchiveMap(current, mapId)`:
+  - `libraryMetaStatus !== "ready"` または保護モードで拒否。
+  - 書込前に最新メタを読み、1 回だけ `writeMapLibraryMeta`。
+  - 書込失敗時はマップ本体を変更せず通知のみ。
+
+### 15.4 `useMapLibrary.ts`
+
+- `extractBranchToNewMap(sourceSession: MapStorageSession, rootId: number): MapLibraryOperationResult`
+  - `moveBranchToMap` と同様に flush → インデックス再読込 → `extractStoredBranch` → 成功時 `commitNewSession`。
+  - 競合時は `conflict` で拒否。復旧不能時は保護モードへ移行しうる。
+- `archiveMap(mapId: string): MapLibraryOperationResult`
+- `unarchiveMap(mapId: string): MapLibraryOperationResult`
+  - メタデータのみ更新。`applyMetaAction` 経由で `runArchiveMap` / `runUnarchiveMap` を呼ぶ。
+
+### 15.5 UI 連携
+
+- `useBranchExtractDialog` は必須 prop `onExtractBranchToNewMap(rootId)` を受け、`submit` で `useMapLibrary.extractBranchToNewMap` を呼ぶ（L-060）。
+- `useMapLibraryDialogState` は `archiveMap` / `unarchiveMap` を一覧画面へ配線する。
