@@ -5,7 +5,6 @@ import { getNodeDisplayLabel } from "@/domain/nodes/nodeDisplayLabel";
 import { IllustrationImage } from "@/components/layout/IllustrationImage";
 import { getIllustrationPanelView } from "@/components/layout/illustrationPanelView";
 import {
-  defaultLoadImageDimensions,
   defaultReadImageFile,
   prepareIllustrationUpload,
 } from "@/services/illustration/prepareIllustrationUpload";
@@ -37,7 +36,6 @@ type IllustrationPanelProps = {
   confirmOverwrite?: () => boolean;
   createThumbnail?: (dataUrl: string) => Promise<string>;
   readImageFile?: (file: File) => Promise<string>;
-  loadImageDimensions?: (dataUrl: string) => Promise<{ width: number; height: number }>;
 };
 
 export function IllustrationPanel({
@@ -50,7 +48,6 @@ export function IllustrationPanel({
   confirmOverwrite = defaultConfirmOverwrite,
   createThumbnail = createIllustrationThumbnail,
   readImageFile = defaultReadImageFile,
-  loadImageDimensions = defaultLoadImageDimensions,
 }: IllustrationPanelProps) {
   const view = getIllustrationPanelView(selectedNode, generation);
   const preview = view.image?.kind === "preview" ? view.image : null;
@@ -81,7 +78,6 @@ export function IllustrationPanel({
       const prepared = await prepareIllustrationUpload(file, {
         readImageFile,
         createThumbnail,
-        loadImageDimensions,
       });
       if (!prepared.ok) {
         setUploadError(UPLOAD_ERROR_MESSAGE);

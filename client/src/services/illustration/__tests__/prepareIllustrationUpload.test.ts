@@ -8,17 +8,16 @@ import {
   type PrepareIllustrationUploadDeps,
 } from "@/services/illustration/prepareIllustrationUpload";
 import { createJpegDataUrl } from "@/testing/jpegFixture";
+import { createPngDataUrl } from "@/testing/pngFixture";
 
-const SOURCE = "data:image/png;base64,SRC";
 const THUMB = "data:image/jpeg;base64,THUMB";
 
 function deps(
   overrides: Partial<PrepareIllustrationUploadDeps> = {},
 ): PrepareIllustrationUploadDeps {
   return {
-    readImageFile: jest.fn(async () => SOURCE),
+    readImageFile: jest.fn(async () => createPngDataUrl(200, 100)),
     createThumbnail: jest.fn(async () => THUMB),
-    loadImageDimensions: jest.fn(async () => ({ width: 200, height: 100 })),
     ...overrides,
   };
 }
@@ -26,13 +25,15 @@ function deps(
 describe("prepareIllustrationUpload", () => {
   const file = new File(["png"], "photo.png", { type: "image/png" });
 
-  it("読取→寸法検査→サムネイル→受理 data URL を返す", async () => {
-    const options = deps();
+  it("読取→ヘッダ寸法検査→サムネイル→受理 data URL を返す", async () => {
+    const source = createPngDataUrl(200, 100);
+    const options = deps({
+      readImageFile: jest.fn(async () => source),
+    });
     const result = await prepareIllustrationUpload(file, options);
 
     expect(options.readImageFile).toHaveBeenCalledWith(file);
-    expect(options.loadImageDimensions).toHaveBeenCalledWith(SOURCE);
-    expect(options.createThumbnail).toHaveBeenCalledWith(SOURCE);
+    expect(options.createThumbnail).toHaveBeenCalledWith(source);
     expect(result).toEqual({ ok: true, dataUrl: THUMB });
   });
 
@@ -61,16 +62,26 @@ describe("prepareIllustrationUpload", () => {
       ok: false,
       reason: "invalid",
     });
-    expect(options.loadImageDimensions).not.toHaveBeenCalled();
     expect(options.createThumbnail).not.toHaveBeenCalled();
   });
 
-  it("非 JPEG のデコード直後寸法が上限超過ならサムネイルせず invalid", async () => {
+  it("PNG の IHDR 寸法が上限超過ならサムネイルせず invalid（デコード前拒否）", async () => {
+    const over = MAX_ILLUSTRATION_UPLOAD_DIMENSION + 1;
+    const pngSource = createPngDataUrl(over, 100);
     const options = deps({
-      loadImageDimensions: jest.fn(async () => ({
-        width: MAX_ILLUSTRATION_UPLOAD_DIMENSION + 1,
-        height: 100,
-      })),
+      readImageFile: jest.fn(async () => pngSource),
+    });
+
+    await expect(prepareIllustrationUpload(file, options)).resolves.toEqual({
+      ok: false,
+      reason: "invalid",
+    });
+    expect(options.createThumbnail).not.toHaveBeenCalled();
+  });
+
+  it("ヘッダ寸法が取れない形式はサムネイルせず invalid", async () => {
+    const options = deps({
+      readImageFile: jest.fn(async () => "data:image/webp;base64,AAAA"),
     });
 
     await expect(prepareIllustrationUpload(file, options)).resolves.toEqual({
