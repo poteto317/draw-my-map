@@ -62,6 +62,8 @@ import {
   toggleNodeLabelUnderline as computeToggleNodeLabelUnderline,
   updateNodeLabelFontSize,
 } from "@/domain/nodes/nodeLabelTextStyleUpdate";
+import { updateNodeIcon, updateNodeKind } from "@/domain/nodes/nodeAppearanceUpdate";
+import type { NodeKind } from "@/types/nodeKind";
 import {
   isSameNodeMergePlan,
   mergeNodes as computeNodeMerge,
@@ -155,6 +157,8 @@ type UseNodesReturn = {
   setLabelFontSize: (id: number, size: LabelFontSize) => boolean;
   toggleLabelBold: (id: number) => boolean;
   toggleLabelUnderline: (id: number) => boolean;
+  setNodeIcon: (id: number, icon: string | undefined) => boolean;
+  setNodeKind: (id: number, kind: NodeKind | undefined) => boolean;
   updateNodeImportance: (id: number, importance: NodeImportance) => boolean;
   updateNodesImportance: (ids: readonly number[], importance: NodeImportance) => boolean;
   attachIllustration: (id: number, dataUrl: string) => boolean;
@@ -420,6 +424,14 @@ export function useNodes(): UseNodesReturn {
 
   const toggleLabelUnderline = useCallback((id: number) => (
     applyNonStructuralChange((currentNodes) => computeToggleNodeLabelUnderline(currentNodes, id))
+  ), [applyNonStructuralChange]);
+
+  const setNodeIcon = useCallback((id: number, icon: string | undefined) => (
+    applyNonStructuralChange((currentNodes) => updateNodeIcon(currentNodes, id, icon))
+  ), [applyNonStructuralChange]);
+
+  const setNodeKind = useCallback((id: number, kind: NodeKind | undefined) => (
+    applyNonStructuralChange((currentNodes) => updateNodeKind(currentNodes, id, kind))
   ), [applyNonStructuralChange]);
 
   const updateNodeImportance = useCallback((id: number, importance: NodeImportance) => (
@@ -807,6 +819,8 @@ export function useNodes(): UseNodesReturn {
     setLabelFontSize,
     toggleLabelBold,
     toggleLabelUnderline,
+    setNodeIcon,
+    setNodeKind,
     updateNodeImportance,
     updateNodesImportance,
     attachIllustration,

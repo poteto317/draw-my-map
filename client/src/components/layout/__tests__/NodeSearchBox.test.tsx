@@ -97,6 +97,33 @@ describe("NodeSearchBox", () => {
     expect(screen.getByText("とても長いラベル")).toHaveAttribute("title", "とても長いラベル");
   });
 
+  it("検索一覧はラベルと親情報のみで、icon / kind を出さない", () => {
+    const withAppearance = {
+      nodeId: 99,
+      label: "プレーン表示",
+      parentLabel: "親",
+      matchedBy: "label" as const,
+      hidden: false,
+      // 誤って渡しても UI は参照しない
+      icon: "🎯",
+      kind: "question",
+    };
+    render(
+      <Harness
+        initialQuery="プレーン"
+        resultMatches={[withAppearance as NodeSearchListItem]}
+      />,
+    );
+
+    const option = screen.getByRole("option", { name: "プレーン表示（親: 親）" });
+    expect(option).toHaveTextContent("プレーン表示");
+    expect(option).toHaveTextContent("親: 親");
+    expect(option).not.toHaveTextContent("🎯");
+    expect(option).not.toHaveTextContent("question");
+    expect(option).not.toHaveTextContent("疑問");
+    expect(within(option).queryByTestId("node-kind-bar")).not.toBeInTheDocument();
+  });
+
   it("URL だけで一致した候補は、補助行とアクセシブルネームに「URL 一致」を付ける", () => {
     const linkMatches: readonly NodeSearchListItem[] = [
       { nodeId: 60, label: "資料", parentLabel: "親ノード", matchedBy: "link", hidden: false },

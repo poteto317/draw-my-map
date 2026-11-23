@@ -1,4 +1,5 @@
 import { IllustrationPanel } from "@/components/layout/IllustrationPanel";
+import { NodeAppearanceSection } from "@/components/layout/NodeAppearanceSection";
 import { NodeBacklinksSection } from "@/components/layout/NodeBacklinksSection";
 import { NodeLinksSection } from "@/components/layout/NodeLinksSection";
 import { NodeMapLinksSection } from "@/components/layout/NodeMapLinksSection";
@@ -6,6 +7,7 @@ import { NodeNoteEditor } from "@/components/layout/NodeNoteEditor";
 import { NodeNoteSection } from "@/components/layout/NodeNoteSection";
 import { NodeSourcesSection } from "@/components/layout/NodeSourcesSection";
 import { NodeTagsSection } from "@/components/layout/NodeTagsSection";
+import type { EditorViewMode } from "@/components/layout/EditorViewModeControl";
 import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
 import type { CrossMapCorpus } from "@/domain/mapLibrary/crossMapCorpus";
 import type { MapIndexEntry } from "@/domain/mapLibrary/mapIndex";
@@ -15,14 +17,16 @@ import type { AddNodeSourceOutcome, NodeSourceInput } from "@/domain/nodes/nodeS
 import type { AddNodeTagOutcome } from "@/domain/nodes/nodeTag";
 import type { IllustrationGenerationState } from "@/types/illustrationGeneration";
 import type { Node } from "@/types/node";
+import type { NodeKind } from "@/types/nodeKind";
 
 type NodeDetailPanelProps = {
   selectedNode: Pick<
     Node,
-    "id" | "label" | "note" | "tags" | "links" | "sources" | "mapLinks" | "illustration"
+    "id" | "label" | "note" | "tags" | "links" | "sources" | "mapLinks" | "illustration" | "icon" | "kind" | "locked"
   > | null;
   selectionCount: number;
   documentRevision: number;
+  viewMode: EditorViewMode;
   currentMapId: string;
   maps: readonly MapIndexEntry[];
   corpus: CrossMapCorpus;
@@ -41,17 +45,20 @@ type NodeDetailPanelProps = {
   ) => AddNodeMapLinkOutcome;
   onRemoveMapLink: (nodeId: number, target: NodeMapLink) => boolean;
   onNavigateToMapTarget: (targetMapId: string, targetNodeId?: number) => void;
+  onSetNodeIcon: (id: number, icon: string | undefined) => boolean;
+  onSetNodeKind: (id: number, kind: NodeKind | undefined) => boolean;
   generation: IllustrationGenerationState;
   onGenerate: (nodeId: number) => void;
   onAttach: (nodeId: number, dataUrl: string) => void;
   onRemove: (nodeId: number) => void;
 };
 
-// 右のパネル。上から詳細メモ、タグ、リンク、出典、マップ間リンク、被リンク、イラストの 7 節を縦に積み、内容が高さを超えたら縦にスクロールする
+// 右のパネル。上から詳細メモ、見た目、タグ、リンク、出典、マップ間リンク、被リンク、イラストを縦に積み、内容が高さを超えたら縦にスクロールする
 export function NodeDetailPanel({
   selectedNode,
   selectionCount,
   documentRevision,
+  viewMode,
   currentMapId,
   maps,
   corpus,
@@ -67,11 +74,20 @@ export function NodeDetailPanel({
   onAddMapLink,
   onRemoveMapLink,
   onNavigateToMapTarget,
+  onSetNodeIcon,
+  onSetNodeKind,
   generation,
   onGenerate,
   onAttach,
   onRemove,
 }: NodeDetailPanelProps) {
+  // 見た目節: 主選択ちょうど1・マップ・非保護（L-061）
+  const appearanceVisible =
+    viewMode === "map"
+    && storageMode !== "protected"
+    && selectionCount === 1
+    && selectedNode !== null;
+
   return (
     <aside
       aria-label="ノードの詳細"
@@ -88,6 +104,19 @@ export function NodeDetailPanel({
           onBeginNoteEdit={onBeginNoteEdit}
         />
       )}
+      <NodeAppearanceSection
+        key={selectedNode === null ? "appearance:none" : `appearance:${selectedNode.id}`}
+        visible={appearanceVisible}
+        disabled={selectedNode?.locked === true}
+        icon={selectedNode?.icon}
+        kind={selectedNode?.kind}
+        onIconChange={(icon) => {
+          if (selectedNode !== null) onSetNodeIcon(selectedNode.id, icon);
+        }}
+        onKindChange={(kind) => {
+          if (selectedNode !== null) onSetNodeKind(selectedNode.id, kind);
+        }}
+      />
       {/* タグ・リンク・出典・マップ間リンクの節の key はノードの ID だけ（兄弟の NodeNoteEditor や互いと重ならないよう接頭辞を付ける）。
           documentRevision では作り直さず、節の中で下書きとエラーだけを消す（作り直すとリンク・削除ボタンのフォーカスが
           body へ落ちる。L-155・L-397・L-588） */}
@@ -137,6 +166,11 @@ export function NodeDetailPanel({
         onGenerate={onGenerate}
         onAttach={onAttach}
         onRemove={onRemove}
+        disabled={
+          selectedNode?.locked === true
+          || storageMode === "protected"
+          || selectionCount !== 1
+        }
       />
     </aside>
   );

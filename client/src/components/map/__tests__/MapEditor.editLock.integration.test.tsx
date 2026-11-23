@@ -135,4 +135,24 @@ describe("MapEditor edit lock（useNodes 経路）", () => {
     expect(result.current.nodes[0]).toEqual(before);
     expect(result.current.canUndo).toBe(false);
   });
+
+  it("locked ノードの icon / kind 変更は無操作で Undo も増えない", () => {
+    const { result } = renderHook(() => useNodes());
+    const initial = lockedNode(1);
+    act(() => {
+      result.current.replaceMap({ layoutMode: "manual", nodes: [initial] });
+    });
+
+    expect(typeof result.current.setNodeIcon).toBe("function");
+    expect(typeof result.current.setNodeKind).toBe("function");
+
+    const before = result.current.nodes[0];
+    act(() => {
+      result.current.setNodeIcon(1, "🔥");
+      result.current.setNodeKind(1, "question");
+    });
+
+    expect(result.current.nodes[0]).toEqual(before);
+    expect(result.current.canUndo).toBe(false);
+  });
 });

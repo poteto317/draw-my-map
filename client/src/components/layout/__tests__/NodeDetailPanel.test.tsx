@@ -95,6 +95,7 @@ function renderPanel(overrides: Partial<Props> = {}) {
     },
     selectionCount: 1,
     documentRevision: 0,
+    viewMode: "map",
     currentMapId: "map-a",
     maps: DEFAULT_MAPS,
     corpus: DEFAULT_CORPUS,
@@ -110,6 +111,8 @@ function renderPanel(overrides: Partial<Props> = {}) {
     onAddMapLink: jest.fn((): AddNodeMapLinkOutcome => ({ ok: true })),
     onRemoveMapLink: jest.fn(() => true),
     onNavigateToMapTarget: jest.fn(),
+    onSetNodeIcon: jest.fn(() => true),
+    onSetNodeKind: jest.fn(() => true),
     generation: { status: "idle" },
     onGenerate: jest.fn(),
     onAttach: jest.fn(),
@@ -154,12 +157,13 @@ describe("NodeDetailPanel", () => {
     expect(panel()).toHaveClass("w-72", "shrink-0", "min-h-0", "overflow-y-auto");
   });
 
-  it("上から詳細メモ、タグ、リンク、出典、マップ間リンク、被リンク、イラストの 7 節の順に置く", () => {
+  it("上から詳細メモ、見た目、タグ、リンク、出典、マップ間リンク、被リンク、イラストの順に置く", () => {
     renderPanel();
 
     const headings = within(panel()).getAllByRole("heading").map((heading) => heading.textContent);
     expect(headings).toEqual([
       "詳細メモ",
+      "見た目",
       "タグ",
       "リンク",
       "出典",
@@ -167,12 +171,53 @@ describe("NodeDetailPanel", () => {
       "被リンク",
       "イラスト",
     ]);
+    expect(within(panel()).getByRole("region", { name: "見た目" })).toBeInTheDocument();
     expect(within(panel()).getByRole("region", { name: "タグ" })).toBeInTheDocument();
     expect(within(panel()).getByRole("region", { name: "リンク" })).toBeInTheDocument();
     expect(within(panel()).getByRole("region", { name: "出典" })).toBeInTheDocument();
     expect(within(panel()).getByRole("region", { name: "マップ間リンク" })).toBeInTheDocument();
     expect(within(panel()).getByRole("region", { name: "被リンク" })).toBeInTheDocument();
     expect(within(panel()).getByRole("region", { name: "イラスト" })).toBeInTheDocument();
+  });
+
+  it("アウトライン・複数選択・保護モードでは見た目節を出さない", () => {
+    const { rerender, props } = renderPanel({ viewMode: "outline" });
+    expect(screen.queryByRole("heading", { name: "見た目" })).not.toBeInTheDocument();
+
+    rerender(<NodeDetailPanel {...props} viewMode="map" selectionCount={2} />);
+    expect(screen.queryByRole("heading", { name: "見た目" })).not.toBeInTheDocument();
+
+    rerender(<NodeDetailPanel {...props} viewMode="map" selectionCount={1} storageMode="protected" />);
+    expect(screen.queryByRole("heading", { name: "見た目" })).not.toBeInTheDocument();
+  });
+
+  it("locked のとき見た目節の操作を無効化する", () => {
+    renderPanel({
+      selectedNode: {
+        id: 1,
+        label: "りんご",
+        locked: true,
+      },
+    });
+
+    expect(screen.getByRole("textbox", { name: "アイコン" })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: "疑問" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "画像を添付" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "イラストを生成" })).toBeDisabled();
+  });
+
+  it("保護モードではイラストの添付・生成を無効化する", () => {
+    renderPanel({ storageMode: "protected" });
+
+    expect(screen.getByRole("button", { name: "画像を添付" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "イラストを生成" })).toBeDisabled();
+  });
+
+  it("主選択がちょうど1でないときはイラストの添付・生成を無効化する", () => {
+    renderPanel({ selectionCount: 2 });
+
+    expect(screen.getByRole("button", { name: "画像を添付" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "イラストを生成" })).toBeDisabled();
   });
 
   it("イラストの機能は従来どおり（生成ボタンで選択中のノード ID を通知する）", async () => {
