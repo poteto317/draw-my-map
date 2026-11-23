@@ -85,6 +85,32 @@ export function branchMovedToMapNotice(): OperationNotice {
   return status("枝を移動し、移動先のマップを開きました。");
 }
 
+export const CONFLICT_BRANCH_EXTRACT_REJECTED_MESSAGE =
+  "別タブでマップが更新または削除されているため、枝を別マップに切り出せませんでした。";
+
+export const BRANCH_EXTRACT_STORED_ERROR_MESSAGE =
+  "枝を別マップに切り出せませんでした。保存データを確認してやり直してください。";
+
+export function branchExtractStoredErrorMessage(): string {
+  return BRANCH_EXTRACT_STORED_ERROR_MESSAGE;
+}
+
+export function conflictBranchExtractRejectedNotice(): OperationNotice {
+  return error(CONFLICT_BRANCH_EXTRACT_REJECTED_MESSAGE);
+}
+
+export function branchExtractRejectedNotice(): OperationNotice {
+  return error("枝を別マップに切り出せませんでした。切り出すノードとマップの状態を確認してやり直してください。");
+}
+
+export function branchExtractFlushFailedNotice(): OperationNotice {
+  return error("編集中のマップを保存できないため、枝を別マップに切り出せませんでした。");
+}
+
+export function branchExtractedToMapNotice(): OperationNotice {
+  return status("枝を別マップに切り出し、新しいマップを開きました。");
+}
+
 export function indexWriteFailedNotice(
   operation: MapLibraryOperationName,
 ): OperationNotice {
