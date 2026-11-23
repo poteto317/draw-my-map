@@ -29,19 +29,22 @@ describe("LabelTextStyleControl", () => {
     expect(screen.queryByRole("button", { name: "文字" })).not.toBeInTheDocument();
   });
 
-  it("メニューを開くとサイズ・太字・下線を表示する", async () => {
+  it("パネルを開くとサイズ・太字・下線を表示する", async () => {
     const user = userEvent.setup();
     render(<LabelTextStyleControl {...defaultProps} />);
 
-    await user.click(screen.getByRole("button", { name: "文字" }));
+    const trigger = screen.getByRole("button", { name: "文字" });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await user.click(trigger);
 
-    expect(screen.getByRole("menu")).toBeInTheDocument();
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("group", { name: "文字" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "文字サイズ" })).toHaveValue("14");
-    expect(screen.getByRole("menuitem", { name: "太字" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "太字" })).toHaveAttribute(
       "aria-pressed",
       "false",
     );
-    expect(screen.getByRole("menuitem", { name: "下線" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "下線" })).toHaveAttribute(
       "aria-pressed",
       "false",
     );
@@ -70,11 +73,11 @@ describe("LabelTextStyleControl", () => {
     render(<LabelTextStyleControl {...defaultProps} bold />);
 
     await user.click(screen.getByRole("button", { name: "文字" }));
-    expect(screen.getByRole("menuitem", { name: "太字" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "太字" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
-    await user.click(screen.getByRole("menuitem", { name: "太字" }));
+    await user.click(screen.getByRole("button", { name: "太字" }));
 
     expect(defaultProps.onToggleBold).toHaveBeenCalledTimes(1);
   });
@@ -84,11 +87,11 @@ describe("LabelTextStyleControl", () => {
     render(<LabelTextStyleControl {...defaultProps} underline />);
 
     await user.click(screen.getByRole("button", { name: "文字" }));
-    expect(screen.getByRole("menuitem", { name: "下線" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "下線" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
-    await user.click(screen.getByRole("menuitem", { name: "下線" }));
+    await user.click(screen.getByRole("button", { name: "下線" }));
 
     expect(defaultProps.onToggleUnderline).toHaveBeenCalledTimes(1);
   });
@@ -100,20 +103,20 @@ describe("LabelTextStyleControl", () => {
     await user.click(screen.getByRole("button", { name: "文字" }));
 
     expect(screen.getByRole("combobox", { name: "文字サイズ" })).toBeDisabled();
-    expect(screen.getByRole("menuitem", { name: "太字" })).toBeDisabled();
-    expect(screen.getByRole("menuitem", { name: "下線" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "太字" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "下線" })).toBeDisabled();
   });
 
-  it("visible が false になると開いていたメニューを閉じる（L-214）", async () => {
+  it("visible が false になると開いていたパネルを閉じる（L-214）", async () => {
     const user = userEvent.setup();
     const { rerender } = render(<LabelTextStyleControl {...defaultProps} />);
 
     await user.click(screen.getByRole("button", { name: "文字" }));
-    expect(screen.getByRole("menu")).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "文字" })).toBeInTheDocument();
 
     rerender(<LabelTextStyleControl {...defaultProps} visible={false} />);
 
-    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "文字" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "文字" })).not.toBeInTheDocument();
   });
 });

@@ -43,14 +43,14 @@ export function LabelTextStyleControl({
   onToggleBold,
   onToggleUnderline,
 }: LabelTextStyleControlProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuId = useId();
+  const [panelOpen, setPanelOpen] = useState(false);
+  const panelId = useId();
   const selectId = useId();
 
   // L-214: visible 消失で開状態を閉じる（LockControls と同型）
   /* eslint-disable react-hooks/set-state-in-effect -- visible の外部同期 */
   useEffect(() => {
-    if (!visible) setMenuOpen(false);
+    if (!visible) setPanelOpen(false);
   }, [visible]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -61,17 +61,16 @@ export function LabelTextStyleControl({
       <button
         type="button"
         className={buttonClassName}
-        aria-haspopup="menu"
-        aria-expanded={menuOpen}
-        aria-controls={menuOpen ? menuId : undefined}
-        onClick={() => setMenuOpen((open) => !open)}
+        aria-expanded={panelOpen}
+        aria-controls={panelOpen ? panelId : undefined}
+        onClick={() => setPanelOpen((open) => !open)}
       >
         文字
       </button>
-      {menuOpen && (
+      {panelOpen && (
         <div
-          id={menuId}
-          role="menu"
+          id={panelId}
+          role="group"
           aria-label="文字"
           className="absolute top-full left-0 z-20 mt-1 flex min-w-[12rem] flex-col gap-2 rounded-md border border-zinc-200 bg-white p-3 shadow-lg dark:border-zinc-600 dark:bg-zinc-800"
         >
@@ -103,7 +102,6 @@ export function LabelTextStyleControl({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              role="menuitem"
               className={toggleButtonClassName}
               aria-pressed={bold}
               disabled={disabled}
@@ -113,7 +111,6 @@ export function LabelTextStyleControl({
             </button>
             <button
               type="button"
-              role="menuitem"
               className={toggleButtonClassName}
               aria-pressed={underline}
               disabled={disabled}
