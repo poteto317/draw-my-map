@@ -21,9 +21,10 @@ export type MapFolder = {
 };
 
 export type MapUserMeta = {
-  readonly favorite?: boolean;
-  readonly lastOpenedAt?: string;
-  readonly folderId?: string;
+  readonly favorite?: boolean; // true のみ保持（false はキー省略）
+  readonly lastOpenedAt?: string; // 厳密 ISO 8601（UTC）
+  readonly folderId?: string; // 所属フォルダー ID（未分類はキー省略）
+  readonly archivedAt?: string; // 厳密 ISO 8601（UTC）。キーあり＝アーカイブ（Phase 27・060）
 };
 
 export type MapLibraryMetaV1 = {
@@ -34,7 +35,7 @@ export type MapLibraryMetaV1 = {
 
 export type MapLibraryMetaStatus = "ready" | "corrupt" | "unavailable";
 
-export type MapListTab = "all" | "favorites" | "recent";
+export type MapListTab = "all" | "favorites" | "recent" | "archived";
 
 export type MapListFolderFilter =
   | { readonly kind: "all" }
@@ -277,11 +278,13 @@ export function buildMapUserMeta(fields: {
   favorite?: boolean;
   lastOpenedAt?: string;
   folderId?: string;
+  archivedAt?: string;
 }): MapUserMeta | null {
   const next: {
     favorite?: boolean;
     lastOpenedAt?: string;
     folderId?: string;
+    archivedAt?: string;
   } = {};
   if (fields.favorite === true) {
     next.favorite = true;
@@ -291,6 +294,9 @@ export function buildMapUserMeta(fields: {
   }
   if (fields.folderId !== undefined) {
     next.folderId = fields.folderId;
+  }
+  if (fields.archivedAt !== undefined) {
+    next.archivedAt = fields.archivedAt;
   }
   return Object.keys(next).length === 0 ? null : next;
 }
@@ -326,6 +332,10 @@ export function getMapUserMeta(
   return Object.prototype.hasOwnProperty.call(meta.mapMeta, mapId)
     ? meta.mapMeta[mapId]
     : undefined;
+}
+
+export function isMapArchived(meta: MapUserMeta | undefined): boolean {
+  return meta?.archivedAt !== undefined;
 }
 
 export function withUpdatedMapUserMeta(

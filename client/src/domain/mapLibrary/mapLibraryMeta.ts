@@ -19,6 +19,7 @@ export {
   createEmptyMapLibraryMeta,
   formatMapFolderFailure,
   getMapUserMeta,
+  isMapArchived,
   isValidMapFolderId,
   MAP_FOLDER_ID_PATTERN,
   mapFolderNameKey,
@@ -63,7 +64,35 @@ export { mergeLibraryMetaForRestore } from "./mapLibraryMetaRestore";
 
 export { countMapsByFolder, filterAndSortMapsForList } from "./mapLibraryMetaList";
 
-// お気に入りをトグルする。他の既存フィールド（lastOpenedAt / folderId）は保持する（L-454）
+export function archiveMapMeta(
+  meta: MapLibraryMetaV1,
+  mapId: string,
+  nowIso: string,
+): MapLibraryMetaV1 {
+  const existing = getMapUserMeta(meta, mapId);
+  const nextEntry = buildMapUserMeta({
+    favorite: existing?.favorite,
+    lastOpenedAt: existing?.lastOpenedAt,
+    folderId: existing?.folderId,
+    archivedAt: nowIso,
+  });
+  return withUpdatedMapUserMeta(meta, mapId, nextEntry);
+}
+
+export function unarchiveMapMeta(meta: MapLibraryMetaV1, mapId: string): MapLibraryMetaV1 {
+  const existing = getMapUserMeta(meta, mapId);
+  if (existing?.archivedAt === undefined) {
+    return meta;
+  }
+  const nextEntry = buildMapUserMeta({
+    favorite: existing.favorite,
+    lastOpenedAt: existing.lastOpenedAt,
+    folderId: existing.folderId,
+  });
+  return withUpdatedMapUserMeta(meta, mapId, nextEntry);
+}
+
+// お気に入りをトグルする。他の既存フィールド（lastOpenedAt / folderId / archivedAt）は保持する（L-454）
 export function toggleMapFavorite(
   meta: MapLibraryMetaV1,
   mapId: string,
@@ -74,6 +103,7 @@ export function toggleMapFavorite(
     favorite: nextFavorite,
     lastOpenedAt: existing?.lastOpenedAt,
     folderId: existing?.folderId,
+    archivedAt: existing?.archivedAt,
   });
   return withUpdatedMapUserMeta(meta, mapId, nextEntry);
 }
@@ -89,6 +119,7 @@ export function recordMapOpened(
     favorite: existing?.favorite,
     lastOpenedAt: openedAt,
     folderId: existing?.folderId,
+    archivedAt: existing?.archivedAt,
   });
   return withUpdatedMapUserMeta(meta, mapId, nextEntry);
 }
@@ -110,6 +141,7 @@ export function assignMapFolder(
     favorite: existing?.favorite,
     lastOpenedAt: existing?.lastOpenedAt,
     folderId: folderId ?? undefined,
+    archivedAt: existing?.archivedAt,
   });
   return { ok: true, meta: withUpdatedMapUserMeta(meta, mapId, nextEntry) };
 }
@@ -197,6 +229,7 @@ export function deleteMapFolder(
       favorite: entry.favorite,
       lastOpenedAt: entry.lastOpenedAt,
       folderId: undefined,
+      archivedAt: entry.archivedAt,
     });
     if (rebuilt !== null) {
       setOwnMapUserMeta(nextMapMeta, mapId, rebuilt);

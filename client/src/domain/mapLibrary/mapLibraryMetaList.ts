@@ -1,6 +1,7 @@
 import { sortMapEntriesForDisplay, type MapIndexEntry } from "./mapIndex";
 import {
   getMapUserMeta,
+  isMapArchived,
   MAX_RECENT_MAPS,
   type MapLibraryMetaV1,
   type MapListFilter,
@@ -43,16 +44,26 @@ export function filterAndSortMapsForList(
 
   switch (filter.tab) {
     case "all":
-      return sortMapEntriesForDisplay(folderFiltered);
+      return sortMapEntriesForDisplay(
+        folderFiltered.filter(
+          (entry) => !isMapArchived(getMapUserMeta(meta, entry.id)),
+        ),
+      );
     case "favorites":
       return sortMapEntriesForDisplay(
         folderFiltered.filter(
-          (entry) => getMapUserMeta(meta, entry.id)?.favorite === true,
+          (entry) => {
+            const userMeta = getMapUserMeta(meta, entry.id);
+            return userMeta?.favorite === true && !isMapArchived(userMeta);
+          },
         ),
       );
     case "recent": {
       const opened = folderFiltered.filter(
-        (entry) => getMapUserMeta(meta, entry.id)?.lastOpenedAt !== undefined,
+        (entry) => {
+          const userMeta = getMapUserMeta(meta, entry.id);
+          return userMeta?.lastOpenedAt !== undefined && !isMapArchived(userMeta);
+        },
       );
       opened.sort((a, b) => {
         const aTime = toTimestampMs(
@@ -68,6 +79,25 @@ export function filterAndSortMapsForList(
         return a.id < b.id ? -1 : 1;
       });
       return opened.slice(0, MAX_RECENT_MAPS);
+    }
+    case "archived": {
+      const archived = folderFiltered.filter((entry) =>
+        isMapArchived(getMapUserMeta(meta, entry.id)),
+      );
+      archived.sort((a, b) => {
+        const aTime = toTimestampMs(
+          getMapUserMeta(meta, a.id)?.archivedAt ?? "",
+        );
+        const bTime = toTimestampMs(
+          getMapUserMeta(meta, b.id)?.archivedAt ?? "",
+        );
+        if (bTime !== aTime) {
+          return bTime - aTime;
+        }
+        if (a.id === b.id) return 0;
+        return a.id < b.id ? -1 : 1;
+      });
+      return archived;
     }
     default: {
       const unreachable: never = filter.tab;

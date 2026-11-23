@@ -20,8 +20,11 @@ import {
   pruneMapMetaForRemovedMap,
   recordMapOpened,
   renameMapFolder,
+  archiveMapMeta,
   toggleMapFavorite,
+  unarchiveMapMeta,
   validateBackupLibraryMeta,
+  isMapArchived,
   type MapFolder,
   type MapFolderFailureReason,
   type MapLibraryMetaV1,
@@ -369,6 +372,14 @@ describe("decodeMapLibraryMeta / encodeMapLibraryMeta", () => {
       }),
     ],
     [
+      "mapMeta の archivedAt が厳密 ISO でない",
+      JSON.stringify({
+        version: 1,
+        folders: [],
+        mapMeta: { "map-1": { archivedAt: "2026-11-01" } },
+      }),
+    ],
+    [
       "mapMeta の folderId がパターン違反",
       JSON.stringify({
         version: 1,
@@ -424,7 +435,35 @@ describe("メタデータ操作の純粋関数", () => {
     },
   };
 
+  describe("archiveMapMeta / unarchiveMapMeta", () => {
+    it("アーカイブ日時を付与・解除し、他フィールドを保持する", () => {
+      const archived = archiveMapMeta(baseMeta, "map-1", T3);
+      expect(archived.mapMeta["map-1"]).toEqual({
+        favorite: true,
+        lastOpenedAt: T1,
+        folderId: "f-1",
+        archivedAt: T3,
+      });
+      expect(isMapArchived(archived.mapMeta["map-1"])).toBe(true);
+
+      const restored = unarchiveMapMeta(archived, "map-1");
+      expect(restored.mapMeta["map-1"]).toEqual({
+        favorite: true,
+        lastOpenedAt: T1,
+        folderId: "f-1",
+      });
+      expect("archivedAt" in restored.mapMeta["map-1"]).toBe(false);
+    });
+  });
+
   describe("toggleMapFavorite", () => {
+    it("アーカイブ済みでもお気に入りを切り替えて archivedAt を保持する", () => {
+      const archived = archiveMapMeta(baseMeta, "map-1", T2);
+      const toggled = toggleMapFavorite(archived, "map-1");
+      expect(toggled.mapMeta["map-1"]?.archivedAt).toBe(T2);
+      expect("favorite" in (toggled.mapMeta["map-1"] ?? {})).toBe(false);
+    });
+
     it("お気に入りを切り替えても他の既存フィールドを消去しない（L-454）", () => {
       const off = toggleMapFavorite(baseMeta, "map-1");
       expect(off.mapMeta["map-1"]).toEqual({ lastOpenedAt: T1, folderId: "f-1" });
@@ -734,6 +773,74 @@ describe("filterAndSortMapsForList", () => {
     ).toEqual(["map-1"]);
   });
 
+  it("アーカイブ済みマップは all / favorites / recent から除外し、archived タブに archivedAt 降順で表示する", () => {
+    const archivedMeta: MapLibraryMetaV1 = {
+      ...meta,
+      mapMeta: {
+        ...meta.mapMeta,
+        "map-1": {
+          ...meta.mapMeta["map-1"],
+          archivedAt: "2026-11-12T00:00:00.000Z",
+        },
+        "map-2": {
+          ...meta.mapMeta["map-2"],
+          archivedAt: "2026-11-11T00:00:00.000Z",
+        },
+        "map-3": {
+          ...meta.mapMeta["map-3"],
+          archivedAt: "2026-11-10T00:00:00.000Z",
+        },
+        "map-z": {
+          archivedAt: "2026-11-10T00:00:00.000Z",
+        },
+        "map-a": {
+          archivedAt: "2026-11-10T00:00:00.000Z",
+        },
+        "map-4": {
+          lastOpenedAt: "2026-11-08T00:00:00.000Z",
+        },
+      },
+    };
+    const archivedMaps: readonly MapIndexEntry[] = [
+      ...maps,
+      makeMapEntry({ id: "map-z", updatedAt: "2026-11-01T00:00:00.000Z" }),
+      makeMapEntry({ id: "map-a", updatedAt: "2026-11-02T00:00:00.000Z" }),
+    ];
+    const opts = { folderFilter: { kind: "all" as const } };
+
+    expect(
+      filterAndSortMapsForList(archivedMaps, archivedMeta, { tab: "all", ...opts }).map(
+        (m) => m.id,
+      ),
+    ).not.toContain("map-1");
+    expect(
+      filterAndSortMapsForList(archivedMaps, archivedMeta, { tab: "all", ...opts }).map(
+        (m) => m.id,
+      ),
+    ).toContain("map-4");
+
+    expect(
+      filterAndSortMapsForList(archivedMaps, archivedMeta, {
+        tab: "favorites",
+        ...opts,
+      }).map((m) => m.id),
+    ).toEqual([]);
+
+    expect(
+      filterAndSortMapsForList(archivedMaps, archivedMeta, {
+        tab: "recent",
+        ...opts,
+      }).map((m) => m.id),
+    ).toEqual(["map-4"]);
+
+    expect(
+      filterAndSortMapsForList(archivedMaps, archivedMeta, {
+        tab: "archived",
+        ...opts,
+      }).map((m) => m.id),
+    ).toEqual(["map-1", "map-2", "map-3", "map-a", "map-z"]);
+  });
+
   it("recent タブは lastOpenedAt 未記録を除外し、lastOpenedAt 降順 → id 昇順で最大 20 件を返す", () => {
     const recent = filterAndSortMapsForList(maps, meta, {
       tab: "recent",
@@ -841,6 +948,26 @@ describe("mergeLibraryMetaForRestore", () => {
     // 既存メタを破壊しない
     expect(existing.folders).toHaveLength(2);
     expect("new-1" in existing.mapMeta).toBe(false);
+  });
+
+  it("バックアップ mapMeta の archivedAt を復元マップへ引き継ぐ", () => {
+    const existing = createEmptyMapLibraryMeta();
+    const backupMapMeta: Record<string, MapUserMeta> = {
+      "old-1": { favorite: true, archivedAt: T3 },
+    };
+
+    const result = mergeLibraryMetaForRestore(
+      existing,
+      undefined,
+      backupMapMeta,
+      new Map([["old-1", "new-1"]]),
+      () => "unused",
+    );
+
+    expect(result.meta.mapMeta["new-1"]).toEqual({
+      favorite: true,
+      archivedAt: T3,
+    });
   });
 
   it("合計 50 件上限を超えるフォルダーは追加せず droppedFolderCount を数え、参照マップを未分類化する", () => {

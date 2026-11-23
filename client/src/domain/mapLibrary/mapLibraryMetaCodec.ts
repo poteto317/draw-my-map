@@ -18,7 +18,7 @@ import { normalizeMapTimestamp } from "./mapTimestamp";
 
 const TOP_LEVEL_KEYS = new Set(["version", "folders", "mapMeta"]);
 const FOLDER_KEYS = new Set(["id", "name", "createdAt", "updatedAt"]);
-const MAP_USER_META_KEYS = new Set(["favorite", "lastOpenedAt", "folderId"]);
+const MAP_USER_META_KEYS = new Set(["favorite", "lastOpenedAt", "folderId", "archivedAt"]);
 
 function isStrictIsoTimestamp(value: unknown): value is string {
   return typeof value === "string" && normalizeMapTimestamp(value).repaired === false;
@@ -126,7 +126,15 @@ function decodeMapUserMetaEntry(
     }
   }
 
-  const built = buildMapUserMeta({ favorite, lastOpenedAt, folderId });
+  let archivedAt: string | undefined;
+  if (hasOwn(entryValue, "archivedAt")) {
+    if (!isStrictIsoTimestamp(entryValue.archivedAt)) {
+      return { ok: false, error: "アーカイブ日時の形式が不正です。" };
+    }
+    archivedAt = entryValue.archivedAt;
+  }
+
+  const built = buildMapUserMeta({ favorite, lastOpenedAt, folderId, archivedAt });
   if (built === null) {
     repaired = true;
   }

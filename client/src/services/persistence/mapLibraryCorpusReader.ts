@@ -1,6 +1,6 @@
 import type {
   OtherMapsCorpus,
-  ReadableMapSnapshot,
+  ReadableMapBodySnapshot,
   UnreadableMapInfo,
 } from "@/domain/mapLibrary/crossMapCorpus";
 import {
@@ -24,7 +24,7 @@ export function readOtherMapsCorpus(
   input: ReadOtherMapsCorpusInput,
 ): OtherMapsCorpus {
   const { maps, currentMapId, storage } = input;
-  const readableMaps: ReadableMapSnapshot[] = [];
+  const readableMaps: ReadableMapBodySnapshot[] = [];
   const unreadableMaps: UnreadableMapInfo[] = [];
 
   for (const entry of sortMapEntriesForDisplay(maps)) {
