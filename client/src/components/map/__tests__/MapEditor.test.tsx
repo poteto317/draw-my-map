@@ -29,7 +29,6 @@ import {
 } from "@/domain/mapLibrary/mapConflictMessages";
 import { createConflictCopyName } from "@/domain/mapLibrary/mapConflict";
 import { createEmptyMapLibraryMeta } from "@/domain/mapLibrary/mapLibraryMeta";
-import { createEmptyMapLibraryMeta } from "@/domain/mapLibrary/mapLibraryMeta";
 import type { MapLibraryOperationResult } from "@/hooks/useMapLibrary";
 import { DEFAULT_WHEEL_ZOOM_SENSITIVITY } from "@/domain/uiPrefs/uiPrefs";
 
@@ -134,6 +133,7 @@ async function renderEditor({
       ]}
       libraryMeta={createEmptyMapLibraryMeta()}
       onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "移動先がありません。" } })}
+      onExtractBranchToNewMap={() => ({ ok: false, notice: { kind: "error", message: "切り出せません。" } })}
       mapName={mapName}
       storageSession={storage.session} storageMode={storageMode}
       mapControls={mapControls}
