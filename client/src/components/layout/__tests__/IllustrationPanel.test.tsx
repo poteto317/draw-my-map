@@ -1,9 +1,59 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ComponentProps } from "react";
 import { FALLBACK_NODE_LABEL } from "@/config/nodeLabel";
+import {
+  MAX_ILLUSTRATION_DATA_URL_LENGTH,
+  MAX_ILLUSTRATION_UPLOAD_BYTES,
+  MAX_ILLUSTRATION_UPLOAD_DIMENSION,
+} from "@/config/illustration";
 import { IllustrationPanel } from "@/components/layout/IllustrationPanel";
+import { createIllustrationThumbnail } from "@/services/illustration/illustrationThumbnail";
+import { createJpegDataUrl } from "@/testing/jpegFixture";
+
+jest.mock("@/services/illustration/illustrationThumbnail", () => {
+  const actual = jest.requireActual("@/services/illustration/illustrationThumbnail");
+  return { ...actual, createIllustrationThumbnail: jest.fn() };
+});
+
+const mockCreateThumbnail = createIllustrationThumbnail as jest.MockedFunction<
+  typeof createIllustrationThumbnail
+>;
+
+const THUMB = "data:image/jpeg;base64,THUMB";
+
+function renderPanel(props: Partial<ComponentProps<typeof IllustrationPanel>> = {}) {
+  const {
+    selectedNode = { id: 3, label: "予算" },
+    generation = { status: "idle" as const },
+    onGenerate = jest.fn(),
+    onAttach = jest.fn(),
+    onRemove = jest.fn(),
+    ...rest
+  } = props;
+  const result = render(
+    <IllustrationPanel
+      selectedNode={selectedNode}
+      generation={generation}
+      onGenerate={onGenerate}
+      onAttach={onAttach}
+      onRemove={onRemove}
+      {...rest}
+    />,
+  );
+  return { onGenerate, onAttach, onRemove, ...result };
+}
+
+function imageFileInput(container: HTMLElement): HTMLInputElement {
+  return container.querySelector<HTMLInputElement>('input[type="file"][accept="image/*"]')!;
+}
 
 describe("IllustrationPanel", () => {
+  beforeEach(() => {
+    mockCreateThumbnail.mockReset();
+    mockCreateThumbnail.mockResolvedValue(THUMB);
+  });
+
   it("名前付きの領域（section）として表示し、見出しを持つ（外側の補足領域はノードの詳細のパネルが持つ）", () => {
     render(<IllustrationPanel selectedNode={null} generation={{ status: "idle" }} onGenerate={jest.fn()} onAttach={jest.fn()} onRemove={jest.fn()} />);
 
@@ -274,5 +324,171 @@ describe("IllustrationPanel", () => {
     expect(screen.getByRole("button", { name: "ノードに設定" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "設定済みのイラストを削除" }));
     expect(onRemove).toHaveBeenCalledWith(1);
+  });
+
+  describe("画像ファイルの添付", () => {
+    const SOURCE_DATA_URL = "data:image/png;base64,SRC";
+    const okDimensions = async () => ({ width: 200, height: 100 });
+
+    function mockReadImageFile() {
+      return jest.fn(async () => SOURCE_DATA_URL);
+    }
+
+    function renderUploadPanel(
+      props: Partial<ComponentProps<typeof IllustrationPanel>> = {},
+    ) {
+      return renderPanel({
+        loadImageDimensions: okDimensions,
+        ...props,
+      });
+    }
+
+    it("「画像を添付」と accept=image/* のファイル入力を持つ", () => {
+      const { container } = renderUploadPanel();
+      expect(screen.getByRole("button", { name: "画像を添付" })).toBeEnabled();
+      expect(imageFileInput(container)).toHaveAttribute("accept", "image/*");
+    });
+
+    it("ファイル選択でサムネイル化した data URL を onAttach に渡す", async () => {
+      const user = userEvent.setup();
+      const readImageFile = mockReadImageFile();
+      const { container, onAttach } = renderUploadPanel({ readImageFile });
+      const file = new File(["png"], "photo.png", { type: "image/png" });
+
+      await user.upload(imageFileInput(container), file);
+
+      await waitFor(() => {
+        expect(readImageFile).toHaveBeenCalledWith(file);
+        expect(mockCreateThumbnail).toHaveBeenCalledWith(SOURCE_DATA_URL);
+        expect(onAttach).toHaveBeenCalledWith(3, THUMB);
+      });
+    });
+
+    it("設定済みイラストがあるとき上書き確認をキャンセルすると onAttach しない", async () => {
+      const user = userEvent.setup();
+      const confirmOverwrite = jest.fn(() => false);
+      const readImageFile = mockReadImageFile();
+      const { container, onAttach } = renderUploadPanel({
+        selectedNode: { id: 3, label: "予算", illustration: "data:image/jpeg;base64,OLD" },
+        confirmOverwrite,
+        readImageFile,
+      });
+
+      await user.upload(
+        imageFileInput(container),
+        new File(["png"], "photo.png", { type: "image/png" }),
+      );
+
+      expect(confirmOverwrite).toHaveBeenCalledTimes(1);
+      expect(readImageFile).not.toHaveBeenCalled();
+      expect(onAttach).not.toHaveBeenCalled();
+    });
+
+    it("設定済みイラストがあるとき上書き確認を承認すると添付する", async () => {
+      const user = userEvent.setup();
+      const confirmOverwrite = jest.fn(() => true);
+      const readImageFile = mockReadImageFile();
+      const { container, onAttach } = renderUploadPanel({
+        selectedNode: { id: 3, label: "予算", illustration: "data:image/jpeg;base64,OLD" },
+        confirmOverwrite,
+        readImageFile,
+      });
+
+      await user.upload(
+        imageFileInput(container),
+        new File(["png"], "photo.png", { type: "image/png" }),
+      );
+
+      await waitFor(() => {
+        expect(confirmOverwrite).toHaveBeenCalledTimes(1);
+        expect(onAttach).toHaveBeenCalledWith(3, THUMB);
+      });
+    });
+
+    it("サムネイル後の data URL が長さ上限を超えると添付せずエラーを出す", async () => {
+      const user = userEvent.setup();
+      const tooLong = `data:image/jpeg;base64,${"A".repeat(MAX_ILLUSTRATION_DATA_URL_LENGTH)}`;
+      mockCreateThumbnail.mockResolvedValue(tooLong);
+      const { container, onAttach } = renderUploadPanel({
+        readImageFile: mockReadImageFile(),
+      });
+
+      await user.upload(
+        imageFileInput(container),
+        new File(["png"], "photo.png", { type: "image/png" }),
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole("alert")).toHaveTextContent("画像を添付できませんでした");
+      });
+      expect(onAttach).not.toHaveBeenCalled();
+    });
+
+    it("File.size が上限超過なら読取せずエラーを出す", async () => {
+      const user = userEvent.setup();
+      const readImageFile = mockReadImageFile();
+      const { container, onAttach } = renderUploadPanel({ readImageFile });
+      const huge = new File(
+        [new Uint8Array(MAX_ILLUSTRATION_UPLOAD_BYTES + 1)],
+        "huge.png",
+        { type: "image/png" },
+      );
+
+      await user.upload(imageFileInput(container), huge);
+
+      await waitFor(() => {
+        expect(screen.getByRole("alert")).toHaveTextContent("画像を添付できませんでした");
+      });
+      expect(readImageFile).not.toHaveBeenCalled();
+      expect(onAttach).not.toHaveBeenCalled();
+    });
+
+    it("JPEG のヘッダ寸法が上限超過ならサムネイルせずエラーを出す", async () => {
+      const user = userEvent.setup();
+      const over = MAX_ILLUSTRATION_UPLOAD_DIMENSION + 1;
+      const jpegSource = createJpegDataUrl(over, 128);
+      const readImageFile = jest.fn(async () => jpegSource);
+      const { container, onAttach } = renderUploadPanel({ readImageFile });
+
+      await user.upload(
+        imageFileInput(container),
+        new File(["jpeg"], "wide.jpg", { type: "image/jpeg" }),
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole("alert")).toHaveTextContent("画像を添付できませんでした");
+      });
+      expect(mockCreateThumbnail).not.toHaveBeenCalled();
+      expect(onAttach).not.toHaveBeenCalled();
+    });
+
+    it("locked（disabled）のとき画像添付・生成・削除を無効にする", () => {
+      renderPanel({
+        selectedNode: { id: 5, label: "予算", illustration: "data:image/jpeg;base64,AAAA" },
+        disabled: true,
+      });
+
+      expect(screen.getByRole("button", { name: "画像を添付" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "イラストを再生成" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "設定済みのイラストを削除" })).toBeDisabled();
+    });
+
+    it("AI 生成と削除はファイル添付追加後も従来どおり動く", async () => {
+      const user = userEvent.setup();
+      const { onGenerate, onRemove } = renderPanel({
+        selectedNode: { id: 5, label: "予算", illustration: "data:image/jpeg;base64,AAAA" },
+      });
+
+      await user.click(screen.getByRole("button", { name: "イラストを再生成" }));
+      expect(onGenerate).toHaveBeenCalledWith(5);
+
+      await user.click(screen.getByRole("button", { name: "設定済みのイラストを削除" }));
+      expect(onRemove).toHaveBeenCalledWith(5);
+    });
+
+    it("未選択のときは画像を添付を無効にする", () => {
+      renderPanel({ selectedNode: null });
+      expect(screen.getByRole("button", { name: "画像を添付" })).toBeDisabled();
+    });
   });
 });
