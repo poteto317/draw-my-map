@@ -80,6 +80,7 @@ async function renderEditor({
       ]}
       libraryMeta={createEmptyMapLibraryMeta()}
       onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "移動先がありません。" } })}
+      onExtractBranchToNewMap={() => ({ ok: false, notice: { kind: "error", message: "切り出せません。" } })}
       mapName={mapName}
       storageSession={storage.session}
       storageMode="persistent"
@@ -198,8 +199,9 @@ describe("MapEditor コマンドパレット配線", () => {
           createdAt: "2026-10-31T00:00:00.000Z",
           updatedAt: "2026-10-31T00:00:00.000Z",
         }]}
-      libraryMeta={createEmptyMapLibraryMeta()}
-      onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "移動先がありません。" } })}
+        libraryMeta={createEmptyMapLibraryMeta()}
+        onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "移動先がありません。" } })}
+        onExtractBranchToNewMap={() => ({ ok: false, notice: { kind: "error", message: "切り出せません。" } })}
         mapName="テストのマップ"
         storageSession={storage.session}
         storageMode="persistent"
@@ -365,8 +367,9 @@ describe("MapEditor コマンドパレット配線", () => {
           createdAt: "2026-10-31T00:00:00.000Z",
           updatedAt: "2026-10-31T00:00:00.000Z",
         }]}
-      libraryMeta={createEmptyMapLibraryMeta()}
-      onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "移動先がありません。" } })}
+        libraryMeta={createEmptyMapLibraryMeta()}
+        onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "移動先がありません。" } })}
+        onExtractBranchToNewMap={() => ({ ok: false, notice: { kind: "error", message: "切り出せません。" } })}
         mapName="別マップ"
         storageSession={storage.session}
         storageMode="persistent"
