@@ -37,12 +37,13 @@
 
 ## 実装完了後のブランチの扱い（マージ前の扱い。マージ後は「PRマージ後の後処理」に従う）
 
-- 作業は`.worktrees/<branch>`のgit worktreeで行う。
+- **既定の作業場所はメインのチェックアウト**（リポジトリのクローン先ルート）で、feature ブランチを切って進める。**git worktree は既定では使わない**（ルート切替や環境の不整合で止まりやすいため）。
+- **worktree を使うのは例外だけ**: 同じリポジトリを別セッション／別エージェントがすでに実装中で、メインの作業ツリーを同時に使えないとき。その場合のみ `.worktrees/<branch>` を作り、作業と検証をそこに閉じる。ユーザーが明示的に worktree を指示した場合も同様。
+- 例外で worktree を使っているときも、その中で `main` へ切り替えない。マージ後の `git pull --ff-only` はメインのチェックアウトで行う。
 - dev-flow-kitの開発ループ（下の「開発フロー」）で進める場合は、ループの起動（`/feature`、`/dev-flow --resume`、自動連結による各コマンドの起動）をコミット・push・Pull Request作成・mainへのマージの指示とみなし、確認を求めずに各コマンドの手順どおり最後まで進める。
   - マージは`pr-merge`の手順で行い、Rebaseマージにする。`dev-flow-pr-review`を別々の視点で2周終えていること、未解決のレビュースレッドが無いこと、失敗しているCIチェックが無いことを確かめてから行う。満たさない場合はマージせずに停止して報告する。ブランチ保護を迂回するオプション（`--admin`など）は使わない。
-  - mainはメインのチェックアウト（リポジトリのクローン先ルート）で使われているため、worktreeの中でmainへ切り替えない。マージ後は、メインのチェックアウトで`git pull --ff-only`を実行して最新にする。
-  - マージ後は、続けて「PRマージ後の後処理」を行う。
-- 開発ループの外で作業する場合は、ユーザーが明示的に指示しない限り、mainへのマージ、push、Pull Request作成、worktreeやブランチの削除は行わない。全タスクの完了・最終レビュー・`npm run verify`成功の後は、ブランチをそのまま保持し（`superpowers:finishing-a-development-branch`の選択肢3）、完了報告ではブランチ名・worktreeのパス・未決事項だけを伝え、選択肢の確認はしない。
+  - マージ後は、メインのチェックアウトで`git pull --ff-only`を実行して最新にし、続けて「PRマージ後の後処理」を行う。
+- 開発ループの外で作業する場合は、ユーザーが明示的に指示しない限り、mainへのマージ、push、Pull Request作成、worktreeやブランチの削除は行わない。全タスクの完了・最終レビュー・`npm run verify`成功の後は、ブランチをそのまま保持し（`superpowers:finishing-a-development-branch`の選択肢3）、完了報告ではブランチ名・（例外で作った場合のみ）worktreeのパス・未決事項だけを伝え、選択肢の確認はしない。
 
 ## Pull Requestレビュー
 
@@ -60,8 +61,8 @@ PRのマージ後は次の順で後処理を行う。
 
 1. マージされた変更と`ROADMAP.md`を照合し、完了した項目、進行中のPhase、現在地、次の未完了項目に変更があれば`ROADMAP.md`を更新する。実装時に更新済みであれば、差分がないことの確認だけでよい。
 2. 更新が不要な場合も、ロードマップと実装が一致していることを確認する。
-3. ベースブランチの最新状態と検証結果を確認してから、マージ済みfeature worktreeとブランチを整理する。worktreeを削除する前に、そのworktreeの`.claude/dev-flow/`の中身（開発フローの状態）をメインのチェックアウトの`.claude/dev-flow/`へ戻す（「開発フロー」の「再開」の項）。
-4. ベースブランチに未コミット変更がある場合は、上書きやリセットを行わず、最新のリモートブランチから作成した隔離worktreeで後処理を行う。
+3. ベースブランチの最新状態と検証結果を確認してから、マージ済みのローカル feature ブランチを整理する。例外で feature worktree を使っていた場合は、削除前にその worktree の`.claude/dev-flow/`の中身をメインのチェックアウトの`.claude/dev-flow/`へ戻す（「開発フロー」の「再開」の項）。
+4. ベースブランチに未コミット変更があり、メインのチェックアウトで後処理できない場合だけ、最新のリモートブランチから隔離 worktree を作って後処理する（上書きやリセットはしない）。それ以外はメインのチェックアウトで後処理する。
 
 ## 開発フロー（dev-flow-kit）
 
@@ -69,15 +70,16 @@ PRのマージ後は次の順で後処理を行う。
 
 - **起動方法**: Claude Code で `/feature [機能の説明]` を実行する。機能の説明を省くと、ロードマップから次の未完了項目を選ぶ。以降は確認が必要なときだけ止まり、次の順に自動で進む。
   `feature` → `refactor-srp` → `review-loop` → `commit-ja` → `pr-ja` → `pr-review-loop` → `pr-merge` → `review-digest` → `lessons-push`
-- **マージと後処理**: `pr-merge`でPRをマージした後、`review-digest`へ進む前に「PRマージ後の後処理」（ROADMAPの照合、メインのチェックアウトでの検証、マージ済みworktreeとローカルブランチの整理）を行う。リモートのブランチは削除しない。
+- **マージと後処理**: `pr-merge`でPRをマージした後、`review-digest`へ進む前に「PRマージ後の後処理」（ROADMAPの照合、メインのチェックアウトでの検証、マージ済みローカルブランチと、例外で作っていた worktree の整理）を行う。リモートのブランチは削除しない。
 - **依頼の言い換え**: 「次の機能を実装して」「ロードマップを進めて」「開発ループを回して」などの依頼は、`/feature` の起動として扱い、Skill ツールで `dev-flow-kit:feature` を起動する。途中のステップだけを頼まれた場合（例: 「SRP リファクタリングして」「レビューループを回して」「PR を作って」）は、該当するコマンド（`dev-flow-kit:refactor-srp` など）を起動する。その 1 ステップだけでよい場合は `--only` を付ける。
 - **再開**: 中断したフローは `/dev-flow --resume` で再開する。状態（`state.json`・`review-log.md`・`script-candidates/`）は git 管理外の `.claude/dev-flow/` に置き、次の規則に従う。同時に進めるフローは 1 つだけにする。
-  - **記録する項目**: state.json を作るとき、更新するとき、各手順を始めるとき、サブエージェントを起動するときと完了を受けたときに、dev-flow-kit の形式の項目に加えて `agent`（Claude Code は `claude-code`、Codex は `codex`）と `updatedAt`（`date '+%Y-%m-%dT%H:%M:%S%z'` の値）を書く。worktree を作った後は `branch` と `worktree`（絶対パス）も書く。「PRマージ後の後処理」を終えたら `postMerge: true` を書く。dev-flow-kit のコマンドの手順で state.json を更新するときも、これらの項目は消さずに残す。
+  - **記録する項目**: state.json を作るとき、更新するとき、各手順を始めるとき、サブエージェントを起動するときと完了を受けたときに、dev-flow-kit の形式の項目に加えて `agent`（Claude Code は `claude-code`、Codex は `codex`、Cursor は `cursor`）と `updatedAt`（`date '+%Y-%m-%dT%H:%M:%S%z'` の値）を書く。feature ブランチを切ったら `branch` も書く。**例外で** worktree を作ったときだけ `worktree`（絶対パス）を書く。「PRマージ後の後処理」を終えたら `postMerge: true` を書く。dev-flow-kit のコマンドの手順で state.json を更新するときも、これらの項目は消さずに残す。
   - **前のフローの記録の退避**: `/feature` の手順1で state.json を作る前に、メインのチェックアウトの `.claude/dev-flow/` に完了したフロー（`completed` に `lessons-push` がある）の state.json・`review-log.md`・`script-candidates/` などがあれば、`.claude/dev-flow/archive-pr<PR番号>/`（PR が無ければ `archive-<日付>/`）へ移す。前のフローの周回や「対応不要」の判定を、次のフローへ持ち込まない。
-  - **状態の置き場所**: `feature` の手順1の state.json はメインのチェックアウトに作る。実装用の worktree を作ったら、`.claude/dev-flow/` の中身をその worktree の `.claude/dev-flow/` へ移し、以降はそこを正本にする。メインの state.json は、`feature`・`branch`・`worktree`・`agent`・`updatedAt` だけを持つ案内に書き換え、進捗（`completed`・`current`・`loop`・`pr`）は書かない。「PRマージ後の後処理」で worktree を削除する前に、worktree の `.claude/dev-flow/` の中身をメインのチェックアウトの `.claude/dev-flow/` へ戻し（案内は上書きしてよい）、戻した state.json から `worktree` を消してから、`review-digest` と `lessons-push` はメインのチェックアウトで進める。完了した state.json は、次の `/feature` で退避するまで残してよい（再開しても「すべて完了」で終わる）。
-  - **作業する場所**: worktree で進めている間、dev-flow-kit の各コマンドの「プロジェクト直下」はその worktree と読み替える。`.claude/dev-flow/` の読み書き、git、検証のコマンドは、worktree の絶対パス（`git -C <worktree>`、`cd <worktree> && ...`）で実行する。シェルの作業ディレクトリが呼び出しのたびにメインへ戻る環境でも、メインの `.claude/dev-flow/` を使わない。
+  - **状態の置き場所（既定）**: `.claude/dev-flow/` はメインのチェックアウトを正本にする。進捗（`completed`・`current`・`loop`・`pr`・`reviewEvidence` など）もここに置く。
+  - **状態の置き場所（例外で worktree を使うときだけ）**: 実装用の worktree を作ったら、`.claude/dev-flow/` の中身をその worktree の `.claude/dev-flow/` へ移し、以降はそこを正本にする。メインの state.json は、`feature`・`branch`・`worktree`・`agent`・`updatedAt` だけを持つ案内に書き換え、進捗は書かない。「PRマージ後の後処理」で worktree を削除する前に、worktree の `.claude/dev-flow/` の中身をメインへ戻し（案内は上書きしてよい）、戻した state.json から `worktree` を消してから、`review-digest` と `lessons-push` はメインで進める。完了した state.json は、次の `/feature` で退避するまで残してよい。
+  - **作業する場所**: 既定はメインのチェックアウト。例外で worktree を使っている間だけ、dev-flow-kit の「プロジェクト直下」をその worktree と読み替え、`.claude/dev-flow/`・git・検証も worktree の絶対パスで実行する。
   - **再開先の決め方**: `/dev-flow --resume` はメインのチェックアウトで実行する。メインの state.json に `worktree` があり、その worktree が存在すれば、その worktree の state.json から再開し、作業もその worktree で行う。`worktree` が無ければ、メインの state.json から再開する。`worktree` が指す worktree が存在しない場合は、メインの state.json に進捗があればメインから再開し、進捗が無ければ再開せずに報告する。`completed` に `pr-merge` があり `postMerge` が `true` でなければ、`review-digest` へ進む前に「PRマージ後の後処理」（状態のメインへの戻しを含む）から再開する。
-  - **別のエージェントとの競合の確認**: 再開と `/feature` の開始の前に、メインの state.json と（あれば）worktree の state.json を読み、次のどれかに当たれば、作業も state.json の上書きもせずに `AskUserQuestion`（無い環境ではユーザーへの質問）で進め方を確認する。`/feature` の手順1の「既にあれば上書きする」よりこの確認を優先する。
+  - **別のエージェントとの競合の確認**: 再開と `/feature` の開始の前に、メインの state.json と（あれば）worktree の state.json を読み、次のどれかに当たれば、作業も state.json の上書きもせずに `AskUserQuestion`（無い環境ではユーザーへの質問）で進め方を確認する。`/feature` の手順1の「既にあれば上書きする」よりこの確認を優先する。競合でメインを使えないと判明したときだけ worktree 例外を検討する。
     - `agent` が自分と異なり、フローが完了していない（`completed` に `lessons-push` が無い）。
     - `agent` が自分と同じでも、`updatedAt` が 30 分以内で、その更新をこのセッションで行った記録が無い（同じ種類のエージェントの別のセッションが進めている可能性がある）。
     - `/feature` の開始時に、完了していないフローの state.json がある。
