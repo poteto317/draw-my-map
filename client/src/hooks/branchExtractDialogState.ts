@@ -1,7 +1,7 @@
+import type { Node } from "@/types/node";
+
 export type BranchExtractFocusRequest = "dialog" | "header" | null;
 export type BranchExtractError = { sequence: number; message: string | null };
-
-import type { Node } from "@/types/node";
 
 export type BranchExtractDialogState = {
   screen: "closed" | "open";
