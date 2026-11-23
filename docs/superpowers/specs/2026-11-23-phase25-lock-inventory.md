@@ -12,6 +12,7 @@
 | 兄弟 DnD（auto） | 移動対象 locked | `client/src/domain/nodes/nodeSiblingOrder.ts`、`client/src/hooks/useNodes.ts`（`reorderSibling`） |
 | クリップボード貼り付け上書き | クリップボード規則 | `client/src/domain/nodes/nodeSubtreeInsertion.ts`（`assertSubtreeClipboardInsertion`）、`client/src/hooks/useNodes.ts`（`pasteSubtree` / `duplicateSubtree`） |
 | 整列・等間隔 048 | 選択に locked 含む | `client/src/domain/nodes/selectionAlign.ts`、`client/src/domain/nodes/selectionDistribute.ts`、`client/src/domain/nodes/selectionLayoutShared.ts`、`client/src/hooks/useSelectionLayoutActions.ts` |
+| ラベル書式変更 | 対象 locked | `LabelTextStyleControl` → `client/src/components/layout/LabelTextStyleControl.tsx`（ヘッダー。`MapHeaderLayoutControls` / `useMapHeaderLayoutControls` / `MapEditor` で配線）、`useNodes` setters → `client/src/hooks/useNodes.ts` / `client/src/domain/nodes/nodeLabelTextStyleUpdate.ts`。コマンドパレット登録は未実装。UI 側の拒否条件は `2026-11-23-label-text-style-inventory.md` を参照 |
 
 共通ヘルパー: `client/src/domain/nodes/nodeEditLock.ts`（`assertNodesEditable`、`lockSubtree`、`unlockSubtree`、`toggleNodeLock`）
 
