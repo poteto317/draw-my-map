@@ -4,6 +4,11 @@ import { getIllustratedNodeMinHeight } from "@/domain/nodes/nodeIllustration";
 import { normalizeMapDocumentNodeImportance } from "@/domain/persistence/mapDocumentNodeImportance";
 import { normalizeMapDocumentNodeLocked } from "@/domain/persistence/mapDocumentNodeLocked";
 import { normalizeMapDocumentNodeIllustration } from "@/domain/persistence/mapDocumentNodeIllustration";
+import {
+  normalizeMapDocumentNodeLabelBold,
+  normalizeMapDocumentNodeLabelFontSize,
+  normalizeMapDocumentNodeLabelUnderline,
+} from "@/domain/persistence/mapDocumentNodeLabelTextStyle";
 import { normalizeMapDocumentNodeLinks } from "@/domain/persistence/mapDocumentNodeLinks";
 import { normalizeMapDocumentNodeMapLinks } from "@/domain/persistence/mapDocumentNodeMapLinks";
 import { normalizeMapDocumentNodeNote } from "@/domain/persistence/mapDocumentNodeNote";
@@ -103,6 +108,21 @@ export function normalizeMapDocumentNode(
     return lockedResult;
   }
   const locked = lockedResult.value;
+  const labelFontSizeResult = normalizeMapDocumentNodeLabelFontSize(node.labelFontSize, index, version);
+  if (!labelFontSizeResult.ok) {
+    return labelFontSizeResult;
+  }
+  const labelFontSize = labelFontSizeResult.value;
+  const labelBoldResult = normalizeMapDocumentNodeLabelBold(node.labelBold, index, version);
+  if (!labelBoldResult.ok) {
+    return labelBoldResult;
+  }
+  const labelBold = labelBoldResult.value;
+  const labelUnderlineResult = normalizeMapDocumentNodeLabelUnderline(node.labelUnderline, index, version);
+  if (!labelUnderlineResult.ok) {
+    return labelUnderlineResult;
+  }
+  const labelUnderline = labelUnderlineResult.value;
   return {
     ok: true,
     value: projectMapDocumentNode({
@@ -121,6 +141,9 @@ export function normalizeMapDocumentNode(
       ...(sources === undefined ? {} : { sources }),
       ...(mapLinks === undefined ? {} : { mapLinks }),
       ...(locked === undefined ? {} : { locked }),
+      ...(labelFontSize === undefined ? {} : { labelFontSize }),
+      ...(labelBold === undefined ? {} : { labelBold }),
+      ...(labelUnderline === undefined ? {} : { labelUnderline }),
     }),
   };
 }

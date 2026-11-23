@@ -32,9 +32,13 @@ const SAMPLE: Required<Omit<Node, "locked">> & { locked?: true } = {
   tags: ["見本"],
   sources: [{ title: "見本の出典", page: "1" }],
   mapLinks: [{ targetMapId: "sample-map", targetNodeId: 1 }],
+  labelFontSize: 18,
+  labelBold: true,
+  labelUnderline: true,
 };
 
 // 各属性を見本と別の値にしたもの（比較の付け忘れを検査する）。Node に属性を足すと、ここでも型エラーになる
+// labelBold / labelUnderline は true のみなので、別値はキー欠落（undefined）とする
 const DIFFERENT = {
   id: 3,
   parentId: null,
@@ -50,6 +54,7 @@ const DIFFERENT = {
   tags: ["別の見本"],
   sources: [{ title: "別の出典", url: "https://example.com/src" }],
   mapLinks: [{ targetMapId: "other-map" }],
+  labelFontSize: 12,
 } as unknown as Required<Node>;
 
 const OPTIONAL_KEYS = Object.keys(NODE_ATTRIBUTE_POLICY) as OptionalNodeKey[];
@@ -87,8 +92,19 @@ function expectedMergedValue(key: OptionalNodeKey): unknown {
 }
 
 describe("NODE_ATTRIBUTE_POLICY", () => {
-  it("任意の属性（illustration・note・links・tags・sources・mapLinks）だけを持つ", () => {
-    expect([...OPTIONAL_KEYS].sort()).toEqual(["illustration", "links", "locked", "mapLinks", "note", "sources", "tags"]);
+  it("任意の属性（illustration・note・links・tags・sources・mapLinks・locked・labelFontSize・labelBold・labelUnderline）だけを持つ", () => {
+    expect([...OPTIONAL_KEYS].sort()).toEqual([
+      "illustration",
+      "labelBold",
+      "labelFontSize",
+      "labelUnderline",
+      "links",
+      "locked",
+      "mapLinks",
+      "note",
+      "sources",
+      "tags",
+    ]);
   });
 });
 

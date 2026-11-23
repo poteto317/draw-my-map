@@ -3,6 +3,7 @@ import { assertNodesEditable } from "@/domain/nodes/nodeEditLock";
 import { keepFirstRootPosition } from "@/domain/nodes/nodeFirstRootPosition";
 import { hasInvalidNodeGeometry } from "@/domain/nodes/nodeGeometryValidation";
 import { maxNodeImportance } from "@/domain/nodes/nodeImportance";
+import { applyProjectedLabelTextStyle } from "@/domain/nodes/labelTextStyle";
 import { indexNodeForest } from "@/domain/nodes/nodeLayoutForest";
 import { NODE_LINKS_MAX_COUNT, areNodeLinksEqual, withNodeLinks } from "@/domain/nodes/nodeLink";
 import {
@@ -291,6 +292,27 @@ function mergeNodeLocked(survivor: Node, absorbed: readonly Node[]): Node {
   return survivor;
 }
 
+// labelFontSize / labelBold / labelUnderline: survivor-else-first（残すノードの値、無ければ吸収側の配列順で最初の値）
+function mergeNodeLabelTextStyle(survivor: Node, absorbed: readonly Node[]): Node {
+  const labelFontSize =
+    survivor.labelFontSize !== undefined
+      ? survivor.labelFontSize
+      : absorbed.find((node) => node.labelFontSize !== undefined)?.labelFontSize;
+  const labelBold =
+    survivor.labelBold === true
+      ? true
+      : absorbed.find((node) => node.labelBold === true)?.labelBold;
+  const labelUnderline =
+    survivor.labelUnderline === true
+      ? true
+      : absorbed.find((node) => node.labelUnderline === true)?.labelUnderline;
+  return applyProjectedLabelTextStyle(survivor, {
+    labelFontSize,
+    labelBold,
+    labelUnderline,
+  });
+}
+
 function applyPlanToSurvivor(survivor: Node, plan: Extract<NodeMergePlan, { ok: true }>): Node {
   const updated = withNodeMapLinks(
     withNodeSources(
@@ -353,7 +375,10 @@ export function mergeNodes(
   // 計画が成功なら残すノードは必ず見つかる。型の絞り込みのため到達しない
   if (survivor === undefined) return failed("primary-missing");
   const absorbed = nodes.filter((node) => plan.absorbedIds.includes(node.id));
-  const updatedSurvivor = mergeNodeLocked(applyPlanToSurvivor(survivor, plan), absorbed);
+  const updatedSurvivor = mergeNodeLabelTextStyle(
+    mergeNodeLocked(applyPlanToSurvivor(survivor, plan), absorbed),
+    absorbed,
+  );
 
   const reattached = reattachAbsorbedChildren(nodes, plan, updatedSurvivor);
   // 先頭のルート（自動配置の列の基準）が吸収されて別のノードに変わるときだけ、旧先頭の座標を新しい先頭へ写す

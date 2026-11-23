@@ -1,4 +1,5 @@
 import { areLayoutSpacingEqual } from "@/domain/persistence/mapDocumentLayoutSpacing";
+import { areLabelTextStylesEqual } from "@/domain/nodes/labelTextStyle";
 import { areNodeMapLinksEqual } from "@/domain/nodes/nodeMapLink";
 import { areNodeSourcesEqual } from "@/domain/nodes/nodeSource";
 import type { Node, NodeMapLink, NodeSource } from "@/types/node";
@@ -26,6 +27,7 @@ export function createMapHistory(initial: NodeMapState): MapHistoryState {
 }
 
 // 配列の値（links・tags）は要素ごとに比べる。sources は areNodeSourcesEqual、mapLinks は areNodeMapLinksEqual。
+// labelFontSize / labelBold / labelUnderline は areLabelTextStylesEqual（欠落＝標準）で比べる。
 // 別の配列でも内容が同じなら、実変更の無い履歴を積まない（L-135）
 function areArrayValuesEqual(a: readonly unknown[], b: readonly unknown[]): boolean {
   return a.length === b.length && a.every((value, index) => value === b[index]);
@@ -33,11 +35,14 @@ function areArrayValuesEqual(a: readonly unknown[], b: readonly unknown[]): bool
 
 function areNodesEqual(a: Node, b: Node): boolean {
   if (a === b) return true;
-  // Node は型エイリアスのため、キャストなしで任意のキーを読める型へ代入できる（illustration・links・tags・sources・mapLinks の有無も比較する）
+  // 書式キーは欠落＝標準としてまとめて比べる（キー有無の差だけでは履歴を積まない）
+  if (!areLabelTextStylesEqual(a, b)) return false;
+  // Node は型エイリアスのため、キャストなしで任意のキーを読める型へ代入できる（illustration・links・tags・sources・mapLinks・labelFontSize・labelBold・labelUnderline の有無も比較する）
   const left: Readonly<Record<string, unknown>> = a;
   const right: Readonly<Record<string, unknown>> = b;
   const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
   for (const key of keys) {
+    if (key === "labelFontSize" || key === "labelBold" || key === "labelUnderline") continue;
     const leftValue = left[key];
     const rightValue = right[key];
     if (leftValue === rightValue) continue;

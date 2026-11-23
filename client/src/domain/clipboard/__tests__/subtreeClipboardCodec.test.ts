@@ -132,6 +132,27 @@ describe("encodeSubtreeClipboard / decodeSubtreeClipboard", () => {
     expect("sources" in decoded.value.nodes.find((item) => item.id === 3)!).toBe(false);
   });
 
+  it("ラベル書式（labelFontSize・labelBold・labelUnderline）もコピーに含めて往復する（無いノード・標準14は項目を持たない）", () => {
+    const withStyle: Node[] = [
+      node(1, null),
+      node(2, 1, { labelFontSize: 18, labelBold: true, labelUnderline: true }),
+      node(3, 2, { labelFontSize: 14 }),
+    ];
+
+    const decoded = encodeAndDecode(withStyle, 2);
+
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) return;
+    const styled = decoded.value.nodes.find((item) => item.id === 2)!;
+    expect(styled.labelFontSize).toBe(18);
+    expect(styled.labelBold).toBe(true);
+    expect(styled.labelUnderline).toBe(true);
+    const child = decoded.value.nodes.find((item) => item.id === 3)!;
+    expect("labelFontSize" in child).toBe(false);
+    expect("labelBold" in child).toBe(false);
+    expect("labelUnderline" in child).toBe(false);
+  });
+
   it("専用の形式で書き出し、元の配列にない項目を持ち込まない", () => {
     const source = [{ ...node(1, null), extra: "x" } as Node];
 
