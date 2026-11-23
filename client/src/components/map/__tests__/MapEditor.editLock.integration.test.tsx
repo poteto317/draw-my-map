@@ -113,4 +113,26 @@ describe("MapEditor edit lock（useNodes 経路）", () => {
     expect(splitResult).toEqual({ ok: false, reason: "locked" });
     expect(result.current.nodes).toHaveLength(1);
   });
+
+  it("locked ノードのラベル書式変更は無操作で Undo も増えない", () => {
+    const { result } = renderHook(() => useNodes());
+    const initial = lockedNode(1);
+    act(() => {
+      result.current.replaceMap({ layoutMode: "manual", nodes: [initial] });
+    });
+
+    expect(typeof result.current.setLabelFontSize).toBe("function");
+    expect(typeof result.current.toggleLabelBold).toBe("function");
+    expect(typeof result.current.toggleLabelUnderline).toBe("function");
+
+    const before = result.current.nodes[0];
+    act(() => {
+      result.current.setLabelFontSize(1, 18);
+      result.current.toggleLabelBold(1);
+      result.current.toggleLabelUnderline(1);
+    });
+
+    expect(result.current.nodes[0]).toEqual(before);
+    expect(result.current.canUndo).toBe(false);
+  });
 });

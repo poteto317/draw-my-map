@@ -120,6 +120,30 @@ const operationCases: OperationCase[] = [
     run: (current) => { current.updateNodeImportance(2, "high"); },
   },
   {
+    name: "setLabelFontSize",
+    initial: baseMap("manual"),
+    run: (current) => { current.setLabelFontSize(2, 18); },
+    verifyAfter: (_before, after) => {
+      expect(after.nodes.find((item) => item.id === 2)!.labelFontSize).toBe(18);
+    },
+  },
+  {
+    name: "toggleLabelBold",
+    initial: baseMap("manual"),
+    run: (current) => { current.toggleLabelBold(2); },
+    verifyAfter: (_before, after) => {
+      expect(after.nodes.find((item) => item.id === 2)!.labelBold).toBe(true);
+    },
+  },
+  {
+    name: "toggleLabelUnderline",
+    initial: baseMap("manual"),
+    run: (current) => { current.toggleLabelUnderline(2); },
+    verifyAfter: (_before, after) => {
+      expect(after.nodes.find((item) => item.id === 2)!.labelUnderline).toBe(true);
+    },
+  },
+  {
     name: "attachIllustration（自動配置）",
     initial: baseMap("auto"),
     run: (current) => { current.attachIllustration(2, ILLUSTRATION); },
