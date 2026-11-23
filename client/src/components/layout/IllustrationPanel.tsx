@@ -1,8 +1,30 @@
+"use client";
+
+import { useRef, useState, type ChangeEvent } from "react";
 import { getNodeDisplayLabel } from "@/domain/nodes/nodeDisplayLabel";
 import { IllustrationImage } from "@/components/layout/IllustrationImage";
 import { getIllustrationPanelView } from "@/components/layout/illustrationPanelView";
+import {
+  defaultLoadImageDimensions,
+  defaultReadImageFile,
+  prepareIllustrationUpload,
+} from "@/services/illustration/prepareIllustrationUpload";
+import { createIllustrationThumbnail } from "@/services/illustration/illustrationThumbnail";
 import type { IllustrationGenerationState } from "@/types/illustrationGeneration";
 import type { Node } from "@/types/node";
+
+const ILLUSTRATION_OVERWRITE_CONFIRM_MESSAGE =
+  "設定済みのイラストを置き換えますか？";
+
+function defaultConfirmOverwrite(): boolean {
+  return window.confirm(ILLUSTRATION_OVERWRITE_CONFIRM_MESSAGE);
+}
+
+const UPLOAD_ERROR_MESSAGE =
+  "画像を添付できませんでした。ファイルが大きすぎるか、形式が対応していません。";
+
+const actionButtonClassName =
+  "rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-700";
 
 type IllustrationPanelProps = {
   selectedNode: Pick<Node, "id" | "label" | "illustration"> | null;
@@ -10,11 +32,68 @@ type IllustrationPanelProps = {
   onGenerate: (nodeId: number) => void;
   onAttach: (nodeId: number, dataUrl: string) => void;
   onRemove: (nodeId: number) => void;
+  /** locked・保護モード・主選択≠1 等。添付・生成・削除を無効化する */
+  disabled?: boolean;
+  confirmOverwrite?: () => boolean;
+  createThumbnail?: (dataUrl: string) => Promise<string>;
+  readImageFile?: (file: File) => Promise<string>;
+  loadImageDimensions?: (dataUrl: string) => Promise<{ width: number; height: number }>;
 };
 
-export function IllustrationPanel({ selectedNode, generation, onGenerate, onAttach, onRemove }: IllustrationPanelProps) {
+export function IllustrationPanel({
+  selectedNode,
+  generation,
+  onGenerate,
+  onAttach,
+  onRemove,
+  disabled = false,
+  confirmOverwrite = defaultConfirmOverwrite,
+  createThumbnail = createIllustrationThumbnail,
+  readImageFile = defaultReadImageFile,
+  loadImageDimensions = defaultLoadImageDimensions,
+}: IllustrationPanelProps) {
   const view = getIllustrationPanelView(selectedNode, generation);
   const preview = view.image?.kind === "preview" ? view.image : null;
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const actionsDisabled = selectedNode === null || disabled || view.isGenerating || isUploading;
+  const errorMessage = uploadError ?? view.errorMessage;
+
+  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    if (!file || selectedNode === null || disabled) {
+      input.value = "";
+      return;
+    }
+
+    // 上書き確認は UI 対話。サービス層（読取・サムネイル・検証）の前に済ませる
+    if (selectedNode.illustration !== undefined && !confirmOverwrite()) {
+      input.value = "";
+      return;
+    }
+
+    setUploadError(null);
+    setIsUploading(true);
+    try {
+      const prepared = await prepareIllustrationUpload(file, {
+        readImageFile,
+        createThumbnail,
+        loadImageDimensions,
+      });
+      if (!prepared.ok) {
+        setUploadError(UPLOAD_ERROR_MESSAGE);
+        return;
+      }
+      onAttach(selectedNode.id, prepared.dataUrl);
+    } finally {
+      setIsUploading(false);
+      input.value = "";
+    }
+  };
+
   return (
     <section aria-label="イラスト" className="flex flex-col gap-3">
       <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">イラスト</h2>
@@ -42,8 +121,9 @@ export function IllustrationPanel({ selectedNode, generation, onGenerate, onAtta
           />
           <button
             type="button"
+            disabled={actionsDisabled}
             onClick={() => onAttach(selectedNode.id, preview.dataUrl)}
-            className="rounded-md border border-blue-600 px-3 py-2 text-sm text-blue-600 transition-colors hover:bg-blue-50 dark:border-blue-400 dark:text-blue-400 dark:hover:bg-zinc-700"
+            className="rounded-md border border-blue-600 px-3 py-2 text-sm text-blue-600 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-400 dark:text-blue-400 dark:hover:bg-zinc-700"
           >
             ノードに設定
           </button>
@@ -61,20 +141,37 @@ export function IllustrationPanel({ selectedNode, generation, onGenerate, onAtta
       {selectedNode !== null && view.canRemove && (
         <button
           type="button"
+          disabled={actionsDisabled}
           onClick={() => onRemove(selectedNode.id)}
-          className="rounded-md border border-red-600 px-3 py-2 text-sm text-red-600 transition-colors hover:bg-red-50 dark:border-red-400 dark:text-red-400 dark:hover:bg-zinc-700"
+          className="rounded-md border border-red-600 px-3 py-2 text-sm text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-400 dark:text-red-400 dark:hover:bg-zinc-700"
         >
           設定済みのイラストを削除
         </button>
       )}
-      {view.errorMessage !== null && (
+      {errorMessage !== null && (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-          {view.errorMessage}
+          {errorMessage}
         </p>
       )}
       <button
         type="button"
-        disabled={selectedNode === null || view.isGenerating}
+        disabled={actionsDisabled}
+        onClick={() => fileInputRef.current?.click()}
+        className={actionButtonClassName}
+      >
+        画像を添付
+      </button>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        disabled={actionsDisabled}
+        onChange={handleFileChange}
+      />
+      <button
+        type="button"
+        disabled={actionsDisabled}
         onClick={() => {
           if (selectedNode !== null) onGenerate(selectedNode.id);
         }}
