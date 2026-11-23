@@ -132,6 +132,7 @@ client/src/
     - `NodeSearchBox.tsx`, `nodeSearchKeyAction.ts`: ARIA combobox/listbox による検索欄と最大50件の候補一覧、および矢印・Enter・Escape・IME変換中のキー判定。URL だけで一致した候補には補助行に「 · URL 一致」、アクセシブルネームに「URL 一致」を足す。
     - `AppWorkspace.tsx`: ヘッダー下の 2 カラム（メインキャンバス領域 + 右サイドパネル）レイアウト。
     - `LayoutModeSelector.tsx`: `手動配置` / `自動配置` 切り替えボタングループ（`role="group"`, `aria-label="レイアウトモード"`）。
+    - `LabelTextStyleControl.tsx`: ヘッダーの「文字」メニュー（マップ表示・主選択ちょうど 1 件・保護モード外・選択 ID が `nodes` に存在するとき表示）。サイズセレクト（12／14／18／24）と太字・下線トグル（`role="menuitem"`）。`locked` では disabled。`visible` 消失で開状態を閉じる（L-214）。`MapHeaderLayoutControls` / `useMapHeaderLayoutControls` 経由で配線。
     - `NodeCollapseControl.tsx`: 選択中の親ノードの枝を折りたたみ・展開するボタン、非表示件数（選択中の親が閉じている間はその全子孫数。未選択・葉・展開中は 0件）、保存・画像出力と表示用配置の説明を表示する。
     - `MapHistoryControls.tsx`: ヘッダーの `元に戻す` / `やり直す` ボタン（履歴の有無に応じて `disabled`）。`Enter` の押し続けを `preventRepeatedEnterClick` で止め、押したボタンが無効になったときのフォーカスの引き継ぎは `usePairedButtonFocusHandover` を使う。
     - `NodeDuplicateControl.tsx`: ヘッダーの `枝を複製` ボタン（ノード未選択時は `disabled`）。クリックごとに 1 回複製し、押したあともフォーカスを移さない。`Enter` の押し続け（`repeat`）だけ `preventDefault()` で抑止する。
@@ -311,11 +312,11 @@ client/src/
 
 #### 5. Domain Layer (`src/domain/`)
 - **責務**: システムの中核となる純粋なビジネスルール、数学・幾何計算、ツリー操作アルゴリズム、データ検証・変換。**React や Pixi.js、DOM、ブラウザ固有 API（window, document, localStorage 等）には一切依存しない純粋関数群**。
-- **構成サブパッケージ（全 120 ファイル）**:
-  - `domain/nodes/` (58 ファイル):
+- **構成サブパッケージ（全 164 ファイル）**:
+  - `domain/nodes/` (78 ファイル):
     - `nodeAutoLayout.ts`, `nodeLayoutForest.ts`, `nodeLayoutForestRelations.ts`, `nodeLayoutForestTraversal.ts`, `nodeLayoutGeometry.ts`, `nodeLayoutMetrics.ts`, `nodeLayoutPlacement.ts`, `nodeLayoutSpacing.ts`, `nodeLayoutArithmetic.ts`: 木構造・森構造の幾何配置計算（親子関係とルート抽出 `buildNodeForestRelations`、非再帰トラバーサルとサイクル検出 `traverseNodeForest`、フォレストインデックス化 `indexNodeForest`、座標展開 `calculateNodePositions`、深さ別列 X 座標とサブツリー垂直スパン計測 `calculateNodeLayoutMetrics`、双方向垂直中央揃え配置 `placeNodeForest`、数値オーバーフロー・浮動小数点 ULP 精度劣化防御および最小間隔判定 `checkedAdd`/`checkedSubtract`/`checkedMultiply`/`calculateRoundingTolerance`/`calculateGapRoundingTolerance`/`hasSufficientGap`、垂直間隔検証 `hasValidVerticalSpacing`）。
     - `nodeTree.ts`: ノード親子付け替え（`connectNodeTree`）、**自己接続・存在しないノード・循環参照検出（`canConnectNodes`）**、部分木 ID 収集（`collectSubtreeIds`。親子の隣接表と queue による非再帰・線形の走査で、親子が循環した入力でも停止する）、部分木連動移動（`moveNodeSubtree`）、ID ごとに配列で最初に出会ったノードを引く索引（`indexFirstNodes`。階層の上げ下げと親の挿入で共有する）。
-    - `nodePlacement.ts`: 新規ルートノード（`createRootNode`）、子ノード（`createChildNode`。位置は `nodeManualPlacement.ts` の `calculateChildPlacement`）、兄弟ノード（`createSiblingNode`）の初期座標算出と、親の挿入で入れる親ノード（`createParentNode(target, id)`。座標と元の親は対象と同じ、重要度は対象から引き継ぎ、大きさは既定の `RECT_WIDTH` × `RECT_HEIGHT`、ラベルは空、`illustration`・`note`・`links`・`tags`・`sources`・`mapLinks` は持たない）。
+    - `nodePlacement.ts`: 新規ルートノード（`createRootNode`）、子ノード（`createChildNode`。位置は `nodeManualPlacement.ts` の `calculateChildPlacement`）、兄弟ノード（`createSiblingNode`）の初期座標算出と、親の挿入で入れる親ノード（`createParentNode(target, id)`。座標と元の親は対象と同じ、重要度は対象から引き継ぎ、大きさは既定の `RECT_WIDTH` × `RECT_HEIGHT`、ラベルは空、`illustration`・`note`・`links`・`tags`・`sources`・`mapLinks`・`locked`・`labelFontSize`・`labelBold`・`labelUnderline` は持たない）。
     - `nodeManualPlacement.ts`: 手動配置の共通の規則。マップ全体の下端から `SIBLING_VERTICAL_GAP` だけ空けた位置への真下の平行移動量（`calculateManualOffsetY`。枝の複製・貼り付けと箇条書きの新しいルートの追加で共有）と、子を追加するときの左上の位置（`calculateChildPlacement`。`createChildNode` と箇条書きの子としての追加で共有。兄弟の下端の最大値はスプレッドを使わずループで求める）。
     - `nodeIdGenerator.ts`, `nodeIdAllocator.ts`: 単調増加 ID 生成（`createMonotonicIdGenerator`）および既存ノード ID との衝突を回避する空きノード ID 採番（`createNodeIdAllocator`。1 件ずつの `nextAvailableId` と、複製と貼り付け用に占有集合を 1 回だけ作る一括採番 `nextAvailableIds`）。
     - `nodeSubtreeDuplication.ts`: 選択ノードと全子孫の複製候補を生成する純粋関数（`duplicateNodeSubtree`）。複製元の部分木を `nodeTree.collectSubtreeIds` で集め、挿入・配置・採番は `nodeSubtreeInsertion.ts` の `insertNodeSubtree` に委ねる（複製根は複製元と同じ親）。
@@ -351,7 +352,9 @@ client/src/
     - `nodeSource.ts`: 出典の上限（`NODE_SOURCES_MAX_COUNT = 10`・`NODE_SOURCE_TITLE_MAX_LENGTH = 200`・`NODE_SOURCE_PAGE_MAX_LENGTH = 80`・入力の先行判定 `NODE_SOURCE_INPUT_MAX_LENGTH = 256`）・タイトル／ページ／URL の正規化（URL は `normalizeNodeLinkUrl` を再利用）・同じ出典とみなす鍵（`nodeSourceKey`）・重複の除去（`uniqueNodeSources`）・並びの比較（`areNodeSourcesEqual`。`undefined` と空配列は同じ）・失敗の文言（`formatNodeSourceFailure`。URL 系は links と同じ文言）・差し替え（`withNodeSources`）・追加（`addNodeSource`。node-missing → 正規化 → duplicate → too-many の順）・削除（`removeNodeSource`。index。最後の 1 件でキー除去）。
     - `nodeMapLink.ts`: マップ間リンクの上限（`NODE_MAP_LINKS_MAX_COUNT = 10`）・正の整数 ID 判定（`isValidTargetNodeId`、`parsePositiveNodeIdString`）・正規化（`normalizeNodeMapLink`）・重複判定鍵（`nodeMapLinkKey`: `${targetMapId}:map` または `${targetMapId}:node:${targetNodeId}`）・重複除去（`uniqueNodeMapLinks`）・順比較（`areNodeMapLinksEqual`）・差し替え（`withNodeMapLinks`）・追加（`addNodeMapLink`: node-missing → 正規化 → self-node → duplicate → too-many）・値一致削除（`removeNodeMapLink`）・一括復元時の `targetMapId` 自動リマップ（`remapNodeMapLinks`）・失敗文言（`formatNodeMapLinkFailure`）。
     - `nodeTag.ts`: タグの上限（`NODE_TAGS_MAX_COUNT = 10`・`NODE_TAG_MAX_LENGTH = 30`・入力の先行判定 `NODE_TAG_INPUT_MAX_LENGTH = 256`）・タグ名の正規化（`normalizeNodeTagName`。前後の空白 → 空 → 入力の長さ → 空白のまとめ → 使えない文字（制御文字と、見えない書式文字＝`\p{Default_Ignorable_Code_Point}` と行内注釈の制御 `U+FFF9`〜`U+FFFB`（前者に含まれないので `INVISIBLE_FORMAT` が明示的に足す）。`U+200D`・`U+FE0E`・`U+FE0F` は許可）→ 許可した見えない書式文字と空白だけで鍵が空になる名前（invalid）→ まとめた後の長さの順）・同じタグとみなす鍵（`nodeTagKey`。`U+200D`・`U+FE0E`・`U+FE0F` を除く → NFKC → 空白のまとめと trim → 小文字化 → NFKC。見た目が同じタグを同一視するため、許可した見えない書式文字は鍵から除く（除いた文字列に NFKC をかけるのが素直なので NFKC より前に除く。最後にもう一度 NFKC をかけるので、除く位置を NFKC の後にしても鍵は変わらない。名前の検査では先に空白をまとめるので、除いた後に残る空白は鍵でもう一度まとめて trim する。NFKC が空白（と結合記号）に展開する文字（`U+FFE3` など）があるので、まとめと trim は NFKC の後にかける。`toLowerCase` の結果は NFKC の正規形とは限らず、鍵が冪等でなくなるので、最後にもう一度 NFKC をかける）。NFKC と小文字化は `domain/search` に依存しないため検索と同じ規則をここに持つ）・同じタグとみなすものの除去（`uniqueNodeTags`。最初のものを残す。統合と保存データの検証が使う）・並びの比較（`areNodeTagsEqual`）・失敗の文言（`formatNodeTagFailure`）・差し替え（`withNodeTags`）・追加（`addNodeTag`。node-missing → 名前 → duplicate → too-many の順）・削除（`removeNodeTag`。完全一致）。
-    - `nodeAttributePolicy.ts`: ノードの任意の属性（`OptionalNodeKey`。`illustration`・`note`・`links`・`tags`・`sources`・`mapLinks`）の分割・統合・親の挿入での扱いの表（`NODE_ATTRIBUTE_POLICY`。`satisfies Record<OptionalNodeKey, NodeAttributePolicy>` で、任意の属性を足して表を更新しないと型エラー）。表は宣言で、実装との一致と全属性の往復・比較は `nodeAttributePolicy.test.ts` で検査する（L-825）。
+    - `nodeAttributePolicy.ts`: ノードの任意の属性（`OptionalNodeKey`。`illustration`・`note`・`links`・`tags`・`sources`・`mapLinks`・`locked`・`labelFontSize`・`labelBold`・`labelUnderline`）の分割・統合・親の挿入での扱いの表（`NODE_ATTRIBUTE_POLICY`。`satisfies Record<OptionalNodeKey, NodeAttributePolicy>` で、任意の属性を足して表を更新しないと型エラー）。表は宣言で、実装との一致と全属性の往復・比較は `nodeAttributePolicy.test.ts` で検査する（L-825）。
+    - `labelTextStyle.ts`: ラベル文字サイズ・太字・下線の解決と投影（許可集合は `types/labelFontSize.ts` の `LABEL_FONT_SIZES`。`resolveLabelFontSize` / `resolveLabelBold` / `resolveLabelUnderline`・`projectLabelTextStyle`。欠落＝標準、encode 時 14 はキー省略）。
+    - `nodeLabelTextStyleUpdate.ts`: ラベル書式の更新（`updateNodeLabelFontSize`・`toggleNodeLabelBold`・`toggleNodeLabelUnderline`。`locked` / 対象不在 / 値不変は `null`）。
     - `nodeLabelUpdate.ts`: ラベルの更新。`replaceNodeLabels` は存在する ID のラベルだけを置き換え、1 件も存在しなければ何も変えずに `null` を返し、すでに同じラベルのノードは参照を維持する。
     - `nodeResolution.ts`, `nodeResolutionLevel.ts`, `nodeVisibility.ts`: 表示レベルに応じた重要度判定（`isNodeVisibleAtLevel`。重要度の序列は `nodeImportance.ts` の `IMPORTANCE_RANK` を使う）、ヒステリシス付き自動解像度レベル判定（`resolveAutomaticResolutionLevel`, `resolveResolutionLevel`）、および祖先ノードの可視維持を含む可視ノード ID 収集（`collectVisibleNodeIds`）。
     - `nodeCollapse.ts`: 非再帰の索引化（`createNodeCollapseIndex`）、全子孫数、折りたたみ可否の判定（`canCollapse`）、不在IDと葉の指定の除外（`normalizeCollapsedNodeIds`）、入れ子の折りたたみ指定の切り替えと展開（`toggleCollapsedNode`, `expandCollapsedNodes`）、折りたたみによる可視集合（`deriveNodeCollapse`）、祖先IDの算出（`collectAncestorIds`）を担う。
@@ -385,14 +388,15 @@ client/src/
     - `illustrationCrop.ts`: 画像の中央正方形トリミング領域算出（`calculateCoverCrop`）。
     - `illustrationDataUrl.ts`: Base64 JPEG Data URL フォーマットおよび文字長上限（`100,000` 文字）の検証（`isIllustrationDataUrl`）。
     - `jpegDimensions.ts`: JPEG ヘッダー（SOF0〜SOF15 マーカー）バイナリ解析によるデコードレス画像幅・高さ抽出（`getJpegDimensions`）および画像寸法上限（`512×512px`）の検証（`isAcceptableIllustrationSize`）。
-  - `domain/persistence/` (15 ファイル):
+  - `domain/persistence/` (19 ファイル):
     - `mapDocumentCodec.ts`, `mapDocumentEncoder.ts`, `mapDocumentDecoder.ts`: マップドキュメント（JSON Version 1, 2, 3）のエンコード（`createMapDocument`, `serializeMapDocument`）・デコード（`parseMapDocumentJson`, `parseMapDocumentJsonWithVersion`）・Version 3 マイグレーション。
     - `mapDocumentNodeNote.ts`: V3 の任意項目 `note` の検証（`normalizeMapDocumentNodeNote`。上限は正規化より先に判定し、超過・文字列以外は読み込み失敗）。
     - `mapDocumentNodeLinks.ts`: V3 の任意項目 `links` の検証（`normalizeMapDocumentNodeLinks`。件数と各要素の長さを URL の解析より先に判定し、各要素を `URL.href` に正規化し、重複は後のものを捨てる）。
     - `mapDocumentNodeTags.ts`: V3 の任意項目 `tags` の検証（`normalizeMapDocumentNodeTags`。件数と各要素の長さ（前後の空白を削る前、256 以下）をタグ名の正規化より先に判定し、各要素を `normalizeNodeTagName` でまとめ、`nodeTagKey` が同じものは後のものを捨てる）。
     - `mapDocumentNodeSources.ts`: V3 の任意項目 `sources` の検証（`normalizeMapDocumentNodeSources`。件数・未知キー・各文字列の長さを正規化より先に判定し、各要素を `normalizeNodeSource` でまとめ、`nodeSourceKey` が同じものは後のものを捨てる）。
     - `mapDocumentNodeMapLinks.ts`: V3 の任意項目 `mapLinks` の検証（`normalizeMapDocumentNodeMapLinks`。件数・プレーンオブジェクト型・未知キー・各フィールド型を正規化より先に判定し、各要素を `normalizeNodeMapLink` で正規化し、`nodeMapLinkKey` が同じものは後のものを捨てる）。
-    - `mapDocumentNode.ts`, `mapDocumentNodeImportance.ts`, `mapDocumentNodeIllustration.ts`, `mapDocumentNodeProjection.ts`: 各ノードフィールドの型検証・バージョン別 `importance` / `illustration` の正規化（`normalizeMapDocumentNode`, `normalizeMapDocumentNodeImportance`, `normalizeMapDocumentNodeIllustration`）・余剰プロパティを除去するプロジェクション（`projectMapDocumentNode`）。
+    - `mapDocumentNodeLabelTextStyle.ts`: V3 の任意項目 `labelFontSize` / `labelBold` / `labelUnderline` の検証（許可集合外・`true` 以外は項目削除。文書全体は失敗させない）。
+    - `mapDocumentNode.ts`, `mapDocumentNodeImportance.ts`, `mapDocumentNodeIllustration.ts`, `mapDocumentNodeProjection.ts`: 各ノードフィールドの型検証・バージョン別 `importance` / `illustration` の正規化（`normalizeMapDocumentNode`, `normalizeMapDocumentNodeImportance`, `normalizeMapDocumentNodeIllustration`）・余剰プロパティを除去するプロジェクション（`projectMapDocumentNode`。ラベル書式は `projectLabelTextStyle` で 14／通常／下線なしをキー省略）。
     - `mapDocumentGraph.ts`: ノード ID 重複・親ノード存在・非再帰トラバーサルによる循環参照（サイクル）のグラフ整合性検証（`validateMapDocumentGraph`）。
     - `mapSaveStatus.ts`, `mapBackupSnapshot.ts`: 保存状態の導出と、書き出し・追加復元に共通する editor snapshot の資格判定。
   - `domain/mapLibrary/` (18 ファイル):

@@ -181,6 +181,23 @@ export type Node = {
    * リンクが無いノードではプロパティ自体が存在しない（空配列も持たない）。任意の `targetNodeId` も無いときキーごと持たない
    */
   mapLinks?: readonly NodeMapLink[];
+  /**
+   * 編集ロック（Phase 25 以降）。値があるノードでは `true` のみキーを持つ。無いノードでは項目ごと持たない
+   */
+  locked?: true;
+  /**
+   * ラベル文字サイズ（#53）。許可値は `12 | 14 | 18 | 24`（`LABEL_FONT_SIZES`）。
+   * 欠落・不正は標準 14（キー削除）。encode 時 14 はキー省略必須（`projectLabelTextStyle`）
+   */
+  labelFontSize?: 12 | 14 | 18 | 24;
+  /**
+   * ラベル太字（#53）。`true` のみキーを持つ（欠落＝通常）
+   */
+  labelBold?: true;
+  /**
+   * ラベル下線（#53）。`true` のみキーを持つ（欠落＝下線なし）
+   */
+  labelUnderline?: true;
 };
 
 /**
@@ -201,7 +218,7 @@ export type NodeMapLink = {
 };
 ```
 
-- **任意属性ポリシー（`client/src/domain/nodes/nodeAttributePolicy.ts`）**: `NODE_ATTRIBUTE_POLICY.mapLinks` は `{ split: "original-only", merge: "union", parentInsert: "none" }` です。ノード分割では元のノードにのみ残し、ノード統合では選択ノード群の `mapLinks` を配列順に連結し、現在マップの統合するノードを指すリンク（`targetMapId` が現在マップで `targetNodeId` が残すノードまたは吸収されるノードの ID。追加時の `self-node` と同じ判定 `isSelfNodeMapLink` を選んだ各ノードに当てる。除いた件数は `mapLinkSelectedTargetCount`）を除いてから `nodeMapLinkKey` で重複除去します（除いた後で 10 件超過時は `map-links-too-many` で拒否）。親の挿入では新しい親へ引き継ぎません。枝の複製・コピー＆ペーストでは値コピーでそのまま引き継ぎます。別マップへの枝の移動では、移動先でノード ID を振り直すので、枝の中のノードを指していたリンク（`targetMapId` が移動元マップで `targetNodeId` が枝の中の旧 ID）は、移動先マップ・新しい ID へ付け替えます（付け替えて重複したら 1 件にまとめます。`remapMovedBranchMapLinks`）。枝の外のノード・マップ全体・ほかのマップを指すリンクは値のまま写します。枝の外（移動元マップのほかのノードや、ほかのマップ）から枝の中を指していたリンクは書き換えません（割り切り。移動の後は「リンク切れを確認」で「ノードなし」として見つかり、利用者が直します）。削除は配列添字ではなく `nodeMapLinkKey` による値一致で行い、最後の 1 件削除時に `mapLinks` キーごと外します。履歴（`mapHistory.ts`）と複数タブ競合判定（`mapConflict.ts`）の同値比較でも `areNodeMapLinksEqual` で検証します。
+- **任意属性ポリシー（`client/src/domain/nodes/nodeAttributePolicy.ts`）**: `OptionalNodeKey` は `illustration`・`note`・`links`・`tags`・`sources`・`mapLinks`・`locked`・`labelFontSize`・`labelBold`・`labelUnderline` です。`NODE_ATTRIBUTE_POLICY.mapLinks` は `{ split: "original-only", merge: "union", parentInsert: "none" }` です。ノード分割では元のノードにのみ残し、ノード統合では選択ノード群の `mapLinks` を配列順に連結し、現在マップの統合するノードを指すリンク（`targetMapId` が現在マップで `targetNodeId` が残すノードまたは吸収されるノードの ID。追加時の `self-node` と同じ判定 `isSelfNodeMapLink` を選んだ各ノードに当てる。除いた件数は `mapLinkSelectedTargetCount`）を除いてから `nodeMapLinkKey` で重複除去します（除いた後で 10 件超過時は `map-links-too-many` で拒否）。親の挿入では新しい親へ引き継ぎません。枝の複製・コピー＆ペーストでは値コピーでそのまま引き継ぎます。別マップへの枝の移動では、移動先でノード ID を振り直すので、枝の中のノードを指していたリンク（`targetMapId` が移動元マップで `targetNodeId` が枝の中の旧 ID）は、移動先マップ・新しい ID へ付け替えます（付け替えて重複したら 1 件にまとめます。`remapMovedBranchMapLinks`）。枝の外のノード・マップ全体・ほかのマップを指すリンクは値のまま写します。枝の外（移動元マップのほかのノードや、ほかのマップ）から枝の中を指していたリンクは書き換えません（割り切り。移動の後は「リンク切れを確認」で「ノードなし」として見つかり、利用者が直します）。削除は配列添字ではなく `nodeMapLinkKey` による値一致で行い、最後の 1 件削除時に `mapLinks` キーごと外します。履歴（`mapHistory.ts`）と複数タブ競合判定（`mapConflict.ts`）の同値比較でも `areNodeMapLinksEqual` で検証します。`locked`・`labelFontSize`・`labelBold`・`labelUnderline` はいずれも `{ split: "original-only", merge: "survivor-else-first", parentInsert: "none" }` です（ラベル書式は欠落＝標準として `resolveLabelFontSize` / `resolveLabelBold` / `resolveLabelUnderline` で比べ、encode 時は `projectLabelTextStyle` で正規化します）。
 
 - 兄弟とルートの順は `nodes` 配列の相対順です（同じ `parentId` を持つノード同士の、配列の中の前後）。並べ替えは根ノード1つの配列内の位置を変え、子孫の位置は変えません。順序のフィールド（`order` など）は持ちません。親子は `parentId` で表すので、子が親より前にあってもかまいません（[features.md の 14 章](./features.md#14-兄弟ノードの順序変更)）。
 - `parentId` は接続（`Shift` + ドラッグ）に加えて、階層の上げ下げ（[features.md の 15 章](./features.md#15-階層の上げ下げ)）でも変わります。上げ下げは、上げ下げする枝の根 T の `parentId` と、T の根ノード1つの配列内の位置を変え、子孫の `parentId` と位置は変えません（下げて新しい親に子が無いときは T の位置も変えません）。
@@ -768,6 +785,8 @@ Phase 18 では、Version 3 のまま（版は上げません）、詳細メモ�
 同じく Phase 18 で、タグを保存する任意項目 `tags`（文字列の配列、最大 10 件、各 30 文字以内）がノードに追加されました。タグが無いノードは項目ごと持ちません。古いアプリで開いて保存し直すとタグは失われます。
 同じく Phase 18 で、出典を保存する任意項目 `sources`（オブジェクトの配列、最大 10 件。各要素は `title` 必須・`page` / `url` 任意）がノードに追加されました。出典が無いノードは項目ごと持ちません。古いアプリで開いて保存し直すと出典は失われます。
 Phase 19 では、Version 3 のまま（版は上げません）、別マップや特定ノードへの参照を保存する任意項目 `mapLinks`（オブジェクトの配列、最大 10 件。各要素は `targetMapId` 必須・`targetNodeId` 任意）がノードに追加されました。マップ間リンクが無いノードは項目ごと持ちません。古いアプリで開いて保存し直すとマップ間リンクは失われます。
+Phase 25 では、Version 3 のまま、編集ロックの任意項目 `locked`（`true` のみ）がノードに追加されました。ロックが無いノードは項目ごと持ちません。
+#53（ラベル文字サイズ・太字・下線）では、Version 3 のまま、任意項目 `labelFontSize`（`12 | 14 | 18 | 24`。欠落＝14、encode 時 14 はキー省略）・`labelBold`（`true` のみ）・`labelUnderline`（`true` のみ）がノードに追加されました。標準・通常・下線なしのノードは項目ごと持ちません。不正値は項目削除（文書全体は失敗させません）。
 
 #### JSON サンプル (Version 3)
 ```json
@@ -857,7 +876,9 @@ Phase 19 では、Version 3 のまま（版は上げません）、別マップ�
     ├─ links 検証（V3 のみ。V1/V2 は無視）
     ├─ tags 検証（V3 のみ。V1/V2 は無視）
     ├─ sources 検証（V3 のみ。V1/V2 は無視）
-    └─ mapLinks 検証（V3 のみ。V1/V2 は無視）
+    ├─ mapLinks 検証（V3 のみ。V1/V2 は無視）
+    ├─ locked 検証（V3 のみ。V1/V2 は無視。`true` 以外は項目削除）
+    └─ labelFontSize / labelBold / labelUnderline 検証（V3 のみ。V1/V2 は無視。不正・標準値は項目削除）
       │ 不正あり ──────────────────────────────► エラー: "node[i].xxxは..."
       ▼ 全ノード正常
  4. グラフ構造整合性検証 (validateMapDocumentGraph)
@@ -886,7 +907,7 @@ export function parseMapDocumentJsonWithVersion(
 
 ### 4.2 バージョンマイグレーション規則
 
-| 入力バージョン | `importance` の処理 | `illustration` の処理（`note`・`links`・`tags`・`sources`・`mapLinks` も同様に、V1 / V2 では無視し、V3 では検証して保持） | 出力バージョン |
+| 入力バージョン | `importance` の処理 | `illustration` の処理（`note`・`links`・`tags`・`sources`・`mapLinks`・`locked`・`labelFontSize`・`labelBold`・`labelUnderline` も同様に、V1 / V2 では無視し、V3 では検証して保持。`locked` / 書式の不正値は項目削除） | 出力バージョン |
 | :--- | :--- | :--- | :--- |
 | **Version 1** | デフォルト値 `"medium"`（`DEFAULT_NODE_IMPORTANCE`）を自動補完。もし入力中に `importance` フィールドが存在しても無視・上書きされる。 | 存在しても完全に無視され、`undefined`（項目なし）へ正規化される。 | **Version 3** |
 | **Version 2** | 入力値の検証を厳格に実施（`"high"`, `"medium"`, `"low"` 以外はエラー）。 | 存在しても完全に無視され、`undefined`（項目なし）へ正規化される。 | **Version 3** |
@@ -1422,12 +1443,12 @@ sequenceDiagram
 | :--- | :--- |
 | `type` | 文字列 `"draw-my-map/subtree"` のみ受け付ける |
 | `version` | 数値 `1` のみ受け付ける |
-| `nodes` | 空でない配列。各要素は V3 のノード（`id`, `parentId`, `x`, `y`, `width`, `height`, `label`, `importance`, 任意の `illustration`・`note`・`links`・`tags`・`sources`・`mapLinks`）。配列の順序を保つ |
+| `nodes` | 空でない配列。各要素は V3 のノード（`id`, `parentId`, `x`, `y`, `width`, `height`, `label`, `importance`, 任意の `illustration`・`note`・`links`・`tags`・`sources`・`mapLinks`・`locked`・`labelFontSize`・`labelBold`・`labelUnderline`）。配列の順序を保つ |
 | 根 | `parentId: null` のノードがちょうど 1 つ。`rootId` は形式に含めず、読み取り時にこのノードから求める。コピー時は選択ノードの `parentId` を `null` にして書き出す |
 | 保存しないもの | 元のマップの配置モード、枝の折りたたみ指定、生成中の画像、プレビュー、選択、viewport |
 | 上限 | 文字数 5,000,000（UTF-16 コード単位。`string.length`）、ノード数 10,000。コピーと貼り付けに同じ上限を適用する。文字数は `JSON.parse` の前に、ノード数は各ノードの検証の前に判定する |
 
-- **検証**: 貼り付けの入力は信用せず、`type` / `version`、非空の `nodes`、単一の根を確認します。各ノードは V3 の `normalizeMapDocumentNode(..., 3)` で検証し、既知の項目だけで作り直します（イラストは Data URL・寸法の検証と高さ補正を V3 と同じ規則で適用。詳細メモ `note`・URL `links`・タグ `tags`・出典 `sources`・マップ間リンク `mapLinks` も V3 と同じ規則で検証し、規則に合わない値は拒否）。グラフは `validateMapDocumentGraph` で検証し、重複 ID・循環・存在しない親・複数の根を拒否します。普通のテキストや `MapDocument` の JSON は枝形式として受け付けません。
+- **検証**: 貼り付けの入力は信用せず、`type` / `version`、非空の `nodes`、単一の根を確認します。各ノードは V3 の `normalizeMapDocumentNode(..., 3)` で検証し、既知の項目だけで作り直します（イラストは Data URL・寸法の検証と高さ補正を V3 と同じ規則で適用。詳細メモ `note`・URL `links`・タグ `tags`・出典 `sources`・マップ間リンク `mapLinks`・編集ロック `locked`・ラベル書式 `labelFontSize` / `labelBold` / `labelUnderline` も V3 と同じ規則で検証し、規則に合わない値は拒否または項目削除）。グラフは `validateMapDocumentGraph` で検証し、重複 ID・循環・存在しない親・複数の根を拒否します。普通のテキストや `MapDocument` の JSON は枝形式として受け付けません。
 - **計算量**: デコードと単一の根の判定は、10,000 ノードに対して線形で終わります（逆順に並んだ深い鎖や、全件が衝突する ID でも、配列要素と `id` の読み取り回数がノード数の定数倍以内）。
 - **貼り付け時の ID**: 形式の中の ID は貼り付け先の ID と対応付けるための仮のものです。貼り付けでは全ノードに未使用の新しい ID を一括で発行し（`nextAvailableIds`）、根の `parentId` は `null`、子孫の `parentId` は新しい ID へ付け替えます。元の ID は引き継ぎません。コピーは折りたたみで隠れた子孫も含み、貼り付けた枝は折りたたみ指定を持たないため、展開した状態で追加されます。
 
