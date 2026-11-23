@@ -1,6 +1,18 @@
 import type { Point } from "@/components/map/mapGeometry";
 
-export const NODE_CONTEXT_MENU_SIZE = { width: 176, height: 44 } as const;
+export const NODE_CONTEXT_MENU_ITEM_HEIGHT = 36;
+export const NODE_CONTEXT_MENU_WIDTH = 220;
+const NODE_CONTEXT_MENU_VERTICAL_PADDING = 8;
+
+export function measureNodeContextMenuHeight(visibleItemCount: number): number {
+  return NODE_CONTEXT_MENU_VERTICAL_PADDING + visibleItemCount * NODE_CONTEXT_MENU_ITEM_HEIGHT;
+}
+
+/** クリップ用の最大高さ（イラスト＋切り出しの 2 項目） */
+export const NODE_CONTEXT_MENU_SIZE = {
+  width: NODE_CONTEXT_MENU_WIDTH,
+  height: measureNodeContextMenuHeight(2),
+} as const;
 
 export function clampNodeContextMenuPosition(
   anchor: Point,

@@ -62,11 +62,14 @@ type FakeLibrary = Pick<
   | "permanentlyDeleteFromTrash"
   | "emptyTrash"
   | "moveBranchToMap"
+  | "extractBranchToNewMap"
   | "prepareBackup"
   | "downloadBackup"
   | "previewRestore"
   | "confirmRestore"
   | "toggleFavorite"
+  | "archiveMap"
+  | "unarchiveMap"
   | "assignFolder"
   | "createFolder"
   | "renameFolder"
@@ -139,11 +142,14 @@ function createFakeLibrary(): jest.Mocked<FakeLibrary> {
     permanentlyDeleteFromTrash: jest.fn<MapLibraryOperationResult, [string]>(() => UNCHANGED),
     emptyTrash: jest.fn<MapLibraryOperationResult, []>(() => UNCHANGED),
     moveBranchToMap: jest.fn<MapLibraryOperationResult, [MapStorageSession, string, number]>(() => UNCHANGED),
+    extractBranchToNewMap: jest.fn<MapLibraryOperationResult, [MapStorageSession, number]>(() => UNCHANGED),
     prepareBackup: jest.fn(() => ({ ok: false as const, error: "準備失敗" })),
     downloadBackup: jest.fn<MapLibraryOperationResult, [LibraryBackupPreview]>(() => UNCHANGED),
     previewRestore: jest.fn<Promise<{ ok: false; error: string }>, [File]>(async () => ({ ok: false, error: "読込失敗" })),
     confirmRestore: jest.fn<MapLibraryOperationResult, [LibraryRestorePreview]>(() => UNCHANGED),
     toggleFavorite: jest.fn<MapLibraryOperationResult, [string]>(() => UNCHANGED),
+    archiveMap: jest.fn<MapLibraryOperationResult, [string]>(() => UNCHANGED),
+    unarchiveMap: jest.fn<MapLibraryOperationResult, [string]>(() => UNCHANGED),
     assignFolder: jest.fn<MapLibraryOperationResult, [string, string | null]>(() => UNCHANGED),
     createFolder: jest.fn<MapLibraryOperationResult, [string]>(() => UNCHANGED),
     renameFolder: jest.fn<MapLibraryOperationResult, [string, string]>(() => UNCHANGED),
@@ -1030,6 +1036,8 @@ describe("useMapLibraryDialogState と MapLibraryDialog のフォーカスの戻
             onOpenFolderRename={state.openFolderRename}
             onOpenFolderDelete={state.openFolderDelete}
             onToggleFavorite={state.toggleFavorite}
+            onArchiveMap={state.archiveMap}
+            onUnarchiveMap={state.unarchiveMap}
             onAssignFolder={state.assignFolder}
             onCreateFolder={state.submitCreateFolder}
             onSubmitRenameFolder={state.submitRenameFolder}
@@ -1826,6 +1834,8 @@ describe("useMapLibraryDialogState のお気に入り・フォルダー管理・
           onOpenFolderRename={state.openFolderRename}
           onOpenFolderDelete={state.openFolderDelete}
           onToggleFavorite={state.toggleFavorite}
+          onArchiveMap={state.archiveMap}
+          onUnarchiveMap={state.unarchiveMap}
           onAssignFolder={state.assignFolder}
           onCreateFolder={state.submitCreateFolder}
           onSubmitRenameFolder={state.submitRenameFolder}

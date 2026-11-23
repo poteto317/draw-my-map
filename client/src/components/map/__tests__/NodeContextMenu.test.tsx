@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NodeContextMenu } from "@/components/map/NodeContextMenu";
 import { isInsideNodeContextMenu } from "@/components/map/nodeContextMenuDom";
-import { NODE_CONTEXT_MENU_SIZE } from "@/components/map/nodeContextMenuLayout";
+import { measureNodeContextMenuHeight, NODE_CONTEXT_MENU_WIDTH } from "@/components/map/nodeContextMenuLayout";
 
 describe("NodeContextMenu", () => {
   it("指定位置にメニューと項目を表示する", () => {
@@ -38,8 +38,8 @@ describe("NodeContextMenu", () => {
     render(<NodeContextMenu hasIllustration={false} position={{ x: 0, y: 0 }} onGenerateIllustration={jest.fn()} />);
 
     expect(screen.getByRole("menu")).toHaveStyle({
-      width: `${NODE_CONTEXT_MENU_SIZE.width}px`,
-      height: `${NODE_CONTEXT_MENU_SIZE.height}px`,
+      width: `${NODE_CONTEXT_MENU_WIDTH}px`,
+      height: `${measureNodeContextMenuHeight(1)}px`,
     });
   });
 

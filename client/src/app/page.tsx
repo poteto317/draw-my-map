@@ -97,6 +97,10 @@ export default function Home() {
               clearPendingNavigation();
               return dialog.moveBranchToMap(view.storageSession, targetMapId, rootId);
             }}
+            onExtractBranchToNewMap={(rootId) => {
+              clearPendingNavigation();
+              return dialog.extractBranchToNewMap(view.storageSession, rootId);
+            }}
             mapName={view.currentMap.name}
             storageSession={view.storageSession}
             storageMode={view.storageMode}

@@ -10,6 +10,10 @@ import {
 } from "react";
 import {
   autoSaveFailedNotice,
+  branchExtractedToMapNotice,
+  branchExtractFlushFailedNotice,
+  branchExtractRejectedNotice,
+  conflictBranchExtractRejectedNotice,
   branchMovedToMapNotice,
   branchMoveFlushFailedNotice,
   branchMoveRejectedNotice,
@@ -119,6 +123,11 @@ import {
   runMapLibraryStartup,
   type MapLibraryStartupResult,
 } from "@/services/persistence/mapLibraryStartupRunner";
+import {
+  prepareBranchMutation,
+  resolveBranchStorageFailure,
+} from "@/hooks/mapLibraryBranchMutation";
+import { extractStoredBranch } from "@/services/persistence/mapBranchExtract";
 import { readBranchMoveIndex, transferStoredBranch } from "@/services/persistence/mapBranchTransfer";
 import { createProtectedStorageSession } from "@/services/persistence/protectedStorageSession";
 import type { MapFlushResult, MapStorageSession } from "@/types/mapStorageSession";
@@ -146,6 +155,7 @@ export type UseMapLibraryResult = {
   permanentlyDeleteFromTrash: (trashId: string) => MapLibraryOperationResult;
   emptyTrash: () => MapLibraryOperationResult;
   moveBranchToMap: (sourceSession: MapStorageSession, targetId: string, rootId: number) => MapLibraryOperationResult;
+  extractBranchToNewMap: (sourceSession: MapStorageSession, rootId: number) => MapLibraryOperationResult;
   prepareBackup: () => MapDocumentResult<LibraryBackupPreview>;
   downloadBackup: (preview: LibraryBackupPreview) => MapLibraryOperationResult;
   previewRestore: (file: File) => Promise<MapDocumentResult<LibraryRestorePreview>>;
@@ -663,6 +673,63 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
       return succeededOperation(notice, true);
     }), [commitNewSession, flushCurrentSession, protectAfterBranchMove, requirePersistent]);
 
+  const extractBranchToNewMap = useCallback((
+    sourceSession: MapStorageSession,
+    rootId: number,
+  ): MapLibraryOperationResult => {
+    const rejected = branchExtractRejectedNotice();
+    return requirePersistent(rejected, (before) => {
+      const flush = flushCurrentSession();
+      const prepared = prepareBranchMutation({
+        before,
+        current: libraryRef.current,
+        sourceSession,
+        flush,
+        notices: {
+          conflict: conflictBranchExtractRejectedNotice(),
+          failed: branchExtractFlushFailedNotice(),
+          rejected,
+        },
+      });
+      if (!("stored" in prepared)) return prepared;
+      const { current, stored } = prepared;
+      const now = depsRef.current.now();
+      const nowIso = now.toISOString();
+      const newMapId = pickNewMapId(
+        current.storage,
+        stored.index,
+        depsRef.current.generateId,
+        (candidate) => hasStoredMapViewBookmarks(current.storage, { id: candidate, createdAt: nowIso }),
+      );
+      if (newMapId === null) {
+        return failedOperation(mapIdUnavailableNotice());
+      }
+      const extracted = extractStoredBranch(
+        current.storage,
+        stored.index,
+        sourceSession.mapId,
+        newMapId,
+        rootId,
+        now,
+      );
+      if (!extracted.ok) {
+        return resolveBranchStorageFailure(extracted, (sourceJson, notice) => {
+          protectAfterBranchMove(current, sourceJson, notice);
+          return protectedModeFailure(notice);
+        });
+      }
+      const { libraryMeta, notice } = persistMapOpenedMeta(
+        current,
+        newMapId,
+        nowIso,
+        branchExtractedToMapNotice(),
+        "枝を別マップに切り出しました",
+      );
+      commitNewSession(current, extracted.index, libraryMeta);
+      return succeededOperation(notice, true);
+    });
+  }, [commitNewSession, flushCurrentSession, protectAfterBranchMove, requirePersistent]);
+
   const prepareBackup = useCallback((): MapDocumentResult<LibraryBackupPreview> => {
     const current = libraryRef.current;
     if (restoreLockRef.current || current?.mode !== "persistent") {
@@ -981,6 +1048,7 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
     permanentlyDeleteFromTrash,
     emptyTrash,
     moveBranchToMap,
+    extractBranchToNewMap,
     prepareBackup,
     downloadBackup,
     previewRestore,
