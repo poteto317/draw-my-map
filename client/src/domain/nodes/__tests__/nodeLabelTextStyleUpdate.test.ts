@@ -1,0 +1,85 @@
+import {
+  toggleNodeLabelBold,
+  toggleNodeLabelUnderline,
+  updateNodeLabelFontSize,
+} from "@/domain/nodes/nodeLabelTextStyleUpdate";
+import { createTestNode } from "@/testing/createTestNode";
+
+describe("updateNodeLabelFontSize", () => {
+  it("対象ノードのサイズを変え、ほかは参照を保つ", () => {
+    const target = createTestNode({ id: 1 });
+    const other = createTestNode({ id: 2, labelFontSize: 12 });
+
+    const result = updateNodeLabelFontSize([target, other], 1, 18);
+
+    expect(result).toEqual([{ ...target, labelFontSize: 18 }, other]);
+    expect(result?.[1]).toBe(other);
+  });
+
+  it("14 に戻すと labelFontSize キーを削除する", () => {
+    const target = createTestNode({ id: 1, labelFontSize: 18, labelBold: true });
+
+    const result = updateNodeLabelFontSize([target], 1, 14);
+
+    expect(result?.[0]).toEqual({ ...createTestNode({ id: 1, labelBold: true }) });
+    expect("labelFontSize" in (result?.[0] ?? {})).toBe(false);
+  });
+
+  it("すでに同じ実効サイズなら null", () => {
+    const plain = createTestNode({ id: 1 });
+    const sized = createTestNode({ id: 2, labelFontSize: 18 });
+
+    expect(updateNodeLabelFontSize([plain], 1, 14)).toBeNull();
+    expect(updateNodeLabelFontSize([sized], 2, 18)).toBeNull();
+  });
+
+  it("対象不在・locked は null", () => {
+    const nodes = [createTestNode({ id: 1 }), createTestNode({ id: 2, locked: true })];
+
+    expect(updateNodeLabelFontSize(nodes, 999, 18)).toBeNull();
+    expect(updateNodeLabelFontSize(nodes, 2, 18)).toBeNull();
+  });
+});
+
+describe("toggleNodeLabelBold", () => {
+  it("未設定なら true を付け、true ならキー削除する", () => {
+    const plain = createTestNode({ id: 1, labelFontSize: 18 });
+    const bold = createTestNode({ id: 2, labelBold: true, labelUnderline: true });
+
+    expect(toggleNodeLabelBold([plain], 1)).toEqual([
+      { ...plain, labelBold: true },
+    ]);
+    expect(toggleNodeLabelBold([bold], 2)?.[0]).toEqual(
+      createTestNode({ id: 2, labelUnderline: true }),
+    );
+    expect("labelBold" in (toggleNodeLabelBold([bold], 2)?.[0] ?? {})).toBe(false);
+  });
+
+  it("対象不在・locked は null", () => {
+    const nodes = [createTestNode({ id: 1 }), createTestNode({ id: 2, locked: true })];
+
+    expect(toggleNodeLabelBold(nodes, 999)).toBeNull();
+    expect(toggleNodeLabelBold(nodes, 2)).toBeNull();
+  });
+});
+
+describe("toggleNodeLabelUnderline", () => {
+  it("未設定なら true を付け、true ならキー削除する", () => {
+    const plain = createTestNode({ id: 1 });
+    const underlined = createTestNode({ id: 2, labelUnderline: true, labelBold: true });
+
+    expect(toggleNodeLabelUnderline([plain], 1)).toEqual([
+      { ...plain, labelUnderline: true },
+    ]);
+    expect(toggleNodeLabelUnderline([underlined], 2)?.[0]).toEqual(
+      createTestNode({ id: 2, labelBold: true }),
+    );
+  });
+
+  it("対象不在・locked は null", () => {
+    const nodes = [createTestNode({ id: 1 }), createTestNode({ id: 2, locked: true })];
+
+    expect(toggleNodeLabelUnderline(nodes, 999)).toBeNull();
+    expect(toggleNodeLabelUnderline(nodes, 2)).toBeNull();
+  });
+});

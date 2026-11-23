@@ -56,6 +56,12 @@ import {
 import { applyTreeChangeWithOutcome } from "@/hooks/treeChangeOutcome";
 import { insertParentNode as computeParentInsertion, type InsertParentNodeResult } from "@/domain/nodes/nodeParentInsertion";
 import { replaceNodeImportance, replaceNodesImportance } from "@/domain/nodes/nodeImportanceUpdate";
+import type { LabelFontSize } from "@/types/labelFontSize";
+import {
+  toggleNodeLabelBold as computeToggleNodeLabelBold,
+  toggleNodeLabelUnderline as computeToggleNodeLabelUnderline,
+  updateNodeLabelFontSize,
+} from "@/domain/nodes/nodeLabelTextStyleUpdate";
 import {
   isSameNodeMergePlan,
   mergeNodes as computeNodeMerge,
@@ -146,6 +152,9 @@ type UseNodesReturn = {
   pruneSelectionToVisible: (visibleNodeIds: ReadonlySet<number>) => void;
   updateNodeLabel: (id: number, label: string) => void;
   updateNodeLabels: (replacements: ReadonlyMap<number, string>) => boolean;
+  setLabelFontSize: (id: number, size: LabelFontSize) => boolean;
+  toggleLabelBold: (id: number) => boolean;
+  toggleLabelUnderline: (id: number) => boolean;
   updateNodeImportance: (id: number, importance: NodeImportance) => boolean;
   updateNodesImportance: (ids: readonly number[], importance: NodeImportance) => boolean;
   attachIllustration: (id: number, dataUrl: string) => boolean;
@@ -399,6 +408,18 @@ export function useNodes(): UseNodesReturn {
   // 複数ノードのラベルを1回の更新関数でまとめて変え、1操作として履歴に記録する
   const updateNodeLabels = useCallback((replacements: ReadonlyMap<number, string>) => (
     applyNonStructuralChange((currentNodes) => replaceNodeLabels(currentNodes, replacements))
+  ), [applyNonStructuralChange]);
+
+  const setLabelFontSize = useCallback((id: number, size: LabelFontSize) => (
+    applyNonStructuralChange((currentNodes) => updateNodeLabelFontSize(currentNodes, id, size))
+  ), [applyNonStructuralChange]);
+
+  const toggleLabelBold = useCallback((id: number) => (
+    applyNonStructuralChange((currentNodes) => computeToggleNodeLabelBold(currentNodes, id))
+  ), [applyNonStructuralChange]);
+
+  const toggleLabelUnderline = useCallback((id: number) => (
+    applyNonStructuralChange((currentNodes) => computeToggleNodeLabelUnderline(currentNodes, id))
   ), [applyNonStructuralChange]);
 
   const updateNodeImportance = useCallback((id: number, importance: NodeImportance) => (
@@ -783,6 +804,9 @@ export function useNodes(): UseNodesReturn {
     pruneSelectionToVisible,
     updateNodeLabel,
     updateNodeLabels,
+    setLabelFontSize,
+    toggleLabelBold,
+    toggleLabelUnderline,
     updateNodeImportance,
     updateNodesImportance,
     attachIllustration,
