@@ -55,18 +55,33 @@ export function buildExtractBranchDisplayLabel(label: string): string {
 export function buildExtractedMapName(sourceMapName: string, displayLabel: string): string {
   const source = normalizeMapName(sourceMapName);
   const label = normalizeExtractDisplayLabel(displayLabel);
-  const separator = Array.from(EXTRACT_MAP_NAME_SEPARATOR);
-  const labelPoints = Array.from(label);
-  const maxSourceLength = MAX_MAP_NAME_LENGTH - separator.length - labelPoints.length;
+  const separatorLength = Array.from(EXTRACT_MAP_NAME_SEPARATOR).length;
   const sourcePoints = Array.from(source);
-  const truncatedSource = sourcePoints.slice(0, Math.max(0, maxSourceLength)).join("");
-  let name = `${truncatedSource}${EXTRACT_MAP_NAME_SEPARATOR}${label}`;
-  const namePoints = Array.from(name);
-  if (namePoints.length > MAX_MAP_NAME_LENGTH) {
-    const roomForLabel = MAX_MAP_NAME_LENGTH - separator.length - Array.from(truncatedSource).length;
-    const trimmedLabel = labelPoints.slice(0, Math.max(0, roomForLabel)).join("");
-    name = `${truncatedSource}${EXTRACT_MAP_NAME_SEPARATOR}${trimmedLabel}`;
+  const labelPoints = Array.from(label);
+
+  let truncatedSourcePoints = sourcePoints;
+  let truncatedLabelPoints = labelPoints;
+  const combinedLength = truncatedSourcePoints.length + separatorLength + truncatedLabelPoints.length;
+  if (combinedLength > MAX_MAP_NAME_LENGTH) {
+    const roomForLabel = MAX_MAP_NAME_LENGTH - separatorLength - truncatedSourcePoints.length;
+    if (roomForLabel >= 0) {
+      truncatedLabelPoints = truncatedLabelPoints.slice(0, roomForLabel);
+    } else {
+      truncatedSourcePoints = truncatedSourcePoints.slice(
+        0,
+        Math.max(0, MAX_MAP_NAME_LENGTH - separatorLength),
+      );
+      const roomAfterSource = MAX_MAP_NAME_LENGTH - separatorLength - truncatedSourcePoints.length;
+      truncatedLabelPoints = labelPoints.slice(0, Math.max(0, roomAfterSource));
+    }
   }
+
+  const truncatedSource = truncatedSourcePoints.join("");
+  const truncatedLabel = truncatedLabelPoints.join("");
+  const name =
+    truncatedLabel.length > 0
+      ? `${truncatedSource}${EXTRACT_MAP_NAME_SEPARATOR}${truncatedLabel}`
+      : truncatedSource;
   return normalizeStoredMapName(name);
 }
 

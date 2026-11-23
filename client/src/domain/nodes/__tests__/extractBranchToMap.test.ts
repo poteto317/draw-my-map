@@ -159,6 +159,15 @@ describe("buildExtractedMapName", () => {
     expect(/^\s/.test(name)).toBe(false);
   });
 
+  it("長い表示ラベルでも元マップ名を先頭に残す", () => {
+    const longLabel = "あ".repeat(47);
+    const name = buildExtractedMapName(SOURCE_MAP_NAME, longLabel);
+    expect(name.startsWith("—")).toBe(false);
+    expect(name).not.toMatch(/^\s*—/);
+    expect(name).toContain("旅行");
+    expect(Array.from(name).length).toBeLessThanOrEqual(50);
+  });
+
   it("制御文字を含むラベルは正規化する", () => {
     expect(buildExtractedMapName(SOURCE_MAP_NAME, "a\tb\nc\u007f")).toBe(`${SOURCE_MAP_NAME} — a b c`);
   });
