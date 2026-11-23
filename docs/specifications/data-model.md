@@ -102,16 +102,21 @@ Root Node B (id: 5, parentId: null)
 
 ## 2. TypeScript 型定義リファレンス
 
-システムの中核を構成する共有型定義は `client/src/types/` 配下の全 16 ファイルに集約されています。
+システムの中核を構成する共有型定義は `client/src/types/` 配下の全 22 ファイルに集約されています。
 
 | ファイルパス | エクスポートされる型名 | 役割・用途 |
 | :--- | :--- | :--- |
 | `client/src/types/node.ts` | `Node`, `NodeSource`, `NodeMapLink` | マインドマップのノードエンティティ型、出典型、マップ間リンク型（任意属性に `icon?` / `kind?` を含む） |
-| `client/src/types/nodeKind.ts` | `NodeKind`, `NODE_KIND_BAR_CSS_VARS` | ノード種別（`"question" \| "conclusion" \| "evidence" \| "idea"`）と左端色バー用 CSS 変数 |
+| `client/src/types/nodeKind.ts` | `NodeKind`, `NODE_KINDS`, `NODE_KIND_BAR_WIDTH_PX`, `NODE_KIND_BAR_CSS_VARS`, `NODE_KIND_BAR_FALLBACK_COLORS` | ノード種別（`"question" \| "conclusion" \| "evidence" \| "idea"`）、左端色バー幅・CSS 変数・Pixi／SVG 用フォールバック色 |
 | `client/src/types/nodeImportance.ts` | `NodeImportance` | ノード重要度レベル（`"high" \| "medium" \| "low"`） |
 | `client/src/types/nodeLayout.ts` | `NodeLayoutMode` | レイアウト配置モード（`"manual" \| "auto"`） |
 | `client/src/types/nodeMapState.ts` | `NodeMapState` | マップ全体のインメモリ状態（`layoutMode`, `nodes`） |
 | `client/src/types/nodeResolution.ts` | `ResolutionLevel`, `ResolutionFilterMode` | 解像度フィルタの表示レベルとフィルタモード |
+| `client/src/types/labelFontSize.ts` | `LABEL_FONT_SIZES`, `LabelFontSize` | ラベル文字サイズの許可集合 |
+| `client/src/types/treeDirection.ts` | `TreeDirection` | ツリー方向（`"lr" \| "tb"`） |
+| `client/src/types/layoutSpacing.ts` | `LayoutSpacing` | 配置間隔（`childGap`, `siblingGap`） |
+| `client/src/types/viewport.ts` | `Viewport`, `ScreenSize`, `INITIAL_VIEWPORT` | キャンバス viewport・画面サイズと妥当性判定 |
+| `client/src/types/mapViewSnapshot.ts` | `MapViewSnapshot` | viewport・選択・折りたたみ・解像度のメモリ上スナップショット |
 | `client/src/types/mapDocument.ts` | `MapDocumentVersion`, `MapDocumentV1`, `MapDocumentV3`, `MapDocument`, `MapDocumentResult` | JSON 永続化ドキュメントスキーマおよび Result 型 |
 | `client/src/types/illustrationGeneration.ts` | `IllustrationGenerationState` | AI イラスト生成の非同期状態マシン（判別共用体） |
 | `client/src/types/operationNotice.ts` | `OperationNotice` | ヘッダー通知バーに表示する操作結果・警告・エラー通知型 |

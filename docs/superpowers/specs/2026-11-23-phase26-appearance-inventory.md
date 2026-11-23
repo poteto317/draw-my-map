@@ -5,11 +5,13 @@
 
 | 入口 | 拒否／無効条件 | 実装ファイル |
 |------|----------------|--------------|
-| `IllustrationPanel` 添付・削除・生成 | 主選択≠1、locked、保護モード | `client/src/components/layout/IllustrationPanel.tsx`（「画像を添付」+ `accept=image/*` + 上書き確認。`disabled` は `NodeDetailPanel` が locked・保護モード・主選択≠1 のとき渡す）。domain 更新は phase25「重要度・属性パネル更新」 |
-| `NodeAppearanceSection` icon / kind | 主選択≠1、locked、保護モード | `client/src/components/layout/NodeAppearanceSection.tsx`、`client/src/components/layout/NodeDetailPanel.tsx`（表示条件・配線）、`client/src/components/map/MapEditor.tsx`（`setNodeIcon` / `setNodeKind` 接続） |
+| `IllustrationPanel` 添付・削除・生成 | `disabled`（locked・保護モード・主選択≠1）。節自体は常時表示 | `client/src/components/layout/IllustrationPanel.tsx`（「画像を添付」+ `accept=image/*` + 上書き確認。`disabled` は `NodeDetailPanel` が渡す）。domain 更新は phase25「重要度・属性パネル更新」 |
+| `NodeAppearanceSection` icon / kind | **表示（`visible`）**: マップ表示・主選択ちょうど1・非保護。アウトライン／件数≠1／保護では節ごと非表示。**操作（`disabled`）**: locked のみ | `client/src/components/layout/NodeAppearanceSection.tsx`、`client/src/components/layout/NodeDetailPanel.tsx`（`appearanceVisible` / `disabled` 分担）、`client/src/components/map/MapEditor.tsx`（`setNodeIcon` / `setNodeKind` 接続） |
 | `useNodes` の `setNodeIcon` / `setNodeKind` | 対象 locked → 無操作（Undo 不変） | `client/src/hooks/useNodes.ts`、`client/src/domain/nodes/nodeAppearanceUpdate.ts` |
 
 共通ガード: `assertNodesEditable`（`client/src/domain/nodes/nodeEditLock.ts`）
+
+メモ: Illustration は `disabled` 一括無効、見た目節は `visible`（マップ・件数・保護）と `disabled`（locked）を分担する。アウトライン表示中は見た目節を出さない（Illustration 節は出るが操作は `disabled`）。
 
 統合テスト: `client/src/components/map/__tests__/MapEditor.editLock.integration.test.tsx`（Task 3 GREEN）
 
