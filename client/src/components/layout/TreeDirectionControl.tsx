@@ -1,4 +1,4 @@
-import type { HeaderControlDisabledReason } from "@/domain/map/mapLayoutStyleAvailability";
+import type { HeaderControlDisabledReason } from "@/domain/map/mapHeaderLayoutControlTypes";
 import type { TreeDirection } from "@/types/treeDirection";
 
 type TreeDirectionControlProps = {

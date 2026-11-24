@@ -2,10 +2,21 @@ import {
   isDocumentBlocked,
   isNonNodeSelection,
 } from "@/domain/map/mapDocumentEditGuards";
+import type {
+  HeaderControlDisabledReason,
+  HeaderControlState,
+  TreeDirectionHeaderControlState,
+} from "@/domain/map/mapHeaderLayoutControlTypes";
 import type { LayoutStyle } from "@/types/layoutStyle";
 import type { MapCanvasSelection } from "@/types/mapCanvasSelection";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 import type { EditorViewMode } from "@/domain/view/editorViewMode";
+
+export type {
+  HeaderControlDisabledReason,
+  HeaderControlState,
+  TreeDirectionHeaderControlState,
+} from "@/domain/map/mapHeaderLayoutControlTypes";
 
 export type LayoutStyleGuardInput = {
   viewMode: EditorViewMode;
@@ -14,18 +25,6 @@ export type LayoutStyleGuardInput = {
   isExternallyDeleted: boolean;
   canvasSelection?: MapCanvasSelection;
   layoutMode: NodeLayoutMode;
-};
-
-/** ヘッダーコントロールの disabled 理由（ツールチップ用） */
-export type HeaderControlDisabledReason = "manual" | "radial" | "blocked" | null;
-
-export type HeaderControlState = {
-  visible: boolean;
-  disabled: boolean;
-};
-
-export type TreeDirectionHeaderControlState = HeaderControlState & {
-  disabledReason: HeaderControlDisabledReason;
 };
 
 function baseHeaderState(input: LayoutStyleGuardInput): HeaderControlState {
