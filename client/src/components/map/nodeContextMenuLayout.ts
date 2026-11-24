@@ -8,10 +8,10 @@ export function measureNodeContextMenuHeight(visibleItemCount: number): number {
   return NODE_CONTEXT_MENU_VERTICAL_PADDING + visibleItemCount * NODE_CONTEXT_MENU_ITEM_HEIGHT;
 }
 
-/** クリップ用の最大高さ（イラスト＋切り出しの 2 項目） */
+/** クリップ用の最大高さ（イラスト＋切り出し＋関連線追加＋結ぶ＋グループ化＋枝グループ化） */
 export const NODE_CONTEXT_MENU_SIZE = {
   width: NODE_CONTEXT_MENU_WIDTH,
-  height: measureNodeContextMenuHeight(2),
+  height: measureNodeContextMenuHeight(6),
 } as const;
 
 export function clampNodeContextMenuPosition(

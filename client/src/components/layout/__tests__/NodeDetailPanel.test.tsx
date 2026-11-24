@@ -124,8 +124,8 @@ function renderPanel(overrides: Partial<Props> = {}) {
   return { props, ...render(<NodeDetailPanel {...props} />) };
 }
 
-function panel(): HTMLElement {
-  return screen.getByRole("complementary", { name: "ノードの詳細" });
+function panel(name = "ノードの詳細"): HTMLElement {
+  return screen.getByRole("complementary", { name });
 }
 
 function box(): HTMLTextAreaElement {
@@ -191,6 +191,75 @@ describe("NodeDetailPanel", () => {
 
     rerender(<NodeDetailPanel {...props} viewMode="map" selectionCount={1} storageMode="protected" />);
     expect(screen.queryByRole("heading", { name: "見た目" })).not.toBeInTheDocument();
+  });
+
+  it("関連線選択時は「関連線」節だけ出し、kind / 有向の変更を通知する", async () => {
+    const user = userEvent.setup();
+    const onUpdateRelationKind = jest.fn();
+    const onUpdateRelationDirected = jest.fn();
+    renderPanel({
+      selectedNode: null,
+      selectionCount: 0,
+      selectedRelation: { id: 10, kind: "related", directed: false },
+      onUpdateRelationKind,
+      onUpdateRelationDirected,
+    });
+
+    expect(panel("関連線の詳細")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "関連線" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "詳細メモ" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "見た目" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: "依存" }));
+    expect(onUpdateRelationKind).toHaveBeenCalledWith(10, "dependency");
+
+    await user.click(screen.getByRole("checkbox", { name: "有向" }));
+    expect(onUpdateRelationDirected).toHaveBeenCalledWith(10, true);
+  });
+
+  it("アウトラインでは関連線選択が残ってもノード UI を出し、関連線節は出さない", () => {
+    renderPanel({
+      viewMode: "outline",
+      selectedNode: null,
+      selectionCount: 0,
+      selectedRelation: { id: 10, kind: "related", directed: false },
+    });
+
+    expect(screen.queryByRole("heading", { name: "関連線" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "詳細メモ" })).toBeInTheDocument();
+  });
+
+  it("関連線編集が disabled のとき操作できない", () => {
+    renderPanel({
+      selectedNode: null,
+      selectionCount: 0,
+      selectedRelation: { id: 10, kind: "conflict", directed: true },
+      relationEditDisabled: true,
+    });
+
+    expect(screen.getByRole("radio", { name: "対立" })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: "有向" })).toBeDisabled();
+  });
+
+  it("グループ選択時は「グループ」節だけ出し、ラベル変更を通知する", () => {
+    const onUpdateGroupLabel = jest.fn();
+    renderPanel({
+      selectedNode: null,
+      selectionCount: 0,
+      selectedGroup: { id: 20, label: "" },
+      onUpdateGroupLabel,
+    });
+
+    expect(panel("グループの詳細")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "グループ" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "詳細メモ" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "見た目" })).not.toBeInTheDocument();
+
+    const input = screen.getByLabelText("ラベル");
+    fireEvent.change(input, { target: { value: "題名" } });
+    expect(onUpdateGroupLabel).not.toHaveBeenCalled();
+    fireEvent.blur(input);
+    expect(onUpdateGroupLabel).toHaveBeenCalledWith(20, "題名");
   });
 
   it("locked のとき見た目節の操作を無効化する", () => {
