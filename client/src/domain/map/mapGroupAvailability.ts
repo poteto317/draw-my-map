@@ -1,3 +1,4 @@
+import { isDocumentBlocked } from "@/domain/map/mapDocumentEditGuards";
 import { assertNodesEditable } from "@/domain/nodes/nodeEditLock";
 import { collectSubtreeIds } from "@/domain/nodes/nodeTree";
 import type { MapGroup } from "@/types/mapGroup";
@@ -32,10 +33,6 @@ export type GroupMenuState = {
   visible: boolean;
   disabled: boolean;
 };
-
-function isDocumentBlocked(input: GroupMutationGuardInput): boolean {
-  return input.isProtectedMode || input.hasConflict || input.isExternallyDeleted;
-}
 
 /** N6: 選択≥2 →「グループ化」 */
 export function resolveGroupCreateContextMenu(input: GroupCreateMenuInput): GroupMenuState {
