@@ -29,6 +29,8 @@ export interface UseMapConflictControllerOptions {
   layoutMode: LayoutMode;
   treeDirection?: NodeMapState["treeDirection"];
   layoutSpacing?: NodeMapState["layoutSpacing"];
+  layoutStyle?: NodeMapState["layoutStyle"];
+  branchLayouts?: NodeMapState["branchLayouts"];
   relations?: NodeMapState["relations"];
   groups?: NodeMapState["groups"];
   mapName: string;
@@ -55,6 +57,8 @@ export function useMapConflictController({
   layoutMode,
   treeDirection,
   layoutSpacing,
+  layoutStyle,
+  branchLayouts,
   relations,
   groups,
   mapName,
@@ -122,7 +126,14 @@ export function useMapConflictController({
     const currentSnapshotJson = serializeMapDocument(createMapDocument(
       nodes,
       layoutMode,
-      mapDocumentOptionsFromState({ treeDirection, layoutSpacing, relations, groups }),
+      mapDocumentOptionsFromState({
+        treeDirection,
+        layoutSpacing,
+        layoutStyle,
+        branchLayouts,
+        relations,
+        groups,
+      }),
     ));
     const result = onSaveCurrentAsNewMap(copyName, currentSnapshotJson);
     if (result.ok) {
@@ -130,7 +141,18 @@ export function useMapConflictController({
     } else {
       setConflictActionNotice(result.notice);
     }
-  }, [mapName, nodes, layoutMode, treeDirection, layoutSpacing, relations, groups, onSaveCurrentAsNewMap]);
+  }, [
+    mapName,
+    nodes,
+    layoutMode,
+    treeDirection,
+    layoutSpacing,
+    layoutStyle,
+    branchLayouts,
+    relations,
+    groups,
+    onSaveCurrentAsNewMap,
+  ]);
 
   const handleCancelConfirm = useCallback(() => {
     setIsConfirmOpen(false);

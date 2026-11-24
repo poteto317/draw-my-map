@@ -1,16 +1,21 @@
 import { useCallback } from "react";
 import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
 import { layoutNodeForest } from "@/domain/nodes/nodeAutoLayout";
+import { planBranchLayoutUpdate } from "@/domain/nodes/planBranchLayoutUpdate";
 import {
+  layoutContextFromState,
   resolveLayoutNodeForestOptions,
   type NodeMapLayoutContext,
-} from "@/domain/nodes/resolveLayoutSpacing";
+} from "@/domain/nodes/nodeMapLayoutContext";
 import {
   areLayoutSpacingEqual,
   clampLayoutSpacing,
   projectMapDocumentLayoutSpacing,
 } from "@/domain/persistence/mapDocumentLayoutSpacing";
+import { commitLayoutFieldUpdate } from "@/hooks/commitLayoutFieldUpdate";
 import { useMapHistory } from "@/hooks/useMapHistory";
+import type { BranchLayoutDirection } from "@/types/branchLayout";
+import { projectLayoutStyle, type LayoutStyle } from "@/types/layoutStyle";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 import type { NodeMapState } from "@/types/nodeMapState";
@@ -24,6 +29,8 @@ type UseNodeLayoutStateReturn = {
   layoutMode: NodeLayoutMode;
   treeDirection: NodeMapState["treeDirection"];
   layoutSpacing: NodeMapState["layoutSpacing"];
+  layoutStyle: NodeMapState["layoutStyle"];
+  branchLayouts: NodeMapState["branchLayouts"];
   relations: NodeMapState["relations"];
   groups: NodeMapState["groups"];
   canUndo: boolean;
@@ -34,12 +41,23 @@ type UseNodeLayoutStateReturn = {
   // 配置モードに依存しない非構造の変更。グループ中は表示上の現在値だけを更新し、グループ外では1操作として確定する
   applyNonStructuralPreview: (update: NodeChange) => boolean;
   applyManualMove: (update: NodeChange) => boolean;
+  // auto 中のピン座標ドラッグ用（子孫非追従）。preview 経路
+  applyPinnedCoordinateMove: (update: NodeChange) => boolean;
+  // ピンドラッグ終了時の再配置（グループ内 preview）
+  relayoutAfterPinnedMove: () => boolean;
   applyTreeChange: (update: TreeChange) => boolean;
   // ノード以外（relations/groups）も含む1操作の文書変更
   applyStateChange: (update: StateChange) => boolean;
   setLayoutMode: (mode: NodeLayoutMode) => void;
   setTreeDirection: (direction: TreeDirection) => void;
   setLayoutSpacing: (spacing: LayoutSpacing) => void;
+  // auto なら即リレイアウト 1 Undo。manual は様式のみ（UI は disabled）
+  setLayoutStyle: (style: LayoutStyle) => void;
+  // null＝エントリ削除。auto+orthogonal なら即リレイアウト。manual/radial は配列のみ
+  setBranchLayout: (
+    nodeId: number,
+    direction: BranchLayoutDirection | null,
+  ) => { ok: true } | { ok: false; reason: "locked" | "node-missing" | "invalid" | "placement-failed" };
   replaceLayoutState: (state: NodeMapState) => void;
   undo: () => boolean;
   redo: () => boolean;
@@ -129,10 +147,7 @@ export function useNodeLayoutState(): UseNodeLayoutStateReturn {
 
   const applyTreeChange = useCallback((update: TreeChange): boolean => {
     const current = getPresent();
-    const layoutContext: NodeMapLayoutContext = {
-      treeDirection: current.treeDirection,
-      layoutSpacing: current.layoutSpacing,
-    };
+    const layoutContext = layoutContextFromState(current);
     const candidateNodes = update(current.nodes, current.layoutMode, layoutContext);
     if (!candidateNodes) return false;
 
@@ -148,14 +163,12 @@ export function useNodeLayoutState(): UseNodeLayoutStateReturn {
 
   const applyStateChange = useCallback((update: StateChange): boolean => {
     const current = getPresent();
-    const layoutContext: NodeMapLayoutContext = {
-      treeDirection: current.treeDirection,
-      layoutSpacing: current.layoutSpacing,
-    };
+    const layoutContext = layoutContextFromState(current);
     const candidate = update(current, layoutContext);
     if (!candidate) return false;
 
-    const layoutOptions = resolveLayoutNodeForestOptions(layoutContext);
+    // 候補 state の layout 設定を使う（様式・枝方向の即時再配置のため）
+    const layoutOptions = resolveLayoutNodeForestOptions(layoutContextFromState(candidate));
     const nextNodes = current.layoutMode === "auto"
       ? layoutNodeForest(candidate.nodes, layoutOptions)
       : candidate.nodes;
@@ -169,7 +182,7 @@ export function useNodeLayoutState(): UseNodeLayoutStateReturn {
     const current = getPresent();
     if (mode === current.layoutMode) return;
 
-    const layoutOptions = resolveLayoutNodeForestOptions(current);
+    const layoutOptions = resolveLayoutNodeForestOptions(layoutContextFromState(current));
     const nextNodes = mode === "auto" ? layoutNodeForest(current.nodes, layoutOptions) : current.nodes;
     if (!nextNodes) return;
 
@@ -181,21 +194,8 @@ export function useNodeLayoutState(): UseNodeLayoutStateReturn {
     const currentDirection = current.treeDirection ?? "lr";
     if (currentDirection === direction) return;
 
-    const layoutContext: NodeMapLayoutContext = {
-      treeDirection: projectTreeDirection(direction) ?? "lr",
-      layoutSpacing: current.layoutSpacing,
-    };
-    const layoutOptions = resolveLayoutNodeForestOptions(layoutContext);
-    const nextNodes = current.layoutMode === "auto"
-      ? layoutNodeForest(current.nodes, layoutOptions)
-      : current.nodes;
-    if (current.layoutMode === "auto" && !nextNodes) return;
-
-    commit({
-      ...current,
-      treeDirection: projectTreeDirection(direction),
-      nodes: nextNodes ?? current.nodes,
-    });
+    const projected = projectTreeDirection(direction);
+    commitLayoutFieldUpdate(current, { treeDirection: projected }, commit);
   }, [getPresent, commit]);
 
   const setLayoutSpacing = useCallback((spacing: LayoutSpacing) => {
@@ -204,27 +204,62 @@ export function useNodeLayoutState(): UseNodeLayoutStateReturn {
     if (areLayoutSpacingEqual(current.layoutSpacing, nextSpacing)) return;
 
     const projected = projectLayoutSpacing(nextSpacing);
-    const layoutOptions = resolveLayoutNodeForestOptions({
-      treeDirection: current.treeDirection,
-      layoutSpacing: projected,
-    });
-    const nextNodes = current.layoutMode === "auto"
-      ? layoutNodeForest(current.nodes, layoutOptions)
-      : current.nodes;
-    if (current.layoutMode === "auto" && !nextNodes) return;
-
-    commit({
-      ...current,
-      layoutSpacing: projected,
-      nodes: nextNodes ?? current.nodes,
-    });
+    commitLayoutFieldUpdate(current, { layoutSpacing: projected }, commit);
   }, [getPresent, commit]);
+
+  const setLayoutStyle = useCallback((style: LayoutStyle) => {
+    const current = getPresent();
+    const currentStyle = current.layoutStyle ?? "orthogonal";
+    if (currentStyle === style) return;
+
+    const projected = projectLayoutStyle(style).layoutStyle;
+    commitLayoutFieldUpdate(current, { layoutStyle: projected }, commit);
+  }, [getPresent, commit]);
+
+  const setBranchLayout = useCallback((
+    nodeId: number,
+    direction: BranchLayoutDirection | null,
+  ) => {
+    const current = getPresent();
+    const planned = planBranchLayoutUpdate(current, nodeId, direction);
+    if (!planned.ok) {
+      if (planned.reason === "unchanged") return { ok: true } as const;
+      if (planned.reason === "locked" || planned.reason === "node-missing") {
+        return { ok: false, reason: planned.reason } as const;
+      }
+      return { ok: false, reason: "placement-failed" } as const;
+    }
+    commit(planned.state);
+    return { ok: true } as const;
+  }, [getPresent, commit]);
+
+  // auto 中のピンドラッグ用。グループ中は preview、グループ外は1操作。layoutMode に依らず受理
+  const applyPinnedCoordinateMove = useCallback((update: NodeChange): boolean => {
+    const current = getPresent();
+    const nextNodes = update(current.nodes);
+    if (!nextNodes) return false;
+    preview(withUpdatedNodes(current, nextNodes));
+    return true;
+  }, [getPresent, preview]);
+
+  // ピンドラッグ終了時: 現在座標のまま他ノードを再配置して preview（グループ内なら1 Undo に載る）
+  const relayoutAfterPinnedMove = useCallback((): boolean => {
+    const current = getPresent();
+    if (current.layoutMode !== "auto") return false;
+    const layoutOptions = resolveLayoutNodeForestOptions(layoutContextFromState(current));
+    const nextNodes = layoutNodeForest(current.nodes, layoutOptions);
+    if (!nextNodes) return false;
+    preview(withUpdatedNodes(current, nextNodes));
+    return true;
+  }, [getPresent, preview]);
 
   return {
     nodes: present.nodes,
     layoutMode: present.layoutMode,
     treeDirection: present.treeDirection,
     layoutSpacing: present.layoutSpacing,
+    layoutStyle: present.layoutStyle,
+    branchLayouts: present.branchLayouts,
     relations: present.relations,
     groups: present.groups,
     canUndo,
@@ -233,11 +268,15 @@ export function useNodeLayoutState(): UseNodeLayoutStateReturn {
     applyNonStructuralChange,
     applyNonStructuralPreview,
     applyManualMove,
+    applyPinnedCoordinateMove,
+    relayoutAfterPinnedMove,
     applyTreeChange,
     applyStateChange,
     setLayoutMode,
     setTreeDirection,
     setLayoutSpacing,
+    setLayoutStyle,
+    setBranchLayout,
     replaceLayoutState,
     undo,
     redo,

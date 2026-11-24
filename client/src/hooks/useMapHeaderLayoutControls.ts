@@ -4,6 +4,11 @@ import { useCallback, useMemo } from "react";
 import type { MapHeaderLayoutControlsProps } from "@/components/layout/MapHeaderLayoutControls";
 import type { EditorViewMode } from "@/components/layout/EditorViewModeControl";
 import {
+  resolveLayoutSpacingHeaderControl,
+  resolveLayoutStyleHeaderControl,
+  resolveTreeDirectionHeaderControl,
+} from "@/domain/map/mapLayoutStyleAvailability";
+import {
   resolveLabelBold,
   resolveLabelFontSize,
   resolveLabelUnderline,
@@ -12,6 +17,8 @@ import type { LayoutSnapPrefs } from "@/domain/nodes/snapGrid";
 import { useLayoutSnapPrefs } from "@/hooks/useLayoutSnapPrefs";
 import { useSelectionLayoutActions } from "@/hooks/useSelectionLayoutActions";
 import type { LabelFontSize } from "@/types/labelFontSize";
+import type { LayoutStyle } from "@/types/layoutStyle";
+import type { MapCanvasSelection } from "@/types/mapCanvasSelection";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 import type { NodeMapState } from "@/types/nodeMapState";
@@ -21,13 +28,18 @@ import type { TreeDirection } from "@/types/treeDirection";
 type UseMapHeaderLayoutControlsArgs = {
   viewMode: EditorViewMode;
   isProtectedMode: boolean;
+  hasConflict?: boolean;
+  isExternallyDeleted?: boolean;
+  canvasSelection?: MapCanvasSelection;
   nodes: readonly Node[];
   layoutMode: NodeLayoutMode;
+  layoutStyle: NodeMapState["layoutStyle"];
   treeDirection: NodeMapState["treeDirection"];
   layoutSpacing: NodeMapState["layoutSpacing"];
   selectedNodeId: number | null;
   selectedNodeIds: readonly number[];
   selectedNodeLocked: boolean;
+  setLayoutStyle: (style: LayoutStyle) => void;
   setTreeDirection: (direction: TreeDirection) => void;
   setLayoutSpacing: (spacing: LayoutSpacing) => void;
   commitManualNodes: (nextNodes: Node[]) => boolean;
@@ -47,13 +59,18 @@ type UseMapHeaderLayoutControlsReturn = {
 export function useMapHeaderLayoutControls({
   viewMode,
   isProtectedMode,
+  hasConflict = false,
+  isExternallyDeleted = false,
+  canvasSelection,
   nodes,
   layoutMode,
+  layoutStyle,
   treeDirection,
   layoutSpacing,
   selectedNodeId,
   selectedNodeIds,
   selectedNodeLocked,
+  setLayoutStyle,
   setTreeDirection,
   setLayoutSpacing,
   commitManualNodes,
@@ -119,14 +136,35 @@ export function useMapHeaderLayoutControls({
   }, [selectedNodeId, toggleLabelUnderline]);
 
   const headerLayoutControls = useMemo((): MapHeaderLayoutControlsProps | null => {
-    if (viewMode !== "map") return null;
+    const guardInput = {
+      viewMode,
+      isProtectedMode,
+      hasConflict,
+      isExternallyDeleted,
+      canvasSelection,
+      layoutMode,
+      layoutStyle,
+    };
+    // visible の正本は domain（viewMode !== "map" は baseHeaderState が担う）
+    const styleHeader = resolveLayoutStyleHeaderControl(guardInput);
+    if (!styleHeader.visible) return null;
+
+    const treeHeader = resolveTreeDirectionHeaderControl(guardInput);
+    const spacingHeader = resolveLayoutSpacingHeaderControl(guardInput);
+
     return {
       layoutMode,
+      layoutStyle,
       treeDirection,
       layoutSpacing,
+      layoutStyleDisabled: styleHeader.disabled,
+      treeDirectionDisabled: treeHeader.disabled,
+      treeDirectionDisabledReason: treeHeader.disabledReason,
+      layoutSpacingDisabled: spacingHeader.disabled,
       selectionActiveForSpacing: selectedNodeId !== null,
       selectionLayoutActive,
       selectionLayoutDisabled: !selectionLayoutActions.canUse,
+      onLayoutStyleChange: setLayoutStyle,
       onTreeDirectionChange: setTreeDirection,
       onLayoutSpacingChange: setLayoutSpacing,
       onAlign: selectionLayoutActions.align,
@@ -151,7 +189,12 @@ export function useMapHeaderLayoutControls({
     };
   }, [
     viewMode,
+    isProtectedMode,
+    hasConflict,
+    isExternallyDeleted,
+    canvasSelection,
     layoutMode,
+    layoutStyle,
     treeDirection,
     layoutSpacing,
     selectedNodeId,
@@ -173,6 +216,7 @@ export function useMapHeaderLayoutControls({
     onLabelFontSizeChange,
     onToggleLabelBold,
     onToggleLabelUnderline,
+    setLayoutStyle,
     setTreeDirection,
     setLayoutSpacing,
   ]);
