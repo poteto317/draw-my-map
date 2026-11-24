@@ -96,6 +96,33 @@ describe("encodeOpml / decodeOpml", () => {
     });
   });
 
+  it("一次元に深い outline ネストでもスタック溢出せず decode する", () => {
+    const depth = 5_000;
+    let nested = "";
+    for (let index = 0; index < depth; index += 1) {
+      nested = `<outline text="L${index}">${nested}</outline>`;
+    }
+    const xml = `<?xml version="1.0" encoding="UTF-8"?><opml><body>${nested}</body></opml>`;
+    const decoded = decodeOpml(xml);
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) return;
+    expect(decoded.items).toHaveLength(depth);
+    expect(decoded.items[0]).toEqual({ label: `L${depth - 1}`, parentIndex: null });
+    expect(decoded.items[depth - 1]).toEqual({ label: "L0", parentIndex: depth - 2 });
+  });
+
+  it("一次元に深いノード列でも encode してスタック溢出しない", () => {
+    const depth = 5_000;
+    const nodes = Array.from({ length: depth }, (_, index) =>
+      node(index + 1, index === 0 ? null : index, { label: `N${index}` }),
+    );
+    expect(() => encodeOpml(nodes)).not.toThrow();
+    const decoded = decodeOpml(encodeOpml(nodes));
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) return;
+    expect(decoded.items).toHaveLength(depth);
+  });
+
   it("decode 結果にファイル id 相当のフィールドが無い", () => {
     const decoded = decodeOpml(`<?xml version="1.0" encoding="UTF-8"?>
 <opml version="2.0"><body><outline text="X"/></body></opml>`);

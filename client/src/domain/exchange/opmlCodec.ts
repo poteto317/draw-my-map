@@ -18,17 +18,41 @@ function escapeXmlAttribute(value: string): string {
     .replaceAll('"', "&quot;");
 }
 
-function outlineXml(node: Node, nodes: readonly Node[]): string {
-  const attrs = [`text="${escapeXmlAttribute(node.label)}"`];
-  if (node.note) attrs.push(`_note="${escapeXmlAttribute(node.note)}"`);
-  const childXml = sortedChildNodes(node.id, nodes).map((child) => outlineXml(child, nodes)).join("");
-  if (childXml) return `<outline ${attrs.join(" ")}>${childXml}</outline>`;
-  return `<outline ${attrs.join(" ")}/>`;
+function buildOutlineXml(roots: readonly Node[], nodes: readonly Node[]): string {
+  const chunks: string[] = [];
+  type Frame =
+    | { kind: "enter"; node: Node }
+    | { kind: "close" };
+  const stack: Frame[] = [];
+  for (let index = roots.length - 1; index >= 0; index -= 1) {
+    stack.push({ kind: "enter", node: roots[index]! });
+  }
+  while (stack.length > 0) {
+    const frame = stack.pop()!;
+    if (frame.kind === "close") {
+      chunks.push("</outline>");
+      continue;
+    }
+    const { node } = frame;
+    const attrs = [`text="${escapeXmlAttribute(node.label)}"`];
+    if (node.note) attrs.push(`_note="${escapeXmlAttribute(node.note)}"`);
+    const children = sortedChildNodes(node.id, nodes);
+    if (children.length === 0) {
+      chunks.push(`<outline ${attrs.join(" ")}/>`);
+      continue;
+    }
+    chunks.push(`<outline ${attrs.join(" ")}>`);
+    stack.push({ kind: "close" });
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      stack.push({ kind: "enter", node: children[index]! });
+    }
+  }
+  return chunks.join("");
 }
 
 export function encodeOpml(closedNodes: readonly Node[]): string {
   const roots = forestRootNodes(closedNodes);
-  const body = roots.map((root) => outlineXml(root, closedNodes)).join("");
+  const body = buildOutlineXml(roots, closedNodes);
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<opml version="2.0">',
@@ -55,16 +79,30 @@ function outlineLabel(outline: Element): string {
   return text ?? "";
 }
 
-function walkOutline(outline: Element, parentIndex: number | null, items: ForestItem[]): void {
-  const label = outlineLabel(outline);
-  const note = outlineNote(outline);
-  const item: ForestItem = { label, parentIndex };
-  if (note !== undefined) item.note = note;
-  const index = items.length;
-  items.push(item);
-  for (const child of outline.querySelectorAll(":scope > outline")) {
-    walkOutline(child, index, items);
+function collectOutlineItems(body: Element): ForestItem[] {
+  const items: ForestItem[] = [];
+  const roots = body.querySelectorAll(":scope > outline");
+  type Frame = { element: Element; parentIndex: number | null };
+  const stack: Frame[] = [];
+  const rootList = Array.from(roots);
+  for (let index = rootList.length - 1; index >= 0; index -= 1) {
+    stack.push({ element: rootList[index]!, parentIndex: null });
   }
+  while (stack.length > 0) {
+    const { element, parentIndex } = stack.pop()!;
+    const label = outlineLabel(element);
+    const note = outlineNote(element);
+    const item: ForestItem = { label, parentIndex };
+    if (note !== undefined) item.note = note;
+    const itemIndex = items.length;
+    items.push(item);
+    const children = element.querySelectorAll(":scope > outline");
+    const childList = Array.from(children);
+    for (let index = childList.length - 1; index >= 0; index -= 1) {
+      stack.push({ element: childList[index]!, parentIndex: itemIndex });
+    }
+  }
+  return items;
 }
 
 export function decodeOpml(xml: string): OpmlDecodeResult {
@@ -79,10 +117,7 @@ export function decodeOpml(xml: string): OpmlDecodeResult {
   const body = opml?.querySelector("body");
   if (!body) return { ok: false, reason: "missing-body" };
 
-  const items: ForestItem[] = [];
-  for (const outline of body.querySelectorAll(":scope > outline")) {
-    walkOutline(outline, null, items);
-  }
+  const items = collectOutlineItems(body);
   if (items.length === 0) return { ok: false, reason: "empty" };
 
   return { ok: true, items };
