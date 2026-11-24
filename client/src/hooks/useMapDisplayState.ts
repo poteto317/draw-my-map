@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { collectDisplayVisibleNodeIds } from "@/domain/nodes/mapDisplayVisibility";
 import type { LayoutNodeForestOptions } from "@/domain/nodes/nodeAutoLayout";
 import { projectCollapsedLayout } from "@/domain/nodes/nodeCollapseLayout";
-import { resolveLayoutNodeForestOptions } from "@/domain/nodes/resolveLayoutSpacing";
+import { resolveLayoutNodeForestOptions } from "@/domain/nodes/nodeMapLayoutContext";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 import type { NodeMapState } from "@/types/nodeMapState";
@@ -13,6 +13,8 @@ type UseMapDisplayStateOptions = {
   layoutMode: NodeLayoutMode;
   treeDirection?: NodeMapState["treeDirection"];
   layoutSpacing?: NodeMapState["layoutSpacing"];
+  layoutStyle?: NodeMapState["layoutStyle"];
+  branchLayouts?: NodeMapState["branchLayouts"];
   collapseVisibleNodeIds: ReadonlySet<number>;
   resolutionVisibleNodeIds: ReadonlySet<number>;
   depthVisibleNodeIds: ReadonlySet<number>;
@@ -32,6 +34,8 @@ export function useMapDisplayState({
   layoutMode,
   treeDirection,
   layoutSpacing,
+  layoutStyle,
+  branchLayouts,
   collapseVisibleNodeIds,
   resolutionVisibleNodeIds,
   depthVisibleNodeIds,
@@ -39,8 +43,13 @@ export function useMapDisplayState({
   focusRootId,
 }: UseMapDisplayStateOptions): MapDisplayState {
   const layoutOptions = useMemo((): LayoutNodeForestOptions => (
-  resolveLayoutNodeForestOptions({ treeDirection, layoutSpacing })
-    ), [layoutSpacing, treeDirection]);
+    resolveLayoutNodeForestOptions({
+      treeDirection,
+      layoutSpacing,
+      layoutStyle,
+      branchLayouts,
+    })
+  ), [branchLayouts, layoutSpacing, layoutStyle, treeDirection]);
 
   const projection = useMemo(
     () => projectCollapsedLayout(nodes, layoutMode, collapseVisibleNodeIds, layoutOptions),

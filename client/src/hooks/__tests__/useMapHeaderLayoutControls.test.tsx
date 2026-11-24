@@ -14,11 +14,13 @@ function baseArgs(
     isProtectedMode: false,
     nodes: [node],
     layoutMode: "manual",
+    layoutStyle: undefined,
     treeDirection: "lr",
     layoutSpacing: { childGap: 100, siblingGap: 32 },
     selectedNodeId: 1,
     selectedNodeIds: [1],
     selectedNodeLocked: false,
+    setLayoutStyle: noop,
     setTreeDirection: noop,
     setLayoutSpacing: noop,
     commitManualNodes: noopBool,
@@ -73,5 +75,51 @@ describe("useMapHeaderLayoutControls labelTextStyleVisible", () => {
     );
 
     expect(result.current.headerLayoutControls?.labelTextStyleVisible).toBe(false);
+  });
+});
+
+describe("useMapHeaderLayoutControls layout style / direction / spacing disabled", () => {
+  it("manual では様式・方向・間隔が disabled", () => {
+    const { result } = renderHook(() =>
+      useMapHeaderLayoutControls(baseArgs({ layoutMode: "manual" })),
+    );
+    expect(result.current.headerLayoutControls).toMatchObject({
+      layoutStyleDisabled: true,
+      treeDirectionDisabled: true,
+      treeDirectionDisabledReason: "manual",
+      layoutSpacingDisabled: true,
+    });
+  });
+
+  it("radial 中は treeDirection のみ disabled、間隔は有効", () => {
+    const { result } = renderHook(() =>
+      useMapHeaderLayoutControls(baseArgs({
+        layoutMode: "auto",
+        layoutStyle: "radial",
+      })),
+    );
+    expect(result.current.headerLayoutControls).toMatchObject({
+      layoutStyleDisabled: false,
+      treeDirectionDisabled: true,
+      treeDirectionDisabledReason: "radial",
+      layoutSpacingDisabled: false,
+    });
+  });
+
+  it("アウトラインでは domain visible によりヘッダー controls が null", () => {
+    const { result } = renderHook(() =>
+      useMapHeaderLayoutControls(baseArgs({ viewMode: "outline" })),
+    );
+    expect(result.current.headerLayoutControls).toBeNull();
+  });
+
+  it("保護モードでは様式が disabled", () => {
+    const { result } = renderHook(() =>
+      useMapHeaderLayoutControls(baseArgs({
+        layoutMode: "auto",
+        isProtectedMode: true,
+      })),
+    );
+    expect(result.current.headerLayoutControls?.layoutStyleDisabled).toBe(true);
   });
 });

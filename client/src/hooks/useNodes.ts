@@ -36,6 +36,13 @@ import {
   pruneAfterRemovedNodeIds,
   rewriteAfterNodeMerge,
 } from "@/domain/map/relationGroupLifecycle";
+import {
+  appendBranchLayouts,
+  pruneBranchLayoutsAfterRemovedNodeIds,
+  remapClosedBranchLayouts,
+  rewriteBranchLayoutsAfterNodeMerge,
+} from "@/domain/map/branchLayoutLifecycle";
+import type { BranchLayoutDirection } from "@/types/branchLayout";
 import type { MapCanvasSelection } from "@/types/mapCanvasSelection";
 import type { MapRelation } from "@/types/mapRelation";
 import {
@@ -54,13 +61,18 @@ import {
   toggleNodeLock,
   unlockSubtree,
 } from "@/domain/nodes/nodeEditLock";
+import {
+  applySetNodeLayoutPinned,
+  movePinnedNodeCoordinate,
+  type SetNodeLayoutPinnedResult,
+} from "@/domain/nodes/nodeLayoutPinned";
 import { applyNodePositionUpdates } from "@/domain/nodes/selectionLayoutShared";
 import { applyManualPositionIfUnlocked } from "@/hooks/applyManualPositionIfUnlocked";
 import { deleteNodeOnly as computeNodeOnlyDeletion, type DeleteNodeOnlyResult } from "@/domain/nodes/nodeOnlyDeletion";
 import {
   resolveLayoutNodeForestOptions,
   resolveLayoutSpacing,
-} from "@/domain/nodes/resolveLayoutSpacing";
+} from "@/domain/nodes/nodeMapLayoutContext";
 import { applyStateChangeWithOutcome } from "@/hooks/stateChangeOutcome";
 import { applyTreeChangeWithOutcome } from "@/hooks/treeChangeOutcome";
 import { insertParentNode as computeParentInsertion, type InsertParentNodeResult } from "@/domain/nodes/nodeParentInsertion";
@@ -132,6 +144,7 @@ import type { NodeImportance } from "@/types/nodeImportance";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 import type { NodeMapState } from "@/types/nodeMapState";
 import type { LayoutSpacing } from "@/types/layoutSpacing";
+import type { LayoutStyle } from "@/types/layoutStyle";
 import type { TreeDirection } from "@/types/treeDirection";
 import {
   addMarquee,
@@ -170,6 +183,8 @@ type UseNodesReturn = {
   layoutMode: NodeLayoutMode;
   treeDirection: NodeMapState["treeDirection"];
   layoutSpacing: NodeMapState["layoutSpacing"];
+  layoutStyle: NodeMapState["layoutStyle"];
+  branchLayouts: NodeMapState["branchLayouts"];
   relations: NodeMapState["relations"];
   groups: NodeMapState["groups"];
   addNode: (x: number, y: number) => number;
@@ -300,6 +315,22 @@ type UseNodesReturn = {
   setLayoutMode: (mode: NodeLayoutMode) => void;
   setTreeDirection: (direction: TreeDirection) => void;
   setLayoutSpacing: (spacing: LayoutSpacing) => void;
+  // レイアウト様式。auto なら即リレイアウト 1 Undo。関連線／グループ選択中は拒否
+  setLayoutStyle: (style: LayoutStyle) => void;
+  // 位置固定の付与／解除。auto なら即リレイアウト（1 Undo）。locked は拒否
+  setNodeLayoutPinned: (
+    nodeId: number,
+    pinned: boolean,
+  ) => { ok: true } | { ok: false; reason: "locked" | "node-missing" | "invalid" | "placement-failed" };
+  // 枝方向の設定／null＝文書の既定に戻す。auto+orthogonal なら即リレイアウト。locked は拒否
+  setBranchLayout: (
+    nodeId: number,
+    direction: BranchLayoutDirection | null,
+  ) => { ok: true } | { ok: false; reason: "locked" | "node-missing" | "invalid" | "placement-failed" };
+  // auto+ピンの座標ドラッグ（当該ノードのみ）。子孫は追従しない
+  movePinnedNode: (id: number, x: number, y: number) => boolean;
+  // ピンドラッグ終了後の再配置（履歴グループ内）。成功時 true
+  finalizePinnedNodeMove: () => boolean;
   replaceMap: (state: NodeMapState) => void;
   // 成功したUndo／RedoとreplaceMapで増える。編集・ジェスチャー・生成結果の失効に使う
   documentRevision: number;
@@ -321,17 +352,23 @@ export function useNodes(): UseNodesReturn {
     layoutMode,
     treeDirection,
     layoutSpacing,
+    layoutStyle,
+    branchLayouts,
     relations,
     groups,
     getCurrentState,
     applyNonStructuralChange: applyNonStructuralChangeRaw,
     applyNonStructuralPreview: applyNonStructuralPreviewRaw,
     applyManualMove: applyManualMoveRaw,
+    applyPinnedCoordinateMove: applyPinnedCoordinateMoveRaw,
+    relayoutAfterPinnedMove: relayoutAfterPinnedMoveRaw,
     applyTreeChange: applyTreeChangeRaw,
     applyStateChange: applyStateChangeRaw,
     setLayoutMode,
-    setTreeDirection,
-    setLayoutSpacing,
+    setTreeDirection: setTreeDirectionRaw,
+    setLayoutSpacing: setLayoutSpacingRaw,
+    setLayoutStyle: setLayoutStyleRaw,
+    setBranchLayout: setBranchLayoutRaw,
     replaceLayoutState,
     canUndo,
     canRedo,
@@ -397,6 +434,11 @@ export function useNodes(): UseNodesReturn {
     if (isNodeOpBlocked()) return false;
     return applyNonStructuralPreviewRaw(update);
   }, [applyNonStructuralPreviewRaw, isNodeOpBlocked]);
+
+  const applyPinnedCoordinateMove: typeof applyPinnedCoordinateMoveRaw = useCallback((update) => {
+    if (isNodeOpBlocked()) return false;
+    return applyPinnedCoordinateMoveRaw(update);
+  }, [applyPinnedCoordinateMoveRaw, isNodeOpBlocked]);
 
   const replaceMap = useCallback((state: NodeMapState) => {
     nodeIdAllocator.reset();
@@ -658,6 +700,57 @@ export function useNodes(): UseNodesReturn {
     ));
   }, [applyManualMove]);
 
+  const setNodeLayoutPinned = useCallback((nodeId: number, pinned: boolean) => {
+    if (isNodeOpBlocked()) return { ok: false, reason: "invalid" } as const;
+    let rejectReason: Exclude<SetNodeLayoutPinnedResult, { ok: true }>["reason"] | null = null;
+    const applied = applyTreeChange((currentNodes) => {
+      const planned = applySetNodeLayoutPinned(currentNodes, nodeId, pinned);
+      if (!planned.ok) {
+        rejectReason = planned.reason;
+        return null;
+      }
+      return planned.nodes;
+    });
+    if (applied) return { ok: true } as const;
+    if (rejectReason === "unchanged") return { ok: true } as const;
+    if (rejectReason === "locked" || rejectReason === "node-missing") {
+      return { ok: false, reason: rejectReason } as const;
+    }
+    return { ok: false, reason: "placement-failed" } as const;
+  }, [applyTreeChange, isNodeOpBlocked]);
+
+  const setTreeDirection = useCallback((direction: TreeDirection) => {
+    if (isNodeOpBlocked()) return;
+    setTreeDirectionRaw(direction);
+  }, [isNodeOpBlocked, setTreeDirectionRaw]);
+
+  const setLayoutSpacing = useCallback((spacing: LayoutSpacing) => {
+    if (isNodeOpBlocked()) return;
+    setLayoutSpacingRaw(spacing);
+  }, [isNodeOpBlocked, setLayoutSpacingRaw]);
+
+  const setLayoutStyle = useCallback((style: LayoutStyle) => {
+    if (isNodeOpBlocked()) return;
+    setLayoutStyleRaw(style);
+  }, [isNodeOpBlocked, setLayoutStyleRaw]);
+
+  const setBranchLayout = useCallback((
+    nodeId: number,
+    direction: BranchLayoutDirection | null,
+  ) => {
+    if (isNodeOpBlocked()) return { ok: false, reason: "invalid" } as const;
+    return setBranchLayoutRaw(nodeId, direction);
+  }, [isNodeOpBlocked, setBranchLayoutRaw]);
+
+  const movePinnedNode = useCallback((id: number, x: number, y: number) => (
+    applyPinnedCoordinateMove((currentNodes) => movePinnedNodeCoordinate(currentNodes, id, x, y))
+  ), [applyPinnedCoordinateMove]);
+
+  const finalizePinnedNodeMove = useCallback(() => {
+    if (isNodeOpBlocked()) return false;
+    return relayoutAfterPinnedMoveRaw();
+  }, [isNodeOpBlocked, relayoutAfterPinnedMoveRaw]);
+
   const connectNodes = useCallback((parentId: number, childId: number) => {
     const applied = applyTreeChange((currentNodes) => (
       connectNodeTree(currentNodes, parentId, childId)
@@ -727,11 +820,16 @@ export function useNodes(): UseNodesReturn {
         (state, count) => nodeIdAllocator.nextAvailableEntityIds(state, count),
       );
       const merged = mergeRelationGroupSlices(current, remapped);
+      const remappedBranchLayouts = remapClosedBranchLayouts(
+        current.branchLayouts,
+        inserted.nodeIdMapping,
+      );
       return {
         ...current,
         nodes: inserted.nodes,
         relations: merged.relations,
         groups: merged.groups,
+        branchLayouts: appendBranchLayouts(current.branchLayouts, remappedBranchLayouts),
       };
     });
     if (!applied || insertedRootId === null) return null;
@@ -745,6 +843,7 @@ export function useNodes(): UseNodesReturn {
     return encodeSubtreeClipboard(state.nodes, sourceId, {
       relations: state.relations,
       groups: state.groups,
+      branchLayouts: state.branchLayouts,
     });
   }, [getCurrentState, isNodeOpBlocked]);
 
@@ -781,11 +880,16 @@ export function useNodes(): UseNodesReturn {
         (state, count) => nodeIdAllocator.nextAvailableEntityIds(state, count),
       );
       const merged = mergeRelationGroupSlices(current, remapped);
+      const remappedBranchLayouts = remapClosedBranchLayouts(
+        data.branchLayouts,
+        inserted.nodeIdMapping,
+      );
       return {
         ...current,
         nodes: inserted.nodes,
         relations: merged.relations,
         groups: merged.groups,
+        branchLayouts: appendBranchLayouts(current.branchLayouts, remappedBranchLayouts),
       };
     });
     if (!applied || insertedRootId === null) return null;
@@ -957,12 +1061,18 @@ export function useNodes(): UseNodesReturn {
         current.relations,
         current.groups,
       );
+      const rewrittenBranchLayouts = rewriteBranchLayoutsAfterNodeMerge(
+        merged.survivorId,
+        merged.absorbedIds,
+        current.branchLayouts,
+      );
       return {
         state: {
           ...current,
           nodes: merged.nodes,
           relations: rewritten.relations,
           groups: rewritten.groups,
+          branchLayouts: rewrittenBranchLayouts,
         },
         outcome: { ok: true, survivorId: merged.survivorId, absorbedCount: merged.absorbedIds.length },
       };
@@ -997,12 +1107,17 @@ export function useNodes(): UseNodesReturn {
       );
       if (!deleted.ok) return { state: null, outcome: deleted };
       const pruned = pruneAfterRemovedNodeIds(current.relations, current.groups, [deleted.deletedId]);
+      const prunedBranchLayouts = pruneBranchLayoutsAfterRemovedNodeIds(
+        current.branchLayouts,
+        [deleted.deletedId],
+      );
       return {
         state: {
           ...current,
           nodes: deleted.nodes,
           relations: pruned.relations,
           groups: pruned.groups,
+          branchLayouts: prunedBranchLayouts,
         },
         outcome: { ok: true, deletedId: deleted.deletedId },
       };
@@ -1022,11 +1137,16 @@ export function useNodes(): UseNodesReturn {
       if (!assertNodesEditable([...subtreeIds], current.nodes).ok) return null;
       const nextNodes = current.nodes.filter((node) => !subtreeIds.has(node.id));
       const pruned = pruneAfterRemovedNodeIds(current.relations, current.groups, [...subtreeIds]);
+      const prunedBranchLayouts = pruneBranchLayoutsAfterRemovedNodeIds(
+        current.branchLayouts,
+        [...subtreeIds],
+      );
       return {
         ...current,
         nodes: nextNodes,
         relations: pruned.relations,
         groups: pruned.groups,
+        branchLayouts: prunedBranchLayouts,
       };
     });
     if (!applied) return;
@@ -1045,6 +1165,8 @@ export function useNodes(): UseNodesReturn {
     layoutMode,
     treeDirection,
     layoutSpacing,
+    layoutStyle,
+    branchLayouts,
     relations,
     groups,
     addNode,
@@ -1108,6 +1230,11 @@ export function useNodes(): UseNodesReturn {
     setLayoutMode,
     setTreeDirection,
     setLayoutSpacing,
+    setLayoutStyle,
+    setNodeLayoutPinned,
+    setBranchLayout,
+    movePinnedNode,
+    finalizePinnedNodeMove,
     replaceMap,
     documentRevision,
     canUndo,

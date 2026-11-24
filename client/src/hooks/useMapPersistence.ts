@@ -26,6 +26,8 @@ export interface UseMapPersistenceOptions {
   layoutMode: NodeLayoutMode;
   treeDirection?: NodeMapState["treeDirection"];
   layoutSpacing?: NodeMapState["layoutSpacing"];
+  layoutStyle?: NodeMapState["layoutStyle"];
+  branchLayouts?: NodeMapState["branchLayouts"];
   relations?: NodeMapState["relations"];
   groups?: NodeMapState["groups"];
   replaceMap: (state: NodeMapState) => void;
@@ -61,6 +63,8 @@ export function useMapPersistence({
   layoutMode,
   treeDirection,
   layoutSpacing,
+  layoutStyle,
+  branchLayouts,
   relations,
   groups,
   replaceMap,
@@ -75,8 +79,15 @@ export function useMapPersistence({
 }: UseMapPersistenceOptions): UseMapPersistenceResult {
   const [notice, setNotice] = useState<OperationNotice | null>(null);
   const documentOptions = useMemo(
-    () => mapDocumentOptionsFromState({ treeDirection, layoutSpacing, relations, groups }),
-    [treeDirection, layoutSpacing, relations, groups],
+    () => mapDocumentOptionsFromState({
+      treeDirection,
+      layoutSpacing,
+      layoutStyle,
+      branchLayouts,
+      relations,
+      groups,
+    }),
+    [treeDirection, layoutSpacing, layoutStyle, branchLayouts, relations, groups],
   );
   const currentSnapshot = useMemo(
     () => serializeMapDocument(createMapDocument(nodes, layoutMode, documentOptions)),
@@ -103,6 +114,8 @@ export function useMapPersistence({
     layoutMode,
     treeDirection,
     layoutSpacing,
+    layoutStyle,
+    branchLayouts,
     relations,
     groups,
     mapName,
