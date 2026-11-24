@@ -23,6 +23,7 @@
 15. [枝の別マップ化とマップアーカイブのクライアントAPI](#15-枝の別マップ化とマップアーカイブのクライアントapi)
 16. [関連線・グループ枠のクライアントAPI](#16-関連線グループ枠のクライアントapi)
 17. [自動配置の拡張のクライアントAPI](#17-自動配置の拡張のクライアントapi)
+18. [OPML・CSV/TSV 交換のクライアントAPI](#18-opmlcsvtsv-交換のクライアントapi)
 
 ---
 
@@ -906,3 +907,64 @@ finalizePinnedNodeMove: () => boolean;
 - コンテキスト: `NodeContextMenu.tsx`（「この枝の配置方向」「位置を固定」「固定を解除」）。
 - 詳細パネル: `NodeDetailPanel.tsx`（ピン付与／解除）。
 - ピンドラッグ: `stageInteractions.ts` / `MapStage.tsx`（auto+ピンは座標移動、ドロップ後 `finalizePinnedNodeMove`）。
+
+## 18. OPML・CSV/TSV 交換のクライアントAPI
+
+Phase 30（候補068・069）。HTTP エンドポイントと MapDocument V3 のスキーマは追加しません。操作入口のガード正本は inventory（`docs/superpowers/specs/2026-11-24-phase30-opml-csv-exchange-inventory.md`）。
+
+### 18.1 Codec（`domain/exchange/`）
+
+```typescript
+// opmlCodec.ts
+export function encodeOpml(closedNodes: readonly Node[]): string;
+export function decodeOpml(xml: string): OpmlDecodeResult;
+
+// csvTsvCodec.ts
+export function encodeCsv(nodes: readonly Node[], delimiter: "," | "\t"): string;
+export function decodeCsv(text: string, delimiter: string): CsvDecodeResult;
+```
+
+- `decodeOpml` / `decodeCsv` の成功時は `ForestItem[]`（`parentIndex` のみ。ファイル内 id は載せない）を返し、失敗時はマップを変えません。
+- `parseExchangeContent` がファイル名から既定区切りを決め、プレビュー用に `buildExchangePreview`（`outlinePreview` 再利用）を呼びます。
+
+### 18.2 書き出し対象（`domain/exportScope/`）
+
+```typescript
+export function closeExportSubtree(
+  allNodes: readonly Node[],
+  targetIds: ReadonlySet<number>,
+): readonly Node[];
+
+export function resolveExchangeExportNodes(
+  scope: ExportScope,
+  allNodes: readonly Node[],
+  visibleNodeIds: ReadonlySet<number>,
+  selectionTargetIds: readonly number[],
+): readonly Node[];
+```
+
+- `resolveExportFormatControls`（`exportFormatAvailability.ts`）で `opml` / `csv` / `tsv` は全 `ExportScope` で有効です。
+- `MapEditor` は `resolveExchangeExportNodes` の結果を `useExchangeExport` に渡し、`downloadExchangeText`（`services/exchange/exchangeTextDownload.ts`）でダウンロードします。
+
+### 18.3 `useExchangeImport` / `useExchangeExport`
+
+```typescript
+// useExchangeImport.ts（抜粋）
+open(entry: "opml" | "csv-tsv"): void;
+setFile(fileName: string, text: string): void;
+setDelimiter(delimiter: "," | "\t"): void;
+submit(): void; // insertForest(items, target)
+
+// useExchangeExport.ts
+exportOpml(): void;
+exportCsv(): void;
+exportTsv(): void;
+```
+
+- `insertForest` は箇条書き取り込みと同じ `useNodes` 経路です。`ForestItem` の任意項目 `importance`・`note`・`tags` は Phase 30 で `insertNodeForest` が新規ノードへ載せます（[data-model.md](./data-model.md) の `ForestItem`）。
+- `MapEditor` は `exchangeImport.screen === "closed"` を `editorShortcutsEnabled` に積み、ダイアログ中は根 `inert` とショートカット停止を OutlineImport と同型にします。
+
+### 18.4 UI 連携
+
+- 取込: `ExchangeImportControl.tsx` → `ExchangeImportDialog.tsx`（`ExchangeImportInputScreen` / `ExchangeImportPreviewScreen`）。
+- 書出: `ExchangeExportControls.tsx`（`ExportScopeControl` と同列。`resolveExportFormatControls` に従う disabled）。

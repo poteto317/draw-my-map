@@ -472,7 +472,7 @@ export type RasterizePng = (
 
 ### 2.6 箇条書きからの追加の型
 
-箇条書きからの追加（Phase 13。[features.md の 13 章](./features.md#13-箇条書きからの追加)）の解析と挿入で受け渡す型です。いずれもメモリ上だけで使い、保存形式（V3）・JSON・`localStorage`・編集履歴には現れません。追加したノードは通常の `Node`（重要度 `"medium"`、イラスト無し、幅100・高さ60）として保存されます。
+箇条書きからの追加（Phase 13。[features.md の 13 章](./features.md#13-箇条書きからの追加)）および OPML／CSV 取り込み（Phase 30）の解析と挿入で受け渡す型です。いずれもメモリ上だけで使い、保存形式（V3）・JSON・`localStorage`・編集履歴には現れません。箇条書きから追加したノードは通常の `Node`（重要度 `"medium"`、イラスト無し、幅100・高さ60）として保存されます。OPML／CSV 取り込みでは `ForestItem` の任意属性（`importance` / `note` / `tags`）を載せることができます。
 
 #### `OutlineItem` / `OutlineWarning` / `ParsedOutline` / `OutlineParseError` / `OutlineParseResult` (`client/src/domain/outline/outlineParser.ts`)
 `parseOutlineText(text: string): OutlineParseResult` の結果の型です。成功と失敗を判別共用体で返し、呼び出し元（`useOutlineImport`）は成功したときだけプレビューへ進みます。
@@ -516,22 +516,33 @@ export type OutlineParseResult =
 - `items` は先行順で、親は常に自分より前にあります。プレビュー用の木（`buildOutlinePreview`、`client/src/domain/outline/outlinePreview.ts`）は、この並びの先頭の最大200件から作ります。
 
 #### `ForestItem` / `ForestInsertionTarget` / `ForestInsertionResult` (`client/src/domain/nodes/nodeForestInsertion.ts`)
-`insertNodeForest(current, items, target, mode, allocateIds): ForestInsertionResult` の引数と結果の型です。`domain/nodes` は `domain/outline` を参照せず、`OutlineItem` は `ForestItem` の形を満たすので、`useOutlineImport` が `ParsedOutline.items` をそのまま渡します。
+`insertNodeForest(current, items, target, mode, allocateIds): ForestInsertionResult` の引数と結果の型です。`domain/nodes` は `domain/outline` を参照せず、`OutlineItem` は `ForestItem` の形を満たすので、`useOutlineImport` が `ParsedOutline.items` をそのまま渡します。OPML／CSV 取り込みでは `decodeOpml` / `decodeCsv` の結果を `useExchangeImport` が `ForestItem[]` として同じ API に渡します。
 
 ```typescript
-export type ForestItem = { label: string; parentIndex: number | null }; // parentIndex は自分より前の添字
+export type ForestItem = {
+  label: string;
+  parentIndex: number | null; // parentIndex は自分より前の添字
+  importance?: NodeImportance;
+  note?: string;
+  tags?: readonly string[];
+};
 
 export type ForestInsertionTarget =
   | { kind: "root" }
   | { kind: "child"; parentId: number };
 
-export type ForestInsertionFailureReason = "parent-missing" | "invalid-items" | "placement-failed";
+export type ForestInsertionFailureReason =
+  | "parent-missing"
+  | "invalid-items"
+  | "placement-failed"
+  | "locked";
 
 export type ForestInsertionResult =
   | { ok: true; nodes: Node[]; rootIds: number[] } // rootIds は深さ0の項目の新しい ID（入力の順）
   | { ok: false; reason: ForestInsertionFailureReason };
 ```
-- 成功時の `nodes` は、`current` を変えずに、その後ろへ `items` の順で新しいノードを足した配列です。ID は検査（項目の形、親の存在、座標）をすべて済ませた後に `allocateIds` を1回だけ呼んで採番します。
+- `importance`・`note`・`tags` は Phase 30（OPML／CSV 取り込み）で任意に載せます。箇条書き取り込みは従来どおり `label` と `parentIndex` だけを渡せば振る舞いは不変です（欠落時は既定の `medium`・属性なし）。
+- 成功時の `nodes` は、`current` を変えずに、その後ろへ `items` の順で新しいノードを足した配列です。ID は検査（項目の形、親の存在、座標）をすべて済ませた後に `allocateIds` を1回だけ呼んで採番します。子として追加する際、親が `locked` のときは `locked` で失敗します。
 - `useNodes.insertForest(items, target)` は、これを `applyTreeChange` の1回の commit の中で呼び、`InsertForestResult`（`{ ok: true; rootId: number; count: number } | { ok: false; reason: ForestInsertionFailureReason }`。`client/src/hooks/useNodes.ts`）を返します。自動配置での全体の再配置に失敗したときは `placement-failed` です。
 
 ### 2.7 兄弟ノードの順序変更の型

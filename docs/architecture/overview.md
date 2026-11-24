@@ -10,7 +10,7 @@ Draw My Map のシステム全体アーキテクチャ、レイヤード設計�
 
 Draw My Map は、思考の整理・アイデア発想を直感的に支援する**ブラウザ完結型シングルページ・マインドマップアプリケーション**（SPA）です。
 
-- **ローカルファースト & クライアント完結**: マップデータ（ノードツリー、配置座標、重要度、レイアウトモード）はすべてブラウザ上の React 状態および `localStorage` で安全に保持・管理され（Phase 12 から、名前を付けた複数のマップを一覧のインデックスとマップごとの本体に分けて保存）、外部データベースへの認証や接続なしにオフラインでも動作します。JSON ファイルとしてのエクスポート/インポート、SVG/PNG 形式の画像書き出しもすべてクライアントサイドで処理されます。
+- **ローカルファースト & クライアント完結**: マップデータ（ノードツリー、配置座標、重要度、レイアウトモード）はすべてブラウザ上の React 状態および `localStorage` で安全に保持・管理され（Phase 12 から、名前を付けた複数のマップを一覧のインデックスとマップごとの本体に分けて保存）、外部データベースへの認証や接続なしにオフラインでも動作します。JSON ファイルとしてのエクスポート/インポート、SVG/PNG 形式の画像書き出し、OPML/CSV/TSV による他ツールとのデータ交換もすべてクライアントサイドで処理されます。
 - **軽量サーバーサイド連携（BFF / Route Handler）**: AI によるノードイラスト生成機能のみ、Next.js App Router の Route Handler（`POST /api/illustrations`）を介して Cloudflare Workers AI（`@cf/meta/m2m100-1.2b` による日本語プロンプト英訳、`@cf/black-forest-labs/flux-1-schnell` による画像生成）と安全に通信します。API キー等の機密情報はサーバーサイドでのみ保持されます。
 
 ```mermaid
@@ -25,7 +25,7 @@ graph TD
             PixiApp["Pixi.js 8 (2D WebGL / Canvas Stage)"]
         end
         LocalStorage[("localStorage<br/>(draw-my-map.maps.v1 /<br/>draw-my-map.maps.v1.doc.&lt;id&gt; /<br/>draw-my-map.library-meta.v1)")]
-        FileIO["File System<br/>(JSON / PNG / SVG)"]
+        FileIO["File System<br/>(JSON / PNG / SVG / OPML / CSV / TSV)"]
     end
 
     subgraph Server ["Next.js Server (Route Handler)"]
@@ -99,6 +99,7 @@ client/src/
 │   ├── illustration/  # イラスト生成通信・サムネイル生成
 │   ├── imageExport/   # PNG/SVG 画像エクスポート
 │   ├── outlineExport/ # Markdown/テキスト等のアウトライン書き出し
+│   ├── exchange/      # OPML・CSV/TSV のテキストダウンロード
 │   └── persistence/   # ストレージ・ファイル永続化・バックアップ復元
 ├── domain/          # 5. Domain Layer (純粋ビジネスロジック・幾何演算・スキーマ検証)
 ├── server/          # 6. Server Layer (サーバーサイド API 処理・Cloudflare Workers AI 連携)
@@ -319,6 +320,8 @@ client/src/
     - `mapTextMeasurement.ts`: Canvas 2D コンテキストを用いたテキスト幅計測（`createMapTextMeasurer`。2D コンテキストが取得できない場合は `throw new Error("Canvas 2D context is unavailable")` を送出）。
   - `services/outlineExport/` (1 ファイル):
     - `outlineTextDownload.ts`: アウトラインテキスト（Markdown・インデント付きテキスト）の `Blob` / 一時 Object URL 生成とブラウザダウンロード処理（`downloadOutlineText`）。
+  - `services/exchange/` (1 ファイル):
+    - `exchangeTextDownload.ts`: OPML・CSV・TSV テキストの `Blob` と `downloadExchangeText`（既存のマップ名・日時ファイル名規則を共有）。
 - **依存可能レイヤー**: Domain, Config, Types
 
 #### 5. Domain Layer (`src/domain/`)
@@ -332,7 +335,7 @@ client/src/
     - `nodeIdGenerator.ts`, `nodeIdAllocator.ts`: 単調増加 ID 生成（`createMonotonicIdGenerator`）および既存ノード ID との衝突を回避する空きノード ID 採番（`createNodeIdAllocator`。1 件ずつの `nextAvailableId` と、複製と貼り付け用に占有集合を 1 回だけ作る一括採番 `nextAvailableIds`）。
     - `nodeSubtreeDuplication.ts`: 選択ノードと全子孫の複製候補を生成する純粋関数（`duplicateNodeSubtree`）。複製元の部分木を `nodeTree.collectSubtreeIds` で集め、挿入・配置・採番は `nodeSubtreeInsertion.ts` の `insertNodeSubtree` に委ねる（複製根は複製元と同じ親）。
     - `nodeSubtreeInsertion.ts`: 部分木を新しい ID で既存ノード配列へ挿入する純粋関数（`insertNodeSubtree`）。枝の複製（`nodeSubtreeDuplication.ts`）と枝の貼り付けで共有する。ID 対応表による親子の付け替え、手動配置での真下への平行移動（既存ノードがあるときのみ。空マップではコピー時の座標を維持）、非有限値・丸めによる配置不能時の `null` 返却、自動配置での既存レイアウトへの受け渡しを担う。手動配置の検査はすべて採番より前に済ませ、ID は `NodeIdAllocator.nextAvailableIds` で 1 回だけ一括採番する。手動配置の平行移動量は `nodeManualPlacement.ts` の `calculateManualOffsetY` を使う。
-    - `nodeForestInsertion.ts`: 箇条書きの項目（`ForestItem`）を森として既存ノード配列の末尾へ入力の順で追加する純粋関数（`insertNodeForest`）。追加先は新しいルート（`{ kind: "root" }`）か既存ノードの子（`{ kind: "child", parentId }`）。手動配置では、取り込む森だけを `layoutNodeForest` で並べてから、新しいルートならマップの左端・下端の下へ、子なら `calculateChildPlacement` の位置へ平行移動する。自動配置では仮の座標を入れ、全体の再配置は `applyTreeChange` に任せる。項目の形・親の存在・座標の検査をすべて済ませてから `allocateIds` を1回だけ呼び、結果を `{ ok: true, nodes, rootIds } | { ok: false, reason: "parent-missing" | "invalid-items" | "placement-failed" }` で返す。`domain/outline` は参照しない。
+    - `nodeForestInsertion.ts`: 森の項目（`ForestItem`。`label`・`parentIndex` に加え Phase 30 で任意の `importance`・`note`・`tags`）を既存ノード配列の末尾へ入力の順で追加する純粋関数（`insertNodeForest`）。追加先は新しいルート（`{ kind: "root" }`）か既存ノードの子（`{ kind: "child", parentId }`）。手動配置では、取り込む森だけを `layoutNodeForest` で並べてから、新しいルートならマップの左端・下端の下へ、子なら `calculateChildPlacement` の位置へ平行移動する。自動配置では仮の座標を入れ、全体の再配置は `applyTreeChange` に任せる。項目の形・親の存在・座標の検査をすべて済ませてから `allocateIds` を1回だけ呼び、結果を `{ ok: true, nodes, rootIds } | { ok: false, reason: "parent-missing" | "invalid-items" | "placement-failed" | "locked" }` で返す。`domain/outline` は参照しない。
     - `nodeSiblingNeighbors.ts`: 兄弟の列の走査（`scanSiblingNeighbors(nodes, nodeId, visibleNodeIds)`。型 `SiblingNeighbors`・`SiblingNeighborsScan`）。`nodes` を1回走査して、対象に最も近い見えている直前・直後の兄弟（`previousVisibleId`・`nextVisibleId`）と、対象より前に隠れた兄弟があるか（`hiddenBefore`）、対象と直後の見えている兄弟の間（無ければ末尾まで）に隠れた兄弟があるか（`hiddenAfter`）を返す。対象が無い・見えていないときは `node-missing`・`node-hidden`。兄弟の順序変更（`nodeSiblingOrder.ts`）と階層の上げ下げ（`nodeIndent.ts`）で共有する。
     - `nodeSiblingOrder.ts`: 兄弟ノードの順序変更の入口。要求と結果の型（`SiblingReorderRequest`、`SiblingReorderResult`、`useNodes.reorderSibling` の戻り値 `ReorderSiblingResult` など）と、要求ごとの並べ替え（`reorderSiblingByRequest`。`step` は挿入先へ解決し、端では `direction` を足した `at-edge` を返す）、並べ替え（`reorderSiblingNodes`。対象と anchor を検証し、配列の組み替えを `nodeSiblingReorderSequence.ts` に任せたうえで、手動配置では `swapSiblingBranchPositions`、自動配置では先頭のルートが変わるときの座標の引き継ぎを適用する）。既存の import 先を保つため、`nodeSiblingReorderTarget.ts` の型と関数（`SiblingReorderDirection`、`SiblingReorderTarget`、`findSiblingReorderTarget`、`getSiblingReorderAvailability` など）を再エクスポートする。
     - `nodeSiblingReorderTarget.ts`: 上下の1段の移動先の解決。見えている隣の兄弟の解決（`findSiblingReorderTarget`。端では、その先に隠れた兄弟があるか `hiddenBeyond` とルートかどうか `isRoot` を返す）と、ボタンの有効・無効（`getSiblingReorderAvailability`。走査は1回）、型 `SiblingReorderDirection`・`SiblingReorderTarget`・`SiblingReorderTargetResult`・`SiblingReorderAvailability`。配列は変えない。
@@ -1146,6 +1149,10 @@ canvasフォーカスは`MapEditor`内の1つの`useRevisionScopedNodeRequest(do
 `MapEditor` は map / outline 共通ヘッダーの `OutlineExportControls` から `useOutlineExport` を呼びます。入力は正本 `nodes` で構築済みの `buildOutlineRows` モデルと現在のマップ名です。表示用 `displayNodes`・`visibleNodeIds` は渡さず、保存失敗・保護モードでも正本全件を扱います。
 
 `formatOutlineRows` は構造異常と空を判定し、ラベル正規化後に全行の UTF-16 長を安全整数・100万の上限で検査します。合格後だけ2スペース字下げの `.md` / `.txt` 文字列を組み立てます。`downloadOutlineText` が UTF-8 Blob、既存の安全なマップ名とローカル日時を使ったファイル名、object URL・クリック・`finally` での URL 解放を受け持ちます。フックは書き出し専用通知を既存の保存・JSON・画像通知と独立して保持します。成功はダウンロード関数の正常復帰後だけで、ディスク保存完了ではありません。正本・履歴・選択・保存形式は変更しません。
+
+## OPML・CSV/TSV 交換（Phase 30・候補068・069）
+
+`domain/exchange/` に `opmlCodec`・`csvTsvCodec`・`parseExchangeContent`・`exchangePreview`・`exchangeMessages` を置き、書き出しは `domain/exportScope/closeExportSubtree.ts` と `resolveExchangeExportNodes.ts` が JSON／Markdown 経路と分離して祖先閉包した `Node[]` を codec へ渡します。`MapEditor` は `useOutlineExport` の隣で `useExchangeExport`（閉包済みノード・マップ名）と `useExchangeImport`（`insertForest`・追加先・成功通知）を配線し、`ExchangeExportControls` と `ExchangeImportControl` / `ExchangeImportDialog` をヘッダーへ載せます。`editorShortcutsEnabled` は `exchangeImport.screen === "closed"` を OutlineImport と同積に含めます。取り込み成功・書き出し結果はそれぞれ専用の操作通知枠に出し、Undo は取り込み成功の 1 回のみです。
 
 ## 複数マップの検索とリンク（Phase 19・候補013・024・031・032・056・057）
 
