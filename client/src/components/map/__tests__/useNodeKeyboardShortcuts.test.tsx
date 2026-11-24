@@ -3,10 +3,14 @@ import { useNodeKeyboardShortcuts } from "@/components/map/useNodeKeyboardShortc
 
 type ShortcutOptions = {
   selectedNodeId: number | null;
+  selectedRelationId?: number | null;
+  selectedGroupId?: number | null;
   isEditing: boolean;
   onAddChildNode: (parentId: number) => number | null;
   onAddSiblingNode: (nodeId: number) => number | null;
   onDeleteNode: (nodeId: number) => void;
+  onDeleteRelation?: (relationId: number) => void;
+  onDeleteGroup?: (groupId: number) => void;
   onStartEditing: (nodeId: number, initialText: string) => void;
   enabled: boolean;
   onClearSelection: () => void;
@@ -103,6 +107,38 @@ describe("useNodeKeyboardShortcuts", () => {
     const event = dispatchKey("Delete");
 
     expect(event.defaultPrevented).toBe(false);
+    expect(options.onDeleteNode).not.toHaveBeenCalled();
+  });
+
+  it.each(["Delete", "Backspace"])("deletes the selected relation on %s", (key) => {
+    const onDeleteRelation = jest.fn();
+    const options = createOptions({
+      selectedNodeId: null,
+      selectedRelationId: 10,
+      onDeleteRelation,
+    });
+    render(<ShortcutHarness {...options} />);
+
+    const event = dispatchKey(key);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(onDeleteRelation).toHaveBeenCalledWith(10);
+    expect(options.onDeleteNode).not.toHaveBeenCalled();
+  });
+
+  it.each(["Delete", "Backspace"])("deletes the selected group on %s (members remain)", (key) => {
+    const onDeleteGroup = jest.fn();
+    const options = createOptions({
+      selectedNodeId: null,
+      selectedGroupId: 20,
+      onDeleteGroup,
+    });
+    render(<ShortcutHarness {...options} />);
+
+    const event = dispatchKey(key);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(onDeleteGroup).toHaveBeenCalledWith(20);
     expect(options.onDeleteNode).not.toHaveBeenCalled();
   });
 
