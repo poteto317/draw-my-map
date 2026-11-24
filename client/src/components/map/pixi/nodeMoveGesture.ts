@@ -17,6 +17,8 @@ type NodeMoveGestureOptions = {
   onMoveNodeRef: LatestValue<(id: number, x: number, y: number) => void>;
   onBeginNodeMoveRef: LatestValue<() => MapHistoryGroupLease>;
   layoutSnapPrefsRef?: LatestValue<LayoutSnapGesturePrefs>;
+  /** ドロップ直前（履歴 finish 前）。false なら finish せず cancel。ピンドラッグ再配置など */
+  onBeforeFinishRef?: LatestValue<() => boolean>;
   dragThreshold: number;
 };
 
@@ -27,6 +29,7 @@ export function createNodeMoveGesture({
   onMoveNodeRef,
   onBeginNodeMoveRef,
   layoutSnapPrefsRef,
+  onBeforeFinishRef,
   dragThreshold,
 }: NodeMoveGestureOptions): PointerGesture | null {
   const node = nodesRef.current.find((currentNode) => currentNode.id === nodeId);
@@ -55,6 +58,13 @@ export function createNodeMoveGesture({
     if (finished) return;
     finished = true;
     snapNodeToGridIfNeeded();
+    if (historyLease?.isActive()) {
+      const ok = onBeforeFinishRef?.current() ?? true;
+      if (!ok) {
+        historyLease.cancel();
+        return;
+      }
+    }
     historyLease?.finish();
   };
 

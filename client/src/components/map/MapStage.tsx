@@ -56,6 +56,11 @@ import {
   resolveGroupDeleteAvailability,
 } from "@/domain/map/mapGroupAvailability";
 import { resolveMapRelationGroupContextMenus } from "@/domain/map/mapRelationGroupContextMenus";
+import { resolveBranchLayoutContextMenu } from "@/domain/map/mapBranchLayoutAvailability";
+import { resolveLayoutPinnedContextMenu } from "@/domain/map/mapLayoutPinnedAvailability";
+import type { BranchLayout, BranchLayoutDirection } from "@/types/branchLayout";
+import type { LayoutStyle } from "@/types/layoutStyle";
+import type { TreeDirection } from "@/types/treeDirection";
 import { resolveRelationDeleteAvailability } from "@/domain/map/mapRelationAvailability";
 import {
   selectedGroupId as readSelectedGroupId,
@@ -111,6 +116,17 @@ type MapStageProps = {
   onMoveNode: (id: number, x: number, y: number) => void;
   // ドラッグの最初の有効な移動の直前に呼び、終了までの移動を1操作にまとめる
   onBeginNodeMove: () => MapHistoryGroupLease;
+  /** auto+ピンの座標ドラッグ（当該ノードのみ） */
+  onMovePinnedNode?: (id: number, x: number, y: number) => void;
+  /** ピンドラッグ終了時の再配置 */
+  onFinalizePinnedNodeMove?: () => boolean;
+  /** N5: 位置固定の切替 */
+  onSetNodeLayoutPinned?: (nodeId: number, pinned: boolean) => void;
+  /** N4: 枝方向。null＝文書の既定に戻す */
+  onSetBranchLayout?: (nodeId: number, direction: BranchLayoutDirection | null) => void;
+  layoutStyle?: LayoutStyle;
+  branchLayouts?: readonly BranchLayout[];
+  treeDirection?: TreeDirection;
   onConnectNodes: (parentId: number, childId: number) => void;
   layoutMode: NodeLayoutMode;
   // ショートカットとドラッグの並べ替えの要求。結果の通知は呼び出し元が出す
@@ -180,6 +196,13 @@ export function MapStage({
   onUpdateLabel,
   onMoveNode,
   onBeginNodeMove,
+  onMovePinnedNode,
+  onFinalizePinnedNodeMove,
+  onSetNodeLayoutPinned,
+  onSetBranchLayout,
+  layoutStyle,
+  branchLayouts,
+  treeDirection,
   onConnectNodes,
   layoutMode,
   onReorderSibling,
@@ -274,6 +297,8 @@ export function MapStage({
     onClearSelection: resolvedOnClearSelection,
     onMoveNode,
     onBeginNodeMove,
+    onMovePinnedNode,
+    onFinalizePinnedNodeMove,
     onConnectNodes,
     layoutMode,
     onReorderSibling,
@@ -650,6 +675,34 @@ export function MapStage({
     nodes,
     relations,
   });
+  const layoutPinnedMenu = menu === null
+    ? { visible: false, disabled: false, action: "pin" as const }
+    : resolveLayoutPinnedContextMenu({
+      ...guardInput,
+      selectedNodeId,
+      selectedNodeIds: resolvedSelectedNodeIds,
+      contextMenuNodeId: menu.nodeId,
+      nodes,
+      canvasSelection,
+    });
+  const branchLayoutMenu = menu === null
+    ? {
+      visible: false,
+      disabled: false,
+      currentDirection: "lr" as const,
+      hasExplicitEntry: false,
+    }
+    : resolveBranchLayoutContextMenu({
+      ...guardInput,
+      selectedNodeId,
+      selectedNodeIds: resolvedSelectedNodeIds,
+      contextMenuNodeId: menu.nodeId,
+      nodes,
+      canvasSelection,
+      layoutStyle,
+      branchLayouts,
+      treeDirection,
+    });
 
   return (
     <div
@@ -724,6 +777,27 @@ export function MapStage({
               menuActivatedAtRef.current = Date.now();
               contextMenu.close();
               onCreateGroup(memberIds);
+            }}
+          layoutPinnedVisible={layoutPinnedMenu.visible}
+          layoutPinnedDisabled={layoutPinnedMenu.disabled}
+          layoutPinnedAction={layoutPinnedMenu.action}
+          onToggleLayoutPinned={onSetNodeLayoutPinned === undefined || selectedNodeId === null
+            ? undefined
+            : () => {
+              menuActivatedAtRef.current = Date.now();
+              contextMenu.close();
+              onSetNodeLayoutPinned(selectedNodeId, layoutPinnedMenu.action === "pin");
+            }}
+          branchLayoutVisible={branchLayoutMenu.visible}
+          branchLayoutDisabled={branchLayoutMenu.disabled}
+          branchLayoutCurrent={branchLayoutMenu.currentDirection}
+          branchLayoutHasExplicit={branchLayoutMenu.hasExplicitEntry}
+          onSetBranchLayout={onSetBranchLayout === undefined || selectedNodeId === null
+            ? undefined
+            : (direction) => {
+              menuActivatedAtRef.current = Date.now();
+              contextMenu.close();
+              onSetBranchLayout(selectedNodeId, direction);
             }}
         />
       )}

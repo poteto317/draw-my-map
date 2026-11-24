@@ -5,7 +5,6 @@ describe("TreeDirectionControl", () => {
   it("選択肢を名前付きグループとして提供する", () => {
     render(
       <TreeDirectionControl
-        layoutMode="auto"
         treeDirection="lr"
         onChange={jest.fn()}
       />,
@@ -23,7 +22,6 @@ describe("TreeDirectionControl", () => {
     (treeDirection, selectedLabel, idleLabel) => {
       render(
         <TreeDirectionControl
-          layoutMode="auto"
           treeDirection={treeDirection}
           onChange={jest.fn()}
         />,
@@ -40,11 +38,10 @@ describe("TreeDirectionControl", () => {
     },
   );
 
-  it("自動配置でクリックした方向への変更を通知する", () => {
+  it("クリックした方向への変更を通知する", () => {
     const onChange = jest.fn();
     render(
       <TreeDirectionControl
-        layoutMode="auto"
         treeDirection="lr"
         onChange={onChange}
       />,
@@ -56,12 +53,13 @@ describe("TreeDirectionControl", () => {
     expect(onChange).toHaveBeenCalledWith("tb");
   });
 
-  it("手動配置では操作を無効にし、説明用ツールチップを付ける", () => {
+  it("disabledReason=manual では操作を無効にし、説明用ツールチップを付ける", () => {
     const onChange = jest.fn();
     const { container } = render(
       <TreeDirectionControl
-        layoutMode="manual"
         treeDirection="lr"
+        disabled
+        disabledReason="manual"
         onChange={onChange}
       />,
     );
@@ -77,5 +75,35 @@ describe("TreeDirectionControl", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "上→下" }));
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("disabledReason=radial のときだけ放射用ツールチップを付ける", () => {
+    const { container } = render(
+      <TreeDirectionControl
+        treeDirection="lr"
+        disabled
+        disabledReason="radial"
+        onChange={jest.fn()}
+      />,
+    );
+
+    expect(container.firstChild).toHaveAttribute(
+      "title",
+      "放射レイアウト中はツリー方向を変更できません。直交に戻すと再び使えます。",
+    );
+  });
+
+  it("disabledReason=blocked ではツールチップを出さない", () => {
+    const { container } = render(
+      <TreeDirectionControl
+        treeDirection="lr"
+        disabled
+        disabledReason="blocked"
+        onChange={jest.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "左→右" })).toBeDisabled();
+    expect(container.firstChild).not.toHaveAttribute("title");
   });
 });

@@ -1,14 +1,20 @@
-import type { NodeLayoutMode } from "@/types/nodeLayout";
+import type { HeaderControlDisabledReason } from "@/domain/map/mapLayoutStyleAvailability";
 import type { TreeDirection } from "@/types/treeDirection";
 
 type TreeDirectionControlProps = {
-  layoutMode: NodeLayoutMode;
   treeDirection: TreeDirection | undefined;
+  /** 親／domain が確定した disabled。省略時は操作可能 */
+  disabled?: boolean;
+  /** disabled 理由。ツールチップ表示の正本（推測しない） */
+  disabledReason?: HeaderControlDisabledReason;
   onChange: (direction: TreeDirection) => void;
 };
 
 const MANUAL_MODE_TOOLTIP =
   "ツリー方向は自動配置モードでのみ変更できます。手動配置では設定だけ保持し、座標は変わりません。";
+
+const RADIAL_MODE_TOOLTIP =
+  "放射レイアウト中はツリー方向を変更できません。直交に戻すと再び使えます。";
 
 const treeDirectionOptions: ReadonlyArray<{
   direction: TreeDirection;
@@ -25,18 +31,25 @@ const idleButtonClassName =
 const disabledButtonClassName =
   "cursor-not-allowed opacity-50";
 
+function tooltipForReason(reason: HeaderControlDisabledReason | undefined): string | undefined {
+  if (reason === "manual") return MANUAL_MODE_TOOLTIP;
+  if (reason === "radial") return RADIAL_MODE_TOOLTIP;
+  return undefined;
+}
+
 export function TreeDirectionControl({
-  layoutMode,
   treeDirection,
+  disabled = false,
+  disabledReason = null,
   onChange,
 }: TreeDirectionControlProps) {
   const selected = treeDirection ?? "lr";
-  const disabled = layoutMode === "manual";
+  const tooltip = disabled ? tooltipForReason(disabledReason) : undefined;
 
   return (
     <div
       className="flex shrink-0 items-center gap-2"
-      title={disabled ? MANUAL_MODE_TOOLTIP : undefined}
+      title={tooltip}
     >
       <span className="text-sm text-zinc-600 dark:text-zinc-400">ツリー方向</span>
       <div

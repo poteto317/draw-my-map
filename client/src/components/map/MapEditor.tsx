@@ -6,6 +6,10 @@ import { CrossMapSearchDialog } from "@/components/layout/CrossMapSearchDialog";
 import { RelationPartnerPickerDialog } from "@/components/layout/RelationPartnerPickerDialog";
 import { isNodeTargetOperationBlocked } from "@/domain/map/mapCanvasSelectionGuards";
 import { resolveGroupLabelEditAvailability } from "@/domain/map/mapGroupAvailability";
+import {
+  isPinnedLayoutEditEnabled,
+  resolveLayoutPinnedDetailPanel,
+} from "@/domain/map/mapLayoutPinnedAvailability";
 import { resolveRelationMeaningEditAvailability } from "@/domain/map/mapRelationAvailability";
 import { EditorViewModeControl, type EditorViewMode } from "@/components/layout/EditorViewModeControl";
 import { ExportScopeControl } from "@/components/layout/ExportScopeControl";
@@ -28,6 +32,7 @@ import {
   serializeMapDocument,
 } from "@/domain/persistence/mapDocumentCodec";
 import { mapDocumentOptionsFromState } from "@/domain/persistence/mapDocumentState";
+import { remapClosedBranchLayouts } from "@/domain/map/branchLayoutLifecycle";
 import { useCrossMapCorpus } from "@/hooks/useCrossMapCorpus";
 import { useCrossMapDialogs } from "@/hooks/useCrossMapDialogs";
 import { useCrossMapNavigation } from "@/hooks/useCrossMapNavigation";
@@ -209,6 +214,8 @@ export function MapEditor({
     layoutMode,
     treeDirection,
     layoutSpacing,
+    layoutStyle,
+    branchLayouts,
     relations,
     groups,
     addNode,
@@ -233,6 +240,10 @@ export function MapEditor({
     updateNodeLabel,
     updateNodesImportance,
     moveNode,
+    movePinnedNode,
+    finalizePinnedNodeMove,
+    setNodeLayoutPinned,
+    setBranchLayout,
     connectNodes,
     duplicateSubtree,
     copySubtree,
@@ -251,6 +262,7 @@ export function MapEditor({
     setLayoutMode,
     setTreeDirection,
     setLayoutSpacing,
+    setLayoutStyle,
     replaceMap,
     attachIllustration,
     removeIllustration,
@@ -309,26 +321,6 @@ export function MapEditor({
     return selectedNodeId === null ? [] : [selectedNodeId];
   }, [viewMode, selectedNodeIds, selectedNodeId]);
   const importanceSummary = summarizeSelectionImportance(nodes, importanceTargetIds);
-  const { headerLayoutControls, layoutSnapPrefs } = useMapHeaderLayoutControls({
-    viewMode,
-    isProtectedMode: storageMode === "protected",
-    nodes,
-    layoutMode,
-    treeDirection,
-    layoutSpacing,
-    selectedNodeId,
-    selectedNodeIds,
-    selectedNodeLocked: selectedNode?.locked === true,
-    setTreeDirection,
-    setLayoutSpacing,
-    commitManualNodes,
-    toggleNodeEditLock,
-    lockNodeSubtree,
-    unlockNodeSubtree,
-    setLabelFontSize,
-    toggleLabelBold,
-    toggleLabelUnderline,
-  });
   const branchCollapse = useBranchCollapse({ nodes, documentRevision });
   const { expandNodes, index: collapseIndex } = branchCollapse;
   const { focusRootId, setFocusRootId, focusVisibleNodeIds, clearFocusOutsideBranch } = useBranchFocus({
@@ -365,6 +357,8 @@ export function MapEditor({
     layoutMode,
     treeDirection,
     layoutSpacing,
+    layoutStyle,
+    branchLayouts,
     collapseVisibleNodeIds: branchCollapse.collapseVisibleNodeIds,
     resolutionVisibleNodeIds: resolutionFilter.visibleNodeIds,
     depthVisibleNodeIds,
@@ -451,6 +445,8 @@ export function MapEditor({
     layoutMode,
     treeDirection,
     layoutSpacing,
+    layoutStyle,
+    branchLayouts,
     relations,
     groups,
     replaceMap: replaceMapAndReset,
@@ -458,6 +454,31 @@ export function MapEditor({
     storageMode,
     mapName,
     onSaveCurrentAsNewMap,
+  });
+  const { headerLayoutControls, layoutSnapPrefs } = useMapHeaderLayoutControls({
+    viewMode,
+    isProtectedMode: storageMode === "protected",
+    hasConflict: persistence.conflictState === "conflict",
+    isExternallyDeleted: persistence.conflictState === "externallyDeleted",
+    canvasSelection,
+    nodes,
+    layoutMode,
+    layoutStyle,
+    treeDirection,
+    layoutSpacing,
+    selectedNodeId,
+    selectedNodeIds,
+    selectedNodeLocked: selectedNode?.locked === true,
+    setLayoutStyle,
+    setTreeDirection,
+    setLayoutSpacing,
+    commitManualNodes,
+    toggleNodeEditLock,
+    lockNodeSubtree,
+    unlockNodeSubtree,
+    setLabelFontSize,
+    toggleLabelBold,
+    toggleLabelUnderline,
   });
   const relationEditDisabled = !resolveRelationMeaningEditAvailability({
     viewMode,
@@ -475,6 +496,16 @@ export function MapEditor({
     nodes,
     group: selectedGroup ?? undefined,
   }).enabled;
+  const layoutPinnedPanel = resolveLayoutPinnedDetailPanel({
+    viewMode,
+    isProtectedMode: storageMode === "protected",
+    hasConflict: persistence.conflictState === "conflict",
+    isExternallyDeleted: persistence.conflictState === "externallyDeleted",
+    selectedNodeId,
+    selectedNodeIds,
+    nodes,
+    canvasSelection,
+  });
   const selectionTargetIds = useMemo(
     () => resolveSelectionTargetIds(viewMode, selectedNodeId, selectedNodeIds),
     [viewMode, selectedNodeId, selectedNodeIds],
@@ -509,12 +540,23 @@ export function MapEditor({
   const scopedJsonSnapshot = useMemo(() => {
     const exportIdMap = new Map(exportDocumentNodes.map((node) => [node.id, node.id]));
     const closed = remapClosedForNodeIdMap(relations, groups, exportIdMap);
+    const closedBranchLayouts = remapClosedBranchLayouts(branchLayouts, exportIdMap);
     return serializeMapDocument(createMapDocument(exportDocumentNodes, layoutMode, {
-      ...mapDocumentOptionsFromState({ treeDirection, layoutSpacing }),
+      ...mapDocumentOptionsFromState({ treeDirection, layoutSpacing, layoutStyle }),
       relations: closed.relations,
       groups: closed.groups,
+      branchLayouts: closedBranchLayouts,
     }));
-  }, [exportDocumentNodes, layoutMode, treeDirection, layoutSpacing, relations, groups]);
+  }, [
+    exportDocumentNodes,
+    layoutMode,
+    treeDirection,
+    layoutSpacing,
+    layoutStyle,
+    branchLayouts,
+    relations,
+    groups,
+  ]);
   const exportScopedJson = useMapJsonExport({
     currentSnapshot: scopedJsonSnapshot,
     mapName,
@@ -547,6 +589,13 @@ export function MapEditor({
   const [partsDialogMode, setPartsDialogMode] = useState<PartsLibraryDialogMode | null>(null);
   const [relationPartnerFromId, setRelationPartnerFromId] = useState<number | null>(null);
   const nodeOpsBlockedByCanvasSelection = isNodeTargetOperationBlocked(canvasSelection);
+  const pinnedLayoutEditEnabled = isPinnedLayoutEditEnabled({
+    viewMode,
+    isProtectedMode: storageMode === "protected",
+    hasConflict: persistence.conflictState === "conflict",
+    isExternallyDeleted: persistence.conflictState === "externallyDeleted",
+    canvasSelection,
+  });
   const partsLibrary = usePartsLibrary({
     storage: storageSession.storage,
     nodes,
@@ -1393,6 +1442,19 @@ export function MapEditor({
                 onUpdateLabel={updateNodeLabel}
                 onMoveNode={moveNode}
                 onBeginNodeMove={beginMoveHistory}
+                onMovePinnedNode={pinnedLayoutEditEnabled ? movePinnedNode : undefined}
+                onFinalizePinnedNodeMove={
+                  pinnedLayoutEditEnabled ? finalizePinnedNodeMove : undefined
+                }
+                onSetNodeLayoutPinned={(nodeId, pinned) => {
+                  setNodeLayoutPinned(nodeId, pinned);
+                }}
+                onSetBranchLayout={(nodeId, direction) => {
+                  setBranchLayout(nodeId, direction);
+                }}
+                layoutStyle={layoutStyle}
+                branchLayouts={branchLayouts}
+                treeDirection={treeDirection}
                 onConnectNodes={connectNodes}
                 layoutMode={layoutMode}
                 onReorderSibling={siblingReorder.reorder}
@@ -1459,6 +1521,11 @@ export function MapEditor({
               onNavigateToMapTarget={navigateToMapTarget}
               onSetNodeIcon={setNodeIcon}
               onSetNodeKind={setNodeKind}
+              layoutPinnedVisible={layoutPinnedPanel.visible}
+              layoutPinnedDisabled={layoutPinnedPanel.disabled}
+              onSetLayoutPinned={(nodeId, pinned) => {
+                setNodeLayoutPinned(nodeId, pinned);
+              }}
               onUpdateRelationKind={(relationId, kind) => {
                 updateRelation(relationId, { kind });
               }}

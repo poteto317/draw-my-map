@@ -63,7 +63,7 @@ describe("LayoutSpacingControl", () => {
     expect(onChange).toHaveBeenCalledWith({ childGap: 400, siblingGap: 40 });
   });
 
-  it("手動配置では操作可能で説明用ツールチップを付ける", async () => {
+  it("手動配置では操作を無効にし、説明用ツールチップを付ける", async () => {
     const user = userEvent.setup();
     const onChange = jest.fn();
     const { container } = render(
@@ -76,18 +76,15 @@ describe("LayoutSpacingControl", () => {
     );
 
     const opener = screen.getByRole("button", { name: "配置間隔" });
-    expect(opener).not.toBeDisabled();
+    expect(opener).toBeDisabled();
     expect(container.firstChild).toHaveAttribute(
       "title",
       "手動配置では間隔の値だけ保存され、座標は変わりません。自動配置では変更に合わせて再配置されます。",
     );
 
     await user.click(opener);
-    const childInput = screen.getByLabelText("子方向の間隔");
-    fireEvent.change(childInput, { target: { value: "100" } });
-    fireEvent.blur(childInput);
-
-    expect(onChange).toHaveBeenCalledWith({ childGap: 100, siblingGap: 40 });
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it("選択が消えると開いていたメニューを閉じる（L-214）", async () => {

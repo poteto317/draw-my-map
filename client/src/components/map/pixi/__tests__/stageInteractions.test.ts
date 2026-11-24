@@ -119,6 +119,8 @@ function createController(overrides: Partial<{
   onMarqueeRectChange: (rect: { x: number; y: number; width: number; height: number } | null) => void;
   onMoveNode: (id: number, x: number, y: number) => void;
   onBeginNodeMove: () => MapHistoryGroupLease;
+  onMovePinnedNode: (id: number, x: number, y: number) => void;
+  onFinalizePinnedNodeMove: () => boolean;
   onConnectNodes: (parentId: number, childId: number) => void;
   onConnectionTargetChange: (id: number | null) => void;
   dragThreshold: number;
@@ -154,6 +156,12 @@ function createController(overrides: Partial<{
     current: overrides.onBeginNodeMove
       ?? jest.fn(createTestMapHistoryLease),
   };
+  const onMovePinnedNodeRef = {
+    current: overrides.onMovePinnedNode,
+  };
+  const onFinalizePinnedNodeMoveRef = {
+    current: overrides.onFinalizePinnedNodeMove,
+  };
   const onConnectNodesRef = {
     current: overrides.onConnectNodes ?? jest.fn<void, [number, number]>(),
   };
@@ -185,6 +193,8 @@ function createController(overrides: Partial<{
     onMarqueeRectChangeRef,
     onMoveNodeRef,
     onBeginNodeMoveRef,
+    onMovePinnedNodeRef,
+    onFinalizePinnedNodeMoveRef,
     onConnectNodesRef,
     onConnectionTargetChangeRef,
     onViewportChangeRef,
@@ -211,6 +221,8 @@ function createController(overrides: Partial<{
     onMarqueeRectChangeRef,
     onMoveNodeRef,
     onBeginNodeMoveRef,
+    onMovePinnedNodeRef,
+    onFinalizePinnedNodeMoveRef,
     onConnectNodesRef,
     onConnectionTargetChangeRef,
     onViewportChangeRef,
@@ -1553,6 +1565,113 @@ describe("createStageInteractions", () => {
       expect(onSiblingReorderPreviewChangeRef.current).toHaveBeenLastCalledWith(null);
       expect(onMoveNodeRef.current).not.toHaveBeenCalled();
       expect(onBeginNodeMoveRef.current).not.toHaveBeenCalled();
+    });
+
+    it("auto+ピンは座標ドラッグし並べ替えない（ドロップで finalize）", () => {
+      const pinned = createTestNode({
+        id: 1, parentId: null, x: 0, y: 0, label: "ピン", layoutPinned: true,
+      });
+      const sibling = createTestNode({ id: 2, parentId: null, x: 0, y: 100, label: "非ピン" });
+      const onMovePinnedNode = jest.fn();
+      const onFinalizePinnedNodeMove = jest.fn(() => true);
+      const { stage, handlers } = createStage();
+      const {
+        controller,
+        onMoveNodeRef,
+        onReorderSiblingRef,
+      } = createController({
+        nodes: [pinned, sibling],
+        layoutMode: "auto",
+        onMovePinnedNode,
+        onFinalizePinnedNodeMove,
+      });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 1, pointer(50, 30) as never);
+      handlers.pointermove?.(pointer(50, 140));
+      handlers.pointerup?.(pointer(50, 140));
+
+      expect(onReorderSiblingRef.current).not.toHaveBeenCalled();
+      expect(onMoveNodeRef.current).not.toHaveBeenCalled();
+      expect(onMovePinnedNode).toHaveBeenCalled();
+      expect(onFinalizePinnedNodeMove).toHaveBeenCalledTimes(1);
+    });
+
+    it("auto+ピンでコールバック欠落時は並べ替えせず無操作", () => {
+      const pinned = createTestNode({
+        id: 1, parentId: null, x: 0, y: 0, label: "ピン", layoutPinned: true,
+      });
+      const sibling = createTestNode({ id: 2, parentId: null, x: 0, y: 100, label: "非ピン" });
+      const { stage, handlers } = createStage();
+      const {
+        controller,
+        onMoveNodeRef,
+        onReorderSiblingRef,
+        onSiblingReorderPreviewChangeRef,
+      } = createController({
+        nodes: [pinned, sibling],
+        layoutMode: "auto",
+        // onMovePinnedNode / onFinalizePinnedNodeMove 欠落（保護・競合などで外す経路）
+      });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 1, pointer(50, 30) as never);
+      handlers.pointermove?.(pointer(50, 140));
+      handlers.pointerup?.(pointer(50, 140));
+
+      expect(onReorderSiblingRef.current).not.toHaveBeenCalled();
+      expect(onSiblingReorderPreviewChangeRef.current).not.toHaveBeenCalled();
+      expect(onMoveNodeRef.current).not.toHaveBeenCalled();
+    });
+
+    it("auto+ピンのジェスチャ中にコールバックが外れても throw しない", () => {
+      const pinned = createTestNode({
+        id: 1, parentId: null, x: 0, y: 0, label: "ピン", layoutPinned: true,
+      });
+      const sibling = createTestNode({ id: 2, parentId: null, x: 0, y: 100, label: "非ピン" });
+      const { stage, handlers } = createStage();
+      const {
+        controller,
+        onMovePinnedNodeRef,
+        onFinalizePinnedNodeMoveRef,
+      } = createController({
+        nodes: [pinned, sibling],
+        layoutMode: "auto",
+        onMovePinnedNode: jest.fn(),
+        onFinalizePinnedNodeMove: jest.fn(() => true),
+      });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 1, pointer(50, 30) as never);
+      onMovePinnedNodeRef.current = undefined;
+      onFinalizePinnedNodeMoveRef.current = undefined;
+
+      expect(() => {
+        handlers.pointermove?.(pointer(50, 140));
+        handlers.pointerup?.(pointer(50, 140));
+      }).not.toThrow();
+    });
+
+    it("auto+非ピンは並べ替えのまま", () => {
+      const { stage, handlers } = createStage();
+      const onMovePinnedNode = jest.fn();
+      const {
+        controller,
+        onReorderSiblingRef,
+      } = createController({
+        nodes: stackedRoots,
+        layoutMode: "auto",
+        onMovePinnedNode,
+        onFinalizePinnedNodeMove: jest.fn(() => true),
+      });
+      controller.bind(stage as never);
+
+      nodePointerDown(controller, 1, pointer(50, 30) as never);
+      handlers.pointermove?.(pointer(50, 140));
+      handlers.pointerup?.(pointer(50, 140));
+
+      expect(onReorderSiblingRef.current).toHaveBeenCalled();
+      expect(onMovePinnedNode).not.toHaveBeenCalled();
     });
 
     it("手動配置ではShiftなしのドラッグで今までどおり移動する", () => {

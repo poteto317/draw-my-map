@@ -5,7 +5,7 @@ import {
   clampLayoutSpacing,
   clampLayoutSpacingValue,
 } from "@/components/layout/layoutSpacingClamp";
-import { resolveLayoutSpacing } from "@/domain/nodes/resolveLayoutSpacing";
+import { resolveLayoutSpacing } from "@/domain/nodes/nodeMapLayoutContext";
 import type { LayoutSpacing } from "@/types/layoutSpacing";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 
@@ -13,6 +13,8 @@ type LayoutSpacingControlProps = {
   layoutMode: NodeLayoutMode;
   layoutSpacing: LayoutSpacing | undefined;
   selectionActive: boolean;
+  /** 省略時は manual のみ disabled（後方互換）。明示指定があればそれを優先 */
+  disabled?: boolean;
   onChange: (spacing: LayoutSpacing) => void;
 };
 
@@ -22,6 +24,9 @@ const MANUAL_MODE_TOOLTIP =
 const buttonClassName =
   "shrink-0 rounded-md bg-zinc-100 px-3 py-1 text-sm text-zinc-700 transition-colors hover:bg-zinc-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:bg-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-600";
 
+const disabledButtonClassName =
+  "shrink-0 cursor-not-allowed rounded-md bg-zinc-100 px-3 py-1 text-sm text-zinc-700 opacity-50 dark:bg-zinc-700 dark:text-zinc-200";
+
 const fieldClassName =
   "w-20 rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm text-zinc-700 dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-200";
 
@@ -29,21 +34,24 @@ export function LayoutSpacingControl({
   layoutMode,
   layoutSpacing,
   selectionActive,
+  disabled: disabledProp,
   onChange,
 }: LayoutSpacingControlProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuId = useId();
   const resolved = resolveLayoutSpacing({ layoutSpacing });
-  const showManualTooltip = layoutMode === "manual";
+  const disabled = disabledProp ?? layoutMode === "manual";
+  const showManualTooltip = disabled && layoutMode === "manual";
 
   // L-214: 選択消失で開状態を閉じる（Phase 24 オーバーレイ同期と同型）
   /* eslint-disable react-hooks/set-state-in-effect -- selectionActive の外部同期 */
   useEffect(() => {
-    if (!selectionActive) setMenuOpen(false);
-  }, [selectionActive]);
+    if (!selectionActive || disabled) setMenuOpen(false);
+  }, [selectionActive, disabled]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   function commitField(field: keyof LayoutSpacing, raw: string) {
+    if (disabled) return;
     const parsed = Number(raw);
     if (!Number.isFinite(parsed)) return;
     const next = clampLayoutSpacing({
@@ -61,15 +69,19 @@ export function LayoutSpacingControl({
     >
       <button
         type="button"
-        className={buttonClassName}
+        className={disabled ? disabledButtonClassName : buttonClassName}
         aria-haspopup="menu"
         aria-expanded={menuOpen}
         aria-controls={menuOpen ? menuId : undefined}
-        onClick={() => setMenuOpen((open) => !open)}
+        disabled={disabled}
+        onClick={() => {
+          if (disabled) return;
+          setMenuOpen((open) => !open);
+        }}
       >
         配置間隔
       </button>
-      {menuOpen && (
+      {menuOpen && !disabled && (
         <div
           id={menuId}
           role="menu"

@@ -103,6 +103,7 @@ describe("resolveMapContextMenuAction", () => {
 
   it("拡大・平行移動したビューポートでもワールド座標でヒット判定する", () => {
     // client(250,170) -> world((250-50)/2, (170-50)/2) = (100,60) はノード(50..150, 30..90)内
+    // メニュー最大高さ（Phase 29 で 13 項目）により y はコンテナ内へクランプされる
     expect(resolveMapContextMenuAction({
       ...base,
       client: { x: 250, y: 170 },
@@ -110,7 +111,7 @@ describe("resolveMapContextMenuAction", () => {
     })).toEqual({
       type: "open",
       nodeId: 1,
-      position: { x: 250, y: 170 },
+      position: { x: 250, y: 600 - NODE_CONTEXT_MENU_SIZE.height },
     });
   });
 });
