@@ -196,7 +196,7 @@ export function createStageInteractions({
         };
         const onFinalizePinnedLiveRef: LatestValue<() => boolean> = {
           get current() {
-            return () => onFinalizePinnedNodeMoveRef?.current?.() ?? true;
+            return () => onFinalizePinnedNodeMoveRef?.current?.() ?? false;
           },
         };
         return createNodeMoveGesture({

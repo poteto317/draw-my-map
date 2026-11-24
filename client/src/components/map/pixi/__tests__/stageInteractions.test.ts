@@ -1624,11 +1624,12 @@ describe("createStageInteractions", () => {
       expect(onMoveNodeRef.current).not.toHaveBeenCalled();
     });
 
-    it("auto+ピンのジェスチャ中にコールバックが外れても throw しない", () => {
+    it("auto+ピンのジェスチャ中に finalize が外れたら cancel し throw しない", () => {
       const pinned = createTestNode({
         id: 1, parentId: null, x: 0, y: 0, label: "ピン", layoutPinned: true,
       });
       const sibling = createTestNode({ id: 2, parentId: null, x: 0, y: 100, label: "非ピン" });
+      const history = createMoveHistorySpy();
       const { stage, handlers } = createStage();
       const {
         controller,
@@ -1637,6 +1638,7 @@ describe("createStageInteractions", () => {
       } = createController({
         nodes: [pinned, sibling],
         layoutMode: "auto",
+        onBeginNodeMove: history.onBeginNodeMove,
         onMovePinnedNode: jest.fn(),
         onFinalizePinnedNodeMove: jest.fn(() => true),
       });
@@ -1650,6 +1652,9 @@ describe("createStageInteractions", () => {
         handlers.pointermove?.(pointer(50, 140));
         handlers.pointerup?.(pointer(50, 140));
       }).not.toThrow();
+
+      expect(history.lease.cancel).toHaveBeenCalledTimes(1);
+      expect(history.lease.finish).not.toHaveBeenCalled();
     });
 
     it("auto+非ピンは並べ替えのまま", () => {
