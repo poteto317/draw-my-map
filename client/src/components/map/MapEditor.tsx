@@ -6,10 +6,8 @@ import { CrossMapSearchDialog } from "@/components/layout/CrossMapSearchDialog";
 import { RelationPartnerPickerDialog } from "@/components/layout/RelationPartnerPickerDialog";
 import { isNodeTargetOperationBlocked } from "@/domain/map/mapCanvasSelectionGuards";
 import { resolveGroupLabelEditAvailability } from "@/domain/map/mapGroupAvailability";
-import {
-  resolveLayoutPinnedDetailPanel,
-  resolvePinnedNodeDragCallbacks,
-} from "@/domain/map/mapLayoutPinnedAvailability";
+import { resolveLayoutPinnedDetailPanel } from "@/domain/map/mapLayoutPinnedAvailability";
+import { resolvePinnedNodeDragCallbacks } from "@/domain/map/resolvePinnedNodeDragCallbacks";
 import { resolveRelationMeaningEditAvailability } from "@/domain/map/mapRelationAvailability";
 import { EditorViewModeControl, type EditorViewMode } from "@/components/layout/EditorViewModeControl";
 import { ExportScopeControl } from "@/components/layout/ExportScopeControl";
