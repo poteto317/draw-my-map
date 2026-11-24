@@ -89,6 +89,44 @@ describe("transferStoredBranch", () => {
     expect(target.ok && target.value.layoutMode).toBe("manual");
   });
 
+  it("閉じた relations/groups を移動先へ保存し、元は prune する", () => {
+    const withClosed = serializeMapDocument(createMapDocument([
+      createTestNode({ id: 1, parentId: null, label: "残す" }),
+      createTestNode({ id: 2, parentId: 1, label: "枝" }),
+      createTestNode({ id: 3, parentId: 2, label: "孫" }),
+    ], "manual", {
+      relations: [
+        { id: 10, fromId: 2, toId: 3, kind: "related", directed: false },
+        { id: 11, fromId: 1, toId: 2, kind: "related", directed: false },
+      ],
+      groups: [
+        { id: 20, nodeIds: [2, 3], label: "closed" },
+        { id: 21, nodeIds: [1, 2, 3], label: "split" },
+      ],
+    }));
+    const recording = createRecordingStorage();
+    const index = seedMapLibrary(recording.storage, [{ id: "a", json: withClosed }, { id: "b", json: null }]);
+
+    const result = transferStoredBranch(recording.storage, index, "a", "b", 2, now);
+    expect(result.ok).toBe(true);
+    const remaining = parseMapDocumentJson(recording.storage.getItem(mapBodyKey("a"))!);
+    const moved = parseMapDocumentJson(recording.storage.getItem(mapBodyKey("b"))!);
+    expect(remaining.ok).toBe(true);
+    expect(moved.ok).toBe(true);
+    if (!remaining.ok || !moved.ok) return;
+    expect(remaining.value.relations).toBeUndefined();
+    expect(remaining.value.groups).toBeUndefined();
+    expect(moved.value.relations).toHaveLength(1);
+    expect(moved.value.groups).toEqual([
+      expect.objectContaining({
+        nodeIds: [moved.value.nodes[0]!.id, moved.value.nodes[1]!.id],
+        label: "closed",
+      }),
+    ]);
+    expect(moved.value.relations![0]!.id).not.toBe(10);
+    expect(moved.value.groups![0]!.id).not.toBe(20);
+  });
+
   it("既存の移動先ノードとlayoutを保ち、衝突IDを再採番する", () => {
     const targetJson = serializeMapDocument(createMapDocument([
       createTestNode({ id: 2, parentId: null, label: "移動先の枝" }),

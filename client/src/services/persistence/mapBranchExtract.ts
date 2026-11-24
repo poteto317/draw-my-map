@@ -10,6 +10,7 @@ import { BRANCH_EXTRACT_STORED_ERROR_MESSAGE } from "@/domain/mapLibrary/mapLibr
 import { extractBranchToNewMap } from "@/domain/nodes/extractBranchToMap";
 import { createNodeIdAllocator } from "@/domain/nodes/nodeIdAllocator";
 import { createMapDocument, parseMapDocumentJson, serializeMapDocument } from "@/domain/persistence/mapDocumentCodec";
+import { mapDocumentOptionsFromState } from "@/domain/persistence/mapDocumentState";
 import type { NodeMapState } from "@/types/nodeMapState";
 import { readBranchMoveIndex } from "./mapBranchTransfer";
 import { writeBranchMove } from "./branchMoveTransaction";
@@ -75,7 +76,7 @@ export function extractStoredBranch(
     newMapId,
     sourceMapId: sourceId,
     sourceMapName: documents.sourceMapName,
-    allocateIds: createNodeIdAllocator().nextAvailableIds,
+    allocateIds: createNodeIdAllocator().nextAvailableEntityIds,
   });
   if (!extracted.ok) return failed(documents.sourceJson);
 
@@ -91,8 +92,16 @@ export function extractStoredBranch(
     sourceBefore: documents.sourceJson,
     targetBefore: null,
     indexBefore: stored.raw,
-    sourceAfter: serializeMapDocument(createMapDocument(extracted.source.nodes, extracted.source.layoutMode)),
-    targetAfter: serializeMapDocument(createMapDocument(extracted.target.nodes, extracted.target.layoutMode)),
+    sourceAfter: serializeMapDocument(createMapDocument(
+      extracted.source.nodes,
+      extracted.source.layoutMode,
+      mapDocumentOptionsFromState(extracted.source),
+    )),
+    targetAfter: serializeMapDocument(createMapDocument(
+      extracted.target.nodes,
+      extracted.target.layoutMode,
+      mapDocumentOptionsFromState(extracted.target),
+    )),
     indexAfter: encodeMapIndex(next),
   });
   if (written.ok) {

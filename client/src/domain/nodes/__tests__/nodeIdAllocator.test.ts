@@ -82,6 +82,24 @@ describe("createNodeIdAllocator", () => {
     expect(nextId).toBe(1_003);
   });
 
+  it("nextAvailableEntityIds は nodes∪relations∪groups を避け、nextAvailableIds のシグネチャは変えない", () => {
+    const allocator = createNodeIdAllocator(() => generatorFrom([1, 2, 3, 4, 5]));
+    const nodes = [node(1), node(3)];
+    expect(allocator.nextAvailableIds(nodes, 1)).toEqual([2]);
+    allocator.reset();
+    const allocator2 = createNodeIdAllocator(() => generatorFrom([1, 2, 3, 4, 5]));
+    expect(
+      allocator2.nextAvailableEntityIds(
+        {
+          nodes,
+          relations: [{ id: 2, fromId: 1, toId: 3, kind: "related", directed: false }],
+          groups: [{ id: 4, nodeIds: [1, 3], label: "" }],
+        },
+        1,
+      ),
+    ).toEqual([5]);
+  });
+
   it("一括採番は既存ノード配列をcountに比例して繰り返し走査しない（1件ずつ採番するO(n·count)への退行を検出する）", () => {
     let current = 0;
     const allocator = createNodeIdAllocator(() => () => {

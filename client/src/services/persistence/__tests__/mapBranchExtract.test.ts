@@ -45,6 +45,42 @@ describe("extractStoredBranch", () => {
     expect(storage.getItem(BRANCH_MOVE_JOURNAL_KEY)).toBeNull();
   });
 
+  it("閉じた relations/groups を新マップへ保存し、元は prune する", () => {
+    const withClosed = serializeMapDocument(createMapDocument([
+      createTestNode({ id: 1, parentId: null, label: "旅行の計画", x: 0, y: 0 }),
+      createTestNode({ id: 2, parentId: 1, label: "枝", x: 120, y: 40 }),
+      createTestNode({ id: 3, parentId: 2, label: "子" }),
+    ], "manual", {
+      relations: [
+        { id: 10, fromId: 2, toId: 3, kind: "related", directed: false },
+        { id: 11, fromId: 1, toId: 2, kind: "related", directed: false },
+      ],
+      groups: [
+        { id: 20, nodeIds: [2, 3], label: "closed" },
+        { id: 21, nodeIds: [1, 2, 3], label: "split" },
+      ],
+    }));
+    const recording = createRecordingStorage();
+    const index = seedMapLibrary(recording.storage, [{ id: "a", json: withClosed, name: "旅行の計画" }]);
+
+    const result = extractStoredBranch(recording.storage, index, "a", "new-map", 2, now);
+    expect(result.ok).toBe(true);
+    const sourceDoc = parseMapDocumentJson(recording.storage.getItem(mapBodyKey("a"))!);
+    const targetDoc = parseMapDocumentJson(recording.storage.getItem(mapBodyKey("new-map"))!);
+    expect(sourceDoc.ok).toBe(true);
+    expect(targetDoc.ok).toBe(true);
+    if (!sourceDoc.ok || !targetDoc.ok) return;
+    expect(sourceDoc.value.relations).toBeUndefined();
+    expect(sourceDoc.value.groups).toBeUndefined();
+    expect(targetDoc.value.relations).toHaveLength(1);
+    expect(targetDoc.value.groups).toEqual([
+      expect.objectContaining({
+        nodeIds: [targetDoc.value.nodes[0]!.id, targetDoc.value.nodes[1]!.id],
+        label: "closed",
+      }),
+    ]);
+  });
+
   it("空白ラベルはマップ名とスタブラベルを既定値にする", () => {
     const blankSource = serializeMapDocument(createMapDocument([
       createTestNode({ id: 1, parentId: null, label: "元" }),

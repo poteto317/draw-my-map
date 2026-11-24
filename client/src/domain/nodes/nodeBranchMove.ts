@@ -1,3 +1,9 @@
+import {
+  type AllocateEntityIds,
+  copyClosedRelationGroups,
+  mergeRelationGroupSlices,
+  pruneSourceAfterBranchMove,
+} from "@/domain/map/relationGroupLifecycle";
 import { assertNodesEditable } from "@/domain/nodes/nodeEditLock";
 import {
   DEFAULT_LAYOUT_NODE_FOREST_OPTIONS,
@@ -7,7 +13,7 @@ import {
 import { calculateIndentTranslation, translateBranch, type BranchTranslation } from "@/domain/nodes/nodeIndentPlacement";
 import { calculateManualOffsetY } from "@/domain/nodes/nodeManualPlacement";
 import { remapMovedBranchMapLinks } from "@/domain/nodes/nodeMapLink";
-import { insertNodeSubtree, type AllocateNodeIds } from "@/domain/nodes/nodeSubtreeInsertion";
+import { insertNodeSubtree } from "@/domain/nodes/nodeSubtreeInsertion";
 import { collectSubtreeIds } from "@/domain/nodes/nodeTree";
 import { resolveLayoutNodeForestOptions, resolveLayoutSpacing } from "@/domain/nodes/resolveLayoutSpacing";
 import { DEFAULT_LAYOUT_SPACING } from "@/domain/persistence/mapDocumentLayoutSpacing";
@@ -15,6 +21,8 @@ import type { LayoutSpacing } from "@/types/layoutSpacing";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 import type { NodeMapState } from "@/types/nodeMapState";
+
+export type { AllocateEntityIds };
 
 export type BranchMoveFailureReason =
   | "missing-node"
@@ -178,12 +186,13 @@ export type BranchTransferMapIds = {
   readonly targetMapId: string;
 };
 
-// 枝を別マップへ移す。移動先で ID を振り直すので、枝の中のノード同士を指すマップ間リンクは移動先マップ・新しい ID へ付け替える
+// 枝を別マップへ移す。移動先で ID を振り直すので、枝の中のノード同士を指すマップ間リンクは移動先マップ・新しい ID へ付け替える。
+// 閉じた relation/group は remap して同行し、境界横断 relation・分割 group は捨てる。元マップは prune する
 export function transferNodeBranch(
   source: NodeMapState,
   target: NodeMapState,
   rootId: number,
-  allocateIds: AllocateNodeIds,
+  allocateIds: AllocateEntityIds,
   mapIds: BranchTransferMapIds,
 ): BranchTransferResult {
   const root = source.nodes.find((node) => node.id === rootId);
@@ -207,15 +216,22 @@ export function transferNodeBranch(
     rootId,
     null,
     target.layoutMode,
-    allocateIds,
+    (occupied, count) => allocateIds(
+      { nodes: [...occupied], relations: target.relations, groups: target.groups },
+      count,
+    ),
     "paste",
     targetSpacing,
   );
   if (inserted === null) return { ok: false, reason: "placement-failed" };
   // 写した枝は配列の末尾に、元の枝と同じ順で並ぶ
   const copies = inserted.nodes.slice(target.nodes.length);
-  const nodeIdMapping = new Map(split.branch.map((item, index) => [item.id, copies[index].id] as const));
-  const remappedCopies = remapMovedBranchMapLinks(copies, mapIds.sourceMapId, mapIds.targetMapId, nodeIdMapping);
+  const remappedCopies = remapMovedBranchMapLinks(
+    copies,
+    mapIds.sourceMapId,
+    mapIds.targetMapId,
+    inserted.nodeIdMapping,
+  );
   const nextTargetNodes = layoutForMode(
     [...inserted.nodes.slice(0, target.nodes.length), ...remappedCopies],
     target.layoutMode,
@@ -223,10 +239,30 @@ export function transferNodeBranch(
   );
   if (nextTargetNodes === null) return { ok: false, reason: "placement-failed" };
 
+  const pruned = pruneSourceAfterBranchMove(source.relations, source.groups, branchIds);
+  const closedCopied = copyClosedRelationGroups(
+    source.relations,
+    source.groups,
+    inserted.nodeIdMapping,
+    { nodes: nextTargetNodes, relations: target.relations, groups: target.groups },
+    allocateIds,
+  );
+  const merged = mergeRelationGroupSlices(target, closedCopied);
+
   return {
     ok: true,
-    source: { layoutMode: source.layoutMode, nodes: nextSourceNodes },
-    target: { layoutMode: target.layoutMode, nodes: nextTargetNodes },
+    source: {
+      ...source,
+      nodes: nextSourceNodes,
+      relations: pruned.relations,
+      groups: pruned.groups,
+    },
+    target: {
+      ...target,
+      nodes: nextTargetNodes,
+      relations: merged.relations,
+      groups: merged.groups,
+    },
     rootId: inserted.rootId,
   };
 }

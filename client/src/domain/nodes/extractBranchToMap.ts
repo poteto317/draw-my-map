@@ -8,10 +8,10 @@ import {
 import { assertNodesEditable } from "@/domain/nodes/nodeEditLock";
 import {
   transferNodeBranch,
+  type AllocateEntityIds,
   type BranchMoveFailureReason,
   type BranchTransferMapIds,
 } from "@/domain/nodes/nodeBranchMove";
-import type { AllocateNodeIds } from "@/domain/nodes/nodeSubtreeInsertion";
 import { listBranchExtractEditableIds } from "@/domain/nodes/branchExtractEditableIds";
 import type { Node } from "@/types/node";
 import type { NodeMapState } from "@/types/nodeMapState";
@@ -29,7 +29,7 @@ export type ExtractBranchToNewMapInput = {
   newMapId: string;
   sourceMapId: string;
   sourceMapName: string;
-  allocateIds: AllocateNodeIds;
+  allocateIds: AllocateEntityIds;
 };
 
 export type ExtractBranchToNewMapResult =
@@ -155,13 +155,17 @@ export function extractBranchToNewMap(input: ExtractBranchToNewMapInput): Extrac
   const transferred = transferNodeBranch(source, target, rootId, allocateIds, mapIds);
   if (!transferred.ok) return transferred;
 
-  const [stubId] = allocateIds(transferred.source.nodes, 1);
+  const [stubId] = allocateIds({
+    nodes: transferred.source.nodes,
+    relations: transferred.source.relations,
+    groups: transferred.source.groups,
+  }, 1);
   const stub = createExtractBranchStub(root, stubId, newMapId);
   const sourceNodes = insertStubAtSiblingIndex(transferred.source.nodes, stub, root.parentId, siblingIndex);
 
   return {
     ok: true,
-    source: { layoutMode: transferred.source.layoutMode, nodes: sourceNodes },
+    source: { ...transferred.source, nodes: sourceNodes },
     target: transferred.target,
     stubNodeId: stubId,
     newMapName,
