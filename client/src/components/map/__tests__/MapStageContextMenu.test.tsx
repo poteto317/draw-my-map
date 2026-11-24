@@ -1,5 +1,6 @@
 import { act, fireEvent } from "@testing-library/react";
 import { MapStage } from "@/components/map/MapStage";
+import { NODE_CONTEXT_MENU_SIZE } from "@/components/map/nodeContextMenuLayout";
 import {
   mockNodePointerHandlers,
   mockStage,
@@ -195,7 +196,10 @@ describe("MapStage context menu boundary", () => {
 
     fireEvent.contextMenu(container, { clientX: 790, clientY: 590 });
 
-    expect(getByRole("menu")).toHaveStyle({ left: "580px", top: "520px" });
+    expect(getByRole("menu")).toHaveStyle({
+      left: `${800 - NODE_CONTEXT_MENU_SIZE.width}px`,
+      top: `${600 - NODE_CONTEXT_MENU_SIZE.height}px`,
+    });
   });
 
   it("開いているメニュー上の右クリックではメニューを維持し再選択しない", async () => {
@@ -373,6 +377,27 @@ describe("MapStage context menu boundary", () => {
     expect(notPrevented).toBe(false);
     expect(onSelectNode).toHaveBeenCalledWith(1);
     expect(queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("イラスト未配線でも onCreateGroup があればメニューを開きグループ化を出す", async () => {
+    const onCreateGroup = jest.fn();
+    const { getByRole, queryByRole } = await renderReady(
+      <MapStage
+        {...defaultProps}
+        nodes={sampleNodes}
+        selectedNodeId={1}
+        selectedNodeIds={[1, 2]}
+        onCreateGroup={onCreateGroup}
+      />,
+    );
+    const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+    mockStageBounds(container);
+
+    fireEvent.contextMenu(container, { clientX: 100, clientY: 60 });
+
+    expect(getByRole("menu")).toBeInTheDocument();
+    expect(queryByRole("menuitem", { name: "イラストを生成" })).not.toBeInTheDocument();
+    expect(getByRole("menuitem", { name: "グループ化" })).toBeInTheDocument();
   });
 });
 

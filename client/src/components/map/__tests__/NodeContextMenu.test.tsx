@@ -63,4 +63,26 @@ describe("NodeContextMenu", () => {
     await userEvent.click(screen.getByRole("menuitem", { name: "イラストを再生成" }));
     expect(onGenerateIllustration).toHaveBeenCalledTimes(1);
   });
+
+  it("イラスト未配線でもグループ化／枝グループ化を出せる（N6/N7）", async () => {
+    const onCreateGroup = jest.fn();
+    const onCreateBranchGroup = jest.fn();
+    render(
+      <NodeContextMenu
+        position={{ x: 0, y: 0 }}
+        hasIllustration={false}
+        groupCreateVisible
+        onCreateGroup={onCreateGroup}
+        branchGroupVisible
+        onCreateBranchGroup={onCreateBranchGroup}
+      />,
+    );
+
+    expect(screen.queryByRole("menuitem", { name: "イラストを生成" })).not.toBeInTheDocument();
+    expect(screen.getByRole("menu")).toHaveStyle({
+      height: `${measureNodeContextMenuHeight(2)}px`,
+    });
+    await userEvent.click(screen.getByRole("menuitem", { name: "グループ化" }));
+    expect(onCreateGroup).toHaveBeenCalledTimes(1);
+  });
 });

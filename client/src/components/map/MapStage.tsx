@@ -51,7 +51,20 @@ import type { NodeLayoutMode } from "@/types/nodeLayout";
 import type { OperationNotice } from "@/types/operationNotice";
 import type { NodeFocusRequest } from "@/types/nodeFocusRequest";
 import type { NodeLabelEditRequest } from "@/types/nodeLabelEditRequest";
+import {
+  branchGroupMemberIds,
+  resolveGroupDeleteAvailability,
+} from "@/domain/map/mapGroupAvailability";
+import { resolveMapRelationGroupContextMenus } from "@/domain/map/mapRelationGroupContextMenus";
+import { resolveRelationDeleteAvailability } from "@/domain/map/mapRelationAvailability";
+import {
+  selectedGroupId as readSelectedGroupId,
+  selectedRelationId as readSelectedRelationId,
+} from "@/domain/map/mapCanvasSelectionGuards";
 import { resolveBranchExtractContextMenu } from "@/domain/nodes/nodeBranchExtractAvailability";
+import type { MapCanvasSelection } from "@/types/mapCanvasSelection";
+import type { MapGroup } from "@/types/mapGroup";
+import type { MapRelation } from "@/types/mapRelation";
 
 const EMPTY_SELECTED_NODE_IDS: readonly number[] = [];
 
@@ -115,6 +128,16 @@ type MapStageProps = {
   onClipboardNotice: (notice: OperationNotice) => void;
   onGenerateIllustration?: (nodeId: number) => void;
   onBeginBranchExtract?: () => void;
+  relations?: readonly MapRelation[];
+  groups?: readonly MapGroup[];
+  canvasSelection?: MapCanvasSelection;
+  onSelectRelation?: (relationId: number) => void;
+  onDeleteRelation?: (relationId: number) => void;
+  onBeginRelationAdd?: (fromId: number) => void;
+  onConnectRelation?: (fromId: number, toId: number) => void;
+  onSelectGroup?: (groupId: number) => void;
+  onDeleteGroup?: (groupId: number) => void;
+  onCreateGroup?: (nodeIds: readonly number[]) => void;
   isProtectedMode?: boolean;
   hasMapConflict?: boolean;
   isExternallyDeleted?: boolean;
@@ -169,6 +192,16 @@ export function MapStage({
   onClipboardNotice,
   onGenerateIllustration,
   onBeginBranchExtract,
+  relations,
+  groups,
+  canvasSelection,
+  onSelectRelation,
+  onDeleteRelation,
+  onBeginRelationAdd,
+  onConnectRelation,
+  onSelectGroup,
+  onDeleteGroup,
+  onCreateGroup,
   isProtectedMode = false,
   hasMapConflict = false,
   isExternallyDeleted = false,
@@ -177,6 +210,8 @@ export function MapStage({
   layoutSnapPrefs = { ...DEFAULT_LAYOUT_SNAP_PREFS, enabled: false },
   dialogMouseClickedAtRef,
 }: MapStageProps) {
+  const selectedRelationId = readSelectedRelationId(canvasSelection);
+  const selectedGroupId = readSelectedGroupId(canvasSelection);
   const effectiveVisibleNodeIds = useMemo(
     () => visibleNodeIds ?? new Set(nodes.map((node) => node.id)),
     [nodes, visibleNodeIds],
@@ -285,6 +320,14 @@ export function MapStage({
     return EMPTY_SELECTED_NODE_IDS;
   }, [selectedNodeId, selectedNodeIds]);
 
+  const handleRelationPointerDown = useCallback((relationId: number) => {
+    onSelectRelation?.(relationId);
+  }, [onSelectRelation]);
+
+  const handleGroupPointerDown = useCallback((groupId: number) => {
+    onSelectGroup?.(groupId);
+  }, [onSelectGroup]);
+
   const scene = useRenderedMapScene({
     runtime,
     options: {
@@ -300,6 +343,12 @@ export function MapStage({
       highlightNodeIds,
       pinnedNodeIds,
       illustrationTextures,
+      relations,
+      selectedRelationId,
+      onRelationPointerDown: handleRelationPointerDown,
+      groups,
+      selectedGroupId,
+      onGroupPointerDown: handleGroupPointerDown,
     },
     viewport,
     viewportRef,
@@ -413,12 +462,56 @@ export function MapStage({
   useViewportScaleNotification(viewport.scale, onViewportScaleChange);
   useViewportFrameNotification(viewport, screenSize, onViewportFrameChange);
 
+  const handleDeleteRelation = useCallback((relationId: number) => {
+    const relation = (relations ?? []).find((entry) => entry.id === relationId);
+    const canDelete = resolveRelationDeleteAvailability({
+      viewMode: "map",
+      isProtectedMode,
+      hasConflict: hasMapConflict,
+      isExternallyDeleted,
+      nodes,
+      relation,
+    }).enabled;
+    if (canDelete) onDeleteRelation?.(relationId);
+  }, [
+    relations,
+    isProtectedMode,
+    hasMapConflict,
+    isExternallyDeleted,
+    nodes,
+    onDeleteRelation,
+  ]);
+
+  const handleDeleteGroup = useCallback((groupId: number) => {
+    const group = (groups ?? []).find((entry) => entry.id === groupId);
+    const canDelete = resolveGroupDeleteAvailability({
+      viewMode: "map",
+      isProtectedMode,
+      hasConflict: hasMapConflict,
+      isExternallyDeleted,
+      nodes,
+      group,
+    }).enabled;
+    if (canDelete) onDeleteGroup?.(groupId);
+  }, [
+    groups,
+    isProtectedMode,
+    hasMapConflict,
+    isExternallyDeleted,
+    nodes,
+    onDeleteGroup,
+  ]);
+
   useNodeKeyboardShortcuts({
     selectedNodeId,
+    selectedRelationId,
+    selectedGroupId,
     isEditing: editing.editingNodeId !== null,
     onAddChildNode,
     onAddSiblingNode,
     onDeleteNode,
+    onDeleteRelation: handleDeleteRelation,
+    onDeleteGroup: handleDeleteGroup,
     onStartEditing: editing.startEditing,
     enabled: shortcutsEnabled,
     onClearSelection: resolvedOnClearSelection,
@@ -482,6 +575,13 @@ export function MapStage({
     if (isOverlayFollowUpClick()) event.preventDefault();
   };
 
+  // イラスト配線の有無に依存しない。関連線／グループ等いずれかの入口があればメニューを開ける
+  const canOpenContextMenu = onGenerateIllustration !== undefined
+    || onBeginBranchExtract !== undefined
+    || onBeginRelationAdd !== undefined
+    || onConnectRelation !== undefined
+    || onCreateGroup !== undefined;
+
   const handleContextMenu = (event: MouseEvent<HTMLDivElement>) => {
     // macOS Ctrl+click is a secondary click; the primary-button gesture it started is not a drag.
     if (event.ctrlKey && hasActiveGesture()) cancelActiveGesture();
@@ -493,7 +593,7 @@ export function MapStage({
         isTextEntryTarget: isTextEntryTarget(event.target),
         isInsideMenu: isInsideNodeContextMenu(event.target),
         hasActiveGesture: hasActiveGesture(),
-        canOpenMenu: onGenerateIllustration !== undefined,
+        canOpenMenu: canOpenContextMenu,
         client: { x: event.clientX, y: event.clientY },
         bounds: container.getBoundingClientRect(),
         viewport: viewportRef.current,
@@ -506,25 +606,44 @@ export function MapStage({
     if (action.type === "dismiss") contextMenu.close();
     else if (action.type === "select") onSelectNode(action.nodeId);
     else if (action.type === "open") {
-      onSelectNode(action.nodeId);
+      // 複数選択中に選択済みノードを右クリックしても選択を畳み込まない（「関連線で結ぶ」用）
+      if (!resolvedSelectedNodeIds.includes(action.nodeId)) {
+        onSelectNode(action.nodeId);
+      }
       contextMenu.open({ nodeId: action.nodeId, position: action.position });
     }
   };
 
   const menu = contextMenu.menu;
   const menuNode = menu === null ? undefined : nodes.find((node) => node.id === menu.nodeId);
+  const guardInput = {
+    viewMode: "map" as const,
+    isProtectedMode,
+    hasConflict: hasMapConflict,
+    isExternallyDeleted,
+  };
   const branchExtractMenu = menu === null
     ? { visible: false, disabled: false }
     : resolveBranchExtractContextMenu({
-      viewMode: "map",
+      ...guardInput,
       selectedNodeId,
       selectedNodeIds: resolvedSelectedNodeIds,
       nodes,
       contextMenuNodeId: menu.nodeId,
-      isProtectedMode,
-      hasConflict: hasMapConflict,
-      isExternallyDeleted,
     });
+  const {
+    relationAdd: relationAddMenu,
+    relationConnect: relationConnectMenu,
+    groupCreate: groupCreateMenu,
+    branchGroup: branchGroupMenu,
+  } = resolveMapRelationGroupContextMenus({
+    ...guardInput,
+    menuNodeId: menu?.nodeId ?? null,
+    selectedNodeId,
+    selectedNodeIds: resolvedSelectedNodeIds,
+    nodes,
+    relations,
+  });
 
   return (
     <div
@@ -546,15 +665,17 @@ export function MapStage({
           onCancel={editing.cancelEditing}
         />
       )}
-      {menu && onGenerateIllustration && (
+      {menu && canOpenContextMenu && (
         <NodeContextMenu
           position={menu.position}
           hasIllustration={menuNode?.illustration !== undefined}
-          onGenerateIllustration={() => {
-            menuActivatedAtRef.current = Date.now();
-            contextMenu.close();
-            onGenerateIllustration(menu.nodeId);
-          }}
+          onGenerateIllustration={onGenerateIllustration === undefined
+            ? undefined
+            : () => {
+              menuActivatedAtRef.current = Date.now();
+              contextMenu.close();
+              onGenerateIllustration(menu.nodeId);
+            }}
           extractVisible={branchExtractMenu.visible}
           extractDisabled={branchExtractMenu.disabled}
           onBeginBranchExtract={onBeginBranchExtract === undefined ? undefined : () => {
@@ -562,6 +683,42 @@ export function MapStage({
             contextMenu.close();
             onBeginBranchExtract();
           }}
+          relationAddVisible={relationAddMenu.visible}
+          relationAddDisabled={relationAddMenu.disabled}
+          onBeginRelationAdd={onBeginRelationAdd === undefined ? undefined : () => {
+            menuActivatedAtRef.current = Date.now();
+            contextMenu.close();
+            onBeginRelationAdd(menu.nodeId);
+          }}
+          relationConnectVisible={relationConnectMenu.visible}
+          relationConnectDisabled={relationConnectMenu.disabled}
+          onConnectRelation={onConnectRelation === undefined || resolvedSelectedNodeIds.length !== 2
+            ? undefined
+            : () => {
+              menuActivatedAtRef.current = Date.now();
+              contextMenu.close();
+              onConnectRelation(resolvedSelectedNodeIds[0]!, resolvedSelectedNodeIds[1]!);
+            }}
+          groupCreateVisible={groupCreateMenu.visible}
+          groupCreateDisabled={groupCreateMenu.disabled}
+          onCreateGroup={onCreateGroup === undefined || resolvedSelectedNodeIds.length < 2
+            ? undefined
+            : () => {
+              menuActivatedAtRef.current = Date.now();
+              contextMenu.close();
+              onCreateGroup(resolvedSelectedNodeIds);
+            }}
+          branchGroupVisible={branchGroupMenu.visible}
+          branchGroupDisabled={branchGroupMenu.disabled}
+          onCreateBranchGroup={onCreateGroup === undefined || selectedNodeId === null
+            ? undefined
+            : () => {
+              const memberIds = branchGroupMemberIds(nodes, selectedNodeId);
+              if (memberIds === null) return;
+              menuActivatedAtRef.current = Date.now();
+              contextMenu.close();
+              onCreateGroup(memberIds);
+            }}
         />
       )}
     </div>

@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { BrokenMapLinksDialog } from "@/components/layout/BrokenMapLinksDialog";
 import { CrossMapSearchDialog } from "@/components/layout/CrossMapSearchDialog";
+import { RelationPartnerPickerDialog } from "@/components/layout/RelationPartnerPickerDialog";
+import { isNodeTargetOperationBlocked } from "@/domain/map/mapCanvasSelectionGuards";
+import { resolveGroupLabelEditAvailability } from "@/domain/map/mapGroupAvailability";
+import { resolveRelationMeaningEditAvailability } from "@/domain/map/mapRelationAvailability";
 import { EditorViewModeControl, type EditorViewMode } from "@/components/layout/EditorViewModeControl";
 import { ExportScopeControl } from "@/components/layout/ExportScopeControl";
 import { OutlineEditor } from "@/components/outline/OutlineEditor";
@@ -18,10 +22,12 @@ import { resolveExportNodes } from "@/domain/exportScope/resolveExportNodes";
 import { resolveSelectionTargetIds } from "@/domain/exportScope/resolveSelectionTargetIds";
 import { summarizeSelectionImportance } from "@/domain/nodes/selectionImportanceSummary";
 import { buildOutlineRows } from "@/domain/outline/outlineRows";
+import { remapClosedForNodeIdMap } from "@/domain/map/relationGroupLifecycle";
 import {
   createMapDocument,
   serializeMapDocument,
 } from "@/domain/persistence/mapDocumentCodec";
+import { mapDocumentOptionsFromState } from "@/domain/persistence/mapDocumentState";
 import { useCrossMapCorpus } from "@/hooks/useCrossMapCorpus";
 import { useCrossMapDialogs } from "@/hooks/useCrossMapDialogs";
 import { useCrossMapNavigation } from "@/hooks/useCrossMapNavigation";
@@ -199,19 +205,31 @@ export function MapEditor({
     nodes,
     selectedNodeId,
     selectedNodeIds,
+    canvasSelection,
     layoutMode,
     treeDirection,
     layoutSpacing,
+    relations,
+    groups,
     addNode,
     addChildNode,
     addSiblingNode,
     selectNode,
+    selectRelation,
+    selectGroup,
     restoreSelection,
     toggleNodeSelection,
     selectNodeRange,
     setSelectionFromMarquee,
     clearSelection,
+    clearNonNodeSelection,
     pruneSelectionToVisible,
+    addRelation,
+    removeRelation,
+    updateRelation,
+    addGroup,
+    removeGroup,
+    updateGroupLabel,
     updateNodeLabel,
     updateNodesImportance,
     moveNode,
@@ -277,6 +295,14 @@ export function MapEditor({
   });
   const { prefs: uiPrefs, setWheelZoomSensitivity } = useUiPrefs();
   const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? null;
+  const selectedRelation = useMemo(() => {
+    if (canvasSelection.type !== "relation") return null;
+    return (relations ?? []).find((relation) => relation.id === canvasSelection.id) ?? null;
+  }, [canvasSelection, relations]);
+  const selectedGroup = useMemo(() => {
+    if (canvasSelection.type !== "group") return null;
+    return (groups ?? []).find((group) => group.id === canvasSelection.id) ?? null;
+  }, [canvasSelection, groups]);
   // 一括編集の対象。アウトラインは単一選択のため、キャンバスで残った複数選択を見えないまま変えない
   const importanceTargetIds = useMemo<readonly number[]>(() => {
     if (viewMode === "map") return selectedNodeIds;
@@ -423,12 +449,32 @@ export function MapEditor({
   const persistence = useMapPersistence({
     nodes,
     layoutMode,
+    treeDirection,
+    layoutSpacing,
+    relations,
+    groups,
     replaceMap: replaceMapAndReset,
     storageSession,
     storageMode,
     mapName,
     onSaveCurrentAsNewMap,
   });
+  const relationEditDisabled = !resolveRelationMeaningEditAvailability({
+    viewMode,
+    isProtectedMode: storageMode === "protected",
+    hasConflict: persistence.conflictState === "conflict",
+    isExternallyDeleted: persistence.conflictState === "externallyDeleted",
+    nodes,
+    relation: selectedRelation ?? undefined,
+  }).enabled;
+  const groupEditDisabled = !resolveGroupLabelEditAvailability({
+    viewMode,
+    isProtectedMode: storageMode === "protected",
+    hasConflict: persistence.conflictState === "conflict",
+    isExternallyDeleted: persistence.conflictState === "externallyDeleted",
+    nodes,
+    group: selectedGroup ?? undefined,
+  }).enabled;
   const selectionTargetIds = useMemo(
     () => resolveSelectionTargetIds(viewMode, selectedNodeId, selectedNodeIds),
     [viewMode, selectedNodeId, selectedNodeIds],
@@ -460,10 +506,15 @@ export function MapEditor({
     nodes: exportNodes,
     mapName,
   });
-  const scopedJsonSnapshot = useMemo(
-    () => serializeMapDocument(createMapDocument(exportDocumentNodes, layoutMode)),
-    [exportDocumentNodes, layoutMode],
-  );
+  const scopedJsonSnapshot = useMemo(() => {
+    const exportIdMap = new Map(exportDocumentNodes.map((node) => [node.id, node.id]));
+    const closed = remapClosedForNodeIdMap(relations, groups, exportIdMap);
+    return serializeMapDocument(createMapDocument(exportDocumentNodes, layoutMode, {
+      ...mapDocumentOptionsFromState({ treeDirection, layoutSpacing }),
+      relations: closed.relations,
+      groups: closed.groups,
+    }));
+  }, [exportDocumentNodes, layoutMode, treeDirection, layoutSpacing, relations, groups]);
   const exportScopedJson = useMapJsonExport({
     currentSnapshot: scopedJsonSnapshot,
     mapName,
@@ -494,6 +545,8 @@ export function MapEditor({
     clearNotice: clearTreeEditNotice,
   } = useRevisionScopedNotice(documentRevision);
   const [partsDialogMode, setPartsDialogMode] = useState<PartsLibraryDialogMode | null>(null);
+  const [relationPartnerFromId, setRelationPartnerFromId] = useState<number | null>(null);
+  const nodeOpsBlockedByCanvasSelection = isNodeTargetOperationBlocked(canvasSelection);
   const partsLibrary = usePartsLibrary({
     storage: storageSession.storage,
     nodes,
@@ -712,6 +765,7 @@ export function MapEditor({
     publishNotice: publishCommandPaletteNotice,
   } = useRevisionScopedNotice(documentRevision);
   // 入口をすべて同じ値で止める（L-061）。commandPalette.screen === "closed" を積に含める
+  // 相手ピッカー表示中も inert／shortcuts 停止（設計 §10）
   const editorShortcutsEnabled = shortcutsEnabled
     && commandPalette.screen === "closed"
     && outlineImport.screen === "closed"
@@ -721,6 +775,7 @@ export function MapEditor({
     && nodeSplit.screen === "closed"
     && nodeMerge.screen === "closed"
     && partsDialogMode === null
+    && relationPartnerFromId === null
     && !crossMapDialogs.crossMapSearchOpen
     && !crossMapDialogs.brokenLinksDialogOpen
     && !persistence.isConfirmOpen;
@@ -763,7 +818,11 @@ export function MapEditor({
   const applyViewMode = useCallback((nextMode: EditorViewMode) => {
     if (nextMode === viewModeRef.current) return;
     viewNavigation.clearCanvasFocus();
-    if (nextMode === "outline") viewNavigation.rememberOutlineViewport();
+    // 関連線／グループ選択のままアウトラインへ行くと isNodeOpBlocked で構造操作が止まる（inventory: 無関係）
+    if (nextMode === "outline") {
+      clearNonNodeSelection();
+      viewNavigation.rememberOutlineViewport();
+    }
     if (nextMode === "map") {
       setViewportScale(INITIAL_VIEWPORT.scale);
       resolutionFilter.resetViewportScale(INITIAL_VIEWPORT.scale);
@@ -771,7 +830,7 @@ export function MapEditor({
     }
     pendingViewModeFocusRef.current = nextMode;
     setViewMode(nextMode);
-  }, [viewModeRef, viewNavigation, resolutionFilter, returnToCanvas]);
+  }, [viewModeRef, viewNavigation, resolutionFilter, returnToCanvas, clearNonNodeSelection]);
   function changeViewMode(nextMode: EditorViewMode) {
     if (!editorShortcutsEnabled) return;
     applyViewMode(nextMode);
@@ -816,30 +875,37 @@ export function MapEditor({
         canUndo,
         canRedo,
         canFitAll: displayState.fitNodes.length > 0,
-        canFitSelection: selectedFitNodes.length > 0,
-        canFocusBranch: selectedBranchIds !== null,
-        canExpandSubtree: canExpandSelectedBranch,
-        canCollapseSubtree: canCollapseSelectedBranch,
-        canDuplicate: selectedNode !== null,
+        // §10: 関連線／グループ選択中はノード対象のパレット項目を無効
+        canFitSelection: !nodeOpsBlockedByCanvasSelection && selectedFitNodes.length > 0,
+        canFocusBranch: !nodeOpsBlockedByCanvasSelection && selectedBranchIds !== null,
+        canExpandSubtree: !nodeOpsBlockedByCanvasSelection && canExpandSelectedBranch,
+        canCollapseSubtree: !nodeOpsBlockedByCanvasSelection && canCollapseSelectedBranch,
+        canDuplicate: !nodeOpsBlockedByCanvasSelection && selectedNode !== null,
         // アウトライン時は allNodeIds 基準（マップの visibleNodeIds と不一致になりうる）
         canDeleteNodeOnly:
-          viewMode === "outline" ? outlineActions.structureCanDelete : nodeOnlyDeletion.canDelete,
-        canInsertParent: nodeParentInsertion.canInsert,
+          !nodeOpsBlockedByCanvasSelection
+          && (viewMode === "outline" ? outlineActions.structureCanDelete : nodeOnlyDeletion.canDelete),
+        canInsertParent: !nodeOpsBlockedByCanvasSelection && nodeParentInsertion.canInsert,
         canMoveSiblingUp:
-          viewMode === "outline" ? outlineActions.structureCanMoveUp : siblingReorder.canMoveUp,
+          !nodeOpsBlockedByCanvasSelection
+          && (viewMode === "outline" ? outlineActions.structureCanMoveUp : siblingReorder.canMoveUp),
         canMoveSiblingDown:
-          viewMode === "outline" ? outlineActions.structureCanMoveDown : siblingReorder.canMoveDown,
-        canIndent: viewMode === "outline" ? outlineActions.structureCanIndent : nodeIndent.canIndent,
+          !nodeOpsBlockedByCanvasSelection
+          && (viewMode === "outline" ? outlineActions.structureCanMoveDown : siblingReorder.canMoveDown),
+        canIndent:
+          !nodeOpsBlockedByCanvasSelection
+          && (viewMode === "outline" ? outlineActions.structureCanIndent : nodeIndent.canIndent),
         canOutdent:
-          viewMode === "outline" ? outlineActions.structureCanOutdent : nodeIndent.canOutdent,
-        canOpenLabelReplace: nodes.length > 0,
-        canOpenBranchMove: selectedNode !== null,
-        canOpenNodeSplit: nodeSplit.canOpen,
+          !nodeOpsBlockedByCanvasSelection
+          && (viewMode === "outline" ? outlineActions.structureCanOutdent : nodeIndent.canOutdent),
+        canOpenLabelReplace: !nodeOpsBlockedByCanvasSelection && nodes.length > 0,
+        canOpenBranchMove: !nodeOpsBlockedByCanvasSelection && selectedNode !== null,
+        canOpenNodeSplit: !nodeOpsBlockedByCanvasSelection && nodeSplit.canOpen,
         nodeSplitDisabledReason: nodeSplit.disabledReason,
-        canOpenNodeMerge: nodeMerge.canOpen,
+        canOpenNodeMerge: !nodeOpsBlockedByCanvasSelection && nodeMerge.canOpen,
         nodeMergeDisabledReason: nodeMerge.disabledReason,
-        canRegisterPart: partsLibrary.canRegister,
-        canInsertPart: partsLibrary.parts.length > 0,
+        canRegisterPart: !nodeOpsBlockedByCanvasSelection && partsLibrary.canRegister,
+        canInsertPart: !nodeOpsBlockedByCanvasSelection && partsLibrary.parts.length > 0,
         canDeletePart: partsLibrary.parts.length > 0,
         canFocusInMapSearch: viewMode === "map",
         canOpenCrossMapSearch: true,
@@ -849,6 +915,7 @@ export function MapEditor({
       }),
     [
       viewMode, selectedNodeId, focusRootId, storageMode, persistence.conflictState,
+      nodeOpsBlockedByCanvasSelection,
       canUndo, canRedo, displayState.fitNodes.length, selectedFitNodes.length, selectedBranchIds,
       canExpandSelectedBranch, canCollapseSelectedBranch, selectedNode, nodeOnlyDeletion.canDelete,
       nodeParentInsertion.canInsert, siblingReorder.canMoveUp, siblingReorder.canMoveDown,
@@ -1294,6 +1361,26 @@ export function MapEditor({
                 onViewportFrameChange={handleViewportFrameChange}
                 selectedNodeId={selectedNodeId}
                 selectedNodeIds={selectedNodeIds}
+                relations={relations}
+                groups={groups}
+                canvasSelection={canvasSelection}
+                onSelectRelation={selectRelation}
+                onDeleteRelation={(relationId) => {
+                  removeRelation(relationId);
+                }}
+                onBeginRelationAdd={(fromId) => {
+                  setRelationPartnerFromId(fromId);
+                }}
+                onConnectRelation={(fromId, toId) => {
+                  addRelation(fromId, toId);
+                }}
+                onSelectGroup={selectGroup}
+                onDeleteGroup={(groupId) => {
+                  removeGroup(groupId);
+                }}
+                onCreateGroup={(nodeIds) => {
+                  addGroup(nodeIds);
+                }}
                 onDoubleClick={addNode}
                 onAddChildNode={addChildNodeExpanding}
                 onAddSiblingNode={addSiblingNode}
@@ -1347,6 +1434,10 @@ export function MapEditor({
           sidePanel={(
             <NodeDetailPanel
               selectedNode={selectedNode}
+              selectedRelation={selectedRelation}
+              relationEditDisabled={relationEditDisabled}
+              selectedGroup={selectedGroup}
+              groupEditDisabled={groupEditDisabled}
               // アウトライン表示では主選択だけ（キャンバスで残った複数選択の件数を見せない）
               selectionCount={importanceTargetIds.length}
               documentRevision={documentRevision}
@@ -1368,6 +1459,15 @@ export function MapEditor({
               onNavigateToMapTarget={navigateToMapTarget}
               onSetNodeIcon={setNodeIcon}
               onSetNodeKind={setNodeKind}
+              onUpdateRelationKind={(relationId, kind) => {
+                updateRelation(relationId, { kind });
+              }}
+              onUpdateRelationDirected={(relationId, directed) => {
+                updateRelation(relationId, { directed });
+              }}
+              onUpdateGroupLabel={(groupId, label) => {
+                updateGroupLabel(groupId, label);
+              }}
               generation={generation}
               onGenerate={generateIllustration}
               onAttach={(nodeId, dataUrl) => {
@@ -1506,6 +1606,21 @@ export function MapEditor({
         />
       )}
       {/* data-map-id を付けず、根の inert の外に置く */}
+      {relationPartnerFromId !== null && (
+        <RelationPartnerPickerDialog
+          fromId={relationPartnerFromId}
+          nodes={nodes}
+          relations={relations}
+          onPick={(toId) => {
+            addRelation(relationPartnerFromId, toId);
+            setRelationPartnerFromId(null);
+          }}
+          onCancel={() => setRelationPartnerFromId(null)}
+          onMouseClick={() => {
+            dialogMouseClickedAtRef.current = Date.now();
+          }}
+        />
+      )}
       {commandPalette.screen === "open" && (
         <CommandPaletteDialog
           open
