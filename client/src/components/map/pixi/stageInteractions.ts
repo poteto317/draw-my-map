@@ -12,6 +12,7 @@ import {
   hasFinitePointerCoordinates,
   toPointerSample,
 } from "@/components/map/pixi/pointerSample";
+import { resolveAutoNodeDragKind } from "@/components/map/pixi/resolveAutoNodeDragKind";
 import { createShiftNodePendingGesture } from "@/components/map/pixi/shiftNodePendingGesture";
 import { createSiblingReorderGesture } from "@/components/map/pixi/siblingReorderGesture";
 import { createToggleNodePendingGesture } from "@/components/map/pixi/toggleNodePendingGesture";
@@ -44,6 +45,10 @@ type StageInteractionOptions = {
   onMarqueeRectChangeRef?: LatestValue<(rect: MarqueeRect | null) => void>;
   onMoveNodeRef: LatestValue<(id: number, x: number, y: number) => void>;
   onBeginNodeMoveRef: LatestValue<() => MapHistoryGroupLease>;
+  /** auto+ピン座標ドラッグ。current 未定義ならピンは無操作（並べ替えへ落とさない） */
+  onMovePinnedNodeRef?: LatestValue<((id: number, x: number, y: number) => void) | undefined>;
+  /** ピンドラッグ終了時の再配置（履歴 finish 前）。未定義ならピンは無操作 */
+  onFinalizePinnedNodeMoveRef?: LatestValue<(() => boolean) | undefined>;
   layoutSnapPrefsRef?: LatestValue<LayoutSnapGesturePrefs>;
   onConnectNodesRef: LatestValue<(parentId: number, childId: number) => void>;
   onConnectionTargetChangeRef: LatestValue<(id: number | null) => void>;
@@ -91,6 +96,8 @@ export function createStageInteractions({
   onMarqueeRectChangeRef = noopMarqueeRectChange,
   onMoveNodeRef,
   onBeginNodeMoveRef,
+  onMovePinnedNodeRef,
+  onFinalizePinnedNodeMoveRef,
   layoutSnapPrefsRef,
   onConnectNodesRef,
   onConnectionTargetChangeRef,
@@ -167,6 +174,43 @@ export function createStageInteractions({
   ): PointerGesture | null => {
     const threshold = options?.dragThreshold ?? dragThreshold;
     if (layoutModeRef.current === "auto") {
+      const target = nodesRef.current.find((node) => node.id === nodeId);
+      const hasPinnedMoveCallbacks = onMovePinnedNodeRef?.current !== undefined
+        && onFinalizePinnedNodeMoveRef?.current !== undefined;
+      const dragKind = resolveAutoNodeDragKind(target, hasPinnedMoveCallbacks);
+
+      if (dragKind.kind === "noop") {
+        markSiblingReorderActive(null);
+        return null;
+      }
+
+      if (dragKind.kind === "pinned-move") {
+        markSiblingReorderActive(null);
+        // ジェスチャ中にコールバックが外れても throw しない
+        const onMovePinnedNodeLiveRef: LatestValue<(id: number, x: number, y: number) => void> = {
+          get current() {
+            return (id: number, x: number, y: number) => {
+              onMovePinnedNodeRef?.current?.(id, x, y);
+            };
+          },
+        };
+        const onFinalizePinnedLiveRef: LatestValue<() => boolean> = {
+          get current() {
+            return () => onFinalizePinnedNodeMoveRef?.current?.() ?? true;
+          },
+        };
+        return createNodeMoveGesture({
+          nodeId,
+          startSample: sample,
+          nodesRef,
+          onMoveNodeRef: onMovePinnedNodeLiveRef,
+          onBeginNodeMoveRef,
+          onBeforeFinishRef: onFinalizePinnedLiveRef,
+          layoutSnapPrefsRef,
+          dragThreshold: threshold,
+        });
+      }
+
       const reorder = createSiblingReorderGesture({
         nodeId,
         startSample: sample,

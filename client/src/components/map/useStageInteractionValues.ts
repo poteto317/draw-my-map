@@ -15,6 +15,8 @@ type UseStageInteractionValuesOptions = {
   onSelectNode: (id: number | null) => void;
   onMoveNode: (id: number, x: number, y: number) => void;
   onBeginNodeMove: () => MapHistoryGroupLease;
+  onMovePinnedNode?: (id: number, x: number, y: number) => void;
+  onFinalizePinnedNodeMove?: () => boolean;
   onConnectNodes: (parentId: number, childId: number) => void;
   layoutMode: NodeLayoutMode;
   onReorderSibling: (nodeId: number, request: SiblingReorderRequest) => void;
@@ -35,6 +37,8 @@ export function useStageInteractionValues({
   onSelectNode,
   onMoveNode,
   onBeginNodeMove,
+  onMovePinnedNode,
+  onFinalizePinnedNodeMove,
   onConnectNodes,
   layoutMode,
   onReorderSibling,
@@ -48,6 +52,8 @@ export function useStageInteractionValues({
   const onSelectNodeRef = useRef(onSelectNode);
   const onMoveNodeRef = useRef(onMoveNode);
   const onBeginNodeMoveRef = useRef(onBeginNodeMove);
+  const onMovePinnedNodeRef = useRef(onMovePinnedNode);
+  const onFinalizePinnedNodeMoveRef = useRef(onFinalizePinnedNodeMove);
   const onConnectNodesRef = useRef(onConnectNodes);
   const layoutModeRef = useRef(layoutMode);
   const onReorderSiblingRef = useRef(onReorderSibling);
@@ -60,6 +66,8 @@ export function useStageInteractionValues({
     onSelectNodeRef.current = onSelectNode;
     onMoveNodeRef.current = onMoveNode;
     onBeginNodeMoveRef.current = onBeginNodeMove;
+    onMovePinnedNodeRef.current = onMovePinnedNode;
+    onFinalizePinnedNodeMoveRef.current = onFinalizePinnedNodeMove;
     onConnectNodesRef.current = onConnectNodes;
     layoutModeRef.current = layoutMode;
     onReorderSiblingRef.current = onReorderSibling;
@@ -71,6 +79,8 @@ export function useStageInteractionValues({
     onSelectNode,
     onMoveNode,
     onBeginNodeMove,
+    onMovePinnedNode,
+    onFinalizePinnedNodeMove,
     onConnectNodes,
     layoutMode,
     onReorderSibling,
@@ -84,6 +94,8 @@ export function useStageInteractionValues({
     onSelectNodeRef,
     onMoveNodeRef,
     onBeginNodeMoveRef,
+    onMovePinnedNodeRef,
+    onFinalizePinnedNodeMoveRef,
     onConnectNodesRef,
     layoutModeRef,
     onReorderSiblingRef,

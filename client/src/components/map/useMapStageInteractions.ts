@@ -29,6 +29,8 @@ type UseMapStageInteractionsOptions = {
   onClearSelection?: () => void;
   onMoveNode: (id: number, x: number, y: number) => void;
   onBeginNodeMove: () => MapHistoryGroupLease;
+  onMovePinnedNode?: (id: number, x: number, y: number) => void;
+  onFinalizePinnedNodeMove?: () => boolean;
   onConnectNodes: (parentId: number, childId: number) => void;
   layoutMode: NodeLayoutMode;
   onReorderSibling: (nodeId: number, request: SiblingReorderRequest) => void;
@@ -60,6 +62,8 @@ export function useMapStageInteractions({
   onClearSelection,
   onMoveNode,
   onBeginNodeMove,
+  onMovePinnedNode,
+  onFinalizePinnedNodeMove,
   onConnectNodes,
   layoutMode,
   onReorderSibling,
@@ -84,6 +88,8 @@ export function useMapStageInteractions({
     onSelectNodeRef,
     onMoveNodeRef,
     onBeginNodeMoveRef,
+    onMovePinnedNodeRef,
+    onFinalizePinnedNodeMoveRef,
     onConnectNodesRef,
     onViewportChangeRef,
     layoutModeRef,
@@ -96,6 +102,8 @@ export function useMapStageInteractions({
     onSelectNode,
     onMoveNode,
     onBeginNodeMove,
+    onMovePinnedNode,
+    onFinalizePinnedNodeMove,
     onConnectNodes,
     layoutMode,
     onReorderSibling,
@@ -117,6 +125,8 @@ export function useMapStageInteractions({
       onMarqueeRectChangeRef,
       onMoveNodeRef,
       onBeginNodeMoveRef,
+      onMovePinnedNodeRef,
+      onFinalizePinnedNodeMoveRef,
       layoutSnapPrefsRef,
       onConnectNodesRef,
       onConnectionTargetChangeRef,

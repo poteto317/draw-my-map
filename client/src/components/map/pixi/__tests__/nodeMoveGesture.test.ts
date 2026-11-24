@@ -387,5 +387,47 @@ describe("createNodeMoveGesture", () => {
       expect(initial).not.toHaveBeenCalled();
       expect(latest).toHaveBeenCalledTimes(1);
     });
+
+    it("onBeforeFinish が false のとき finish せず cancel する", () => {
+      const history = createMapHistoryLeaseSpy();
+      const onBeforeFinish = jest.fn(() => false);
+      const gesture = createNodeMoveGesture({
+        nodeId: 1,
+        startSample: pointer(100, 60),
+        nodesRef: { current: [node] },
+        onMoveNodeRef: { current: jest.fn() },
+        onBeginNodeMoveRef: { current: history.onBeginNodeMove },
+        onBeforeFinishRef: { current: onBeforeFinish },
+        dragThreshold: 4,
+      });
+
+      gesture?.move(pointer(110, 60));
+      gesture?.end(pointer(110, 60));
+
+      expect(onBeforeFinish).toHaveBeenCalledTimes(1);
+      expect(history.lease.finish).not.toHaveBeenCalled();
+      expect(history.lease.cancel).toHaveBeenCalledTimes(1);
+    });
+
+    it("onBeforeFinish が true のとき finish する", () => {
+      const history = createMapHistoryLeaseSpy();
+      const onBeforeFinish = jest.fn(() => true);
+      const gesture = createNodeMoveGesture({
+        nodeId: 1,
+        startSample: pointer(100, 60),
+        nodesRef: { current: [node] },
+        onMoveNodeRef: { current: jest.fn() },
+        onBeginNodeMoveRef: { current: history.onBeginNodeMove },
+        onBeforeFinishRef: { current: onBeforeFinish },
+        dragThreshold: 4,
+      });
+
+      gesture?.move(pointer(110, 60));
+      gesture?.end(pointer(110, 60));
+
+      expect(onBeforeFinish).toHaveBeenCalledTimes(1);
+      expect(history.lease.cancel).not.toHaveBeenCalled();
+      expect(history.lease.finish).toHaveBeenCalledTimes(1);
+    });
   });
 });

@@ -26,7 +26,18 @@ import type { NodeKind } from "@/types/nodeKind";
 type NodeDetailPanelProps = {
   selectedNode: Pick<
     Node,
-    "id" | "label" | "note" | "tags" | "links" | "sources" | "mapLinks" | "illustration" | "icon" | "kind" | "locked"
+    | "id"
+    | "label"
+    | "note"
+    | "tags"
+    | "links"
+    | "sources"
+    | "mapLinks"
+    | "illustration"
+    | "icon"
+    | "kind"
+    | "locked"
+    | "layoutPinned"
   > | null;
   /** 関連線選択時。ノード節と同時には出さない想定（選択が排他） */
   selectedRelation?: Pick<MapRelation, "id" | "kind" | "directed"> | null;
@@ -57,6 +68,10 @@ type NodeDetailPanelProps = {
   onNavigateToMapTarget: (targetMapId: string, targetNodeId?: number) => void;
   onSetNodeIcon: (id: number, icon: string | undefined) => boolean;
   onSetNodeKind: (id: number, kind: NodeKind | undefined) => boolean;
+  /** N5: 位置固定。未指定なら節を出さない */
+  layoutPinnedVisible?: boolean;
+  layoutPinnedDisabled?: boolean;
+  onSetLayoutPinned?: (nodeId: number, pinned: boolean) => void;
   onUpdateRelationKind?: (relationId: number, kind: RelationKind) => void;
   onUpdateRelationDirected?: (relationId: number, directed: boolean) => void;
   onUpdateGroupLabel?: (groupId: number, label: string) => void;
@@ -93,6 +108,9 @@ export function NodeDetailPanel({
   onNavigateToMapTarget,
   onSetNodeIcon,
   onSetNodeKind,
+  layoutPinnedVisible = false,
+  layoutPinnedDisabled = false,
+  onSetLayoutPinned,
   onUpdateRelationKind,
   onUpdateRelationDirected,
   onUpdateGroupLabel,
@@ -172,6 +190,21 @@ export function NodeDetailPanel({
               if (selectedNode !== null) onSetNodeKind(selectedNode.id, kind);
             }}
           />
+          {layoutPinnedVisible && selectedNode !== null && onSetLayoutPinned !== undefined && (
+            <section aria-label="位置固定" className="flex flex-col gap-2">
+              <h2 className="text-sm font-medium text-zinc-700 dark:text-zinc-200">位置固定</h2>
+              <button
+                type="button"
+                disabled={layoutPinnedDisabled}
+                className="rounded border border-zinc-300 px-3 py-2 text-left text-sm text-zinc-800 hover:bg-zinc-100 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-600 dark:text-zinc-100 dark:hover:bg-zinc-700"
+                onClick={() => {
+                  onSetLayoutPinned(selectedNode.id, selectedNode.layoutPinned !== true);
+                }}
+              >
+                {selectedNode.layoutPinned === true ? "固定を解除" : "位置を固定"}
+              </button>
+            </section>
+          )}
           {/* タグ・リンク・出典・マップ間リンクの節の key はノードの ID だけ（兄弟の NodeNoteEditor や互いと重ならないよう接頭辞を付ける）。
               documentRevision では作り直さず、節の中で下書きとエラーだけを消す（作り直すとリンク・削除ボタンのフォーカスが
               body へ落ちる。L-155・L-397・L-588） */}
