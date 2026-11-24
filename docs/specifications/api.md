@@ -1,6 +1,6 @@
 # Draw My Map API 仕様書
 
-本書は、**Draw My Map** におけるノードアイコン・イラスト生成エンドポイント（`POST /api/illustrations`）の詳細な API 仕様、内部アーキテクチャ、処理パイプライン、クライアント側画像処理、および本番公開に向けた運用・セキュリティ考慮事項をまとめた技術仕様書です。9〜16章ではクライアントAPIを扱います。
+本書は、**Draw My Map** におけるノードアイコン・イラスト生成エンドポイント（`POST /api/illustrations`）の詳細な API 仕様、内部アーキテクチャ、処理パイプライン、クライアント側画像処理、および本番公開に向けた運用・セキュリティ考慮事項をまとめた技術仕様書です。9〜17章ではクライアントAPIを扱います。
 
 ---
 
@@ -22,6 +22,7 @@
 14. [複数タブの編集競合検出のクライアントAPI](#14-複数タブの編集競合検出のクライアントapi)
 15. [枝の別マップ化とマップアーカイブのクライアントAPI](#15-枝の別マップ化とマップアーカイブのクライアントapi)
 16. [関連線・グループ枠のクライアントAPI](#16-関連線グループ枠のクライアントapi)
+17. [自動配置の拡張のクライアントAPI](#17-自動配置の拡張のクライアントapi)
 
 ---
 
@@ -835,3 +836,73 @@ updateGroupLabel(groupId: number, label: string): UpdateGroupLabelOutcome;
 - コンテキスト: `NodeContextMenu.tsx`（追加／結ぶ／グループ化／枝グループ化）。相手ピッカー: `RelationPartnerPickerDialog.tsx`（表示中 inert）。
 - 右パネル: `RelationDetailSection.tsx` / `GroupDetailSection.tsx`（`NodeDetailPanel.tsx`）。
 - 描画: `renderMapRelations.ts` / `renderMapGroups.ts`（`renderMapScene.ts` から呼ぶ）。
+
+## 17. 自動配置の拡張のクライアントAPI
+
+Phase 29（候補064・065・066）で追加した文書級 `layoutStyle` / `branchLayouts` とノード属性 `layoutPinned` の公開面です。操作入口のガード正本は inventory（`docs/superpowers/specs/2026-11-24-phase29-auto-layout-extensions-inventory.md`）。
+
+### 17.1 型・正規化（`types/layoutStyle.ts`・`types/branchLayout.ts`）
+
+```typescript
+export type LayoutStyle = "orthogonal" | "radial";
+export function normalizeLayoutStyle(raw: unknown): LayoutStyle | undefined;
+export function projectLayoutStyle(
+  style: LayoutStyle | undefined,
+): { layoutStyle?: LayoutStyle };
+
+export type BranchLayoutDirection = "lr" | "rl" | "tb" | "bt";
+export type BranchLayout = { nodeId: number; direction: BranchLayoutDirection };
+export function normalizeBranchLayouts(
+  raw: unknown,
+  nodeIdSet: ReadonlySet<number>,
+): readonly BranchLayout[] | undefined;
+export function pruneBranchLayoutsAfterRemovedNodeIds(
+  layouts: readonly BranchLayout[] | undefined,
+  removedIds: readonly number[],
+): readonly BranchLayout[] | undefined;
+export function remapClosedBranchLayouts(
+  layouts: readonly BranchLayout[] | undefined,
+  idMap: ReadonlyMap<number, number>,
+): readonly BranchLayout[] | undefined;
+export function rewriteBranchLayoutsAfterNodeMerge(
+  survivorId: number,
+  absorbedIds: readonly number[],
+  layouts: readonly BranchLayout[] | undefined,
+): readonly BranchLayout[] | undefined;
+```
+
+- 配置入口: `layoutNodeForest`（`nodeAutoLayout.ts`）が `layoutStyle === "radial"` で放射幾何（`nodeRadialLayout.ts`）へ分岐。orthogonal は枝方向（`nodeBranchLayoutEngine.ts`）とピン（`nodeLayoutPinned.ts`）を尊重。
+- 可用性: `mapLayoutStyleAvailability.ts` / `mapBranchLayoutAvailability.ts` / `mapLayoutPinnedAvailability.ts`。
+
+### 17.2 `useNodes.ts`
+
+```typescript
+layoutStyle: NodeMapState["layoutStyle"];
+branchLayouts: NodeMapState["branchLayouts"];
+
+setLayoutStyle: (style: LayoutStyle) => void;
+setBranchLayout: (
+  nodeId: number,
+  direction: BranchLayoutDirection | null,
+) => { ok: true } | { ok: false; reason: "locked" | "node-missing" | "invalid" | "placement-failed" };
+setNodeLayoutPinned: (
+  nodeId: number,
+  pinned: boolean,
+) => { ok: true } | { ok: false; reason: "locked" | "node-missing" | "invalid" | "placement-failed" };
+
+// auto+ピンの座標ドラッグ（当該ノードのみ）。子孫は追従しない
+movePinnedNode: (id: number, x: number, y: number) => boolean;
+// ピンドラッグ終了後の再配置（履歴グループ内）
+finalizePinnedNodeMove: () => boolean;
+```
+
+- `setLayoutStyle`: 関連線／グループ選択中・保護／競合では拒否。`auto` なら即リレイアウト（1 Undo）。`manual` はヘッダー UI が disabled（値保持）。
+- `setBranchLayout`: `null`＝文書の既定に戻す（エントリ削除）。主選択 locked は拒否。`auto` かつ orthogonal なら即リレイアウト。radial／manual では配列のみ。
+- `setNodeLayoutPinned`: locked は拒否（L-1061）。`auto` なら付与／解除と同時に即リレイアウト（1 Undo）。
+
+### 17.3 UI 連携
+
+- ヘッダー: `LayoutStyleControl.tsx` / `MapHeaderLayoutControls.tsx` / `useMapHeaderLayoutControls.ts`（様式。ツリー方向は radial 中 disabled、間隔は radial でも有効）。
+- コンテキスト: `NodeContextMenu.tsx`（「この枝の配置方向」「位置を固定」「固定を解除」）。
+- 詳細パネル: `NodeDetailPanel.tsx`（ピン付与／解除）。
+- ピンドラッグ: `stageInteractions.ts` / `MapStage.tsx`（auto+ピンは座標移動、ドロップ後 `finalizePinnedNodeMove`）。

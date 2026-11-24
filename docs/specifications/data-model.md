@@ -102,15 +102,15 @@ Root Node B (id: 5, parentId: null)
 
 ## 2. TypeScript 型定義リファレンス
 
-システムの中核を構成する共有型定義は `client/src/types/` 配下の全 25 ファイルに集約されています。
+システムの中核を構成する共有型定義は `client/src/types/` 配下の全 27 ファイルに集約されています。
 
 | ファイルパス | エクスポートされる型名 | 役割・用途 |
 | :--- | :--- | :--- |
-| `client/src/types/node.ts` | `Node`, `NodeSource`, `NodeMapLink` | マインドマップのノードエンティティ型、出典型、マップ間リンク型（任意属性に `icon?` / `kind?` を含む） |
+| `client/src/types/node.ts` | `Node`, `NodeSource`, `NodeMapLink` | マインドマップのノードエンティティ型、出典型、マップ間リンク型（任意属性に `icon?` / `kind?` / `layoutPinned?` を含む） |
 | `client/src/types/nodeKind.ts` | `NodeKind`, `NODE_KINDS`, `NODE_KIND_BAR_WIDTH_PX`, `NODE_KIND_BAR_CSS_VARS`, `NODE_KIND_BAR_FALLBACK_COLORS` | ノード種別（`"question" \| "conclusion" \| "evidence" \| "idea"`）、左端色バー幅・CSS 変数・Pixi／SVG 用フォールバック色 |
 | `client/src/types/nodeImportance.ts` | `NodeImportance` | ノード重要度レベル（`"high" \| "medium" \| "low"`） |
 | `client/src/types/nodeLayout.ts` | `NodeLayoutMode` | レイアウト配置モード（`"manual" \| "auto"`） |
-| `client/src/types/nodeMapState.ts` | `NodeMapState` | マップ全体のインメモリ状態（`layoutMode`, `nodes`, 任意の `treeDirection` / `layoutSpacing` / `relations` / `groups`） |
+| `client/src/types/nodeMapState.ts` | `NodeMapState` | マップ全体のインメモリ状態（`layoutMode`, `nodes`, 任意の `treeDirection` / `layoutSpacing` / `layoutStyle` / `branchLayouts` / `relations` / `groups`） |
 | `client/src/types/mapRelation.ts` | `MapRelation`, `RelationKind`, `RELATION_KINDS` | 親子以外の関連線（Phase 28・061/062） |
 | `client/src/types/mapGroup.ts` | `MapGroup`, `MAP_GROUP_LABEL_MAX_CODEPOINTS` | ノード集合のグループ枠（Phase 28・063） |
 | `client/src/types/mapCanvasSelection.ts` | `MapCanvasSelection` | キャンバス選択（`nodes` / `relation` / `group`） |
@@ -118,6 +118,8 @@ Root Node B (id: 5, parentId: null)
 | `client/src/types/labelFontSize.ts` | `LABEL_FONT_SIZES`, `LabelFontSize` | ラベル文字サイズの許可集合 |
 | `client/src/types/treeDirection.ts` | `TreeDirection` | ツリー方向（`"lr" \| "tb"`） |
 | `client/src/types/layoutSpacing.ts` | `LayoutSpacing` | 配置間隔（`childGap`, `siblingGap`） |
+| `client/src/types/layoutStyle.ts` | `LayoutStyle`, `normalizeLayoutStyle`, `projectLayoutStyle`, `areLayoutStylesEqual` | レイアウト様式（`"orthogonal" \| "radial"`。Phase 29・064） |
+| `client/src/types/branchLayout.ts` | `BranchLayout`, `BranchLayoutDirection`, `normalizeBranchLayouts` ほか | 枝ごとの配置方向（Phase 29・065） |
 | `client/src/types/viewport.ts` | `Viewport`, `ScreenSize`, `INITIAL_VIEWPORT` | キャンバス viewport・画面サイズと妥当性判定 |
 | `client/src/types/mapViewSnapshot.ts` | `MapViewSnapshot` | viewport・選択・折りたたみ・解像度のメモリ上スナップショット |
 | `client/src/types/mapDocument.ts` | `MapDocumentVersion`, `MapDocumentV1`, `MapDocumentV3`, `MapDocument`, `MapDocumentResult` | JSON 永続化ドキュメントスキーマおよび Result 型 |
@@ -195,6 +197,11 @@ export type Node = {
    */
   locked?: true;
   /**
+   * 自動配置時の位置固定（Phase 29・066）。`true` のみキーを持つ（欠落＝非固定）。`locked` とは別。
+   * 分割では元のノードにだけ残し、統合では survivor-else-first、親の挿入では新しい親に持たせない。複製・clipboard は値コピー
+   */
+  layoutPinned?: true;
+  /**
    * ラベル文字サイズ（#53）。許可値は `12 | 14 | 18 | 24`（`LABEL_FONT_SIZES`）。
    * 欠落・不正は標準 14（キー削除）。encode 時 14 はキー省略必須（`projectLabelTextStyle`）
    */
@@ -237,7 +244,7 @@ export type NodeMapLink = {
 };
 ```
 
-- **任意属性ポリシー（`client/src/domain/nodes/nodeAttributePolicy.ts`）**: `OptionalNodeKey` は `illustration`・`note`・`links`・`tags`・`sources`・`mapLinks`・`locked`・`labelFontSize`・`labelBold`・`labelUnderline`・`icon`・`kind` です。`NODE_ATTRIBUTE_POLICY.mapLinks` は `{ split: "original-only", merge: "union", parentInsert: "none" }` です。ノード分割では元のノードにのみ残し、ノード統合では選択ノード群の `mapLinks` を配列順に連結し、現在マップの統合するノードを指すリンク（`targetMapId` が現在マップで `targetNodeId` が残すノードまたは吸収されるノードの ID。追加時の `self-node` と同じ判定 `isSelfNodeMapLink` を選んだ各ノードに当てる。除いた件数は `mapLinkSelectedTargetCount`）を除いてから `nodeMapLinkKey` で重複除去します（除いた後で 10 件超過時は `map-links-too-many` で拒否）。親の挿入では新しい親へ引き継ぎません。枝の複製・コピー＆ペーストでは値コピーでそのまま引き継ぎます。別マップへの枝の移動では、移動先でノード ID を振り直すので、枝の中のノードを指していたリンク（`targetMapId` が移動元マップで `targetNodeId` が枝の中の旧 ID）は、移動先マップ・新しい ID へ付け替えます（付け替えて重複したら 1 件にまとめます。`remapMovedBranchMapLinks`）。枝の外のノード・マップ全体・ほかのマップを指すリンクは値のまま写します。枝の外（移動元マップのほかのノードや、ほかのマップ）から枝の中を指していたリンクは書き換えません（割り切り。移動の後は「リンク切れを確認」で「ノードなし」として見つかり、利用者が直します）。削除は配列添字ではなく `nodeMapLinkKey` による値一致で行い、最後の 1 件削除時に `mapLinks` キーごと外します。履歴（`mapHistory.ts`）と複数タブ競合判定（`mapConflict.ts`）の同値比較でも `areNodeMapLinksEqual` で検証します。`locked`・`labelFontSize`・`labelBold`・`labelUnderline`・`icon`・`kind` はいずれも `{ split: "original-only", merge: "survivor-else-first", parentInsert: "none" }` です（ラベル書式は欠落＝標準として `resolveLabelFontSize` / `resolveLabelBold` / `resolveLabelUnderline` で比べ、encode 時は `projectLabelTextStyle` で正規化します。`icon` / `kind` はキー有無ごと（欠落＝無し）に比べ、履歴の `areNodesEqual` と競合の `areNodesEqual` の両方で検証します）。
+- **任意属性ポリシー（`client/src/domain/nodes/nodeAttributePolicy.ts`）**: `OptionalNodeKey` は `illustration`・`note`・`links`・`tags`・`sources`・`mapLinks`・`locked`・`layoutPinned`・`labelFontSize`・`labelBold`・`labelUnderline`・`icon`・`kind` です。`NODE_ATTRIBUTE_POLICY.layoutPinned` は `{ split: "original-only", merge: "survivor-else-first", parentInsert: "none" }` です（`locked` と同型）。`NODE_ATTRIBUTE_POLICY.mapLinks` は `{ split: "original-only", merge: "union", parentInsert: "none" }` です。ノード分割では元のノードにのみ残し、ノード統合では選択ノード群の `mapLinks` を配列順に連結し、現在マップの統合するノードを指すリンク（`targetMapId` が現在マップで `targetNodeId` が残すノードまたは吸収されるノードの ID。追加時の `self-node` と同じ判定 `isSelfNodeMapLink` を選んだ各ノードに当てる。除いた件数は `mapLinkSelectedTargetCount`）を除いてから `nodeMapLinkKey` で重複除去します（除いた後で 10 件超過時は `map-links-too-many` で拒否）。親の挿入では新しい親へ引き継ぎません。枝の複製・コピー＆ペーストでは値コピーでそのまま引き継ぎます。別マップへの枝の移動では、移動先でノード ID を振り直すので、枝の中のノードを指していたリンク（`targetMapId` が移動元マップで `targetNodeId` が枝の中の旧 ID）は、移動先マップ・新しい ID へ付け替えます（付け替えて重複したら 1 件にまとめます。`remapMovedBranchMapLinks`）。枝の外のノード・マップ全体・ほかのマップを指すリンクは値のまま写します。枝の外（移動元マップのほかのノードや、ほかのマップ）から枝の中を指していたリンクは書き換えません（割り切り。移動の後は「リンク切れを確認」で「ノードなし」として見つかり、利用者が直します）。削除は配列添字ではなく `nodeMapLinkKey` による値一致で行い、最後の 1 件削除時に `mapLinks` キーごと外します。履歴（`mapHistory.ts`）と複数タブ競合判定（`mapConflict.ts`）の同値比較でも `areNodeMapLinksEqual` で検証します。`locked`・`labelFontSize`・`labelBold`・`labelUnderline`・`icon`・`kind` はいずれも `{ split: "original-only", merge: "survivor-else-first", parentInsert: "none" }` です（ラベル書式は欠落＝標準として `resolveLabelFontSize` / `resolveLabelBold` / `resolveLabelUnderline` で比べ、encode 時は `projectLabelTextStyle` で正規化します。`icon` / `kind` はキー有無ごと（欠落＝無し）に比べ、履歴の `areNodesEqual` と競合の `areNodesEqual` の両方で検証します）。
 
 - 兄弟とルートの順は `nodes` 配列の相対順です（同じ `parentId` を持つノード同士の、配列の中の前後）。並べ替えは根ノード1つの配列内の位置を変え、子孫の位置は変えません。順序のフィールド（`order` など）は持ちません。親子は `parentId` で表すので、子が親より前にあってもかまいません（[features.md の 14 章](./features.md#14-兄弟ノードの順序変更)）。
 - `parentId` は接続（`Shift` + ドラッグ）に加えて、階層の上げ下げ（[features.md の 15 章](./features.md#15-階層の上げ下げ)）でも変わります。上げ下げは、上げ下げする枝の根 T の `parentId` と、T の根ノード1つの配列内の位置を変え、子孫の `parentId` と位置は変えません（下げて新しい親に子が無いときは T の位置も変えません）。
@@ -254,7 +261,9 @@ export type NodeImportance = "high" | "medium" | "low";
 アプリケーション内部のマップ状態を表す型です。
 
 ```typescript
+import type { BranchLayout } from "@/types/branchLayout";
 import type { LayoutSpacing } from "@/types/layoutSpacing";
+import type { LayoutStyle } from "@/types/layoutStyle";
 import type { MapGroup } from "@/types/mapGroup";
 import type { MapRelation } from "@/types/mapRelation";
 import type { Node } from "@/types/node";
@@ -268,12 +277,33 @@ export type NodeMapState = {
   treeDirection?: TreeDirection;
   // 自動レイアウトの間隔。無いときは config/shapes.ts の既定値
   layoutSpacing?: LayoutSpacing;
+  // レイアウト様式。欠落キー＝orthogonal。orthogonal はエンコード時にキー省略
+  layoutStyle?: LayoutStyle;
+  // 枝ごとの配置方向。欠落キー＝空。空配列はエンコード時にキー省略
+  branchLayouts?: readonly BranchLayout[];
   // 親子以外の関連線。欠落キー＝空。空配列はエンコード時にキー省略
   relations?: readonly MapRelation[];
   // ノード集合のグループ枠。欠落キー＝空。空配列はエンコード時にキー省略
   groups?: readonly MapGroup[];
 };
 ```
+
+#### `LayoutStyle` / `BranchLayout`（Phase 29）
+
+```typescript
+// client/src/types/layoutStyle.ts
+type LayoutStyle = "orthogonal" | "radial";
+// 未知・欠落 → undefined（文書既定＝orthogonal）。文書失敗にはしない
+
+// client/src/types/branchLayout.ts
+type BranchLayoutDirection = "lr" | "rl" | "tb" | "bt";
+type BranchLayout = { nodeId: number; direction: BranchLayoutDirection };
+// 不正エントリ・未知 direction・存在しない nodeId・同一 nodeId 重複は除去（先勝ち）
+```
+
+- **正規化**: `normalizeLayoutStyle` / `normalizeBranchLayouts`。`layoutStyle` の未知値はキー削除。`branchLayouts` はエントリ除去で文書成功。
+- **GC**: `pruneBranchLayoutsAfterRemovedNodeIds`・`remapClosedBranchLayouts`・`rewriteBranchLayoutsAfterNodeMerge` が削除／統合／枝移動・切り出し／クリップボード経路で処理（`relations`/`groups` 同型）。
+- **投影**: `projectLayoutStyle`（`orthogonal`／欠落はキー省略）・`projectBranchLayouts`（空はキー省略）。
 
 #### `MapRelation` / `MapGroup` / `MapCanvasSelection`（Phase 28）
 
@@ -311,8 +341,8 @@ type MapCanvasSelection =
 `NodeMapState` を1操作ぶんのスナップショットとして、過去・現在・未来の配列でメモリ上に保持します。
 
 - 上限は `MAP_HISTORY_LIMIT`（100操作）です。変更のないノードオブジェクトと画像文字列は履歴間で共有し、操作のたびに deep clone や JSON 化は行いません。
-- 復元対象は `nodes`・`layoutMode` および任意の `treeDirection` / `layoutSpacing` / `relations` / `groups` です。選択、パン・ズーム、表示フィルター、枝の折りたたみ、イラスト生成のプレビューは含めません。`relations` / `groups` のみが違う場合も equal は偽です。
-- 履歴は保存も書き出しもしません。JSON と `localStorage` の Version 3 形式は版を上げず、文書級任意キーとして `relations` / `groups` を載せます（欠落＝空、空配列はエンコード時キー省略）。
+- 復元対象は `nodes`・`layoutMode` および任意の `treeDirection` / `layoutSpacing` / `layoutStyle` / `branchLayouts` / `relations` / `groups` です（ノード任意属性 `layoutPinned` も含む）。選択、パン・ズーム、表示フィルター、枝の折りたたみ、イラスト生成のプレビューは含めません。`layoutStyle` / `branchLayouts` / `relations` / `groups` のみが違う場合も equal は偽です。
+- 履歴は保存も書き出しもしません。JSON と `localStorage` の Version 3 形式は版を上げず、文書級任意キーとして `layoutStyle` / `branchLayouts` / `relations` / `groups` を載せます（欠落＝既定／空、空配列・`orthogonal` はエンコード時キー省略）。
 - 初回の保存データ復元と JSON 読み込みの成功は新しい起点となり、過去・未来・進行中のドラッグのグループを消去します。
 
 ### 2.2 レイアウト・解像度フィルタリング型
@@ -848,6 +878,7 @@ Phase 18 では、Version 3 のまま（版は上げません）、詳細メモ�
 Phase 19 では、Version 3 のまま（版は上げません）、別マップや特定ノードへの参照を保存する任意項目 `mapLinks`（オブジェクトの配列、最大 10 件。各要素は `targetMapId` 必須・`targetNodeId` 任意）がノードに追加されました。マップ間リンクが無いノードは項目ごと持ちません。古いアプリで開いて保存し直すとマップ間リンクは失われます。
 Phase 25 では、Version 3 のまま、編集ロックの任意項目 `locked`（`true` のみ）がノードに追加されました。ロックが無いノードは項目ごと持ちません。
 #53（ラベル文字サイズ・太字・下線）では、Version 3 のまま、任意項目 `labelFontSize`（`12 | 14 | 18 | 24`。欠落＝14、encode 時 14 はキー省略）・`labelBold`（`true` のみ）・`labelUnderline`（`true` のみ）がノードに追加されました。標準・通常・下線なしのノードは項目ごと持ちません。不正値は項目削除（文書全体は失敗させません）。
+Phase 29 では、Version 3 のまま、文書級任意項目 `layoutStyle`（`"orthogonal" | "radial"`。欠落＝orthogonal、`orthogonal` はエンコード時キー省略）・`branchLayouts`（`{ nodeId, direction }[]`。欠落＝空、空配列はキー省略）と、ノード任意項目 `layoutPinned`（`true` のみ。欠落＝非固定）が追加されました。未知の `layoutStyle` はキー削除、不正な `branchLayouts` 要素はエントリ除去で文書成功です。
 
 #### JSON サンプル (Version 3)
 ```json
@@ -891,6 +922,9 @@ Phase 25 では、Version 3 のまま、編集ロックの任意項目 `locked`�
 | `nodes[].tags` | `string[]` | △ (任意) | タグ（最大 10 件、各 30 文字以内）。読み込みでは各要素の前後の空白を削って連続する空白を 1 個にまとめ、`nodeTagKey`（`U+200D`・`U+FE0E`・`U+FE0F` の除去 → NFKC → 空白のまとめと trim → 小文字化 → NFKC）で同じになるものは後のものを捨て、空なら項目ごと持たない。無い場合はキー自体を含めない。V1/V2 では存在しても無視する |
 | `nodes[].sources` | `object[]` | △ (任意) | 出典（最大 10 件。各要素は `title`（必須）と任意の `page`・`url`）。読み込みでは件数・未知キー・各文字列の長さを正規化より先に判定し、タイトル・ページ・URL を正規化し、`nodeSourceKey` が同じものは後のものを捨て、空なら項目ごと持たない。無い場合はキー自体を含めない。V1/V2 では存在しても無視する |
 | `nodes[].mapLinks` | `object[]` | △ (任意) | マップ間リンク（最大 10 件。各要素は `targetMapId`（必須・`MAP_ID_PATTERN`）と任意の `targetNodeId`（1 以上の安全な整数））。読み込みでは件数・要素のプレーンオブジェクト型・未知キー・各フィールド型を正規化より先に判定し、`normalizeNodeMapLink` を通して `nodeMapLinkKey` が同じものは後のものを捨て、空なら項目ごと持たない。無い場合はキー自体を含めない。V1/V2 では存在しても無視する |
+| `layoutStyle` | `string` | △ (任意) | `"orthogonal"` または `"radial"`（Phase 29）。欠落＝orthogonal。未知値はキー削除。`orthogonal` はエンコード時キー省略。V1/V2 では無視 |
+| `branchLayouts` | `object[]` | △ (任意) | 枝ごとの配置方向（Phase 29。各要素は `nodeId`・`direction`=`"lr"\|"rl"\|"tb"\|"bt"`）。不正要素は除去。空ならキー省略。V1/V2 では無視 |
+| `nodes[].layoutPinned` | `true` | △ (任意) | 自動配置時の位置固定（Phase 29）。`true` のみ。不正・欠落はキー削除／省略。V1/V2 では無視 |
 | `nodes[].icon` | `string` | △ (任意) | 絵文字アイコン（書記素ちょうど 1・CP 1〜16・Extended_Pictographic 必須）。不正・欠落はキー削除／省略。V1/V2 では存在しても無視する |
 | `nodes[].kind` | `string` | △ (任意) | ノード種別（`question` / `conclusion` / `evidence` / `idea`）。許可外・欠落はキー削除／省略。V1/V2 では存在しても無視する |
 
