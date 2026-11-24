@@ -395,8 +395,12 @@ client/src/
     - `mapRelationAvailability.ts` / `mapGroupAvailability.ts`: コンテキスト・Delete の有効判定。
     - `mapRelationGroupContextMenus.ts`: コンテキストメニュー項目（関連線追加／結ぶ／グループ化／枝グループ化）の有効判定の解決。
     - `mapCanvasSelectionGuards.ts`: 関連線／グループ選択中のノード操作無効化。
+    - `mapDocumentEditGuards.ts`: `isDocumentBlocked` / `isNonNodeSelection` の共有正本。関連線・グループ枠・Phase 29 入口がここへ寄せる。
     - `relationKindLabels.ts` / `relationKindColors.ts` / `relationSegmentGeometry.ts` / `mapGroupGeometry.ts`: 表示ラベル・色・ヒット幾何。
+    - `branchLayoutLifecycle.ts`: 枝方向の GC／remap／merge rewrite／append（`types/branchLayout` から移した prune／remap／rewrite／append）。
+    - `mapHeaderLayoutControlTypes.ts`: ヘッダー配置コントロール共有型（`HeaderControlState` / `HeaderControlDisabledReason`）。
     - `mapLayoutStyleAvailability.ts` / `mapBranchLayoutAvailability.ts` / `mapLayoutPinnedAvailability.ts`: Phase 29 入口（様式・枝方向・ピン）の有効判定。
+    - `resolvePinnedNodeDragCallbacks.ts`: MapEditor→stage のピンドラッグ配線工場（可用性判定とは分離）。
   - `domain/history/` (1 ファイル):
     - `mapHistory.ts`: 編集履歴の純粋な遷移（記録・Undo・Redo・同値判定（ノードの各キーを比べ、配列の値（`links`・`tags`）は要素ごとに比べ、`sources` は `areNodeSourcesEqual`、`mapLinks` は `areNodeMapLinksEqual`、文書級の `layoutStyle` / `branchLayouts` / `relations` / `groups` も比較対象）・最大100操作の上限）。
   - `domain/shared/` (1 ファイル):
@@ -486,7 +490,7 @@ client/src/
   - `types/treeDirection.ts`: `TreeDirection`（`"lr" | "tb"`）。
   - `types/layoutSpacing.ts`: `LayoutSpacing`（`childGap`, `siblingGap`）。
   - `types/layoutStyle.ts`: `LayoutStyle`（`"orthogonal" | "radial"`）、`normalizeLayoutStyle` / `projectLayoutStyle` / `areLayoutStylesEqual`（Phase 29）。
-  - `types/branchLayout.ts`: `BranchLayout`、`BranchLayoutDirection`、normalize／prune／remap／rewrite／project／equal（Phase 29）。
+  - `types/branchLayout.ts`: `BranchLayout`、`BranchLayoutDirection`、normalize／project／equal（Phase 29）。prune／remap／rewrite／append は `domain/map/branchLayoutLifecycle.ts`。
   - `types/viewport.ts`: `Viewport`、`ScreenSize`、`INITIAL_VIEWPORT`、倍率上下限、妥当性判定。
   - `types/mapViewSnapshot.ts`: `MapViewSnapshot`（viewport・選択・折りたたみ・解像度モードのメモリ上スナップショット）。
   - `types/mapDocument.ts`: `MapDocumentVersion`（`1 | 2 | 3`）、`MapDocumentV1`、`MapDocumentV3`、`MapDocument`、`MapDocumentResult<T>`。
@@ -915,7 +919,7 @@ sequenceDiagram
 
 #### 自動配置の拡張の流れ（Phase 29・064/065/066）
 
-- **責務の分担**: 様式・枝方向の型と正規化は `types/layoutStyle.ts` / `types/branchLayout.ts`。配置は `layoutNodeForest`（`nodeAutoLayout.ts`）が `layoutStyle` で分岐し、放射は `nodeRadialLayout.ts`、orthogonal の枝方向は `nodeBranchLayoutEngine.ts` / `nodeBranchLayout.ts`、ピンは `nodeLayoutPinned.ts`。可用性は `mapLayoutStyleAvailability.ts` / `mapBranchLayoutAvailability.ts` / `mapLayoutPinnedAvailability.ts`。公開操作は `useNodes.setLayoutStyle` / `setBranchLayout` / `setNodeLayoutPinned` / `movePinnedNode` / `finalizePinnedNodeMove`（実装本体は `useNodeLayoutState`）。ヘッダーは `LayoutStyleControl.tsx` / `MapHeaderLayoutControls.tsx` / `useMapHeaderLayoutControls.ts`。コンテキスト／詳細パネルは `NodeContextMenu.tsx` / `NodeDetailPanel.tsx`。ピンドラッグは `stageInteractions.ts`。
+- **責務の分担**: 様式・枝方向の型と正規化は `types/layoutStyle.ts` / `types/branchLayout.ts`。配置コンテキストは `nodeMapLayoutContext.ts`（`NodeMapLayoutContext` / `resolveLayoutNodeForestOptions`）。配置は `layoutNodeForest`（`nodeAutoLayout.ts`）が `layoutStyle` で分岐し、放射は `nodeRadialLayout.ts`、orthogonal の枝方向は `nodeBranchLayoutEngine.ts` / `nodeBranchLayout.ts`。ピン対応配置は `nodeLayoutPinnedAwarePlacement.ts` / `nodeLayoutPlacementShared.ts`。`nodeLayoutPinned.ts` は属性の付与／解除・座標更新のみ。純計画は `planLayoutFieldUpdate.ts` / `planBranchLayoutUpdate.ts`。枝方向の lifecycle は `branchLayoutLifecycle.ts`。可用性は `mapLayoutStyleAvailability.ts` / `mapBranchLayoutAvailability.ts` / `mapLayoutPinnedAvailability.ts`（共有型は `mapHeaderLayoutControlTypes.ts`）。ピンドラッグの MapEditor→stage 配線は `resolvePinnedNodeDragCallbacks.ts`。公開操作は `useNodes.setLayoutStyle` / `setBranchLayout` / `setNodeLayoutPinned` / `movePinnedNode` / `finalizePinnedNodeMove`（実装本体は `useNodeLayoutState`）。ヘッダーは `LayoutStyleControl.tsx` / `MapHeaderLayoutControls.tsx` / `useMapHeaderLayoutControls.ts`。コンテキスト／詳細パネルは `NodeContextMenu.tsx` / `NodeDetailPanel.tsx`。ピンドラッグは `stageInteractions.ts`。
 - **即時再配置**: `layoutStyle` 切替・`layoutPinned` 付与／解除は `auto` なら 1 Undo でリレイアウト。`branchLayouts` は `auto` かつ orthogonal のときのみ。radial 中は `treeDirection`／枝方向 UI を disabled（値保持）、`layoutSpacing` は有効。
 - **ガード**: 関連線／グループ選択・保護／競合・アウトラインでは入口無効。locked はピン操作・ピンドラッグ拒否（inventory 正本: `docs/superpowers/specs/2026-11-24-phase29-auto-layout-extensions-inventory.md`）。
 - **永続化**: MapDocument V3 の文書級任意キーとノード `layoutPinned`。未知様式は orthogonal 扱い、不正枝方向エントリは除去。エンコード時の `orthogonal`／空配列はキー省略。
