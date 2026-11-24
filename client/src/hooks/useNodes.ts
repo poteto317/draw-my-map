@@ -31,6 +31,14 @@ import {
   type SubtreeClipboardResult,
 } from "@/domain/clipboard/subtreeClipboardCodec";
 import {
+  copyClosedRelationGroups,
+  mergeRelationGroupSlices,
+  pruneAfterRemovedNodeIds,
+  rewriteAfterNodeMerge,
+} from "@/domain/map/relationGroupLifecycle";
+import type { MapCanvasSelection } from "@/types/mapCanvasSelection";
+import type { MapRelation } from "@/types/mapRelation";
+import {
   reorderSiblingByRequest,
   type ReorderSiblingResult,
   type SiblingReorderRequest,
@@ -53,6 +61,7 @@ import {
   resolveLayoutNodeForestOptions,
   resolveLayoutSpacing,
 } from "@/domain/nodes/resolveLayoutSpacing";
+import { applyStateChangeWithOutcome } from "@/hooks/stateChangeOutcome";
 import { applyTreeChangeWithOutcome } from "@/hooks/treeChangeOutcome";
 import { insertParentNode as computeParentInsertion, type InsertParentNodeResult } from "@/domain/nodes/nodeParentInsertion";
 import { replaceNodeImportance, replaceNodesImportance } from "@/domain/nodes/nodeImportanceUpdate";
@@ -109,6 +118,15 @@ import {
 } from "@/domain/nodes/nodeBranchMove";
 import type { MapHistoryGroupLease } from "@/domain/history/mapHistory";
 import { useNodeLayoutState } from "@/hooks/useNodeLayoutState";
+import {
+  useRelationGroupActions,
+  type AddGroupOutcome,
+  type AddRelationOutcome,
+  type RemoveGroupOutcome,
+  type RemoveRelationOutcome,
+  type UpdateGroupLabelOutcome,
+  type UpdateRelationOutcome,
+} from "@/hooks/useRelationGroupActions";
 import type { Node, NodeMapLink } from "@/types/node";
 import type { NodeImportance } from "@/types/nodeImportance";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
@@ -134,24 +152,53 @@ export type MoveBranchResult =
   | { ok: true; rootId: number }
   | { ok: false; reason: BranchMoveFailureReason };
 
+export type {
+  AddRelationOutcome,
+  RemoveRelationOutcome,
+  UpdateRelationOutcome,
+  AddGroupOutcome,
+  RemoveGroupOutcome,
+  UpdateGroupLabelOutcome,
+};
+
 type UseNodesReturn = {
   nodes: Node[];
   selectedNodeId: number | null;
   selectedNodeIds: readonly number[];
+  /** キャンバス選択（ノード / 関連線 / グループ）。関連線・グループ選択時は nodes は空 */
+  canvasSelection: MapCanvasSelection;
   layoutMode: NodeLayoutMode;
   treeDirection: NodeMapState["treeDirection"];
   layoutSpacing: NodeMapState["layoutSpacing"];
+  relations: NodeMapState["relations"];
+  groups: NodeMapState["groups"];
   addNode: (x: number, y: number) => number;
   addChildNode: (parentId: number) => number | null;
   addSiblingNode: (nodeId: number) => number | null;
   selectNode: (id: number | null) => void;
+  selectRelation: (id: number) => void;
+  selectGroup: (id: number) => void;
   restoreSelection: (selection: NodeSelectionState) => void;
   toggleNodeSelection: (id: number) => void;
   /** Shift範囲選択: アンカー〜target を現在の集合へ加算する（置換ではない。domain の `addRange`）。 */
   selectNodeRange: (targetId: number, visibleNodeIdsOrdered: readonly number[]) => void;
   setSelectionFromMarquee: (args: { mode: "replace" | "add"; ids: readonly number[] }) => void;
   clearSelection: () => void;
+  /** 関連線／グループのキャンバス選択だけ外す（ノード選択は触らない）。アウトライン切替など */
+  clearNonNodeSelection: () => void;
   pruneSelectionToVisible: (visibleNodeIds: ReadonlySet<number>) => void;
+  // 既定 kind=related / directed=false。重複・locked・欠落は拒否
+  addRelation: (fromId: number, toId: number) => AddRelationOutcome;
+  removeRelation: (relationId: number) => RemoveRelationOutcome;
+  // kind / directed 更新。重複・locked・欠落・無変更は拒否（履歴は成功時のみ）
+  updateRelation: (
+    relationId: number,
+    patch: { kind?: MapRelation["kind"]; directed?: boolean },
+  ) => UpdateRelationOutcome;
+  // メンバー≥2。複数グループ所属可。locked 関与は拒否
+  addGroup: (nodeIds: readonly number[], label?: string) => AddGroupOutcome;
+  removeGroup: (groupId: number) => RemoveGroupOutcome;
+  updateGroupLabel: (groupId: number, label: string) => UpdateGroupLabelOutcome;
   updateNodeLabel: (id: number, label: string) => void;
   updateNodeLabels: (replacements: ReadonlyMap<number, string>) => boolean;
   setLabelFontSize: (id: number, size: LabelFontSize) => boolean;
@@ -274,11 +321,14 @@ export function useNodes(): UseNodesReturn {
     layoutMode,
     treeDirection,
     layoutSpacing,
+    relations,
+    groups,
     getCurrentState,
-    applyNonStructuralChange,
-    applyNonStructuralPreview,
-    applyManualMove,
-    applyTreeChange,
+    applyNonStructuralChange: applyNonStructuralChangeRaw,
+    applyNonStructuralPreview: applyNonStructuralPreviewRaw,
+    applyManualMove: applyManualMoveRaw,
+    applyTreeChange: applyTreeChangeRaw,
+    applyStateChange: applyStateChangeRaw,
     setLayoutMode,
     setTreeDirection,
     setLayoutSpacing,
@@ -297,18 +347,71 @@ export function useNodes(): UseNodesReturn {
       .map((node) => node.id),
     [nodes, selection.selectedIds],
   );
+  const {
+    canvasSelection,
+    clearNonNodeSelection,
+    isNodeOpBlocked,
+    selectRelation: selectRelationOnly,
+    selectGroup: selectGroupOnly,
+    addRelation,
+    removeRelation,
+    updateRelation,
+    addGroup,
+    removeGroup,
+    updateGroupLabel,
+  } = useRelationGroupActions({
+    selectedNodeIds,
+    applyStateChangeRaw,
+    nodeIdAllocator,
+  });
 
   // 復元したマップでは以前の選択と編集対象が無効になるため、選択を外して版を進める
   const markDocumentRestored = useCallback(() => {
+    clearNonNodeSelection();
     setSelection(clearSelectionState());
     setDocumentRevision((revision) => revision + 1);
-  }, []);
+  }, [clearNonNodeSelection]);
+
+  // §10: 関連線／グループ選択中はノード対象の確定を通さない（関係の add/remove は Raw を直接使う）
+  const applyNonStructuralChange: typeof applyNonStructuralChangeRaw = useCallback((update) => {
+    if (isNodeOpBlocked()) return false;
+    return applyNonStructuralChangeRaw(update);
+  }, [applyNonStructuralChangeRaw, isNodeOpBlocked]);
+
+  const applyTreeChange: typeof applyTreeChangeRaw = useCallback((update) => {
+    if (isNodeOpBlocked()) return false;
+    return applyTreeChangeRaw(update);
+  }, [applyTreeChangeRaw, isNodeOpBlocked]);
+
+  const applyStateChange: typeof applyStateChangeRaw = useCallback((update) => {
+    if (isNodeOpBlocked()) return false;
+    return applyStateChangeRaw(update);
+  }, [applyStateChangeRaw, isNodeOpBlocked]);
+
+  const applyManualMove: typeof applyManualMoveRaw = useCallback((update) => {
+    if (isNodeOpBlocked()) return false;
+    return applyManualMoveRaw(update);
+  }, [applyManualMoveRaw, isNodeOpBlocked]);
+
+  const applyNonStructuralPreview: typeof applyNonStructuralPreviewRaw = useCallback((update) => {
+    if (isNodeOpBlocked()) return false;
+    return applyNonStructuralPreviewRaw(update);
+  }, [applyNonStructuralPreviewRaw, isNodeOpBlocked]);
 
   const replaceMap = useCallback((state: NodeMapState) => {
     nodeIdAllocator.reset();
     replaceLayoutState(state);
     markDocumentRestored();
   }, [nodeIdAllocator, replaceLayoutState, markDocumentRestored]);
+
+  // nodes ∪ relations ∪ groups の共有空間で採番する（確定時点の最新ノード列を渡す）
+  const allocateEntityIds = useCallback((currentNodes: readonly Node[], count: number) => {
+    const state = getCurrentState();
+    return nodeIdAllocator.nextAvailableEntityIds(
+      { nodes: [...currentNodes], relations: state.relations, groups: state.groups },
+      count,
+    );
+  }, [getCurrentState, nodeIdAllocator]);
 
   // ID allocatorはresetしない。Undoで消えたノードのIDも以後の追加で再利用しない
   const undo = useCallback(() => {
@@ -326,11 +429,11 @@ export function useNodes(): UseNodesReturn {
   const addNode = useCallback((x: number, y: number) => {
     let id!: number;
     applyTreeChange((currentNodes) => {
-      id = nodeIdAllocator.nextAvailableId(currentNodes);
+      id = allocateEntityIds(currentNodes, 1)[0]!;
       return [...currentNodes, createRootNode(id, x, y)];
     });
     return id;
-  }, [nodeIdAllocator, applyTreeChange]);
+  }, [allocateEntityIds, applyTreeChange]);
 
   // 基点のノード（子なら親、兄弟なら元のノード）から1つ作って追加し、作ったノードを選択してそのIDを返す。
   // 基点が無い・作れないときは何も変えずに null を返す。ID は確定時点の最新の配列から採番する
@@ -346,7 +449,7 @@ export function useNodes(): UseNodesReturn {
     let createdId: number | null = null;
     const applied = applyTreeChange((currentNodes, _mode, layout) => {
       if (!assertNodesEditable([anchorId], currentNodes).ok) return null;
-      const id = nodeIdAllocator.nextAvailableId(currentNodes);
+      const id = allocateEntityIds(currentNodes, 1)[0]!;
       const spacing = resolveLayoutSpacing(layout);
       const created = createNode(currentNodes, anchorId, id, spacing);
       if (!created) return null;
@@ -358,7 +461,7 @@ export function useNodes(): UseNodesReturn {
 
     setSelection(selectOnly(createdId));
     return createdId;
-  }, [nodeIdAllocator, applyTreeChange]);
+  }, [allocateEntityIds, applyTreeChange]);
 
   const addChildNode = useCallback((parentId: number) => (
     addNodeFromAnchor(parentId, (nodes, parent, id, spacing) => createChildNode(nodes, parent, id, spacing))
@@ -372,28 +475,44 @@ export function useNodes(): UseNodesReturn {
   ), [addNodeFromAnchor]);
 
   const selectNode = useCallback((id: number | null) => {
+    clearNonNodeSelection();
     setSelection(id === null ? clearSelectionState() : selectOnly(id));
-  }, []);
+  }, [clearNonNodeSelection]);
+
+  // 関連線／グループ選択時はノード選択を空にする（選択は排他）
+  const selectRelation = useCallback((id: number) => {
+    selectRelationOnly(id);
+    setSelection(clearSelectionState());
+  }, [selectRelationOnly]);
+
+  const selectGroup = useCallback((id: number) => {
+    selectGroupOnly(id);
+    setSelection(clearSelectionState());
+  }, [selectGroupOnly]);
 
   const toggleNodeSelection = useCallback((id: number) => {
+    clearNonNodeSelection();
     const orderedNodeIds = getCurrentState().nodes.map((node) => node.id);
     setSelection((prev) => toggle(prev, id, orderedNodeIds));
-  }, [getCurrentState]);
+  }, [clearNonNodeSelection, getCurrentState]);
 
   // 加算（置換ではない）。公開名は設計の selectNodeRange に合わせる
   const selectNodeRange = useCallback((targetId: number, visibleNodeIdsOrdered: readonly number[]) => {
+    clearNonNodeSelection();
     setSelection((prev) => addRange(prev, targetId, visibleNodeIdsOrdered));
-  }, []);
+  }, [clearNonNodeSelection]);
 
   const setSelectionFromMarquee = useCallback((args: { mode: "replace" | "add"; ids: readonly number[] }) => {
+    clearNonNodeSelection();
     setSelection((prev) => (
       args.mode === "replace" ? replaceWithMarquee(args.ids) : addMarquee(prev, args.ids)
     ));
-  }, []);
+  }, [clearNonNodeSelection]);
 
   const clearSelection = useCallback(() => {
+    clearNonNodeSelection();
     setSelection(clearSelectionState());
-  }, []);
+  }, [clearNonNodeSelection]);
 
   const pruneSelectionToVisible = useCallback((visibleNodeIds: ReadonlySet<number>) => {
     const orderedNodeIds = getCurrentState().nodes.map((node) => node.id);
@@ -567,7 +686,7 @@ export function useNodes(): UseNodesReturn {
       const inserted = insert(
         currentNodes,
         mode,
-        (occupied, count) => nodeIdAllocator.nextAvailableIds(occupied, count),
+        (occupied, count) => allocateEntityIds(occupied, count),
         spacing,
         layoutOptions,
       );
@@ -580,23 +699,99 @@ export function useNodes(): UseNodesReturn {
 
     setSelection(selectOnly(insertedRootId));
     return insertedRootId;
-  }, [nodeIdAllocator, applyTreeChange]);
+  }, [allocateEntityIds, applyTreeChange]);
 
-  const duplicateSubtree = useCallback((sourceId: number) => (
-    applySubtreeInsertion((currentNodes, mode, allocateIds, spacing) => (
-      duplicateNodeSubtree(currentNodes, sourceId, mode, allocateIds, spacing)
-    ))
-  ), [applySubtreeInsertion]);
+  // 閉じた relation/group も新 entity ID で写す（pasteSubtree と同型）
+  const duplicateSubtree = useCallback((sourceId: number) => {
+    let insertedRootId: number | null = null;
+    const applied = applyStateChange((current, layout) => {
+      const spacing = resolveLayoutSpacing(layout);
+      const inserted = duplicateNodeSubtree(
+        current.nodes,
+        sourceId,
+        current.layoutMode,
+        (occupied, count) => nodeIdAllocator.nextAvailableEntityIds(
+          { nodes: [...occupied], relations: current.relations, groups: current.groups },
+          count,
+        ),
+        spacing,
+      );
+      if (!inserted) return null;
+      insertedRootId = inserted.rootId;
 
-  const copySubtree = useCallback((sourceId: number) => (
-    encodeSubtreeClipboard(getCurrentState().nodes, sourceId)
-  ), [getCurrentState]);
+      const remapped = copyClosedRelationGroups(
+        current.relations,
+        current.groups,
+        inserted.nodeIdMapping,
+        { nodes: [...inserted.nodes], relations: current.relations, groups: current.groups },
+        (state, count) => nodeIdAllocator.nextAvailableEntityIds(state, count),
+      );
+      const merged = mergeRelationGroupSlices(current, remapped);
+      return {
+        ...current,
+        nodes: inserted.nodes,
+        relations: merged.relations,
+        groups: merged.groups,
+      };
+    });
+    if (!applied || insertedRootId === null) return null;
+    setSelection(selectOnly(insertedRootId));
+    return insertedRootId;
+  }, [applyStateChange, nodeIdAllocator]);
 
-  const pasteSubtree = useCallback((data: SubtreeClipboardData) => (
-    applySubtreeInsertion((currentNodes, mode, allocateIds, spacing) => (
-      insertNodeSubtree(currentNodes, data.nodes, data.rootId, null, mode, allocateIds, "paste", spacing)
-    ))
-  ), [applySubtreeInsertion]);
+  const copySubtree = useCallback((sourceId: number) => {
+    if (isNodeOpBlocked()) return { ok: false, reason: "invalid" } as const;
+    const state = getCurrentState();
+    return encodeSubtreeClipboard(state.nodes, sourceId, {
+      relations: state.relations,
+      groups: state.groups,
+    });
+  }, [getCurrentState, isNodeOpBlocked]);
+
+  const restoreSelection = useCallback((next: NodeSelectionState) => {
+    clearNonNodeSelection();
+    setSelection(next);
+  }, [clearNonNodeSelection]);
+
+  const pasteSubtree = useCallback((data: SubtreeClipboardData) => {
+    let insertedRootId: number | null = null;
+    const applied = applyStateChange((current, layout) => {
+      const spacing = resolveLayoutSpacing(layout);
+      const inserted = insertNodeSubtree(
+        current.nodes,
+        data.nodes,
+        data.rootId,
+        null,
+        current.layoutMode,
+        (occupied, count) => nodeIdAllocator.nextAvailableEntityIds(
+          { nodes: [...occupied], relations: current.relations, groups: current.groups },
+          count,
+        ),
+        "paste",
+        spacing,
+      );
+      if (!inserted) return null;
+      insertedRootId = inserted.rootId;
+
+      const remapped = copyClosedRelationGroups(
+        data.relations,
+        data.groups,
+        inserted.nodeIdMapping,
+        { nodes: [...inserted.nodes], relations: current.relations, groups: current.groups },
+        (state, count) => nodeIdAllocator.nextAvailableEntityIds(state, count),
+      );
+      const merged = mergeRelationGroupSlices(current, remapped);
+      return {
+        ...current,
+        nodes: inserted.nodes,
+        relations: merged.relations,
+        groups: merged.groups,
+      };
+    });
+    if (!applied || insertedRootId === null) return null;
+    setSelection(selectOnly(insertedRootId));
+    return insertedRootId;
+  }, [applyStateChange, nodeIdAllocator]);
 
   // 部品挿入など、任意の部分木を targetParentId（null なら新ルート）へ挿入する
   const insertSubtree = useCallback((
@@ -637,7 +832,11 @@ export function useNodes(): UseNodesReturn {
         failureReason = inserted.reason;
         return null;
       }
-      return { nodes: inserted.nodes, rootId: inserted.rootIds[0] };
+      return {
+        nodes: inserted.nodes,
+        rootId: inserted.rootIds[0]!,
+        nodeIdMapping: new Map(),
+      };
     });
     // 候補を作れた後に失敗するのは、全体の自動配置だけ
     if (rootId === null) return { ok: false, reason: failureReason ?? "placement-failed" };
@@ -688,7 +887,7 @@ export function useNodes(): UseNodesReturn {
     visibleNodeIds: ReadonlySet<number>,
   ): InsertParentNodeResult => {
     const settled = applyTreeChangeWithOutcome<InsertParentNodeResult>(applyTreeChange, (currentNodes, mode, layout) => {
-      const id = nodeIdAllocator.nextAvailableId(currentNodes);
+      const id = allocateEntityIds(currentNodes, 1)[0]!;
       const inserted = computeParentInsertion(
         currentNodes,
         nodeId,
@@ -703,7 +902,7 @@ export function useNodes(): UseNodesReturn {
     });
     if (settled.ok) setSelection(selectOnly(settled.insertedId));
     return settled;
-  }, [nodeIdAllocator, applyTreeChange]);
+  }, [allocateEntityIds, applyTreeChange]);
 
   // 計画は描画時の配列ではなく、確定時点の最新の配列から作り直す。新しい ID は計画が通った後にまとめて 1 回採番し、
   // 自動配置の失敗などで確定しなかった ID は欠番のままにする（allocator を巻き戻さない）。
@@ -719,12 +918,12 @@ export function useNodes(): UseNodesReturn {
       if (!fresh.ok) return { nodes: null, outcome: fresh };
       if (!isSameNodeSplitPlan(fresh, expected)) return { nodes: null, outcome: { ok: false, reason: "plan-changed" } };
 
-      const newNodeIds = nodeIdAllocator.nextAvailableIds(currentNodes, fresh.fragments.length - 1);
+      const newNodeIds = allocateEntityIds(currentNodes, fresh.fragments.length - 1);
       const split = computeNodeSplit(currentNodes, nodeId, separator, newNodeIds, visibleNodeIds);
       if (!split.ok) return { nodes: null, outcome: split };
       return { nodes: split.nodes, outcome: { ok: true, insertedIds: split.insertedIds } };
     })
-  ), [nodeIdAllocator, applyTreeChange]);
+  ), [allocateEntityIds, applyTreeChange]);
 
   // 統合は成功したら、残したノードだけを選択する。選択に残った吸収されるノードの ID は、ここで置き換わる
   const mergeNodes = useCallback((
@@ -735,21 +934,42 @@ export function useNodes(): UseNodesReturn {
     expected: NodeMergePlan,
     currentMapId: string,
   ): MergeNodesResult => {
-    const settled = applyTreeChangeWithOutcome<MergeNodesResult>(applyTreeChange, (currentNodes, mode, _layout) => {
-      const fresh = planNodeMerge(currentNodes, ids, primaryId, joiner, visibleNodeIds, currentMapId);
-      if (!fresh.ok) return { nodes: null, outcome: fresh };
-      if (!isSameNodeMergePlan(fresh, expected)) return { nodes: null, outcome: { ok: false, reason: "plan-changed" } };
+    const settled = applyStateChangeWithOutcome<MergeNodesResult>(applyStateChange, (current) => {
+      const fresh = planNodeMerge(current.nodes, ids, primaryId, joiner, visibleNodeIds, currentMapId);
+      if (!fresh.ok) return { state: null, outcome: fresh };
+      if (!isSameNodeMergePlan(fresh, expected)) {
+        return { state: null, outcome: { ok: false, reason: "plan-changed" } };
+      }
 
-      const merged = computeNodeMerge(currentNodes, ids, primaryId, joiner, visibleNodeIds, mode, currentMapId);
-      if (!merged.ok) return { nodes: null, outcome: merged };
+      const merged = computeNodeMerge(
+        current.nodes,
+        ids,
+        primaryId,
+        joiner,
+        visibleNodeIds,
+        current.layoutMode,
+        currentMapId,
+      );
+      if (!merged.ok) return { state: null, outcome: merged };
+      const rewritten = rewriteAfterNodeMerge(
+        merged.survivorId,
+        merged.absorbedIds,
+        current.relations,
+        current.groups,
+      );
       return {
-        nodes: merged.nodes,
+        state: {
+          ...current,
+          nodes: merged.nodes,
+          relations: rewritten.relations,
+          groups: rewritten.groups,
+        },
         outcome: { ok: true, survivorId: merged.survivorId, absorbedCount: merged.absorbedIds.length },
       };
     });
     if (settled.ok) setSelection(selectOnly(settled.survivorId));
     return settled;
-  }, [applyTreeChange]);
+  }, [applyStateChange]);
 
   const moveBranch = useCallback((rootId: number, parentId: number | null): MoveBranchResult => {
     const settled = applyTreeChangeWithOutcome<MoveBranchResult>(applyTreeChange, (currentNodes, mode, layout) => {
@@ -768,10 +988,24 @@ export function useNodes(): UseNodesReturn {
     nodeId: number,
     visibleNodeIds: ReadonlySet<number>,
   ): DeleteNodeOnlyResult => {
-    const settled = applyTreeChangeWithOutcome<DeleteNodeOnlyResult>(applyTreeChange, (currentNodes, mode, _layout) => {
-      const deleted = computeNodeOnlyDeletion(currentNodes, nodeId, visibleNodeIds, mode);
-      if (!deleted.ok) return { nodes: null, outcome: deleted };
-      return { nodes: deleted.nodes, outcome: { ok: true, deletedId: deleted.deletedId } };
+    const settled = applyStateChangeWithOutcome<DeleteNodeOnlyResult>(applyStateChange, (current) => {
+      const deleted = computeNodeOnlyDeletion(
+        current.nodes,
+        nodeId,
+        visibleNodeIds,
+        current.layoutMode,
+      );
+      if (!deleted.ok) return { state: null, outcome: deleted };
+      const pruned = pruneAfterRemovedNodeIds(current.relations, current.groups, [deleted.deletedId]);
+      return {
+        state: {
+          ...current,
+          nodes: deleted.nodes,
+          relations: pruned.relations,
+          groups: pruned.groups,
+        },
+        outcome: { ok: true, deletedId: deleted.deletedId },
+      };
     });
     if (settled.ok) {
       const remaining = getCurrentState().nodes;
@@ -780,14 +1014,20 @@ export function useNodes(): UseNodesReturn {
       setSelection((prev) => pruneMissing(prev, remainingIds, orderedNodeIds));
     }
     return settled;
-  }, [applyTreeChange, getCurrentState]);
+  }, [applyStateChange, getCurrentState]);
 
   const deleteNode = useCallback((id: number) => {
-    let subtreeIds = new Set<number>();
-    const applied = applyTreeChange((currentNodes) => {
-      subtreeIds = collectSubtreeIds(currentNodes, id);
-      if (!assertNodesEditable([...subtreeIds], currentNodes).ok) return null;
-      return currentNodes.filter((node) => !subtreeIds.has(node.id));
+    const applied = applyStateChange((current) => {
+      const subtreeIds = collectSubtreeIds(current.nodes, id);
+      if (!assertNodesEditable([...subtreeIds], current.nodes).ok) return null;
+      const nextNodes = current.nodes.filter((node) => !subtreeIds.has(node.id));
+      const pruned = pruneAfterRemovedNodeIds(current.relations, current.groups, [...subtreeIds]);
+      return {
+        ...current,
+        nodes: nextNodes,
+        relations: pruned.relations,
+        groups: pruned.groups,
+      };
     });
     if (!applied) return;
 
@@ -795,25 +1035,37 @@ export function useNodes(): UseNodesReturn {
     const remainingIds = new Set(remaining.map((node) => node.id));
     const orderedNodeIds = remaining.map((node) => node.id);
     setSelection((prev) => pruneMissing(prev, remainingIds, orderedNodeIds));
-  }, [applyTreeChange, getCurrentState]);
+  }, [applyStateChange, getCurrentState]);
 
   return {
     nodes,
     selectedNodeId,
     selectedNodeIds,
+    canvasSelection,
     layoutMode,
     treeDirection,
     layoutSpacing,
+    relations,
+    groups,
     addNode,
     addChildNode,
     addSiblingNode,
     selectNode,
-    restoreSelection: setSelection,
+    selectRelation,
+    selectGroup,
+    restoreSelection,
     toggleNodeSelection,
     selectNodeRange,
     setSelectionFromMarquee,
     clearSelection,
+    clearNonNodeSelection,
     pruneSelectionToVisible,
+    addRelation,
+    removeRelation,
+    updateRelation,
+    addGroup,
+    removeGroup,
+    updateGroupLabel,
     updateNodeLabel,
     updateNodeLabels,
     setLabelFontSize,
