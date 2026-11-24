@@ -24,6 +24,8 @@ type UseNodeLayoutStateReturn = {
   layoutMode: NodeLayoutMode;
   treeDirection: NodeMapState["treeDirection"];
   layoutSpacing: NodeMapState["layoutSpacing"];
+  relations: NodeMapState["relations"];
+  groups: NodeMapState["groups"];
   canUndo: boolean;
   canRedo: boolean;
   // 同じイベント内の直前の変更も含めた最新の状態を読み取る。状態と履歴は変えない
@@ -33,6 +35,8 @@ type UseNodeLayoutStateReturn = {
   applyNonStructuralPreview: (update: NodeChange) => boolean;
   applyManualMove: (update: NodeChange) => boolean;
   applyTreeChange: (update: TreeChange) => boolean;
+  // ノード以外（relations/groups）も含む1操作の文書変更
+  applyStateChange: (update: StateChange) => boolean;
   setLayoutMode: (mode: NodeLayoutMode) => void;
   setTreeDirection: (direction: TreeDirection) => void;
   setLayoutSpacing: (spacing: LayoutSpacing) => void;
@@ -50,14 +54,17 @@ export type TreeChange = (
   layout: NodeMapLayoutContext,
 ) => Node[] | null;
 
+export type StateChange = (
+  current: NodeMapState,
+  layout: NodeMapLayoutContext,
+) => NodeMapState | null;
+
 const EMPTY_MAP_STATE: NodeMapState = { layoutMode: "manual", nodes: [] };
 
 function withUpdatedNodes(state: NodeMapState, nodes: Node[]): NodeMapState {
   return {
-    layoutMode: state.layoutMode,
+    ...state,
     nodes,
-    treeDirection: state.treeDirection,
-    layoutSpacing: state.layoutSpacing,
   };
 }
 
@@ -139,6 +146,25 @@ export function useNodeLayoutState(): UseNodeLayoutStateReturn {
     return true;
   }, [getPresent, commit]);
 
+  const applyStateChange = useCallback((update: StateChange): boolean => {
+    const current = getPresent();
+    const layoutContext: NodeMapLayoutContext = {
+      treeDirection: current.treeDirection,
+      layoutSpacing: current.layoutSpacing,
+    };
+    const candidate = update(current, layoutContext);
+    if (!candidate) return false;
+
+    const layoutOptions = resolveLayoutNodeForestOptions(layoutContext);
+    const nextNodes = current.layoutMode === "auto"
+      ? layoutNodeForest(candidate.nodes, layoutOptions)
+      : candidate.nodes;
+    if (!nextNodes) return false;
+
+    commit({ ...candidate, nodes: nextNodes });
+    return true;
+  }, [getPresent, commit]);
+
   const setLayoutMode = useCallback((mode: NodeLayoutMode) => {
     const current = getPresent();
     if (mode === current.layoutMode) return;
@@ -199,6 +225,8 @@ export function useNodeLayoutState(): UseNodeLayoutStateReturn {
     layoutMode: present.layoutMode,
     treeDirection: present.treeDirection,
     layoutSpacing: present.layoutSpacing,
+    relations: present.relations,
+    groups: present.groups,
     canUndo,
     canRedo,
     getCurrentState: getPresent,
@@ -206,6 +234,7 @@ export function useNodeLayoutState(): UseNodeLayoutStateReturn {
     applyNonStructuralPreview,
     applyManualMove,
     applyTreeChange,
+    applyStateChange,
     setLayoutMode,
     setTreeDirection,
     setLayoutSpacing,

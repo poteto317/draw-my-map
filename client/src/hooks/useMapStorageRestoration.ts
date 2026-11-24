@@ -5,6 +5,7 @@ import {
   parseMapDocumentJsonWithVersion,
   serializeMapDocument,
 } from "@/domain/persistence/mapDocumentCodec";
+import { nodeMapStateFromDocument } from "@/domain/persistence/mapDocumentState";
 import type { MapRestoreOrigin } from "@/domain/persistence/mapSaveStatus";
 import type { MapDocumentResult } from "@/types/mapDocument";
 import type { NodeMapState } from "@/types/nodeMapState";
@@ -70,10 +71,7 @@ export function useMapStorageRestoration({
     }
 
     const { document, sourceVersion } = parsed.value;
-    replaceMap({
-      layoutMode: document.layoutMode,
-      nodes: document.nodes,
-    });
+    replaceMap(nodeMapStateFromDocument(document));
     setRestoration({
       hydrated: true,
       initialPersistedSnapshot: sourceVersion === 1

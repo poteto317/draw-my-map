@@ -9,12 +9,16 @@ import {
   parseMapDocumentJson,
   serializeMapDocument,
 } from "@/domain/persistence/mapDocumentCodec";
+import {
+  mapDocumentOptionsFromState,
+  nodeMapStateFromDocument,
+} from "@/domain/persistence/mapDocumentState";
 import type { MapLibraryOperationResult } from "@/hooks/useMapLibrary";
 import { useStorageConflictMonitor } from "@/hooks/useStorageConflictMonitor";
-import type { MapDocumentV3 } from "@/types/mapDocument";
 import type { MapStorageSession } from "@/types/mapStorageSession";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
+import type { NodeMapState } from "@/types/nodeMapState";
 import type { OperationNotice } from "@/types/operationNotice";
 
 export type LayoutMode = NodeLayoutMode;
@@ -23,9 +27,13 @@ export interface UseMapConflictControllerOptions {
   storageSession: MapStorageSession;
   nodes: readonly Node[];
   layoutMode: LayoutMode;
+  treeDirection?: NodeMapState["treeDirection"];
+  layoutSpacing?: NodeMapState["layoutSpacing"];
+  relations?: NodeMapState["relations"];
+  groups?: NodeMapState["groups"];
   mapName: string;
   getHasPendingEdits: () => boolean;
-  replaceMapAndReset: (document: MapDocumentV3) => void;
+  replaceMapAndReset: (state: NodeMapState) => void;
   onSaveCurrentAsNewMap?: (name: string, snapshotJson: string) => MapLibraryOperationResult;
   rebaseSnapshot?: (snapshotJson: string) => void;
 }
@@ -45,6 +53,10 @@ export function useMapConflictController({
   storageSession,
   nodes,
   layoutMode,
+  treeDirection,
+  layoutSpacing,
+  relations,
+  groups,
   mapName,
   getHasPendingEdits,
   replaceMapAndReset,
@@ -90,7 +102,7 @@ export function useMapConflictController({
       return;
     }
     rebaseSnapshot?.(read.value);
-    replaceMapAndReset(parsed.value);
+    replaceMapAndReset(nodeMapStateFromDocument(parsed.value));
     setConflictState("none");
     setIsConfirmOpen(false);
     setConflictActionNotice(conflictReloadSuccessNotice());
@@ -107,14 +119,18 @@ export function useMapConflictController({
   const handleSaveAsCopy = useCallback(() => {
     if (!onSaveCurrentAsNewMap) return;
     const copyName = createConflictCopyName(mapName);
-    const currentSnapshotJson = serializeMapDocument(createMapDocument(nodes, layoutMode));
+    const currentSnapshotJson = serializeMapDocument(createMapDocument(
+      nodes,
+      layoutMode,
+      mapDocumentOptionsFromState({ treeDirection, layoutSpacing, relations, groups }),
+    ));
     const result = onSaveCurrentAsNewMap(copyName, currentSnapshotJson);
     if (result.ok) {
       setConflictState("none");
     } else {
       setConflictActionNotice(result.notice);
     }
-  }, [mapName, nodes, layoutMode, onSaveCurrentAsNewMap]);
+  }, [mapName, nodes, layoutMode, treeDirection, layoutSpacing, relations, groups, onSaveCurrentAsNewMap]);
 
   const handleCancelConfirm = useCallback(() => {
     setIsConfirmOpen(false);

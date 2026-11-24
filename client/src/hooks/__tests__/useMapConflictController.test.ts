@@ -245,7 +245,10 @@ describe("useMapConflictController", () => {
       });
 
       expect(result.current.isConfirmOpen).toBe(false);
-      expect(replaceMapAndReset).toHaveBeenCalledWith(validExternalDoc);
+      expect(replaceMapAndReset).toHaveBeenCalledWith({
+        layoutMode: validExternalDoc.layoutMode,
+        nodes: validExternalDoc.nodes,
+      });
       expect(result.current.conflictState).toBe("none");
       expect(result.current.conflictActionNotice).toEqual({
         kind: "status",
@@ -307,7 +310,10 @@ describe("useMapConflictController", () => {
         result.current.handleConfirmReload();
       });
 
-      expect(replaceMapAndReset).toHaveBeenCalledWith(validExternalDoc);
+      expect(replaceMapAndReset).toHaveBeenCalledWith({
+        layoutMode: validExternalDoc.layoutMode,
+        nodes: validExternalDoc.nodes,
+      });
       expect(result.current.isConfirmOpen).toBe(false);
       expect(result.current.conflictState).toBe("none");
       expect(result.current.conflictActionNotice).toEqual({

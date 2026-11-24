@@ -8,12 +8,13 @@ import {
   parseMapDocumentJsonWithVersion,
   serializeMapDocument,
 } from "@/domain/persistence/mapDocumentCodec";
+import { mapDocumentOptionsFromState } from "@/domain/persistence/mapDocumentState";
 import type { MapSaveStatus } from "@/domain/persistence/mapSaveStatus";
 import { useMapConflictController } from "@/hooks/useMapConflictController";
 import { useMapFilePersistence } from "@/hooks/useMapFilePersistence";
 import type { MapLibraryOperationResult } from "@/hooks/useMapLibrary";
 import { useMapStoragePersistence } from "@/hooks/useMapStoragePersistence";
-import type { MapDocumentResult, MapDocumentV3 } from "@/types/mapDocument";
+import type { MapDocumentResult } from "@/types/mapDocument";
 import type { MapStorageSession } from "@/types/mapStorageSession";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
@@ -23,6 +24,10 @@ import type { OperationNotice } from "@/types/operationNotice";
 export interface UseMapPersistenceOptions {
   nodes: readonly Node[];
   layoutMode: NodeLayoutMode;
+  treeDirection?: NodeMapState["treeDirection"];
+  layoutSpacing?: NodeMapState["layoutSpacing"];
+  relations?: NodeMapState["relations"];
+  groups?: NodeMapState["groups"];
   replaceMap: (state: NodeMapState) => void;
   storageSession: MapStorageSession;
   storageMode: "persistent" | "protected";
@@ -54,6 +59,10 @@ export interface UseMapPersistenceResult {
 export function useMapPersistence({
   nodes,
   layoutMode,
+  treeDirection,
+  layoutSpacing,
+  relations,
+  groups,
   replaceMap,
   storageSession,
   storageMode,
@@ -65,9 +74,13 @@ export function useMapPersistence({
   onSaveCurrentAsNewMap,
 }: UseMapPersistenceOptions): UseMapPersistenceResult {
   const [notice, setNotice] = useState<OperationNotice | null>(null);
+  const documentOptions = useMemo(
+    () => mapDocumentOptionsFromState({ treeDirection, layoutSpacing, relations, groups }),
+    [treeDirection, layoutSpacing, relations, groups],
+  );
   const currentSnapshot = useMemo(
-    () => serializeMapDocument(createMapDocument(nodes, layoutMode)),
-    [nodes, layoutMode],
+    () => serializeMapDocument(createMapDocument(nodes, layoutMode, documentOptions)),
+    [nodes, layoutMode, documentOptions],
   );
 
   const canonicalInitialSnapshot = useMemo(() => {
@@ -88,13 +101,17 @@ export function useMapPersistence({
     storageSession,
     nodes,
     layoutMode,
+    treeDirection,
+    layoutSpacing,
+    relations,
+    groups,
     mapName,
     getHasPendingEdits: () => (
       !hydratedRef.current && canonicalInitialSnapshot !== null
         ? false
         : confirmedSnapshot !== null && currentSnapshot !== confirmedSnapshot
     ),
-    replaceMapAndReset: replaceMap as (document: MapDocumentV3) => void,
+    replaceMapAndReset: replaceMap,
     onSaveCurrentAsNewMap,
     rebaseSnapshot: (json) => {
       setConfirmedSnapshot(json);

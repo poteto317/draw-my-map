@@ -64,6 +64,35 @@ describe("useMapJsonImport", () => {
     });
   });
 
+  it("読み込んだ relations/groups を replaceMap に渡す", async () => {
+    const json = JSON.stringify({
+      version: 3,
+      layoutMode: "manual",
+      nodes: [
+        { id: 1, parentId: null, x: 0, y: 0, width: 100, height: 40, label: "a", importance: "medium" },
+        { id: 2, parentId: null, x: 40, y: 0, width: 80, height: 30, label: "b", importance: "medium" },
+      ],
+      relations: [{ id: 10, fromId: 1, toId: 2, kind: "related", directed: false }],
+      groups: [{ id: 20, nodeIds: [1, 2], label: "" }],
+    });
+    const replaceMap = jest.fn();
+    const { result } = renderHook(() => useMapJsonImport({
+      replaceMap,
+      requestSnapshotSave: jest.fn(),
+      publishNotice: jest.fn(),
+      readFile: async () => ({ ok: true, value: json }),
+    }));
+
+    await act(async () => {
+      await result.current(new File([json], "map.json"));
+    });
+
+    expect(replaceMap).toHaveBeenCalledWith(expect.objectContaining({
+      relations: [{ id: 10, fromId: 1, toId: 2, kind: "related", directed: false }],
+      groups: [{ id: 20, nodeIds: [1, 2], label: "" }],
+    }));
+  });
+
   it("並行読取が逆順に完了しても最後に選んだファイルだけを反映する", async () => {
     const firstRead = deferredRead();
     const secondRead = deferredRead();
