@@ -1,4 +1,4 @@
-export type MapFileExtension = "json" | "png" | "svg" | "md" | "txt";
+export type MapFileExtension = "json" | "png" | "svg" | "md" | "txt" | "opml" | "csv" | "tsv";
 
 const FALLBACK_FILE_NAME_BASE = "draw-my-map";
 const FORBIDDEN_FILE_NAME_CHARACTERS = /[\\/:*?"<>|\u0000-\u001f\u007f]/g;

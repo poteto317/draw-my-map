@@ -1,6 +1,14 @@
 import type { ExportScope } from "@/domain/exportScope/exportScope";
 
-export type ExportFormat = "png" | "svg" | "markdown" | "json" | "bullets";
+export type ExportFormat =
+  | "png"
+  | "svg"
+  | "markdown"
+  | "json"
+  | "bullets"
+  | "opml"
+  | "csv"
+  | "tsv";
 
 export type ExportFormatControl = {
   readonly enabled: boolean;
@@ -9,12 +17,41 @@ export type ExportFormatControl = {
 
 export type ExportFormatControls = Record<ExportFormat, ExportFormatControl>;
 
-const EXPORT_FORMATS = ["png", "svg", "markdown", "json", "bullets"] as const satisfies readonly ExportFormat[];
+const EXPORT_FORMATS = [
+  "png",
+  "svg",
+  "markdown",
+  "json",
+  "bullets",
+  "opml",
+  "csv",
+  "tsv",
+] as const satisfies readonly ExportFormat[];
+
+// OPML/CSV/TSV はスコープ別の利用可否セットに常に含める（空集合の無効化は exportNodeCount で一括判定）。
+const EXCHANGE_FORMATS_ALWAYS_ENABLED: readonly ExportFormat[] = ["opml", "csv", "tsv"];
 
 const ENABLED_FORMATS: Record<ExportScope, ReadonlySet<ExportFormat>> = {
-  all: new Set(["png", "svg", "markdown", "json", "bullets"]),
-  visible: new Set(["png", "svg", "markdown"]),
-  selection: new Set(["png", "markdown", "json"]),
+  all: new Set([
+    "png",
+    "svg",
+    "markdown",
+    "json",
+    "bullets",
+    ...EXCHANGE_FORMATS_ALWAYS_ENABLED,
+  ]),
+  visible: new Set([
+    "png",
+    "svg",
+    "markdown",
+    ...EXCHANGE_FORMATS_ALWAYS_ENABLED,
+  ]),
+  selection: new Set([
+    "png",
+    "markdown",
+    "json",
+    ...EXCHANGE_FORMATS_ALWAYS_ENABLED,
+  ]),
 };
 
 const EMPTY_EXPORT_REASON = "書き出すノードがありません";
@@ -29,6 +66,7 @@ export function canUseSelectionScope(selectionTargetIds: readonly number[]): boo
 }
 
 // スコープ×形式の可否と無効理由を一度に決める（UI 側で形式ごとに同じ判定を繰り返さない）
+// exportNodeCount は exchange 書き出しの closed 集合長と空判定で一致する（closed ⊇ resolved）。
 export function resolveExportFormatControls(
   scope: ExportScope,
   exportNodeCount: number,
