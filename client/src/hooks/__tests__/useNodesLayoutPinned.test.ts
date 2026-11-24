@@ -118,16 +118,22 @@ describe("useNodes layoutPinned", () => {
       });
     });
     const beforeGesture = result.current.nodes.find((n) => n.id === 2)!;
+    let childDuringDrag = { x: 0, y: 0 };
 
     act(() => {
       const lease = result.current.beginMoveHistory();
       result.current.movePinnedNode(2, 220, 400);
+      const child = result.current.nodes.find((n) => n.id === 3)!;
+      childDuringDrag = { x: child.x, y: child.y };
       result.current.finalizePinnedNodeMove();
       lease.finish();
     });
 
     expect(result.current.nodes.find((n) => n.id === 2)).toMatchObject({ x: 220, y: 400 });
     expect(result.current.nodes.find((n) => n.id === 2)?.layoutPinned).toBe(true);
+    // ドロップ後リレイアウトで子孫がピン局所原点として更新される（ドラッグ中のまま残らない）
+    const childAfter = result.current.nodes.find((n) => n.id === 3)!;
+    expect(childAfter.x !== childDuringDrag.x || childAfter.y !== childDuringDrag.y).toBe(true);
 
     act(() => {
       result.current.undo();
