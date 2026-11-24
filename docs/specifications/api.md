@@ -1,6 +1,6 @@
 # Draw My Map API 仕様書
 
-本書は、**Draw My Map** におけるノードアイコン・イラスト生成エンドポイント（`POST /api/illustrations`）の詳細な API 仕様、内部アーキテクチャ、処理パイプライン、クライアント側画像処理、および本番公開に向けた運用・セキュリティ考慮事項をまとめた技術仕様書です。9〜14章ではクライアントAPIを扱います。
+本書は、**Draw My Map** におけるノードアイコン・イラスト生成エンドポイント（`POST /api/illustrations`）の詳細な API 仕様、内部アーキテクチャ、処理パイプライン、クライアント側画像処理、および本番公開に向けた運用・セキュリティ考慮事項をまとめた技術仕様書です。9〜16章ではクライアントAPIを扱います。
 
 ---
 
@@ -21,6 +21,7 @@
 13. [一括バックアップ・追加復元のクライアントAPI](#13-一括バックアップ追加復元のクライアントapi)
 14. [複数タブの編集競合検出のクライアントAPI](#14-複数タブの編集競合検出のクライアントapi)
 15. [枝の別マップ化とマップアーカイブのクライアントAPI](#15-枝の別マップ化とマップアーカイブのクライアントapi)
+16. [関連線・グループ枠のクライアントAPI](#16-関連線グループ枠のクライアントapi)
 
 ---
 
@@ -772,3 +773,65 @@ export function unarchiveMapMeta(meta: MapLibraryMetaV1, mapId: string): MapLibr
 
 - `useBranchExtractDialog` は必須 prop `onExtractBranchToNewMap(rootId)` を受け、`submit` で `useMapLibrary.extractBranchToNewMap` を呼ぶ（L-060）。
 - `useMapLibraryDialogState` は `archiveMap` / `unarchiveMap` を一覧画面へ配線する。
+
+## 16. 関連線・グループ枠のクライアントAPI
+
+Phase 28（候補061・062・063）で追加した文書級 `relations` / `groups` の公開面です。
+
+### 16.1 ドメイン（`domain/map/relationGroupModel.ts` ほか）
+
+```typescript
+export function collectUsedEntityIds(
+  state: Pick<NodeMapState, "nodes" | "relations" | "groups">,
+): number[];
+export function normalizeRelations(
+  raw: unknown,
+  nodeIdSet: ReadonlySet<number>,
+): readonly MapRelation[] | undefined;
+export function normalizeGroups(
+  raw: unknown,
+  nodeIdSet: ReadonlySet<number>,
+  reservedEntityIds?: ReadonlySet<number>,
+): readonly MapGroup[] | undefined;
+export function canCommitRelation(
+  relations: readonly MapRelation[] | undefined,
+  draft: MapRelation,
+  ignoreId?: number,
+): boolean;
+export function pruneAfterRemovedNodeIds(
+  relations: readonly MapRelation[] | undefined,
+  groups: readonly MapGroup[] | undefined,
+  removedIds: readonly number[],
+): RelationGroupSlice;
+```
+
+- `nextAvailableEntityIds(state, count)`（`nodeIdAllocator.ts`）が nodes∪relations∪groups 共有空間で採番する（既存 `nextAvailableIds(nodes, count)` は維持）。
+- 変異計画: `mapRelationMutation.ts` / `mapGroupMutation.ts`。可用性: `mapRelationAvailability.ts` / `mapGroupAvailability.ts`。
+
+### 16.2 `useNodes.ts`
+
+```typescript
+canvasSelection: MapCanvasSelection;
+relations: NodeMapState["relations"];
+groups: NodeMapState["groups"];
+selectRelation(id: number): void;
+selectGroup(id: number): void;
+addRelation(fromId: number, toId: number): AddRelationOutcome;
+removeRelation(relationId: number): RemoveRelationOutcome;
+updateRelation(
+  relationId: number,
+  patch: { kind?: RelationKind; directed?: boolean },
+): UpdateRelationOutcome;
+addGroup(nodeIds: readonly number[], label?: string): AddGroupOutcome;
+removeGroup(groupId: number): RemoveGroupOutcome;
+updateGroupLabel(groupId: number, label: string): UpdateGroupLabelOutcome;
+```
+
+- 既定の新規関連線は `kind: "related"`・`directed: false`。成功時のみ 1 操作の Undo / Redo。
+- 関連線／グループ選択中はノード対象操作をガード（`mapCanvasSelectionGuards.ts`）。Delete は `useNodeKeyboardShortcuts` が `removeRelation` / `removeGroup` へ振る。
+
+### 16.3 UI 連携
+
+- コンテキスト: `NodeContextMenu.tsx`（追加／結ぶ／グループ化／枝グループ化）。相手ピッカー: `RelationPartnerPickerDialog.tsx`（表示中 inert）。
+- 右パネル: `RelationDetailSection.tsx` / `GroupDetailSection.tsx`（`NodeDetailPanel.tsx`）。
+- 描画: `renderMapRelations.ts` / `renderMapGroups.ts`（`renderMapScene.ts` から呼ぶ）。
