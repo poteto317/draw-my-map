@@ -307,6 +307,68 @@ describe("insertNodeForest: 失敗と採番", () => {
   });
 });
 
+describe("insertNodeForest: ForestItem の任意属性", () => {
+  it("importance・note・tags があれば新規ノードに載せる", () => {
+    const items: ForestItem[] = [
+      {
+        label: "A",
+        parentIndex: null,
+        importance: "high",
+        note: "ルートのメモ",
+        tags: ["tag-a", "tag-b"],
+      },
+      {
+        label: "A1",
+        parentIndex: 0,
+        importance: "low",
+        note: "子のメモ",
+        tags: ["child"],
+      },
+    ];
+    const result = expectSuccess(
+      insertNodeForest([], items, { kind: "root" }, "manual", idsFrom(1)),
+    );
+
+    expect(findByLabel(result.nodes, "A")).toMatchObject({
+      importance: "high",
+      note: "ルートのメモ",
+      tags: ["tag-a", "tag-b"],
+    });
+    expect(findByLabel(result.nodes, "A1")).toMatchObject({
+      importance: "low",
+      note: "子のメモ",
+      tags: ["child"],
+    });
+  });
+
+  it("label と parentIndex だけの項目は従来どおり medium で note・tags のキーを持たない", () => {
+    const result = expectSuccess(
+      insertNodeForest([], twoTrees, { kind: "root" }, "manual", idsFrom(1)),
+    );
+    const added = result.nodes;
+
+    for (const node of added) {
+      expect(node.importance).toBe("medium");
+      expect(node).not.toHaveProperty("note");
+      expect(node).not.toHaveProperty("tags");
+    }
+  });
+
+  it("importance だけ指定した項目は note・tags のキーを持たない", () => {
+    const items: ForestItem[] = [
+      { label: "A", parentIndex: null, importance: "high" },
+    ];
+    const result = expectSuccess(
+      insertNodeForest([], items, { kind: "root" }, "manual", idsFrom(1)),
+    );
+
+    const node = findByLabel(result.nodes, "A");
+    expect(node.importance).toBe("high");
+    expect(node).not.toHaveProperty("note");
+    expect(node).not.toHaveProperty("tags");
+  });
+});
+
 describe("insertNodeForest: 計算量", () => {
   const itemCount = 10_000;
   const currentCount = 1_000;
