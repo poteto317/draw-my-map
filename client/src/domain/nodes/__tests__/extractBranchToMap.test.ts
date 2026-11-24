@@ -14,6 +14,8 @@ import { normalizeMapDocumentNode } from "@/domain/persistence/mapDocumentNode";
 import { projectMapDocumentNode } from "@/domain/persistence/mapDocumentNodeProjection";
 import { createTestNode } from "@/testing/createTestNode";
 import type { MapDocumentV3 } from "@/types/mapDocument";
+import type { MapGroup } from "@/types/mapGroup";
+import type { MapRelation } from "@/types/mapRelation";
 import type { NodeMapState } from "@/types/nodeMapState";
 
 const SOURCE_MAP_ID = "map-src";
@@ -21,13 +23,21 @@ const NEW_MAP_ID = "map-new";
 const SOURCE_MAP_NAME = "旅行の計画";
 const manual = (nodes: ReturnType<typeof createTestNode>[]): NodeMapState => ({ layoutMode: "manual", nodes });
 
+function relation(partial: Partial<MapRelation> & Pick<MapRelation, "id" | "fromId" | "toId">): MapRelation {
+  return { kind: "related", directed: false, ...partial };
+}
+
+function group(partial: Partial<MapGroup> & Pick<MapGroup, "id" | "nodeIds">): MapGroup {
+  return { label: "", ...partial };
+}
+
 function extract(
   source: NodeMapState,
   rootId: number,
   target: NodeMapState = manual([]),
   sourceMapName: string = SOURCE_MAP_NAME,
 ) {
-  const allocateIds = createNodeIdAllocator().nextAvailableIds;
+  const allocateIds = createNodeIdAllocator().nextAvailableEntityIds;
   return extractBranchToNewMap({
     source,
     target,
@@ -68,6 +78,47 @@ describe("extractBranchToNewMap", () => {
       mapLinks: [{ targetMapId: NEW_MAP_ID }],
     });
     expect(result.source.nodes.indexOf(stub)).toBe(2);
+  });
+
+  it("閉じた relations/groups を新マップへ写し、元は prune・境界は捨てる", () => {
+    const source: NodeMapState = {
+      layoutMode: "manual",
+      nodes: [
+        createTestNode({ id: 1, parentId: null, label: "親" }),
+        createTestNode({ id: 2, parentId: 1, label: "枝", x: 20, y: 20 }),
+        createTestNode({ id: 3, parentId: 2, label: "子" }),
+        createTestNode({ id: 9, parentId: null, label: "残す" }),
+      ],
+      relations: [
+        relation({ id: 10, fromId: 2, toId: 3 }),
+        relation({ id: 11, fromId: 1, toId: 2 }),
+      ],
+      groups: [
+        group({ id: 20, nodeIds: [2, 3], label: "closed" }),
+        group({ id: 21, nodeIds: [1, 2], label: "split" }),
+      ],
+    };
+
+    const result = extract(source, 2);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.source.relations).toBeUndefined();
+    expect(result.source.groups).toBeUndefined();
+    expect(result.target.relations).toHaveLength(1);
+    expect(result.target.relations![0]).toMatchObject({
+      fromId: result.target.nodes[0]!.id,
+      toId: result.target.nodes[1]!.id,
+    });
+    expect(result.target.relations![0]!.id).not.toBe(10);
+    expect(result.target.groups).toEqual([
+      group({
+        id: result.target.groups![0]!.id,
+        nodeIds: [result.target.nodes[0]!.id, result.target.nodes[1]!.id],
+        label: "closed",
+      }),
+    ]);
+    expect(result.target.groups![0]!.id).not.toBe(20);
   });
 
   it("ルート直下の枝は拒否する", () => {

@@ -2,6 +2,7 @@ import { decodeMapIndex, encodeMapIndex, findMapEntry, openMapAfterBranchTransfe
 import { transferNodeBranch } from "@/domain/nodes/nodeBranchMove";
 import { createNodeIdAllocator } from "@/domain/nodes/nodeIdAllocator";
 import { createMapDocument, parseMapDocumentJson, serializeMapDocument } from "@/domain/persistence/mapDocumentCodec";
+import { mapDocumentOptionsFromState } from "@/domain/persistence/mapDocumentState";
 import type { NodeMapState } from "@/types/nodeMapState";
 import { writeBranchMove } from "./branchMoveTransaction";
 import { MAP_INDEX_STORAGE_KEY, readMapBody, type MapLibraryStorage } from "./mapLibraryStorage";
@@ -70,7 +71,7 @@ export function transferStoredBranch(
     documents.source,
     documents.target,
     rootId,
-    createNodeIdAllocator().nextAvailableIds,
+    createNodeIdAllocator().nextAvailableEntityIds,
     { sourceMapId: sourceId, targetMapId: targetId },
   );
   if (!moved.ok) return failed(sourceJson);
@@ -78,8 +79,16 @@ export function transferStoredBranch(
   const next = openMapAfterBranchTransfer(index, sourceId, targetId, now.toISOString());
   const written = writeBranchMove(storage, {
     sourceId, targetId, sourceBefore: sourceJson, targetBefore: targetJson, indexBefore: stored.raw,
-    sourceAfter: serializeMapDocument(createMapDocument(moved.source.nodes, moved.source.layoutMode)),
-    targetAfter: serializeMapDocument(createMapDocument(moved.target.nodes, moved.target.layoutMode)),
+    sourceAfter: serializeMapDocument(createMapDocument(
+      moved.source.nodes,
+      moved.source.layoutMode,
+      mapDocumentOptionsFromState(moved.source),
+    )),
+    targetAfter: serializeMapDocument(createMapDocument(
+      moved.target.nodes,
+      moved.target.layoutMode,
+      mapDocumentOptionsFromState(moved.target),
+    )),
     indexAfter: encodeMapIndex(next),
   });
   return written.ok

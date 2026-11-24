@@ -1,9 +1,12 @@
 import { layoutNodeForest } from "@/domain/nodes/nodeAutoLayout";
+import type { AllocateEntityIds } from "@/domain/nodes/nodeBranchMove";
 import { listBranchMoveParentCandidates, moveNodeBranch, transferNodeBranch } from "@/domain/nodes/nodeBranchMove";
 import { createNodeIdAllocator } from "@/domain/nodes/nodeIdAllocator";
-import type { AllocateNodeIds } from "@/domain/nodes/nodeSubtreeInsertion";
 import { createTestNode } from "@/testing/createTestNode";
+import type { MapGroup } from "@/types/mapGroup";
+import type { MapRelation } from "@/types/mapRelation";
 import type { Node } from "@/types/node";
+import type { NodeMapState } from "@/types/nodeMapState";
 
 jest.mock("@/domain/nodes/nodeAutoLayout", () => {
   const actual = jest.requireActual<typeof import("@/domain/nodes/nodeAutoLayout")>(
@@ -14,6 +17,14 @@ jest.mock("@/domain/nodes/nodeAutoLayout", () => {
 
 function node(id: number, parentId: number | null, x: number, y: number, extra: Partial<Node> = {}): Node {
   return createTestNode({ id, parentId, x, y, width: 100, height: 60, label: `ノード${id}`, ...extra });
+}
+
+function relation(partial: Partial<MapRelation> & Pick<MapRelation, "id" | "fromId" | "toId">): MapRelation {
+  return { kind: "related", directed: false, ...partial };
+}
+
+function group(partial: Partial<MapGroup> & Pick<MapGroup, "id" | "nodeIds">): MapGroup {
+  return { label: "", ...partial };
 }
 
 describe("listBranchMoveParentCandidates", () => {
@@ -134,9 +145,9 @@ describe("moveNodeBranch", () => {
 const MAP_IDS = { sourceMapId: "map-src", targetMapId: "map-dst" };
 
 describe("transferNodeBranch", () => {
-  const allocateIds: AllocateNodeIds = (occupied, count) => {
+  const allocateIds: AllocateEntityIds = (occupied, count) => {
     let nextId = 100;
-    return createNodeIdAllocator(() => () => nextId++).nextAvailableIds(occupied, count);
+    return createNodeIdAllocator(() => () => nextId++).nextAvailableEntityIds(occupied, count);
   };
 
   beforeEach(() => {
@@ -365,5 +376,117 @@ describe("transferNodeBranch", () => {
     expect(target.nodes).toBe(targetBefore);
     expect(source.nodes).toEqual(sourceSnapshot);
     expect(target.nodes).toEqual(targetSnapshot);
+  });
+
+  describe("閉じた relations / groups の同行と境界 GC", () => {
+    // 移動枝: 1→2。残す: 9。閉じた relation/group は同行、境界横断・分割は捨てる
+    function sourceWithClosed(): NodeMapState {
+      return {
+        layoutMode: "manual",
+        nodes: [
+          node(1, null, 0, 0),
+          node(2, 1, 300, 0),
+          node(9, null, 0, 400),
+        ],
+        relations: [
+          relation({ id: 10, fromId: 1, toId: 2 }),
+          relation({ id: 11, fromId: 1, toId: 9 }),
+        ],
+        groups: [
+          group({ id: 20, nodeIds: [1, 2], label: "closed" }),
+          group({ id: 21, nodeIds: [1, 2, 9], label: "split" }),
+          group({ id: 22, nodeIds: [1, 9], label: "boundary" }),
+        ],
+      };
+    }
+    const target: NodeMapState = { layoutMode: "manual", nodes: [node(100, null, 0, 0)] };
+
+    it("閉じた relation/group は新 entity ID で移動先へ写し、元は prune する", () => {
+      const result = transferNodeBranch(sourceWithClosed(), target, 1, allocateIds, MAP_IDS);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.source.nodes.map(({ id }) => id)).toEqual([9]);
+      expect(result.source.relations).toBeUndefined();
+      expect(result.source.groups).toBeUndefined();
+
+      const movedByLabel = (label: string) => result.target.nodes.find((item) => item.label === label)!;
+      const root = movedByLabel("ノード1");
+      const child = movedByLabel("ノード2");
+      expect(result.target.relations).toHaveLength(1);
+      expect(result.target.relations![0]).toMatchObject({ fromId: root.id, toId: child.id, kind: "related", directed: false });
+      expect(result.target.relations![0]!.id).not.toBe(10);
+      expect(result.target.groups).toEqual([
+        group({ id: result.target.groups![0]!.id, nodeIds: [root.id, child.id], label: "closed" }),
+      ]);
+      expect(result.target.groups![0]!.id).not.toBe(20);
+      const entityIds = new Set([
+        ...result.target.nodes.map((item) => item.id),
+        ...(result.target.relations ?? []).map((item) => item.id),
+        ...(result.target.groups ?? []).map((item) => item.id),
+      ]);
+      expect(entityIds.size).toBe(
+        result.target.nodes.length
+          + (result.target.relations ?? []).length
+          + (result.target.groups ?? []).length,
+      );
+    });
+
+    it("境界横断 relation と分割 group は移動先にも残さない", () => {
+      const result = transferNodeBranch(sourceWithClosed(), target, 1, allocateIds, MAP_IDS);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.target.relations).toHaveLength(1);
+      expect((result.target.groups ?? []).map((item) => item.label)).toEqual(["closed"]);
+    });
+
+    it("枝だけに閉じた関係が無いとき、元マップの境界外 relation/group は残る", () => {
+      const source: NodeMapState = {
+        layoutMode: "manual",
+        nodes: [
+          node(1, null, 0, 0),
+          node(2, 1, 300, 0),
+          node(8, null, 0, 200),
+          node(9, null, 0, 400),
+        ],
+        relations: [
+          relation({ id: 11, fromId: 1, toId: 9 }),
+          relation({ id: 12, fromId: 8, toId: 9 }),
+        ],
+        groups: [
+          group({ id: 21, nodeIds: [1, 9], label: "split" }),
+          group({ id: 23, nodeIds: [8, 9], label: "stay" }),
+        ],
+      };
+      const result = transferNodeBranch(source, target, 1, allocateIds, MAP_IDS);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.source.relations).toEqual([relation({ id: 12, fromId: 8, toId: 9 })]);
+      expect(result.source.groups).toEqual([group({ id: 23, nodeIds: [8, 9], label: "stay" })]);
+      expect(result.target.relations).toBeUndefined();
+      expect(result.target.groups).toBeUndefined();
+    });
+
+    it("分割 group は残メンバーが 2 以上でも元マップから丸ごと削除する", () => {
+      // 枝: 1。残す: 8, 9。group [1,8,9] は境界分割 → 縮めて [8,9] を残さず削除
+      const source: NodeMapState = {
+        layoutMode: "manual",
+        nodes: [
+          node(1, null, 0, 0),
+          node(8, null, 0, 200),
+          node(9, null, 0, 400),
+        ],
+        groups: [
+          group({ id: 30, nodeIds: [1, 8, 9], label: "split-keep2" }),
+          group({ id: 31, nodeIds: [8, 9], label: "outside" }),
+        ],
+      };
+      const result = transferNodeBranch(source, target, 1, allocateIds, MAP_IDS);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.source.nodes.map(({ id }) => id).sort((a, b) => a - b)).toEqual([8, 9]);
+      expect(result.source.groups).toEqual([group({ id: 31, nodeIds: [8, 9], label: "outside" })]);
+      expect(result.target.groups).toBeUndefined();
+    });
   });
 });

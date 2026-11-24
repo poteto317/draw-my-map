@@ -5,7 +5,12 @@ import type { LayoutSpacing } from "@/types/layoutSpacing";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 
-export type SubtreeInsertionResult = { nodes: Node[]; rootId: number };
+export type SubtreeInsertionResult = {
+  nodes: Node[];
+  rootId: number;
+  // コピー元 id → 採番した新 id（閉じた relation/group の remap 用）
+  nodeIdMapping: ReadonlyMap<number, number>;
+};
 
 export type SubtreeClipboardGuardResult =
   | { ok: true }
@@ -105,18 +110,22 @@ export function insertNodeSubtree(
   if (plan === null) return null;
 
   const ids = allocateIds(current, sources.length);
+  const nodeIdMapping = new Map<number, number>();
   const copies = sources.map((source, index): Node => {
     const parentIndex = plan.parentIndexes[index];
+    const id = ids[index]!;
+    nodeIdMapping.set(source.id, id);
     return {
       ...source,
-      id: ids[index],
-      parentId: parentIndex === null ? targetParentId : ids[parentIndex],
-      y: plan.ys[index],
+      id,
+      parentId: parentIndex === null ? targetParentId : ids[parentIndex]!,
+      y: plan.ys[index]!,
     };
   });
 
   return {
     nodes: [...current, ...copies],
-    rootId: ids[plan.rootIndex],
+    rootId: ids[plan.rootIndex]!,
+    nodeIdMapping,
   };
 }
