@@ -3,7 +3,7 @@ import {
   settleTreeChangeOutcome,
   type TreeChangeComputation,
 } from "@/hooks/treeChangeOutcome";
-import type { NodeMapLayoutContext } from "@/domain/nodes/resolveLayoutSpacing";
+import type { NodeMapLayoutContext } from "@/domain/nodes/nodeMapLayoutContext";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 

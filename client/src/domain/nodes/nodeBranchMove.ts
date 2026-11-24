@@ -15,8 +15,13 @@ import { calculateManualOffsetY } from "@/domain/nodes/nodeManualPlacement";
 import { remapMovedBranchMapLinks } from "@/domain/nodes/nodeMapLink";
 import { insertNodeSubtree } from "@/domain/nodes/nodeSubtreeInsertion";
 import { collectSubtreeIds } from "@/domain/nodes/nodeTree";
-import { resolveLayoutNodeForestOptions, resolveLayoutSpacing } from "@/domain/nodes/resolveLayoutSpacing";
+import { resolveLayoutNodeForestOptions, resolveLayoutSpacing } from "@/domain/nodes/nodeMapLayoutContext";
 import { DEFAULT_LAYOUT_SPACING } from "@/domain/persistence/mapDocumentLayoutSpacing";
+import {
+  appendBranchLayouts,
+  pruneBranchLayoutsAfterRemovedNodeIds,
+  remapClosedBranchLayouts,
+} from "@/domain/map/branchLayoutLifecycle";
 import type { LayoutSpacing } from "@/types/layoutSpacing";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
@@ -240,6 +245,7 @@ export function transferNodeBranch(
   if (nextTargetNodes === null) return { ok: false, reason: "placement-failed" };
 
   const pruned = pruneSourceAfterBranchMove(source.relations, source.groups, branchIds);
+  const prunedBranchLayouts = pruneBranchLayoutsAfterRemovedNodeIds(source.branchLayouts, [...branchIds]);
   const closedCopied = copyClosedRelationGroups(
     source.relations,
     source.groups,
@@ -248,6 +254,7 @@ export function transferNodeBranch(
     allocateIds,
   );
   const merged = mergeRelationGroupSlices(target, closedCopied);
+  const remappedBranchLayouts = remapClosedBranchLayouts(source.branchLayouts, inserted.nodeIdMapping);
 
   return {
     ok: true,
@@ -256,12 +263,14 @@ export function transferNodeBranch(
       nodes: nextSourceNodes,
       relations: pruned.relations,
       groups: pruned.groups,
+      branchLayouts: prunedBranchLayouts,
     },
     target: {
       ...target,
       nodes: nextTargetNodes,
       relations: merged.relations,
       groups: merged.groups,
+      branchLayouts: appendBranchLayouts(target.branchLayouts, remappedBranchLayouts),
     },
     rootId: inserted.rootId,
   };

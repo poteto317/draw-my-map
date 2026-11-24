@@ -294,6 +294,15 @@ function mergeNodeLocked(survivor: Node, absorbed: readonly Node[]): Node {
   return survivor;
 }
 
+// layoutPinned: survivor-else-first（残すノードの値、無ければ吸収側の配列順で最初の値）
+function mergeNodeLayoutPinned(survivor: Node, absorbed: readonly Node[]): Node {
+  if (survivor.layoutPinned === true) return survivor;
+  if (absorbed.find((node) => node.layoutPinned === true)?.layoutPinned === true) {
+    return { ...survivor, layoutPinned: true };
+  }
+  return survivor;
+}
+
 // labelFontSize / labelBold / labelUnderline: survivor-else-first（残すノードの値、無ければ吸収側の配列順で最初の値）
 function mergeNodeLabelTextStyle(survivor: Node, absorbed: readonly Node[]): Node {
   const labelFontSize =
@@ -395,7 +404,10 @@ export function mergeNodes(
   const absorbed = nodes.filter((node) => plan.absorbedIds.includes(node.id));
   const updatedSurvivor = mergeNodeAppearance(
     mergeNodeLabelTextStyle(
-      mergeNodeLocked(applyPlanToSurvivor(survivor, plan), absorbed),
+      mergeNodeLayoutPinned(
+        mergeNodeLocked(applyPlanToSurvivor(survivor, plan), absorbed),
+        absorbed,
+      ),
       absorbed,
     ),
     absorbed,

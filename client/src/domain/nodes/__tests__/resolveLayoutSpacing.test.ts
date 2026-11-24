@@ -3,7 +3,7 @@ import {
   resolveLayoutNodeForestOptions,
   resolveLayoutSpacing,
   resolveTreeDirection,
-} from "@/domain/nodes/resolveLayoutSpacing";
+} from "@/domain/nodes/nodeMapLayoutContext";
 
 describe("resolveLayoutSpacing", () => {
   it("欠落時は shapes の既定間隔を返す", () => {
@@ -38,6 +38,28 @@ describe("resolveLayoutNodeForestOptions", () => {
     })).toEqual({
       direction: "tb",
       spacing: { childGap: 100, siblingGap: 32 },
+    });
+  });
+
+  it("layoutStyle と branchLayouts を options へ渡す（欠落は載せない）", () => {
+    expect(resolveLayoutNodeForestOptions({
+      treeDirection: "lr",
+      layoutSpacing: { childGap: 64, siblingGap: 24 },
+      layoutStyle: "radial",
+      branchLayouts: [{ nodeId: 1, direction: "rl" }],
+    })).toEqual({
+      direction: "lr",
+      spacing: { childGap: 64, siblingGap: 24 },
+      layoutStyle: "radial",
+      branchLayouts: [{ nodeId: 1, direction: "rl" }],
+    });
+
+    expect(resolveLayoutNodeForestOptions({
+      treeDirection: "lr",
+      layoutSpacing: undefined,
+    })).toEqual({
+      direction: "lr",
+      spacing: { childGap: CHILD_HORIZONTAL_GAP, siblingGap: SIBLING_VERTICAL_GAP },
     });
   });
 });

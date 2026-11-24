@@ -16,6 +16,11 @@ export function calculateNodePositions(
   const layoutMetrics = calculateNodeLayoutMetrics(forest, metrics);
   if (!layoutMetrics) return null;
   const positions = placeNodeForest(forest, layoutMetrics, metrics);
-  if (!positions || !hasValidVerticalSpacing(forest, positions, metrics.siblingGap)) return null;
+  if (!positions || !hasValidVerticalSpacing(
+    forest,
+    positions,
+    metrics.siblingGap,
+    forest.nodes,
+  )) return null;
   return positions;
 }
