@@ -534,6 +534,73 @@ describe("mapConflict", () => {
     });
   });
 
+  describe("isDocumentContentEqual（relations / groups）", () => {
+    const baseDoc: MapDocumentV3 = {
+      version: 3,
+      layoutMode: "manual",
+      nodes: [
+        {
+          id: 1,
+          parentId: null,
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 40,
+          label: "ルート",
+          importance: "medium",
+        },
+        {
+          id: 2,
+          parentId: 1,
+          x: 120,
+          y: 0,
+          width: 80,
+          height: 30,
+          label: "子",
+          importance: "high",
+        },
+      ],
+    };
+
+    it("relations だけ違うと false", () => {
+      expect(
+        isDocumentContentEqual(baseDoc, {
+          ...baseDoc,
+          relations: [{ id: 10, fromId: 1, toId: 2, kind: "related", directed: false }],
+        }),
+      ).toBe(false);
+    });
+
+    it("groups だけ違うと false", () => {
+      expect(
+        isDocumentContentEqual(baseDoc, {
+          ...baseDoc,
+          groups: [{ id: 20, nodeIds: [1, 2], label: "" }],
+        }),
+      ).toBe(false);
+    });
+
+    it("未定義と空・配列順違いは等価", () => {
+      expect(isDocumentContentEqual(baseDoc, { ...baseDoc, relations: [] })).toBe(true);
+      expect(isDocumentContentEqual(baseDoc, { ...baseDoc, groups: [] })).toBe(true);
+      const left: MapDocumentV3 = {
+        ...baseDoc,
+        relations: [
+          { id: 10, fromId: 1, toId: 2, kind: "related", directed: false },
+          { id: 11, fromId: 2, toId: 1, kind: "dependency", directed: true },
+        ],
+      };
+      const right: MapDocumentV3 = {
+        ...baseDoc,
+        relations: [
+          { id: 11, fromId: 2, toId: 1, kind: "dependency", directed: true },
+          { id: 10, fromId: 1, toId: 2, kind: "related", directed: false },
+        ],
+      };
+      expect(isDocumentContentEqual(left, right)).toBe(true);
+    });
+  });
+
   describe("mapConflictMessages", () => {
     it("定数値が設計書と整合していること", () => {
       expect(CONFLICT_NOTICE_MESSAGE).toBe(

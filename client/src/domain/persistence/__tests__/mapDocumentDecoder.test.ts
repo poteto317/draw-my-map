@@ -392,6 +392,50 @@ describe("version 3 の treeDirection と layoutSpacing", () => {
   });
 });
 
+describe("version 3 の relations / groups", () => {
+  const baseDoc = {
+    version: 3,
+    layoutMode: "manual" as const,
+    nodes: [node(1, null), node(2, 1), node(3, 1)],
+  };
+
+  it("不正エントリを除去して文書は成功する（全体 corrupt にしない）", () => {
+    const result = parseMapDocumentJson(JSON.stringify({
+      ...baseDoc,
+      relations: [
+        { id: 10, fromId: 1, toId: 2, kind: "related", directed: false },
+        { id: 11, fromId: 1, toId: 1, kind: "related", directed: false },
+        { id: 12, fromId: 1, toId: 9, kind: "related", directed: false },
+      ],
+      groups: [
+        { id: 20, nodeIds: [1, 2], label: "g" },
+        { id: 21, nodeIds: [1], label: "" },
+        { id: 22, nodeIds: [2, 3], label: "あ".repeat(101) },
+      ],
+    }));
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        version: 3,
+        layoutMode: "manual",
+        nodes: [node(1, null), node(2, 1), node(3, 1)],
+        relations: [{ id: 10, fromId: 1, toId: 2, kind: "related", directed: false }],
+        groups: [{ id: 20, nodeIds: [1, 2], label: "g" }],
+      },
+    });
+  });
+
+  it("非配列の relations/groups はキーごと無視する", () => {
+    const result = parseMapDocumentJson(JSON.stringify({
+      ...baseDoc,
+      relations: { id: 1 },
+      groups: "x",
+    }));
+    expect(result.ok && "relations" in result.value).toBe(false);
+    expect(result.ok && "groups" in result.value).toBe(false);
+  });
+});
+
 describe("version 3 の locked", () => {
   it("trueだけを読み込み、falseは落とす", () => {
     const jsonValue = JSON.stringify({

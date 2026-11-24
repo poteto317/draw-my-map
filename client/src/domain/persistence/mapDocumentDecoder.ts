@@ -1,3 +1,4 @@
+import { normalizeGroups, normalizeRelations } from "@/domain/map/relationGroupModel";
 import { validateMapDocumentGraph } from "@/domain/persistence/mapDocumentGraph";
 import { normalizeMapDocumentLayoutSpacing } from "@/domain/persistence/mapDocumentLayoutSpacing";
 import { normalizeMapDocumentNode } from "@/domain/persistence/mapDocumentNode";
@@ -53,6 +54,15 @@ export function parseMapDocumentJsonWithVersion(
 
   const treeDirection = treeDirectionResult.value;
   const layoutSpacing = layoutSpacingResult.value;
+  const nodeIdSet = new Set(graph.value.map((node) => node.id));
+  const relations = record.version === 3
+    ? normalizeRelations(record.relations, nodeIdSet)
+    : undefined;
+  const reservedEntityIds = new Set(nodeIdSet);
+  for (const relation of relations ?? []) reservedEntityIds.add(relation.id);
+  const groups = record.version === 3
+    ? normalizeGroups(record.groups, nodeIdSet, reservedEntityIds)
+    : undefined;
 
   return {
     ok: true,
@@ -63,6 +73,8 @@ export function parseMapDocumentJsonWithVersion(
         nodes: graph.value,
         ...(treeDirection === "lr" ? {} : { treeDirection }),
         ...(layoutSpacing === undefined ? {} : { layoutSpacing }),
+        ...(relations === undefined ? {} : { relations }),
+        ...(groups === undefined ? {} : { groups }),
       },
       sourceVersion: record.version,
     },
