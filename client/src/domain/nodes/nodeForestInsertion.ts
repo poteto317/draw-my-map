@@ -14,9 +14,16 @@ import type { AllocateNodeIds } from "@/domain/nodes/nodeSubtreeInsertion";
 import type { LayoutSpacing } from "@/types/layoutSpacing";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
+import type { NodeImportance } from "@/types/nodeImportance";
 import { DEFAULT_LAYOUT_SPACING } from "@/domain/persistence/mapDocumentLayoutSpacing";
 
-export type ForestItem = { label: string; parentIndex: number | null }; // parentIndex は自分より前の添字
+export type ForestItem = {
+  label: string;
+  parentIndex: number | null; // parentIndex は自分より前の添字
+  importance?: NodeImportance;
+  note?: string;
+  tags?: readonly string[];
+};
 
 export type ForestInsertionTarget =
   | { kind: "root" }
@@ -175,6 +182,28 @@ function placeForest(
   }
 }
 
+function createInsertedNode(
+  id: number,
+  parentId: number | null,
+  position: Point,
+  item: ForestItem,
+): Node {
+  const { label, importance, note, tags } = item;
+  const node: Node = {
+    id,
+    parentId,
+    x: position.x,
+    y: position.y,
+    width: RECT_WIDTH,
+    height: RECT_HEIGHT,
+    label,
+    importance: importance ?? DEFAULT_NODE_IMPORTANCE,
+  };
+  if (note !== undefined) node.note = note;
+  if (tags !== undefined) node.tags = tags;
+  return node;
+}
+
 function findTargetParent(
   current: readonly Node[],
   target: ForestInsertionTarget,
@@ -219,19 +248,15 @@ export function insertNodeForest(
   const nodes = current.slice();
   const rootIds: number[] = [];
   for (let index = 0; index < items.length; index += 1) {
-    const { label, parentIndex } = items[index];
+    const { parentIndex } = items[index];
     const id = ids[index];
     if (parentIndex === null) rootIds.push(id);
-    nodes.push({
+    nodes.push(createInsertedNode(
       id,
-      parentId: parentIndex === null ? rootParentId : ids[parentIndex],
-      x: positions[index].x,
-      y: positions[index].y,
-      width: RECT_WIDTH,
-      height: RECT_HEIGHT,
-      label,
-      importance: DEFAULT_NODE_IMPORTANCE,
-    });
+      parentIndex === null ? rootParentId : ids[parentIndex],
+      positions[index],
+      items[index],
+    ));
   }
   return { ok: true, nodes, rootIds };
 }
