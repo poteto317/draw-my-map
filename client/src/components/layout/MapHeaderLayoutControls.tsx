@@ -7,7 +7,7 @@ import { LockControls } from "@/components/layout/LockControls";
 import { SelectionAlignMenu } from "@/components/layout/SelectionAlignMenu";
 import { SnapGridControl } from "@/components/layout/SnapGridControl";
 import { TreeDirectionControl } from "@/components/layout/TreeDirectionControl";
-import type { HeaderControlDisabledReason } from "@/domain/map/mapLayoutStyleAvailability";
+import type { HeaderControlDisabledReason } from "@/domain/map/mapHeaderLayoutControlTypes";
 import type { LayoutSnapPrefs } from "@/domain/nodes/snapGrid";
 import type { SelectionLayoutActionOutcome } from "@/hooks/useSelectionLayoutActions";
 import type { SelectionAlignOp } from "@/domain/nodes/selectionAlign";
