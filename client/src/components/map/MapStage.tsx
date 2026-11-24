@@ -321,12 +321,16 @@ export function MapStage({
   }, [selectedNodeId, selectedNodeIds]);
 
   const handleRelationPointerDown = useCallback((relationId: number) => {
+    // 関連線選択へ移るとき進行中のノードラベル編集を捨てる（L-061・確定拒否で黙って捨てない）
+    cancelEditing();
     onSelectRelation?.(relationId);
-  }, [onSelectRelation]);
+  }, [cancelEditing, onSelectRelation]);
 
   const handleGroupPointerDown = useCallback((groupId: number) => {
+    // グループ選択へ移るとき進行中のノードラベル編集を捨てる（L-061）
+    cancelEditing();
     onSelectGroup?.(groupId);
-  }, [onSelectGroup]);
+  }, [cancelEditing, onSelectGroup]);
 
   const scene = useRenderedMapScene({
     runtime,
@@ -555,6 +559,8 @@ export function MapStage({
 
   const handleDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
     if (isOverlayFollowUpClick()) return;
+    // 関連線／グループ選択中はノードラベル編集・空キャンバス追加を始めない（L-061）
+    if (selectedRelationId !== null || selectedGroupId !== null) return;
     const container = containerRef.current;
     if (!container) return;
 

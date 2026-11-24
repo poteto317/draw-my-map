@@ -8,6 +8,7 @@ export type MockPointerEvent = {
   pointerId: number;
   pointerType: string;
   composedPath: () => unknown[];
+  stopPropagation: () => void;
   target?: unknown;
   shiftKey?: boolean;
   metaKey?: boolean;
@@ -37,6 +38,9 @@ export type MockContainer = {
 
 export const mockStageHandlers: Partial<Record<StageEvent, MockPointerHandler>> = {};
 export const mockNodePointerHandlers: Array<
+  Partial<Record<"pointerdown", MockPointerHandler>>
+> = [];
+export const mockGraphicsPointerHandlers: Array<
   Partial<Record<"pointerdown", MockPointerHandler>>
 > = [];
 export const mockContainers: MockContainer[] = [];
@@ -75,18 +79,31 @@ export function createMockPixiModule({ init }: { init?: () => Promise<void> } = 
         },
       };
     }),
-    Graphics: jest.fn().mockImplementation(() => ({
-      rect: jest.fn().mockReturnThis(),
-      circle: jest.fn().mockReturnThis(),
-      fill: jest.fn().mockReturnThis(),
-      stroke: jest.fn().mockReturnThis(),
-      moveTo: jest.fn().mockReturnThis(),
-      bezierCurveTo: jest.fn().mockReturnThis(),
-    })),
+    Graphics: jest.fn().mockImplementation(() => {
+      const handlers: Partial<Record<"pointerdown", MockPointerHandler>> = {};
+      return {
+        rect: jest.fn().mockReturnThis(),
+        circle: jest.fn().mockReturnThis(),
+        roundRect: jest.fn().mockReturnThis(),
+        fill: jest.fn().mockReturnThis(),
+        stroke: jest.fn().mockReturnThis(),
+        moveTo: jest.fn().mockReturnThis(),
+        lineTo: jest.fn().mockReturnThis(),
+        bezierCurveTo: jest.fn().mockReturnThis(),
+        on: jest.fn((event: "pointerdown", handler: MockPointerHandler) => {
+          handlers[event] = handler;
+          mockGraphicsPointerHandlers.push(handlers);
+        }),
+        alpha: 1,
+        eventMode: "none",
+        cursor: "default",
+      };
+    }),
     Text: jest.fn().mockImplementation(() => ({
       anchor: { set: jest.fn() },
       x: 0,
       y: 0,
+      eventMode: "none",
     })),
     Container: jest.fn().mockImplementation(() => {
       const handlers: Partial<Record<"pointerdown", MockPointerHandler>> = {};
@@ -125,6 +142,7 @@ export function pointer(
     pointerType: "mouse",
     button: 0,
     composedPath: () => path,
+    stopPropagation: jest.fn(),
     ...eventOptions,
   };
 }
@@ -167,6 +185,7 @@ export function resetMapStageTestRuntime() {
     delete mockStageHandlers[event];
   }
   mockNodePointerHandlers.length = 0;
+  mockGraphicsPointerHandlers.length = 0;
   mockContainers.length = 0;
   setViewportCullingEnabled(false);
 }
