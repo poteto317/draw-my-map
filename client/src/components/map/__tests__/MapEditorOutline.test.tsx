@@ -1,3 +1,5 @@
+import "@/components/map/testing/mockExchangeTextDownload";
+import { mockDownloadExchangeText } from "@/components/map/testing/mockExchangeTextDownload";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode, RefObject } from "react";
@@ -28,6 +30,7 @@ const mockDownloadOutlineText = jest.fn();
 jest.mock("@/services/outlineExport/outlineTextDownload", () => ({
   downloadOutlineText: (text: string, mapName: string, format: string) => mockDownloadOutlineText(text, mapName, format),
 }));
+
 jest.mock("@/services/persistence/mapJsonDownload", () => {
   const actual = jest.requireActual("@/services/persistence/mapJsonDownload");
   return {
@@ -112,6 +115,7 @@ beforeEach(() => {
   mockDownloadMapJson.mockReset();
   mockDownloadOutlineText.mockReset();
   mockDownloadMapImage.mockReset();
+  mockDownloadExchangeText.mockReset();
 });
 
 afterEach(() => {
@@ -389,6 +393,19 @@ it("保存失敗中にも出力し、出力失敗は保存通知と独立して�
   expect(mockDownloadOutlineText).toHaveBeenLastCalledWith("・親A\n  ・救出\n", "テストのマップ", "txt");
   expect(within(screen.getByRole("banner")).getByRole("alert")).toHaveTextContent("ブラウザへ自動保存できませんでした。");
   expect(screen.getByText("箇条書きファイルを書き出しました。", { selector: "p" })).toBeInTheDocument();
+});
+
+it("アウトライン表示でも OPML・CSV・TSV 書き出しボタンが見える", async () => {
+  await renderOutlineEditor();
+  expect(screen.getByRole("button", { name: "OPML書き出し" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "CSV書き出し" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "TSV書き出し" })).toBeInTheDocument();
+});
+
+it("アウトライン表示でも OPML・CSV/TSV 取り込みボタンが見える", async () => {
+  await renderOutlineEditor();
+  expect(screen.getByRole("button", { name: "OPML取り込み" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "CSV/TSV取り込み" })).toBeInTheDocument();
 });
 
 it("respectsEditorInert: 取込みと枝移動のダイアログ中は根が inert で閉じると戻る", async () => {

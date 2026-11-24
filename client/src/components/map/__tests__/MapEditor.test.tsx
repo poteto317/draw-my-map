@@ -1,3 +1,4 @@
+import "@/components/map/testing/mockExchangeTextDownload";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode, RefObject } from "react";
@@ -6,6 +7,7 @@ import { MapEditor } from "@/components/map/MapEditor";
 import {
   mockNodePointerHandlers,
   mockContainers,
+  mockGraphicsPointerHandlers,
   lastWorldContainer,
   mockStage,
   mockStageBounds,
@@ -217,6 +219,35 @@ const viewNavigationJson = JSON.stringify({
     { id: 6, parentId: 5, label: "別の枝の子", importance: "low" },
   ].map((node, index) => ({ ...node, x: 100 + index * 120, y: 100 + index * 50, width: 100, height: 60 })),
 });
+
+function viewNavigationJsonWithRelation() {
+  const base = JSON.parse(viewNavigationJson) as Record<string, unknown>;
+  return JSON.stringify({
+    ...base,
+    relations: [{ id: 10, fromId: 1, toId: 5, kind: "related", directed: false }],
+  });
+}
+
+function viewNavigationJsonWithGroup() {
+  const base = JSON.parse(viewNavigationJson) as Record<string, unknown>;
+  return JSON.stringify({
+    ...base,
+    groups: [{ id: 20, nodeIds: [2, 3], label: "枝束" }],
+  });
+}
+
+async function triggerEditConflict(storage: TestStorageSession) {
+  addNodeAt(300, 200);
+  act(() => {
+    window.dispatchEvent(
+      new StorageEvent("storage", {
+        key: mapBodyKey(storage.session.mapId),
+        newValue: "{}\n",
+      }),
+    );
+  });
+  expect(screen.getAllByText(CONFLICT_NOTICE_MESSAGE).length).toBeGreaterThan(0);
+}
 
 async function renderViewNavigationEditor() {
   const storage = createTestStorageSession({ initialJson: viewNavigationJson });
@@ -1759,12 +1790,18 @@ describe("書き出し対象スコープの配線", () => {
     expect(screen.getByRole("button", { name: /PNG書き出し/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Markdown書き出し/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /JSON書き出し/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /OPML書き出し/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /CSV書き出し/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /TSV書き出し/ })).toBeEnabled();
 
     await selectExportScope(user, "表示中");
     expect(screen.getByRole("button", { name: /JSON書き出し/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /箇条書き書き出し/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /SVG書き出し/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Markdown書き出し/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /OPML書き出し/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /CSV書き出し/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /TSV書き出し/ })).toBeEnabled();
   });
 
   it("visibleNodeIds が空のとき表示中書き出しを無効化する", async () => {
@@ -1776,6 +1813,9 @@ describe("書き出し対象スコープの配線", () => {
     expect(png).toBeDisabled();
     expect(screen.getByRole("button", { name: /SVG書き出し/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Markdown書き出し/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /OPML書き出し/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /CSV書き出し/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /TSV書き出し/ })).toBeDisabled();
     expect(png).toHaveAccessibleName(/書き出すノードがありません|表示中/);
   });
 
@@ -1794,6 +1834,7 @@ describe("書き出し対象スコープの配線", () => {
     expect(exported.nodes.find((node) => node.label === "集中する枝")?.parentId).toBeNull();
     expect(exported.nodes.find((node) => node.label === "内部ノード")?.parentId).not.toBeNull();
   });
+
 });
 
 function canvasNodeContentAlpha(label: string): number | undefined {
