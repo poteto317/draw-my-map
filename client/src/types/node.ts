@@ -13,7 +13,8 @@ import type { NodeKind } from "@/types/nodeKind";
 // areNodesEqual。項目を並べて比べている）、編集履歴の同値判定（domain/history/mapHistory.ts の areNodesEqual。links・tags は
 // 要素ごと ===、sources はオブジェクト要素なので areNodeSourcesEqual、mapLinks は areNodeMapLinksEqual）、親の挿入（domain/nodes/nodePlacement.ts の
 // createParentNode）、検索（domain/search/nodeLabelSearch.ts）、
-// キャンバスの描画（components/map/pixi/renderMapNodes.ts）、アウトライン書き出し・画像書き出し
+// キャンバスの描画（components/map/pixi/renderMapNodes.ts）、アウトライン書き出し・画像書き出し。
+// layoutPinned は locked と同型（true のみキー）。branchLayouts はノード属性ではなく文書級
 export type Node = {
   id: number;
   parentId: number | null;
@@ -60,6 +61,10 @@ export type Node = {
   mapLinks?: readonly NodeMapLink[];
   // 編集ロック。値があるノードでは true のみキーを持つ
   locked?: true;
+  // 自動配置時の位置固定。true のみキーを持つ（欠落＝非固定）。locked とは別。
+  // 分割では元のノードにだけ残し、統合では survivor-else-first、親の挿入では新しい親に持たせない。
+  // 複製・clipboard は値コピー
+  layoutPinned?: true;
   // ラベル文字サイズ（許可値は types/labelFontSize.ts の LABEL_FONT_SIZES: 12 | 14 | 18 | 24）。
   // 欠落・不正は標準 14（キー削除）。encode 時 14 はキー省略必須（projectLabelTextStyle）。
   // 分割では元のノードにだけ残し、統合では survivor-else-first、親の挿入では新しい親に持たせない。

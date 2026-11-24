@@ -17,7 +17,10 @@ const CURRENT_MAP_ID = "map-current";
 
 // 全属性を持つ見本のノード。Node に属性を足すと、ここで型エラーになる（見本の値を足し忘れない。L-825）。
 // 値は保存形式の検証を通る値にする（イラストは寸法を宣言した JPEG、高さはイラスト付きの高さ）
-const SAMPLE: Required<Omit<Node, "locked">> & { locked?: true } = {
+const SAMPLE: Required<Omit<Node, "locked" | "layoutPinned">> & {
+  locked?: true;
+  layoutPinned?: true;
+} = {
   id: 2,
   parentId: 1,
   x: 200,
@@ -32,6 +35,7 @@ const SAMPLE: Required<Omit<Node, "locked">> & { locked?: true } = {
   tags: ["見本"],
   sources: [{ title: "見本の出典", page: "1" }],
   mapLinks: [{ targetMapId: "sample-map", targetNodeId: 1 }],
+  layoutPinned: true,
   labelFontSize: 18,
   labelBold: true,
   labelUnderline: true,
@@ -40,7 +44,7 @@ const SAMPLE: Required<Omit<Node, "locked">> & { locked?: true } = {
 };
 
 // 各属性を見本と別の値にしたもの（比較の付け忘れを検査する）。Node に属性を足すと、ここでも型エラーになる
-// labelBold / labelUnderline は true のみなので、別値はキー欠落（undefined）とする
+// labelBold / labelUnderline / layoutPinned は true のみなので、別値はキー欠落（undefined）とする
 const DIFFERENT = {
   id: 3,
   parentId: null,
@@ -96,7 +100,7 @@ function expectedMergedValue(key: OptionalNodeKey): unknown {
 }
 
 describe("NODE_ATTRIBUTE_POLICY", () => {
-  it("任意の属性（illustration・note・links・tags・sources・mapLinks・locked・labelFontSize・labelBold・labelUnderline・icon・kind）だけを持つ", () => {
+  it("任意の属性（illustration・note・links・tags・sources・mapLinks・locked・layoutPinned・labelFontSize・labelBold・labelUnderline・icon・kind）だけを持つ", () => {
     expect([...OPTIONAL_KEYS].sort()).toEqual([
       "icon",
       "illustration",
@@ -104,6 +108,7 @@ describe("NODE_ATTRIBUTE_POLICY", () => {
       "labelBold",
       "labelFontSize",
       "labelUnderline",
+      "layoutPinned",
       "links",
       "locked",
       "mapLinks",
@@ -198,7 +203,7 @@ describe("全属性の往復と比較の検査（書き出し・読み込み・�
   });
 });
 
-describe("マップ文書の treeDirection / layoutSpacing", () => {
+describe("マップ文書の treeDirection / layoutSpacing / layoutStyle / branchLayouts", () => {
   const base = (): MapDocumentV3 => ({ version: 3, layoutMode: "manual", nodes: [SAMPLE] });
 
   it("treeDirection が違えば競合・履歴とも不一致", () => {
@@ -208,6 +213,17 @@ describe("マップ文書の treeDirection / layoutSpacing", () => {
 
   it("layoutSpacing が違えば競合・履歴とも不一致", () => {
     const other = { ...base(), layoutSpacing: { childGap: 100, siblingGap: 32 } };
+    expect(isDocumentContentEqual(base(), other)).toBe(false);
+    expect(areMapStatesEqual(base(), other)).toBe(false);
+  });
+
+  it("layoutStyle が違えば競合・履歴とも不一致", () => {
+    expect(isDocumentContentEqual(base(), { ...base(), layoutStyle: "radial" })).toBe(false);
+    expect(areMapStatesEqual(base(), { ...base(), layoutStyle: "radial" })).toBe(false);
+  });
+
+  it("branchLayouts が違えば競合・履歴とも不一致", () => {
+    const other = { ...base(), branchLayouts: [{ nodeId: 2, direction: "rl" as const }] };
     expect(isDocumentContentEqual(base(), other)).toBe(false);
     expect(areMapStatesEqual(base(), other)).toBe(false);
   });
