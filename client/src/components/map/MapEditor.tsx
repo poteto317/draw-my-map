@@ -7,8 +7,8 @@ import { RelationPartnerPickerDialog } from "@/components/layout/RelationPartner
 import { isNodeTargetOperationBlocked } from "@/domain/map/mapCanvasSelectionGuards";
 import { resolveGroupLabelEditAvailability } from "@/domain/map/mapGroupAvailability";
 import {
-  isPinnedLayoutEditEnabled,
   resolveLayoutPinnedDetailPanel,
+  resolvePinnedNodeDragCallbacks,
 } from "@/domain/map/mapLayoutPinnedAvailability";
 import { resolveRelationMeaningEditAvailability } from "@/domain/map/mapRelationAvailability";
 import { EditorViewModeControl, type EditorViewMode } from "@/components/layout/EditorViewModeControl";
@@ -589,12 +589,16 @@ export function MapEditor({
   const [partsDialogMode, setPartsDialogMode] = useState<PartsLibraryDialogMode | null>(null);
   const [relationPartnerFromId, setRelationPartnerFromId] = useState<number | null>(null);
   const nodeOpsBlockedByCanvasSelection = isNodeTargetOperationBlocked(canvasSelection);
-  const pinnedLayoutEditEnabled = isPinnedLayoutEditEnabled({
+  const pinnedNodeDragCallbacks = resolvePinnedNodeDragCallbacks({
     viewMode,
     isProtectedMode: storageMode === "protected",
     hasConflict: persistence.conflictState === "conflict",
     isExternallyDeleted: persistence.conflictState === "externallyDeleted",
     canvasSelection,
+    layoutMode,
+    nodes,
+    movePinnedNode,
+    finalizePinnedNodeMove,
   });
   const partsLibrary = usePartsLibrary({
     storage: storageSession.storage,
@@ -1442,10 +1446,8 @@ export function MapEditor({
                 onUpdateLabel={updateNodeLabel}
                 onMoveNode={moveNode}
                 onBeginNodeMove={beginMoveHistory}
-                onMovePinnedNode={pinnedLayoutEditEnabled ? movePinnedNode : undefined}
-                onFinalizePinnedNodeMove={
-                  pinnedLayoutEditEnabled ? finalizePinnedNodeMove : undefined
-                }
+                onMovePinnedNode={pinnedNodeDragCallbacks.onMovePinnedNode}
+                onFinalizePinnedNodeMove={pinnedNodeDragCallbacks.onFinalizePinnedNodeMove}
                 onSetNodeLayoutPinned={(nodeId, pinned) => {
                   setNodeLayoutPinned(nodeId, pinned);
                 }}
