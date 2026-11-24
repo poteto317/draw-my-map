@@ -1,52 +1,29 @@
 import {
   checkedAdd,
-  checkedMultiply,
   checkedSubtract,
   hasSufficientGap,
 } from "@/domain/nodes/nodeLayoutArithmetic";
 import type { IndexedNodeForest } from "@/domain/nodes/nodeLayoutForest";
 import type { NodeLayoutMetrics } from "@/domain/nodes/nodeLayoutMetrics";
+import { placePinnedAwareForest } from "@/domain/nodes/nodeLayoutPinnedAwarePlacement";
+import {
+  calculateCenteringOffset,
+  calculateChildFrames,
+  isLayoutPinned,
+  type LayoutPoint,
+} from "@/domain/nodes/nodeLayoutPlacementShared";
 import type { LayoutGapMetrics } from "@/domain/nodes/resolveLayoutMetrics";
-import type { Node } from "@/types/node";
 
-export type LayoutPoint = { x: number; y: number };
-type ChildFrame = { node: Node; top: number };
+export type { LayoutPoint } from "@/domain/nodes/nodeLayoutPlacementShared";
 
-function calculateCenteringOffset(outerSpan: number, innerHeight: number): number | null {
-  const extraSpan = checkedSubtract(outerSpan, innerHeight);
-  if (extraSpan === null) return null;
-  return checkedMultiply(extraSpan, 0.5);
+function forestHasPins(forest: IndexedNodeForest): boolean {
+  return forest.nodes.some(isLayoutPinned);
 }
 
-function calculateChildFrames(
-  children: readonly Node[],
-  frameTop: number,
-  span: number,
-  childrenHeight: number,
-  spanById: ReadonlyMap<number, number>,
-  siblingGap: number,
-): ChildFrame[] | null {
-  const childFrames: ChildFrame[] = [];
-  const childTopOffset = calculateCenteringOffset(span, childrenHeight);
-  if (childTopOffset === null) return null;
-  let childTop = checkedAdd(frameTop, childTopOffset);
-  if (childTop === null) return null;
-  for (const [childIndex, child] of children.entries()) {
-    childFrames.push({ node: child, top: childTop });
-    if (childIndex + 1 < children.length) {
-      const afterChild = checkedAdd(childTop, spanById.get(child.id)!);
-      if (afterChild === null) return null;
-      childTop = checkedAdd(afterChild, siblingGap);
-      if (childTop === null) return null;
-    }
-  }
-  return childFrames;
-}
-
-export function placeNodeForest(
+function placeUnpinnedForest(
   forest: IndexedNodeForest,
   metrics: NodeLayoutMetrics,
-  { siblingGap }: LayoutGapMetrics,
+  siblingGap: number,
 ): ReadonlyMap<number, LayoutPoint> | null {
   const { columnX, spanById, childrenHeightById } = metrics;
   const treeGap = siblingGap * 2;
@@ -108,4 +85,15 @@ export function placeNodeForest(
     }
   }
   return positions;
+}
+
+export function placeNodeForest(
+  forest: IndexedNodeForest,
+  metrics: NodeLayoutMetrics,
+  { siblingGap }: LayoutGapMetrics,
+): ReadonlyMap<number, LayoutPoint> | null {
+  if (!forestHasPins(forest)) {
+    return placeUnpinnedForest(forest, metrics, siblingGap);
+  }
+  return placePinnedAwareForest(forest, metrics, siblingGap);
 }

@@ -467,6 +467,32 @@ describe("transferNodeBranch", () => {
       expect(result.target.groups).toBeUndefined();
     });
 
+    it("閉じた branchLayouts は remap して移動先へ写し、元は prune する", () => {
+      const source: NodeMapState = {
+        layoutMode: "manual",
+        nodes: [
+          node(1, null, 0, 0),
+          node(2, 1, 300, 0),
+          node(9, null, 0, 400),
+        ],
+        branchLayouts: [
+          { nodeId: 1, direction: "rl" },
+          { nodeId: 2, direction: "tb" },
+          { nodeId: 9, direction: "bt" },
+        ],
+      };
+      const result = transferNodeBranch(source, target, 1, allocateIds, MAP_IDS);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.source.branchLayouts).toEqual([{ nodeId: 9, direction: "bt" }]);
+      const root = result.target.nodes.find((item) => item.label === "ノード1")!;
+      const child = result.target.nodes.find((item) => item.label === "ノード2")!;
+      expect(result.target.branchLayouts).toEqual([
+        { nodeId: root.id, direction: "rl" },
+        { nodeId: child.id, direction: "tb" },
+      ]);
+    });
+
     it("分割 group は残メンバーが 2 以上でも元マップから丸ごと削除する", () => {
       // 枝: 1。残す: 8, 9。group [1,8,9] は境界分割 → 縮めて [8,9] を残さず削除
       const source: NodeMapState = {

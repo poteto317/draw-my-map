@@ -2,7 +2,7 @@ import {
   applyStateChangeWithOutcome,
   type StateChangeComputation,
 } from "@/hooks/stateChangeOutcome";
-import type { NodeMapLayoutContext } from "@/domain/nodes/resolveLayoutSpacing";
+import type { NodeMapLayoutContext } from "@/domain/nodes/nodeMapLayoutContext";
 import type { NodeMapState } from "@/types/nodeMapState";
 
 type Result =

@@ -162,6 +162,95 @@ describe("placeNodeForest", () => {
 
     expect(placeNodeForest(forest, metrics, defaultMetrics)).toBeNull();
   });
+
+  it("両側ピンに挟まれた非ピン run が区間に収まれば prev.bottom+gap から置く", () => {
+    // pin(y=0,h=60) … gap … non-pin(span=60) … gap … pin(y=200,h=60)
+    // 利用可能: 60+gap … 200-gap。span=60 はちょうど収まる
+    const gap = defaultMetrics.siblingGap;
+    const pinA = createTestNode({
+      id: 2, parentId: 1, x: 300, y: 0, height: 60, label: "2", layoutPinned: true,
+    });
+    const free = node(3, 1, 0, 60);
+    const pinB = createTestNode({
+      id: 4, parentId: 1, x: 300, y: 200, height: 60, label: "4", layoutPinned: true,
+    });
+    const forest = indexNodeForest([node(1, null, 0, 60), pinA, free, pinB])!;
+    const metrics: NodeLayoutMetrics = {
+      columnX: [80, 300],
+      spanById: new Map([[1, 260], [2, 60], [3, 60], [4, 60]]),
+      childrenHeightById: new Map([[1, 260], [2, 0], [3, 0], [4, 0]]),
+    };
+
+    const positions = placeNodeForest(forest, metrics, defaultMetrics);
+
+    expect(positions).not.toBeNull();
+    expect(positions!.get(2)).toEqual({ x: 300, y: 0 });
+    expect(positions!.get(4)).toEqual({ x: 300, y: 200 });
+    expect(positions!.get(3)).toEqual({ x: 300, y: 60 + gap });
+  });
+
+  it("両側ピンに挟まれた非ピン run が区間不足なら null", () => {
+    // pin(y=0,h=60) と pin(y=120,h=60) の間に gap を挟むと非ピン span=100 が入らない
+    const pinA = createTestNode({
+      id: 2, parentId: 1, x: 300, y: 0, height: 60, label: "2", layoutPinned: true,
+    });
+    const free = node(3, 1, 0, 100);
+    const pinB = createTestNode({
+      id: 4, parentId: 1, x: 300, y: 120, height: 60, label: "4", layoutPinned: true,
+    });
+    const forest = indexNodeForest([node(1, null, 0, 60), pinA, free, pinB])!;
+    const metrics: NodeLayoutMetrics = {
+      columnX: [80, 300],
+      spanById: new Map([[1, 260], [2, 60], [3, 100], [4, 60]]),
+      childrenHeightById: new Map([[1, 260], [2, 0], [3, 0], [4, 0]]),
+    };
+
+    expect(placeNodeForest(forest, metrics, defaultMetrics)).toBeNull();
+  });
+
+  it("ピン直後の非ピン run は pin.bottom+gap から開始する", () => {
+    const gap = defaultMetrics.siblingGap;
+    const pin = createTestNode({
+      id: 2, parentId: 1, x: 300, y: 40, height: 60, label: "2", layoutPinned: true,
+    });
+    const free = node(3, 1, 0, 60);
+    const forest = indexNodeForest([node(1, null, 0, 60), pin, free])!;
+    const metrics: NodeLayoutMetrics = {
+      columnX: [80, 300],
+      spanById: new Map([[1, 200], [2, 60], [3, 60]]),
+      childrenHeightById: new Map([[1, 200], [2, 0], [3, 0]]),
+    };
+
+    const positions = placeNodeForest(forest, metrics, defaultMetrics);
+
+    expect(positions).not.toBeNull();
+    expect(positions!.get(2)).toEqual({ x: 300, y: 40 });
+    expect(positions!.get(3)).toEqual({ x: 300, y: 40 + 60 + gap });
+  });
+
+  it("ピン親の非ピン子はピン中心に揃えて並べる", () => {
+    const gap = defaultMetrics.siblingGap;
+    const pin = createTestNode({
+      id: 1, parentId: null, x: 80, y: 100, height: 60, label: "1", layoutPinned: true,
+    });
+    const childA = node(2, 1, 0, 40);
+    const childB = node(3, 1, 0, 40);
+    const forest = indexNodeForest([pin, childA, childB])!;
+    const childrenHeight = 40 + gap + 40;
+    const metrics: NodeLayoutMetrics = {
+      columnX: [80, 300],
+      spanById: new Map([[1, childrenHeight], [2, 40], [3, 40]]),
+      childrenHeightById: new Map([[1, childrenHeight], [2, 0], [3, 0]]),
+    };
+
+    const positions = placeNodeForest(forest, metrics, defaultMetrics);
+
+    expect(positions).not.toBeNull();
+    expect(positions!.get(1)).toEqual({ x: 80, y: 100 });
+    const expectedTop = 100 + 60 / 2 - childrenHeight / 2;
+    expect(positions!.get(2)).toEqual({ x: 300, y: expectedTop });
+    expect(positions!.get(3)).toEqual({ x: 300, y: expectedTop + 40 + gap });
+  });
 });
 
 // 2 ** 60 の前後の浮動小数点数の間隔は、下が 128、上が 256 なので、半分未満の加減算は失われる

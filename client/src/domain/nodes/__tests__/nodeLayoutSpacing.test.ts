@@ -88,4 +88,23 @@ describe("hasValidVerticalSpacing", () => {
 
     expect(hasValidVerticalSpacing(forest, positions, defaultSiblingGap)).toBe(false);
   });
+
+  it("ピン関与ペアは間隔不足でもスキップし true", () => {
+    const pinned = createTestNode({
+      id: 1, parentId: null, height: 60, label: "1", layoutPinned: true,
+    });
+    const other = node(2);
+    const forest = indexNodeForest([pinned, other])!;
+    const positions = new Map([[1, { x: 0, y: 0 }], [2, { x: 0, y: 10 }]]);
+
+    expect(hasValidVerticalSpacing(forest, positions, defaultSiblingGap)).toBe(true);
+    expect(hasValidVerticalSpacing(forest, positions, defaultSiblingGap, [pinned, other])).toBe(true);
+  });
+
+  it("非ピン同士の間隔不足は nodes 指定時も false", () => {
+    const forest = indexNodeForest([node(1), node(2)])!;
+    const positions = new Map([[1, { x: 0, y: 0 }], [2, { x: 0, y: 10 }]]);
+    expect(hasValidVerticalSpacing(forest, positions, defaultSiblingGap, [node(1), node(2)]))
+      .toBe(false);
+  });
 });

@@ -1,4 +1,4 @@
-import type { NodeMapLayoutContext } from "@/domain/nodes/resolveLayoutSpacing";
+import type { NodeMapLayoutContext } from "@/domain/nodes/nodeMapLayoutContext";
 import {
   settleTreeChangeOutcome,
   type TreeChangePlacementFailure,
