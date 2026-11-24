@@ -4,12 +4,48 @@ import {
 } from "@/domain/exportScope/exportFormatAvailability";
 import type { ExportScope } from "@/domain/exportScope/exportScope";
 
-const formats = ["png", "svg", "markdown", "json", "bullets"] as const;
+const formats = [
+  "png",
+  "svg",
+  "markdown",
+  "json",
+  "bullets",
+  "opml",
+  "csv",
+  "tsv",
+] as const;
 
 const expected: Record<ExportScope, Record<(typeof formats)[number], boolean>> = {
-  all: { png: true, svg: true, markdown: true, json: true, bullets: true },
-  visible: { png: true, svg: true, markdown: true, json: false, bullets: false },
-  selection: { png: true, svg: false, markdown: true, json: true, bullets: false },
+  all: {
+    png: true,
+    svg: true,
+    markdown: true,
+    json: true,
+    bullets: true,
+    opml: true,
+    csv: true,
+    tsv: true,
+  },
+  visible: {
+    png: true,
+    svg: true,
+    markdown: true,
+    json: false,
+    bullets: false,
+    opml: true,
+    csv: true,
+    tsv: true,
+  },
+  selection: {
+    png: true,
+    svg: false,
+    markdown: true,
+    json: true,
+    bullets: false,
+    opml: true,
+    csv: true,
+    tsv: true,
+  },
 };
 
 describe("isExportFormatEnabled", () => {
