@@ -1,4 +1,6 @@
+import type { BranchLayout } from "@/types/branchLayout";
 import type { LayoutSpacing } from "@/types/layoutSpacing";
+import type { LayoutStyle } from "@/types/layoutStyle";
 import type { MapGroup } from "@/types/mapGroup";
 import type { MapRelation } from "@/types/mapRelation";
 import type { Node } from "@/types/node";
@@ -12,6 +14,10 @@ export type NodeMapState = {
   treeDirection?: TreeDirection;
   // 自動レイアウトの間隔。無いときは config/shapes.ts の既定値
   layoutSpacing?: LayoutSpacing;
+  // レイアウト様式。欠落キー＝orthogonal。orthogonal はエンコード時にキー省略
+  layoutStyle?: LayoutStyle;
+  // 枝ごとの配置方向。欠落キー＝空。空配列はエンコード時にキー省略
+  branchLayouts?: readonly BranchLayout[];
   // 親子以外の関連線。欠落キー＝空。空配列はエンコード時にキー省略
   relations?: readonly MapRelation[];
   // ノード集合のグループ枠。欠落キー＝空。空配列はエンコード時にキー省略
