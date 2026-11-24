@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import {
   areMapStatesEqual,
   beginMapHistoryGroup,
+  cancelMapHistoryGroup,
   canRedoMapHistory,
   canUndoMapHistory,
   commitMapHistory,
@@ -68,6 +69,10 @@ export function useMapHistory(initial: NodeMapState) {
       finish: () => {
         if (!isActive()) return;
         apply(finishMapHistoryGroup(historyRef.current));
+      },
+      cancel: () => {
+        if (!isActive()) return;
+        apply(cancelMapHistoryGroup(historyRef.current));
       },
     };
   }, [apply]);

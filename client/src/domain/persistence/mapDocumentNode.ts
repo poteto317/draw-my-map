@@ -3,6 +3,7 @@ import type { Node } from "@/types/node";
 import { getIllustratedNodeMinHeight } from "@/domain/nodes/nodeIllustration";
 import { normalizeMapDocumentNodeImportance } from "@/domain/persistence/mapDocumentNodeImportance";
 import { normalizeMapDocumentNodeLocked } from "@/domain/persistence/mapDocumentNodeLocked";
+import { normalizeMapDocumentNodeLayoutPinned } from "@/domain/persistence/mapDocumentNodeLayoutPinned";
 import { normalizeMapDocumentNodeIcon } from "@/domain/persistence/mapDocumentNodeIcon";
 import { normalizeMapDocumentNodeIllustration } from "@/domain/persistence/mapDocumentNodeIllustration";
 import { normalizeMapDocumentNodeKind } from "@/domain/persistence/mapDocumentNodeKind";
@@ -110,6 +111,11 @@ export function normalizeMapDocumentNode(
     return lockedResult;
   }
   const locked = lockedResult.value;
+  const layoutPinnedResult = normalizeMapDocumentNodeLayoutPinned(node.layoutPinned, index, version);
+  if (!layoutPinnedResult.ok) {
+    return layoutPinnedResult;
+  }
+  const layoutPinned = layoutPinnedResult.value;
   const labelFontSizeResult = normalizeMapDocumentNodeLabelFontSize(node.labelFontSize, index, version);
   if (!labelFontSizeResult.ok) {
     return labelFontSizeResult;
@@ -153,6 +159,7 @@ export function normalizeMapDocumentNode(
       ...(sources === undefined ? {} : { sources }),
       ...(mapLinks === undefined ? {} : { mapLinks }),
       ...(locked === undefined ? {} : { locked }),
+      ...(layoutPinned === undefined ? {} : { layoutPinned }),
       ...(labelFontSize === undefined ? {} : { labelFontSize }),
       ...(labelBold === undefined ? {} : { labelBold }),
       ...(labelUnderline === undefined ? {} : { labelUnderline }),

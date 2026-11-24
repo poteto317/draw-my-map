@@ -4,6 +4,12 @@ import { collectSubtreeIds } from "@/domain/nodes/nodeTree";
 import { validateMapDocumentGraph } from "@/domain/persistence/mapDocumentGraph";
 import { normalizeMapDocumentNode } from "@/domain/persistence/mapDocumentNode";
 import { isRecord } from "@/domain/shared/unknownRecord";
+import { remapClosedBranchLayouts } from "@/domain/map/branchLayoutLifecycle";
+import {
+  normalizeBranchLayouts,
+  projectBranchLayouts,
+  type BranchLayout,
+} from "@/types/branchLayout";
 import type { MapGroup } from "@/types/mapGroup";
 import type { MapRelation } from "@/types/mapRelation";
 import type { Node } from "@/types/node";
@@ -15,6 +21,7 @@ export type SubtreeClipboardData = {
   rootId: number;
   relations?: readonly MapRelation[];
   groups?: readonly MapGroup[];
+  branchLayouts?: readonly BranchLayout[];
 };
 
 export type SubtreeClipboardResult<T> =
@@ -46,11 +53,13 @@ function withClosedSlice(
   data: SubtreeClipboardData,
   relations: readonly MapRelation[] | undefined,
   groups: readonly MapGroup[] | undefined,
+  branchLayouts: readonly BranchLayout[] | undefined,
 ): SubtreeClipboardData {
   return {
     ...data,
     ...(relations === undefined ? {} : { relations }),
     ...(groups === undefined ? {} : { groups }),
+    ...(branchLayouts === undefined ? {} : { branchLayouts }),
   };
 }
 
@@ -58,6 +67,7 @@ export function validateSubtreeClipboardNodes(
   nodes: readonly Node[],
   relationsRaw?: unknown,
   groupsRaw?: unknown,
+  branchLayoutsRaw?: unknown,
 ): SubtreeClipboardResult<SubtreeClipboardData> {
   if (nodes.length > MAX_SUBTREE_CLIPBOARD_NODES) return TOO_LARGE;
 
@@ -76,17 +86,18 @@ export function validateSubtreeClipboardNodes(
   const reservedEntityIds = new Set(nodeIdSet);
   for (const relation of relations ?? []) reservedEntityIds.add(relation.id);
   const groups = normalizeGroups(groupsRaw, nodeIdSet, reservedEntityIds);
+  const branchLayouts = normalizeBranchLayouts(branchLayoutsRaw, nodeIdSet);
   return {
     ok: true,
-    value: withClosedSlice({ nodes: graph.value, rootId }, relations, groups),
+    value: withClosedSlice({ nodes: graph.value, rootId }, relations, groups, branchLayouts),
   };
 }
 
-// コピー元の根と全子孫を抜き出し、根だけを親から切り離す。閉じた relation/group だけ同行する。元の配列は変更しない
+// コピー元の根と全子孫を抜き出し、根だけを親から切り離す。閉じた relation/group/branchLayouts だけ同行する。元の配列は変更しない
 export function encodeSubtreeClipboard(
   nodes: readonly Node[],
   sourceId: number,
-  slice?: Pick<NodeMapState, "relations" | "groups">,
+  slice?: Pick<NodeMapState, "relations" | "groups" | "branchLayouts">,
 ): SubtreeClipboardResult<string> {
   const subtreeIds = collectSubtreeIds(nodes, sourceId);
   if (subtreeIds.size > MAX_SUBTREE_CLIPBOARD_NODES) return TOO_LARGE;
@@ -103,7 +114,13 @@ export function encodeSubtreeClipboard(
   const identityMap = new Map<number, number>();
   for (const id of subtreeIds) identityMap.set(id, id);
   const closed = remapClosedForNodeIdMap(slice?.relations, slice?.groups, identityMap);
-  const validated = validateSubtreeClipboardNodes(normalized, closed.relations, closed.groups);
+  const closedBranchLayouts = remapClosedBranchLayouts(slice?.branchLayouts, identityMap);
+  const validated = validateSubtreeClipboardNodes(
+    normalized,
+    closed.relations,
+    closed.groups,
+    closedBranchLayouts,
+  );
   if (!validated.ok) return validated;
 
   const text = JSON.stringify({
@@ -112,6 +129,7 @@ export function encodeSubtreeClipboard(
     nodes: validated.value.nodes,
     ...(validated.value.relations === undefined ? {} : { relations: validated.value.relations }),
     ...(validated.value.groups === undefined ? {} : { groups: validated.value.groups }),
+    ...projectBranchLayouts(validated.value.branchLayouts),
   });
   if (text.length > MAX_SUBTREE_CLIPBOARD_LENGTH) return TOO_LARGE;
   return { ok: true, value: text };
@@ -138,5 +156,10 @@ export function decodeSubtreeClipboard(
 
   const nodes = normalizeNodes(record.nodes);
   if (!nodes) return INVALID;
-  return validateSubtreeClipboardNodes(nodes, record.relations, record.groups);
+  return validateSubtreeClipboardNodes(
+    nodes,
+    record.relations,
+    record.groups,
+    record.branchLayouts,
+  );
 }

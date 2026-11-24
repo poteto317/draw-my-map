@@ -357,6 +357,38 @@ describe("閉じた relations / groups の写し", () => {
       },
     });
   });
+
+  it("閉じた branchLayouts を往復し、layoutPinned は値コピーする", () => {
+    const nodes = [
+      { ...node(1, null), layoutPinned: true as const },
+      node(2, 1),
+      node(4, null),
+    ];
+    const text = encodeSubtreeClipboard(nodes, 1, {
+      branchLayouts: [
+        { nodeId: 1, direction: "rl" },
+        { nodeId: 2, direction: "tb" },
+        { nodeId: 4, direction: "bt" },
+      ],
+    });
+    expect(text.ok).toBe(true);
+    if (!text.ok) return;
+    const decoded = decodeSubtreeClipboard(text.value);
+    expect(decoded).toEqual({
+      ok: true,
+      value: {
+        rootId: 1,
+        nodes: [
+          { ...node(1, null), layoutPinned: true },
+          node(2, 1),
+        ],
+        branchLayouts: [
+          { nodeId: 1, direction: "rl" },
+          { nodeId: 2, direction: "tb" },
+        ],
+      },
+    });
+  });
 });
 
 describe("validateSubtreeClipboardNodes", () => {

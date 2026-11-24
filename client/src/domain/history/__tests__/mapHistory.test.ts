@@ -2,6 +2,7 @@ import {
   MAP_HISTORY_LIMIT,
   areMapStatesEqual,
   beginMapHistoryGroup,
+  cancelMapHistoryGroup,
   canRedoMapHistory,
   canUndoMapHistory,
   commitMapHistory,
@@ -91,6 +92,17 @@ describe("mapHistory", () => {
     expect(h.past).toEqual([a, b]);
     expect(h.present).toEqual(c);
     expect(h.groupStart).toBeNull();
+  });
+
+  it("cancelMapHistoryGroup は present を groupStart に戻し past を積まない", () => {
+    let h = beginMapHistoryGroup(commitMapHistory(createMapHistory(a), b));
+    h = previewMapHistory(h, c);
+    h = cancelMapHistoryGroup(h);
+
+    expect(h.present).toEqual(b);
+    expect(h.past).toEqual([a]);
+    expect(h.groupStart).toBeNull();
+    expect(canUndoMapHistory(h)).toBe(true);
   });
 
   it("グループ内で元に戻ればpast/futureを維持する", () => {

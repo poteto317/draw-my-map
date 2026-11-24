@@ -4,6 +4,8 @@ import { normalizeMapDocumentLayoutSpacing } from "@/domain/persistence/mapDocum
 import { normalizeMapDocumentNode } from "@/domain/persistence/mapDocumentNode";
 import { normalizeMapDocumentTreeDirection } from "@/domain/persistence/mapDocumentTreeDirection";
 import { isRecord } from "@/domain/shared/unknownRecord";
+import { normalizeBranchLayouts } from "@/types/branchLayout";
+import { normalizeLayoutStyle, projectLayoutStyle } from "@/types/layoutStyle";
 import type { MapDocumentResult, MapDocumentV3, MapDocumentVersion } from "@/types/mapDocument";
 import type { Node } from "@/types/node";
 
@@ -55,6 +57,12 @@ export function parseMapDocumentJsonWithVersion(
   const treeDirection = treeDirectionResult.value;
   const layoutSpacing = layoutSpacingResult.value;
   const nodeIdSet = new Set(graph.value.map((node) => node.id));
+  const layoutStyle = record.version === 3
+    ? normalizeLayoutStyle(record.layoutStyle)
+    : undefined;
+  const branchLayouts = record.version === 3
+    ? normalizeBranchLayouts(record.branchLayouts, nodeIdSet)
+    : undefined;
   const relations = record.version === 3
     ? normalizeRelations(record.relations, nodeIdSet)
     : undefined;
@@ -73,6 +81,8 @@ export function parseMapDocumentJsonWithVersion(
         nodes: graph.value,
         ...(treeDirection === "lr" ? {} : { treeDirection }),
         ...(layoutSpacing === undefined ? {} : { layoutSpacing }),
+        ...projectLayoutStyle(layoutStyle),
+        ...(branchLayouts === undefined ? {} : { branchLayouts }),
         ...(relations === undefined ? {} : { relations }),
         ...(groups === undefined ? {} : { groups }),
       },
