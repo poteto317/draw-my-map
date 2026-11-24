@@ -1,3 +1,4 @@
+import { areGroupsEqual, areRelationsEqual } from "@/domain/map/relationGroupModel";
 import { areLayoutSpacingEqual } from "@/domain/persistence/mapDocumentLayoutSpacing";
 import { MAX_MAP_NAME_LENGTH } from "@/domain/mapLibrary/mapName";
 import { areLabelTextStylesEqual } from "@/domain/nodes/labelTextStyle";
@@ -104,6 +105,13 @@ export function isDocumentContentEqual(
     if (!areNodesEqual(sortedA[i], sortedB[i])) {
       return false;
     }
+  }
+
+  if (!areRelationsEqual(docA.relations, docB.relations)) {
+    return false;
+  }
+  if (!areGroupsEqual(docA.groups, docB.groups)) {
+    return false;
   }
 
   return true;

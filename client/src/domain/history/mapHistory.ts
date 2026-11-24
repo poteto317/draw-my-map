@@ -1,3 +1,4 @@
+import { areGroupsEqual, areRelationsEqual } from "@/domain/map/relationGroupModel";
 import { areLayoutSpacingEqual } from "@/domain/persistence/mapDocumentLayoutSpacing";
 import { areLabelTextStylesEqual } from "@/domain/nodes/labelTextStyle";
 import { areNodeMapLinksEqual } from "@/domain/nodes/nodeMapLink";
@@ -80,6 +81,8 @@ export function areMapStatesEqual(a: NodeMapState, b: NodeMapState): boolean {
   if (a.layoutMode !== b.layoutMode || a.nodes.length !== b.nodes.length) return false;
   if ((a.treeDirection ?? "lr") !== (b.treeDirection ?? "lr")) return false;
   if (!areLayoutSpacingEqual(a.layoutSpacing, b.layoutSpacing)) return false;
+  if (!areRelationsEqual(a.relations, b.relations)) return false;
+  if (!areGroupsEqual(a.groups, b.groups)) return false;
   return a.nodes.every((node, index) => areNodesEqual(node, b.nodes[index]));
 }
 

@@ -312,5 +312,53 @@ describe("mapHistory", () => {
         expect(committed.past).toHaveLength(1);
       });
     });
+
+    describe("文書級 relations / groups", () => {
+      const n1 = createTestNode({ id: 1 });
+      const n2 = createTestNode({ id: 2 });
+      const base = (extra: Partial<NodeMapState> = {}): NodeMapState => ({
+        layoutMode: "manual",
+        nodes: [n1, n2],
+        ...extra,
+      });
+
+      it("relations だけ違うと等しくない", () => {
+        expect(
+          areMapStatesEqual(
+            base(),
+            base({
+              relations: [{ id: 10, fromId: 1, toId: 2, kind: "related", directed: false }],
+            }),
+          ),
+        ).toBe(false);
+      });
+
+      it("groups だけ違うと等しくない", () => {
+        expect(
+          areMapStatesEqual(
+            base(),
+            base({ groups: [{ id: 20, nodeIds: [1, 2], label: "" }] }),
+          ),
+        ).toBe(false);
+      });
+
+      it("未定義と空配列は等しく、配列順が違っても内容が同じなら等しい", () => {
+        const withRelations: NodeMapState = base({
+          relations: [
+            { id: 10, fromId: 1, toId: 2, kind: "related", directed: false },
+            { id: 11, fromId: 2, toId: 1, kind: "dependency", directed: true },
+          ],
+        });
+        const reordered: NodeMapState = base({
+          relations: [
+            { id: 11, fromId: 2, toId: 1, kind: "dependency", directed: true },
+            { id: 10, fromId: 1, toId: 2, kind: "related", directed: false },
+          ],
+        });
+        expect(areMapStatesEqual(base(), base({ relations: [] }))).toBe(true);
+        expect(areMapStatesEqual(base(), base({ groups: [] }))).toBe(true);
+        expect(areMapStatesEqual(withRelations, reordered)).toBe(true);
+      });
+    });
   });
 });

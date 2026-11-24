@@ -1,11 +1,21 @@
+import { normalizeGroups, normalizeRelations } from "@/domain/map/relationGroupModel";
+import { remapClosedForNodeIdMap } from "@/domain/map/relationGroupLifecycle";
 import { collectSubtreeIds } from "@/domain/nodes/nodeTree";
 import { validateMapDocumentGraph } from "@/domain/persistence/mapDocumentGraph";
 import { normalizeMapDocumentNode } from "@/domain/persistence/mapDocumentNode";
 import { isRecord } from "@/domain/shared/unknownRecord";
+import type { MapGroup } from "@/types/mapGroup";
+import type { MapRelation } from "@/types/mapRelation";
 import type { Node } from "@/types/node";
+import type { NodeMapState } from "@/types/nodeMapState";
 
 // 正規化済みの単一の部分木。rootIdは唯一の根から求めた値で、クリップボードの形式には含めない
-export type SubtreeClipboardData = { nodes: Node[]; rootId: number };
+export type SubtreeClipboardData = {
+  nodes: Node[];
+  rootId: number;
+  relations?: readonly MapRelation[];
+  groups?: readonly MapGroup[];
+};
 
 export type SubtreeClipboardResult<T> =
   | { ok: true; value: T }
@@ -32,8 +42,22 @@ function normalizeNodes(values: readonly unknown[]): Node[] | null {
   return nodes;
 }
 
+function withClosedSlice(
+  data: SubtreeClipboardData,
+  relations: readonly MapRelation[] | undefined,
+  groups: readonly MapGroup[] | undefined,
+): SubtreeClipboardData {
+  return {
+    ...data,
+    ...(relations === undefined ? {} : { relations }),
+    ...(groups === undefined ? {} : { groups }),
+  };
+}
+
 export function validateSubtreeClipboardNodes(
   nodes: readonly Node[],
+  relationsRaw?: unknown,
+  groupsRaw?: unknown,
 ): SubtreeClipboardResult<SubtreeClipboardData> {
   if (nodes.length > MAX_SUBTREE_CLIPBOARD_NODES) return TOO_LARGE;
 
@@ -47,13 +71,22 @@ export function validateSubtreeClipboardNodes(
 
   const graph = validateMapDocumentGraph(nodes);
   if (!graph.ok) return INVALID;
-  return { ok: true, value: { nodes: graph.value, rootId } };
+  const nodeIdSet = new Set(graph.value.map((node) => node.id));
+  const relations = normalizeRelations(relationsRaw, nodeIdSet);
+  const reservedEntityIds = new Set(nodeIdSet);
+  for (const relation of relations ?? []) reservedEntityIds.add(relation.id);
+  const groups = normalizeGroups(groupsRaw, nodeIdSet, reservedEntityIds);
+  return {
+    ok: true,
+    value: withClosedSlice({ nodes: graph.value, rootId }, relations, groups),
+  };
 }
 
-// コピー元の根と全子孫を抜き出し、根だけを親から切り離す。元の配列は変更しない
+// コピー元の根と全子孫を抜き出し、根だけを親から切り離す。閉じた relation/group だけ同行する。元の配列は変更しない
 export function encodeSubtreeClipboard(
   nodes: readonly Node[],
   sourceId: number,
+  slice?: Pick<NodeMapState, "relations" | "groups">,
 ): SubtreeClipboardResult<string> {
   const subtreeIds = collectSubtreeIds(nodes, sourceId);
   if (subtreeIds.size > MAX_SUBTREE_CLIPBOARD_NODES) return TOO_LARGE;
@@ -67,13 +100,18 @@ export function encodeSubtreeClipboard(
   // 貼り付けで受理できないデータはクリップボードへ出さない
   const normalized = normalizeNodes(snapshot);
   if (!normalized) return INVALID;
-  const validated = validateSubtreeClipboardNodes(normalized);
+  const identityMap = new Map<number, number>();
+  for (const id of subtreeIds) identityMap.set(id, id);
+  const closed = remapClosedForNodeIdMap(slice?.relations, slice?.groups, identityMap);
+  const validated = validateSubtreeClipboardNodes(normalized, closed.relations, closed.groups);
   if (!validated.ok) return validated;
 
   const text = JSON.stringify({
     type: SUBTREE_CLIPBOARD_TYPE,
     version: SUBTREE_CLIPBOARD_VERSION,
     nodes: validated.value.nodes,
+    ...(validated.value.relations === undefined ? {} : { relations: validated.value.relations }),
+    ...(validated.value.groups === undefined ? {} : { groups: validated.value.groups }),
   });
   if (text.length > MAX_SUBTREE_CLIPBOARD_LENGTH) return TOO_LARGE;
   return { ok: true, value: text };
@@ -100,5 +138,5 @@ export function decodeSubtreeClipboard(
 
   const nodes = normalizeNodes(record.nodes);
   if (!nodes) return INVALID;
-  return validateSubtreeClipboardNodes(nodes);
+  return validateSubtreeClipboardNodes(nodes, record.relations, record.groups);
 }

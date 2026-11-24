@@ -331,6 +331,34 @@ describe("decodeSubtreeClipboard", () => {
   });
 });
 
+describe("閉じた relations / groups の写し", () => {
+  it("部分木に閉じた関連線・グループだけを往復し、境界横断は捨てる", () => {
+    const nodes = [node(1, null), node(2, 1), node(3, 1), node(4, null)];
+    const relations = [
+      { id: 10, fromId: 2, toId: 3, kind: "related" as const, directed: false },
+      { id: 11, fromId: 2, toId: 4, kind: "related" as const, directed: false },
+    ];
+    const groups = [
+      { id: 20, nodeIds: [2, 3], label: "closed" },
+      { id: 21, nodeIds: [1, 4], label: "split" },
+    ];
+
+    const text = encodeSubtreeClipboard(nodes, 1, { relations, groups });
+    expect(text.ok).toBe(true);
+    if (!text.ok) return;
+    const decoded = decodeSubtreeClipboard(text.value);
+    expect(decoded).toEqual({
+      ok: true,
+      value: {
+        rootId: 1,
+        nodes: [node(1, null), node(2, 1), node(3, 1)],
+        relations: [{ id: 10, fromId: 2, toId: 3, kind: "related", directed: false }],
+        groups: [{ id: 20, nodeIds: [2, 3], label: "closed" }],
+      },
+    });
+  });
+});
+
 describe("validateSubtreeClipboardNodes", () => {
   it("単一ルート判定とグラフ検証を、ノード数に比例する読み取り回数で終える", () => {
     const nodeCount = MAX_SUBTREE_CLIPBOARD_NODES;
