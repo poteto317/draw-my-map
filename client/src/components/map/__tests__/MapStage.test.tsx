@@ -12,6 +12,7 @@ import { MapStage, type MapStageViewportHandle } from "@/components/map/MapStage
 import {
   lastWorldContainer,
   mockContainers,
+  mockGraphicsPointerHandlers,
   mockNodePointerHandlers,
   mockStage,
   mockStageBounds,
@@ -26,6 +27,10 @@ import { useNodes } from "@/hooks/useNodes";
 import type { Node } from "@/types/node";
 import { createTestNode } from "@/testing/createTestNode";
 import { createTestMapHistoryLease } from "@/testing/createTestMapHistoryLease";
+import {
+  groupSelection,
+  relationSelection,
+} from "@/domain/map/mapCanvasSelectionGuards";
 
 jest.mock("pixi.js", () => {
   const runtime = jest.requireActual<typeof import("@/components/map/testing/mapStageTestRuntime")>(
@@ -409,6 +414,104 @@ describe("MapStage boundary", () => {
     fireEvent.doubleClick(container, { clientX: 100, clientY: 60 });
 
     expect(getByTestId("node-label-input")).toHaveValue("ノード1");
+  });
+
+  it.each([
+    ["relation", relationSelection(10)],
+    ["group", groupSelection(20)],
+  ] as const)(
+    "関連線／グループ選択中はノードダブルクリックでラベル編集を始めない（%s・L-061）",
+    async (_kind, canvasSelection) => {
+      const { queryByTestId } = await renderReady(
+        <MapStage
+          {...defaultProps}
+          nodes={sampleNodes}
+          canvasSelection={canvasSelection}
+        />,
+      );
+      const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+      mockStageBounds(container);
+
+      fireEvent.doubleClick(container, { clientX: 100, clientY: 60 });
+
+      expect(queryByTestId("node-label-input")).not.toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    ["relation", relationSelection(10)],
+    ["group", groupSelection(20)],
+  ] as const)(
+    "関連線／グループ選択中は空キャンバスのダブルクリックでノードを追加しない（%s・L-061）",
+    async (_kind, canvasSelection) => {
+      const onDoubleClick = jest.fn();
+      await renderReady(
+        <MapStage
+          {...defaultProps}
+          nodes={sampleNodes}
+          canvasSelection={canvasSelection}
+          onDoubleClick={onDoubleClick}
+        />,
+      );
+      const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+      mockStageBounds(container);
+
+      fireEvent.doubleClick(container, { clientX: 700, clientY: 500 });
+
+      expect(onDoubleClick).not.toHaveBeenCalled();
+    },
+  );
+
+  it("関連線クリックで選択するとき進行中のノードラベル編集をキャンセルする（L-061）", async () => {
+    const onSelectRelation = jest.fn();
+    const { getByTestId, queryByTestId } = await renderReady(
+      <MapStage
+        {...defaultProps}
+        nodes={sampleNodes}
+        relations={[
+          { id: 10, fromId: 1, toId: 2, kind: "related", directed: false },
+        ]}
+        onSelectRelation={onSelectRelation}
+      />,
+    );
+    const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+    mockStageBounds(container);
+    fireEvent.doubleClick(container, { clientX: 100, clientY: 60 });
+    expect(getByTestId("node-label-input")).toBeInTheDocument();
+
+    const relationHandler = mockGraphicsPointerHandlers.at(-1)?.pointerdown;
+    expect(relationHandler).toBeDefined();
+    act(() => {
+      relationHandler?.(pointer(150, 80));
+    });
+
+    expect(onSelectRelation).toHaveBeenCalledWith(10);
+    expect(queryByTestId("node-label-input")).not.toBeInTheDocument();
+  });
+
+  it("グループクリックで選択するとき進行中のノードラベル編集をキャンセルする（L-061）", async () => {
+    const onSelectGroup = jest.fn();
+    const { getByTestId, queryByTestId } = await renderReady(
+      <MapStage
+        {...defaultProps}
+        nodes={sampleNodes}
+        groups={[{ id: 20, nodeIds: [1, 2], label: "束" }]}
+        onSelectGroup={onSelectGroup}
+      />,
+    );
+    const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+    mockStageBounds(container);
+    fireEvent.doubleClick(container, { clientX: 100, clientY: 60 });
+    expect(getByTestId("node-label-input")).toBeInTheDocument();
+
+    const groupHandler = mockGraphicsPointerHandlers.at(-1)?.pointerdown;
+    expect(groupHandler).toBeDefined();
+    act(() => {
+      groupHandler?.(pointer(120, 40));
+    });
+
+    expect(onSelectGroup).toHaveBeenCalledWith(20);
+    expect(queryByTestId("node-label-input")).not.toBeInTheDocument();
   });
 
   it("wheelでpointer位置をanchorにworld containerを拡大する", async () => {
