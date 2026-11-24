@@ -1,3 +1,4 @@
+import { isDocumentBlocked } from "@/domain/map/mapDocumentEditGuards";
 import { assertNodesEditable } from "@/domain/nodes/nodeEditLock";
 import { canCommitRelation } from "@/domain/map/relationConflict";
 import type { MapRelation } from "@/types/mapRelation";
@@ -34,10 +35,6 @@ export type RelationMenuState = {
   visible: boolean;
   disabled: boolean;
 };
-
-function isDocumentBlocked(input: RelationMutationGuardInput): boolean {
-  return input.isProtectedMode || input.hasConflict || input.isExternallyDeleted;
-}
 
 /** N1: コンテキスト「関連線を追加」→相手ピッカー */
 export function resolveRelationAddContextMenu(input: RelationAddMenuInput): RelationMenuState {
