@@ -20,18 +20,21 @@ export function sortedChildNodes(parentId: number, nodes: readonly Node[]): Node
     .sort((a, b) => order.get(a.id)! - order.get(b.id)!);
 }
 
-function appendPreOrder(node: Node, nodes: readonly Node[], out: Node[]): void {
-  out.push(node);
-  for (const child of sortedChildNodes(node.id, nodes)) {
-    appendPreOrder(child, nodes, out);
-  }
-}
-
 /** 閉じた部分森をルート→深さ優先の配列順に並べる（CSV 書き出し用）。 */
 export function preOrderClosedForest(nodes: readonly Node[]): Node[] {
   const out: Node[] = [];
-  for (const root of forestRootNodes(nodes)) {
-    appendPreOrder(root, nodes, out);
+  const stack: Node[] = [];
+  const roots = forestRootNodes(nodes);
+  for (let index = roots.length - 1; index >= 0; index -= 1) {
+    stack.push(roots[index]!);
+  }
+  while (stack.length > 0) {
+    const node = stack.pop()!;
+    out.push(node);
+    const children = sortedChildNodes(node.id, nodes);
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      stack.push(children[index]!);
+    }
   }
   return out;
 }

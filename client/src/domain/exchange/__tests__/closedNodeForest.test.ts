@@ -31,4 +31,16 @@ describe("closedNodeForest", () => {
     ];
     expect(preOrderClosedForest(nodes).map((n) => n.id)).toEqual([10, 20, 30, 11, 21]);
   });
+
+  it("一次元に深いノード列でもスタック溢出せず前順走査する", () => {
+    const depth = 5_000;
+    const nodes = Array.from({ length: depth }, (_, index) =>
+      node(index + 1, index === 0 ? null : index),
+    );
+    const ordered = preOrderClosedForest(nodes);
+    expect(ordered).toHaveLength(depth);
+    expect(ordered.map((n) => n.id)).toEqual(
+      Array.from({ length: depth }, (_, index) => index + 1),
+    );
+  });
 });
