@@ -66,6 +66,36 @@ describe("useMapStorageRestoration", () => {
     });
   });
 
+  it("V3 の relations/groups を replaceMap に渡す", () => {
+    const storedJson = JSON.stringify({
+      version: 3,
+      layoutMode: "manual",
+      nodes: [
+        { id: 1, parentId: null, x: 0, y: 0, width: 100, height: 40, label: "a", importance: "medium" },
+        { id: 2, parentId: 1, x: 120, y: 0, width: 80, height: 30, label: "b", importance: "medium" },
+      ],
+      relations: [{ id: 10, fromId: 1, toId: 2, kind: "related", directed: false }],
+      groups: [{ id: 20, nodeIds: [1, 2], label: "g" }],
+    });
+    const replaceMap = jest.fn();
+    renderHook(() => useMapStorageRestoration({
+      currentSnapshot: emptyMapJson,
+      replaceMap,
+      publishNotice: jest.fn(),
+      readBody: createTestStorageSession({ initialJson: storedJson }).session.readBody,
+    }));
+
+    expect(replaceMap).toHaveBeenCalledWith({
+      layoutMode: "manual",
+      nodes: [
+        expect.objectContaining({ id: 1 }),
+        expect.objectContaining({ id: 2 }),
+      ],
+      relations: [{ id: 10, fromId: 1, toId: 2, kind: "related", directed: false }],
+      groups: [{ id: 20, nodeIds: [1, 2], label: "g" }],
+    });
+  });
+
   it.each([2, 3])("V%i保存値はV3正規化snapshotを基準にする", (version) => {
     const storedJson = JSON.stringify({ version, layoutMode: "manual", nodes: [] });
     const replaceMap = jest.fn();

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { parseMapDocumentJson, serializeMapDocument } from "@/domain/persistence/mapDocumentCodec";
+import { nodeMapStateFromDocument } from "@/domain/persistence/mapDocumentState";
 import { readMapJsonFile } from "@/services/persistence/mapJsonFileReader";
 import type { MapDocumentResult } from "@/types/mapDocument";
 import type { NodeMapState } from "@/types/nodeMapState";
@@ -66,10 +67,7 @@ export function useMapJsonImport({
 
     const importedSnapshot = serializeMapDocument(parsed.value);
     requestSnapshotSave(importedSnapshot);
-    replaceMap({
-      layoutMode: parsed.value.layoutMode,
-      nodes: parsed.value.nodes,
-    });
+    replaceMap(nodeMapStateFromDocument(parsed.value));
     publishNotice({ kind: "status", message: "マップを読み込みました。" });
   }, [publishNotice, readFile, replaceMap, requestSnapshotSave]);
 }
