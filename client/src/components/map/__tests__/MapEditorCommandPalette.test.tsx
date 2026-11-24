@@ -231,6 +231,50 @@ describe("MapEditor コマンドパレット配線", () => {
     expect(paletteDialog()).toBe(before);
   });
 
+  it("OPML取り込みダイアログ中はヘッダーもショートカットもパレットを開かない", async () => {
+    await renderEditor();
+
+    fireEvent.click(screen.getByRole("button", { name: "OPML取り込み" }));
+    expect(screen.getByRole("dialog", { name: "OPML取り込み" })).toBeInTheDocument();
+    await userEvent.click(commandButton());
+    expect(screen.queryByRole("dialog", { name: "コマンドパレット" })).not.toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    expect(screen.queryByRole("dialog", { name: "コマンドパレット" })).not.toBeInTheDocument();
+
+    fireEvent.click(
+      within(screen.getByRole("dialog", { name: "OPML取り込み" })).getByRole("button", {
+        name: "キャンセル",
+      }),
+    );
+    await openPaletteViaHeader();
+    const before = paletteDialog();
+    await userEvent.click(commandButton());
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    expect(paletteDialog()).toBe(before);
+  });
+
+  it("CSV/TSV取り込みダイアログ中はヘッダーもショートカットもパレットを開かない", async () => {
+    await renderEditor();
+
+    fireEvent.click(screen.getByRole("button", { name: "CSV/TSV取り込み" }));
+    expect(screen.getByRole("dialog", { name: "CSV/TSV取り込み" })).toBeInTheDocument();
+    await userEvent.click(commandButton());
+    expect(screen.queryByRole("dialog", { name: "コマンドパレット" })).not.toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    expect(screen.queryByRole("dialog", { name: "コマンドパレット" })).not.toBeInTheDocument();
+
+    fireEvent.click(
+      within(screen.getByRole("dialog", { name: "CSV/TSV取り込み" })).getByRole("button", {
+        name: "キャンセル",
+      }),
+    );
+    await openPaletteViaHeader();
+    const before = paletteDialog();
+    await userEvent.click(commandButton());
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    expect(paletteDialog()).toBe(before);
+  });
+
   it("パレット open 時は editorShortcutsEnabled 偽・根 inert・履歴ショートカット停止・表示切替停止（L-061）", async () => {
     await renderEditor();
     addNodeAt(300, 200);

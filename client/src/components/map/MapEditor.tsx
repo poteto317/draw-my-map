@@ -20,6 +20,7 @@ import {
 } from "@/domain/exportScope/exportFormatAvailability";
 import type { ExportScope } from "@/domain/exportScope/exportScope";
 import { normalizeExportForestParents } from "@/domain/exportScope/normalizeExportForestParents";
+import { resolveExchangeExportNodes } from "@/domain/exportScope/resolveExchangeExportNodes";
 import { resolveExportNodes } from "@/domain/exportScope/resolveExportNodes";
 import { resolveSelectionTargetIds } from "@/domain/exportScope/resolveSelectionTargetIds";
 import { summarizeSelectionImportance } from "@/domain/nodes/selectionImportanceSummary";
@@ -76,6 +77,9 @@ import { NodePinControls } from "@/components/layout/NodePinControls";
 import { ResolutionFilterSelector } from "@/components/layout/ResolutionFilterSelector";
 import { MapHeaderLayoutControls } from "@/components/layout/MapHeaderLayoutControls";
 import { WheelZoomSensitivityControl } from "@/components/layout/WheelZoomSensitivityControl";
+import { ExchangeExportControls } from "@/components/layout/ExchangeExportControls";
+import { ExchangeImportControl } from "@/components/layout/ExchangeImportControl";
+import { ExchangeImportDialog } from "@/components/layout/ExchangeImportDialog";
 import { MapImageExportControls } from "@/components/layout/MapImageExportControls";
 import { OutlineExportControls } from "@/components/layout/OutlineExportControls";
 import { MapHistoryControls } from "@/components/layout/MapHistoryControls";
@@ -121,6 +125,7 @@ import { useUiPrefs } from "@/hooks/useUiPrefs";
 import { useMapHistoryShortcuts } from "@/components/map/useMapHistoryShortcuts";
 import { useMapImageExport } from "@/hooks/useMapImageExport";
 import { useMapJsonExport } from "@/hooks/useMapJsonExport";
+import { useExchangeExport } from "@/hooks/useExchangeExport";
 import { useOutlineExport } from "@/hooks/useOutlineExport";
 import { useMapDepthLimit } from "@/hooks/useMapDepthLimit";
 import { useMapHighlightMode } from "@/hooks/useMapHighlightMode";
@@ -137,6 +142,7 @@ import { useBranchCollapse } from "@/hooks/useBranchCollapse";
 import { useBranchFocus } from "@/hooks/useBranchFocus";
 import { useNodeSearchNavigation } from "@/hooks/useNodeSearchNavigation";
 import { useOutlineImport } from "@/hooks/useOutlineImport";
+import { useExchangeImport } from "@/hooks/useExchangeImport";
 import { useSiblingReorderAction } from "@/hooks/useSiblingReorderAction";
 import { useNodeIndentAction } from "@/hooks/useNodeIndentAction";
 import { useNodeOnlyDeletionAction } from "@/hooks/useNodeOnlyDeletionAction";
@@ -670,6 +676,12 @@ export function MapEditor({
     insertForest,
     expandNodes: branchCollapse.expandNodes,
   });
+  const exchangeImport = useExchangeImport({
+    selectedNodeId,
+    documentRevision,
+    insertForest,
+    expandNodes: branchCollapse.expandNodes,
+  });
   const siblingReorder = useSiblingReorderAction({
     selectedNodeId,
     nodes,
@@ -807,6 +819,13 @@ export function MapEditor({
   // 下の effect の依存配列に入れるため、値と関数を取り出しておく
   const { focusRequest: outlineFocusRequest, consumeFocusRequest: consumeOutlineFocusRequest } = outlineImport;
   const outlineImportButtonRef = useRef<HTMLButtonElement>(null);
+  const {
+    focusRequest: exchangeFocusRequest,
+    consumeFocusRequest: consumeExchangeFocusRequest,
+    lastEntry: exchangeLastEntry,
+  } = exchangeImport;
+  const exchangeOpmlButtonRef = useRef<HTMLButtonElement>(null);
+  const exchangeCsvButtonRef = useRef<HTMLButtonElement>(null);
   const commandPalette = useCommandPalette({ mapId, documentRevision });
   const commandPaletteButtonRef = useRef<HTMLButtonElement>(null);
   const commandPaletteOpenerRef = useRef<HTMLElement | null>(null);
@@ -820,6 +839,7 @@ export function MapEditor({
   const editorShortcutsEnabled = shortcutsEnabled
     && commandPalette.screen === "closed"
     && outlineImport.screen === "closed"
+    && exchangeImport.screen === "closed"
     && branchMove.screen === "closed"
     && branchExtract.screen === "closed"
     && labelReplace.screen === "closed"
@@ -840,6 +860,19 @@ export function MapEditor({
     () => buildOutlineRows(exportDocumentNodes),
     [exportDocumentNodes],
   );
+  const exchangeClosedNodes = useMemo(
+    () => resolveExchangeExportNodes(
+      exportScope,
+      nodes,
+      displayState.visibleNodeIds,
+      selectionTargetIds,
+    ),
+    [exportScope, nodes, displayState.visibleNodeIds, selectionTargetIds],
+  );
+  const exchangeExport = useExchangeExport({
+    closedNodes: exchangeClosedNodes,
+    mapName,
+  });
   const outlineExport = useOutlineExport({ model: exportOutlineModel, mapName });
   const exportFormatControls = useMemo(
     () => resolveExportFormatControls(exportScope, exportNodes.length),
@@ -1120,11 +1153,13 @@ export function MapEditor({
     scopedJsonNotice,
     imageExport.notice,
     outlineExport.notice,
+    exchangeExport.notice,
     duplication.notice,
     clipboardNotice,
     nodeSearchNotice,
     navigationNotice,
     outlineImport.notice,
+    exchangeImport.notice,
     treeEditNotice,
     commandPaletteNotice,
     persistence.conflictActionNotice,
@@ -1136,6 +1171,15 @@ export function MapEditor({
     outlineImportButtonRef.current?.focus();
     consumeOutlineFocusRequest();
   }, [outlineFocusRequest, consumeOutlineFocusRequest]);
+
+  useLayoutEffect(() => {
+    if (exchangeFocusRequest !== "header") return;
+    const focusButton = exchangeLastEntry === "csv-tsv"
+      ? exchangeCsvButtonRef.current
+      : exchangeOpmlButtonRef.current;
+    focusButton?.focus();
+    consumeExchangeFocusRequest();
+  }, [exchangeFocusRequest, consumeExchangeFocusRequest, exchangeLastEntry]);
 
   return (
     <>
@@ -1340,6 +1384,13 @@ export function MapEditor({
                 onOpen={outlineImport.open}
                 buttonRef={outlineImportButtonRef}
               />
+              <ExchangeImportControl
+                opmlExpanded={exchangeImport.screen !== "closed" && exchangeImport.entry === "opml"}
+                csvExpanded={exchangeImport.screen !== "closed" && exchangeImport.entry === "csv-tsv"}
+                onOpen={exchangeImport.open}
+                opmlButtonRef={exchangeOpmlButtonRef}
+                csvButtonRef={exchangeCsvButtonRef}
+              />
               <ExportScopeControl
                 scope={exportScope}
                 onChange={setExportScope}
@@ -1368,6 +1419,17 @@ export function MapEditor({
                 plainTextEnabled={exportFormatControls.bullets.enabled}
                 markdownDisabledReason={exportFormatControls.markdown.disabledReason}
                 plainTextDisabledReason={exportFormatControls.bullets.disabledReason}
+              />
+              <ExchangeExportControls
+                onExportOpml={exchangeExport.exportOpml}
+                onExportCsv={exchangeExport.exportCsv}
+                onExportTsv={exchangeExport.exportTsv}
+                opmlEnabled={exportFormatControls.opml.enabled}
+                csvEnabled={exportFormatControls.csv.enabled}
+                tsvEnabled={exportFormatControls.tsv.enabled}
+                opmlDisabledReason={exportFormatControls.opml.disabledReason}
+                csvDisabledReason={exportFormatControls.csv.disabledReason}
+                tsvDisabledReason={exportFormatControls.tsv.disabledReason}
               />
             </>
           )}
@@ -1703,6 +1765,37 @@ export function MapEditor({
           }}
           onExecuteActive={handleExecutePaletteActive}
           onDismiss={() => commandPalette.close("dismiss")}
+          onMouseClick={() => {
+            dialogMouseClickedAtRef.current = Date.now();
+          }}
+        />
+      )}
+      {exchangeImport.screen !== "closed" && exchangeImport.entry !== null && (
+        <ExchangeImportDialog
+          screen={exchangeImport.screen === "preview" ? "preview" : "input"}
+          entry={exchangeImport.entry}
+          fileName={exchangeImport.fileName}
+          delimiter={exchangeImport.delimiter}
+          inputError={exchangeImport.inputError}
+          parsed={exchangeImport.parsed}
+          preview={exchangeImport.preview}
+          parentCandidate={resolveOutlineParentCandidate(
+            nodes,
+            exchangeImport.parentCandidateId,
+            exchangeImport.parentCandidateStale,
+          )}
+          target={exchangeImport.target}
+          dialogNotices={exchangeImport.dialogNotices}
+          focusRequest={exchangeImport.focusRequest}
+          onFocusRequestApplied={exchangeImport.consumeFocusRequest}
+          onFileLoad={exchangeImport.setFile}
+          onLoadError={exchangeImport.reportInputError}
+          onDelimiterChange={exchangeImport.setDelimiter}
+          onPreview={exchangeImport.requestPreview}
+          onCancel={exchangeImport.close}
+          onBack={exchangeImport.back}
+          onTargetChange={exchangeImport.setTarget}
+          onSubmit={exchangeImport.submit}
           onMouseClick={() => {
             dialogMouseClickedAtRef.current = Date.now();
           }}
