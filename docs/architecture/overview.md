@@ -132,6 +132,7 @@ client/src/
     - `NodeSearchBox.tsx`, `nodeSearchKeyAction.ts`: ARIA combobox/listbox による検索欄と最大50件の候補一覧、および矢印・Enter・Escape・IME変換中のキー判定。URL だけで一致した候補には補助行に「 · URL 一致」、アクセシブルネームに「URL 一致」を足す。
     - `AppWorkspace.tsx`: ヘッダー下の 2 カラム（メインキャンバス領域 + 右サイドパネル）レイアウト。
     - `LayoutModeSelector.tsx`: `手動配置` / `自動配置` 切り替えボタングループ（`role="group"`, `aria-label="レイアウトモード"`）。
+    - `LayoutStyleControl.tsx` / `MapHeaderLayoutControls.tsx`: ヘッダーの「レイアウト様式」直交／放射（Phase 29）とツリー方向・配置間隔・整列等の配線。manual 時は様式・方向・間隔が disabled（値保持）。radial 中はツリー方向が disabled（値保持）、間隔は有効。`useMapHeaderLayoutControls` 経由。
     - `LabelTextStyleControl.tsx`: ヘッダーの「文字」開示パネル（マップ表示・主選択ちょうど 1 件・保護モード外・選択 ID が `nodes` に存在するとき表示）。トリガーは `aria-expanded` / `aria-controls`、パネルは `role="group"`（native `<select>` と `aria-pressed` トグルを置くため `menu` / `menuitem` は使わない）。サイズセレクト（12／14／18／24）と太字・下線トグル。`locked` では disabled。`visible` 消失で開状態を閉じる（L-214）。`MapHeaderLayoutControls` / `useMapHeaderLayoutControls` 経由で配線。
     - `NodeCollapseControl.tsx`: 選択中の親ノードの枝を折りたたみ・展開するボタン、非表示件数（選択中の親が閉じている間はその全子孫数。未選択・葉・展開中は 0件）、保存・画像出力と表示用配置の説明を表示する。
     - `MapHistoryControls.tsx`: ヘッダーの `元に戻す` / `やり直す` ボタン（履歴の有無に応じて `disabled`）。`Enter` の押し続けを `preventRepeatedEnterClick` で止め、押したボタンが無効になったときのフォーカスの引き継ぎは `usePairedButtonFocusHandover` を使う。
@@ -324,9 +325,9 @@ client/src/
 - **責務**: システムの中核となる純粋なビジネスルール、数学・幾何計算、ツリー操作アルゴリズム、データ検証・変換。**React や Pixi.js、DOM、ブラウザ固有 API（window, document, localStorage 等）には一切依存しない純粋関数群**。
 - **構成サブパッケージ（全 169 ファイル）**:
   - `domain/nodes/` (81 ファイル):
-    - `nodeAutoLayout.ts`, `nodeLayoutForest.ts`, `nodeLayoutForestRelations.ts`, `nodeLayoutForestTraversal.ts`, `nodeLayoutGeometry.ts`, `nodeLayoutMetrics.ts`, `nodeLayoutPlacement.ts`, `nodeLayoutSpacing.ts`, `nodeLayoutArithmetic.ts`: 木構造・森構造の幾何配置計算（親子関係とルート抽出 `buildNodeForestRelations`、非再帰トラバーサルとサイクル検出 `traverseNodeForest`、フォレストインデックス化 `indexNodeForest`、座標展開 `calculateNodePositions`、深さ別列 X 座標とサブツリー垂直スパン計測 `calculateNodeLayoutMetrics`、双方向垂直中央揃え配置 `placeNodeForest`、数値オーバーフロー・浮動小数点 ULP 精度劣化防御および最小間隔判定 `checkedAdd`/`checkedSubtract`/`checkedMultiply`/`calculateRoundingTolerance`/`calculateGapRoundingTolerance`/`hasSufficientGap`、垂直間隔検証 `hasValidVerticalSpacing`）。
+    - `nodeAutoLayout.ts`, `nodeLayoutForest.ts`, `nodeLayoutForestRelations.ts`, `nodeLayoutForestTraversal.ts`, `nodeLayoutGeometry.ts`, `nodeLayoutMetrics.ts`, `nodeLayoutPlacement.ts`, `nodeLayoutSpacing.ts`, `nodeLayoutArithmetic.ts`, `nodeRadialLayout.ts`, `nodeBranchLayout.ts`, `nodeBranchLayoutEngine.ts`, `nodeLayoutPinned.ts`: 木構造・森構造の幾何配置計算（親子関係とルート抽出 `buildNodeForestRelations`、非再帰トラバーサルとサイクル検出 `traverseNodeForest`、フォレストインデックス化 `indexNodeForest`、座標展開 `calculateNodePositions`、深さ別列 X 座標とサブツリー垂直スパン計測 `calculateNodeLayoutMetrics`、双方向垂直中央揃え配置 `placeNodeForest`、数値オーバーフロー・浮動小数点 ULP 精度劣化防御および最小間隔判定 `checkedAdd`/`checkedSubtract`/`checkedMultiply`/`calculateRoundingTolerance`/`calculateGapRoundingTolerance`/`hasSufficientGap`、垂直間隔検証 `hasValidVerticalSpacing`。Phase 29: `layoutStyle==="radial"` で放射配置、orthogonal の枝方向・`layoutPinned` 尊重）。
     - `nodeTree.ts`: ノード親子付け替え（`connectNodeTree`）、**自己接続・存在しないノード・循環参照検出（`canConnectNodes`）**、部分木 ID 収集（`collectSubtreeIds`。親子の隣接表と queue による非再帰・線形の走査で、親子が循環した入力でも停止する）、部分木連動移動（`moveNodeSubtree`）、ID ごとに配列で最初に出会ったノードを引く索引（`indexFirstNodes`。階層の上げ下げと親の挿入で共有する）。
-    - `nodePlacement.ts`: 新規ルートノード（`createRootNode`）、子ノード（`createChildNode`。位置は `nodeManualPlacement.ts` の `calculateChildPlacement`）、兄弟ノード（`createSiblingNode`）の初期座標算出と、親の挿入で入れる親ノード（`createParentNode(target, id)`。座標と元の親は対象と同じ、重要度は対象から引き継ぎ、大きさは既定の `RECT_WIDTH` × `RECT_HEIGHT`、ラベルは空、`illustration`・`note`・`links`・`tags`・`sources`・`mapLinks`・`locked`・`labelFontSize`・`labelBold`・`labelUnderline`・`icon`・`kind` は持たない）。
+    - `nodePlacement.ts`: 新規ルートノード（`createRootNode`）、子ノード（`createChildNode`。位置は `nodeManualPlacement.ts` の `calculateChildPlacement`）、兄弟ノード（`createSiblingNode`）の初期座標算出と、親の挿入で入れる親ノード（`createParentNode(target, id)`。座標と元の親は対象と同じ、重要度は対象から引き継ぎ、大きさは既定の `RECT_WIDTH` × `RECT_HEIGHT`、ラベルは空、`illustration`・`note`・`links`・`tags`・`sources`・`mapLinks`・`locked`・`layoutPinned`・`labelFontSize`・`labelBold`・`labelUnderline`・`icon`・`kind` は持たない）。
     - `nodeManualPlacement.ts`: 手動配置の共通の規則。マップ全体の下端から `SIBLING_VERTICAL_GAP` だけ空けた位置への真下の平行移動量（`calculateManualOffsetY`。枝の複製・貼り付けと箇条書きの新しいルートの追加で共有）と、子を追加するときの左上の位置（`calculateChildPlacement`。`createChildNode` と箇条書きの子としての追加で共有。兄弟の下端の最大値はスプレッドを使わずループで求める）。
     - `nodeIdGenerator.ts`, `nodeIdAllocator.ts`: 単調増加 ID 生成（`createMonotonicIdGenerator`）および既存ノード ID との衝突を回避する空きノード ID 採番（`createNodeIdAllocator`。1 件ずつの `nextAvailableId` と、複製と貼り付け用に占有集合を 1 回だけ作る一括採番 `nextAvailableIds`）。
     - `nodeSubtreeDuplication.ts`: 選択ノードと全子孫の複製候補を生成する純粋関数（`duplicateNodeSubtree`）。複製元の部分木を `nodeTree.collectSubtreeIds` で集め、挿入・配置・採番は `nodeSubtreeInsertion.ts` の `insertNodeSubtree` に委ねる（複製根は複製元と同じ親）。
@@ -386,7 +387,7 @@ client/src/
     - `outlineExport.ts`: アウトライン行リストから Markdown 形式（`- [ ] ` または `- `）およびインデント付きテキスト（箇条書き）への書き出し文字列生成。
   - `domain/clipboard/` (1 ファイル):
     - `subtreeClipboardCodec.ts`: 枝のクリップボード専用形式（`{"type":"draw-my-map/subtree","version":1,"nodes":[...]}`）の書き出し（`encodeSubtreeClipboard`。選択根の `parentId` を `null` に切り離し、上限と貼り付け可能性を確認）と、読み取り・検証（`decodeSubtreeClipboard`。文字数 5,000,000・ノード数 10,000 の上限、`type` / `version`、V3 のノード検証 `normalizeMapDocumentNode(..., 3)`、単一の根、`validateMapDocumentGraph`）。判定は線形で、結果は `{ ok: true, value } | { ok: false, reason: "invalid" | "too-large" }`。
-  - `domain/map/` (Phase 28・関連線／グループ枠):
+  - `domain/map/` (Phase 28・関連線／グループ枠、Phase 29・配置拡張の可用性):
     - `relationGroupModel.ts`: `collectUsedEntityIds` / `normalizeRelations` / `normalizeGroups` / `areRelationsEqual` / `areGroupsEqual` / `projectRelations` / `projectGroups`。
     - `relationConflict.ts`: `relationConflictKey` / `relationsConflict` / `canCommitRelation` / `dedupeRelationsByConflict`。
     - `relationGroupLifecycle.ts`: `pruneAfterRemovedNodeIds` / `pruneSourceAfterBranchMove` / `rewriteAfterNodeMerge` / `remapClosedForNodeIdMap` / `copyClosedRelationGroups` / `mergeRelationGroupSlices`。
@@ -395,8 +396,9 @@ client/src/
     - `mapRelationGroupContextMenus.ts`: コンテキストメニュー項目（関連線追加／結ぶ／グループ化／枝グループ化）の有効判定の解決。
     - `mapCanvasSelectionGuards.ts`: 関連線／グループ選択中のノード操作無効化。
     - `relationKindLabels.ts` / `relationKindColors.ts` / `relationSegmentGeometry.ts` / `mapGroupGeometry.ts`: 表示ラベル・色・ヒット幾何。
+    - `mapLayoutStyleAvailability.ts` / `mapBranchLayoutAvailability.ts` / `mapLayoutPinnedAvailability.ts`: Phase 29 入口（様式・枝方向・ピン）の有効判定。
   - `domain/history/` (1 ファイル):
-    - `mapHistory.ts`: 編集履歴の純粋な遷移（記録・Undo・Redo・同値判定（ノードの各キーを比べ、配列の値（`links`・`tags`）は要素ごとに比べ、`sources` は `areNodeSourcesEqual`、`mapLinks` は `areNodeMapLinksEqual`、文書級の `relations` / `groups` も比較対象）・最大100操作の上限）。
+    - `mapHistory.ts`: 編集履歴の純粋な遷移（記録・Undo・Redo・同値判定（ノードの各キーを比べ、配列の値（`links`・`tags`）は要素ごとに比べ、`sources` は `areNodeSourcesEqual`、`mapLinks` は `areNodeMapLinksEqual`、文書級の `layoutStyle` / `branchLayouts` / `relations` / `groups` も比較対象）・最大100操作の上限）。
   - `domain/shared/` (1 ファイル):
     - `unknownRecord.ts`: 外部から受け取った `unknown` の値（JSON・`localStorage`・ネットワークの応答・リクエスト本文）を `as` のキャストなしで読むための型ガード。`isRecord(value)`（null と配列を除くオブジェクトか）、`isPlainRecord(value)`（通常・null プロトタイプのプレーンオブジェクトか）、`hasOwn(value, key)`（プロトタイプ継承を除外した自身プロパティ判定）、`hasOnlyKeys(value, allowed)`（許可キー集合外を含まないか）、`readProperty(value, key)`（オブジェクトなら `value[key]`、null やプリミティブなら `undefined`）。マップ JSON・インデックス・クリップボード・バックアップ・メタデータ・マップ間リンクのデコーダと、Cloudflare・`/api/illustrations` の読み取りで共有する。
   - `domain/search/` (4 ファイル):
@@ -470,12 +472,12 @@ client/src/
 
 #### 8. Types Layer (`src/types/`)
 - **責務**: アプリケーション横断で共有される TypeScript 型定義、インターフェース、ユニオン型。
-- **構成ファイル（全 25 ファイル完全網羅）**:
-  - `types/node.ts`: `Node`（`id`, `parentId`, `x`, `y`, `width`, `height`, `label`, `importance`, `illustration?`, `note?`, `links?`, `tags?`, `sources?`, `mapLinks?`, `locked?`, `labelFontSize?`, `labelBold?`, `labelUnderline?`, `icon?`, `kind?`）、`NodeSource`、`NodeMapLink`。
+- **構成ファイル（全 27 ファイル完全網羅）**:
+  - `types/node.ts`: `Node`（`id`, `parentId`, `x`, `y`, `width`, `height`, `label`, `importance`, `illustration?`, `note?`, `links?`, `tags?`, `sources?`, `mapLinks?`, `locked?`, `layoutPinned?`, `labelFontSize?`, `labelBold?`, `labelUnderline?`, `icon?`, `kind?`）、`NodeSource`、`NodeMapLink`。
   - `types/nodeKind.ts`: `NodeKind`（`"question" | "conclusion" | "evidence" | "idea"`）、`NODE_KINDS`、`NODE_KIND_BAR_WIDTH_PX`、`NODE_KIND_BAR_CSS_VARS`、`NODE_KIND_BAR_FALLBACK_COLORS`（Pixi／SVG 用。DOM は CSS 変数）。
   - `types/nodeImportance.ts`: `NodeImportance`（`"high" | "medium" | "low"`）。
   - `types/nodeLayout.ts`: `NodeLayoutMode`（`"manual" | "auto"`）。
-  - `types/nodeMapState.ts`: `NodeMapState`（`layoutMode`, `nodes`, 任意の `treeDirection?` / `layoutSpacing?` / `relations?` / `groups?`）。
+  - `types/nodeMapState.ts`: `NodeMapState`（`layoutMode`, `nodes`, 任意の `treeDirection?` / `layoutSpacing?` / `layoutStyle?` / `branchLayouts?` / `relations?` / `groups?`）。
   - `types/mapRelation.ts`: `MapRelation`、`RelationKind`、`RELATION_KINDS`（Phase 28）。
   - `types/mapGroup.ts`: `MapGroup`、`MAP_GROUP_LABEL_MAX_CODEPOINTS`（Phase 28）。
   - `types/mapCanvasSelection.ts`: `MapCanvasSelection`（`nodes` / `relation` / `group`）。
@@ -483,6 +485,8 @@ client/src/
   - `types/labelFontSize.ts`: `LABEL_FONT_SIZES`、`LabelFontSize`。
   - `types/treeDirection.ts`: `TreeDirection`（`"lr" | "tb"`）。
   - `types/layoutSpacing.ts`: `LayoutSpacing`（`childGap`, `siblingGap`）。
+  - `types/layoutStyle.ts`: `LayoutStyle`（`"orthogonal" | "radial"`）、`normalizeLayoutStyle` / `projectLayoutStyle` / `areLayoutStylesEqual`（Phase 29）。
+  - `types/branchLayout.ts`: `BranchLayout`、`BranchLayoutDirection`、normalize／prune／remap／rewrite／project／equal（Phase 29）。
   - `types/viewport.ts`: `Viewport`、`ScreenSize`、`INITIAL_VIEWPORT`、倍率上下限、妥当性判定。
   - `types/mapViewSnapshot.ts`: `MapViewSnapshot`（viewport・選択・折りたたみ・解像度モードのメモリ上スナップショット）。
   - `types/mapDocument.ts`: `MapDocumentVersion`（`1 | 2 | 3`）、`MapDocumentV1`、`MapDocumentV3`、`MapDocument`、`MapDocumentResult<T>`。
@@ -817,7 +821,7 @@ sequenceDiagram
 
 #### 編集履歴の所有とリビジョン
 
-- **所有者**: 編集履歴は `useNodeLayoutState` が呼ぶ `useMapHistory`（純粋な遷移は `domain/history/mapHistory.ts`）が所有する。ref を正とし、同じ結果を React state へ反映するため、同一イベント内の連続操作（追加→削除→Undo など）でも最新の状態を使える。`NodeMapState`（`nodes`・`layoutMode` および任意の `treeDirection` / `layoutSpacing` / `relations` / `groups`）を記録し、選択・viewport・表示フィルターは含めない。
+- **所有者**: 編集履歴は `useNodeLayoutState` が呼ぶ `useMapHistory`（純粋な遷移は `domain/history/mapHistory.ts`）が所有する。ref を正とし、同じ結果を React state へ反映するため、同一イベント内の連続操作（追加→削除→Undo など）でも最新の状態を使える。`NodeMapState`（`nodes`・`layoutMode` および任意の `treeDirection` / `layoutSpacing` / `layoutStyle` / `branchLayouts` / `relations` / `groups`。ノード任意属性 `layoutPinned` を含む）を記録し、選択・viewport・表示フィルターは含めない。
 - **ドラッグのグループ**: Pixi 側はドラッグの閾値を越えた最初の有効な移動を通知する直前に `onBeginNodeMove` を呼んで履歴グループのリースを受け取り（クリックだけでは履歴を開始しない）、移動のたびに有効かを確認する。ドラッグ全体が1操作になり、Undo / Redo / 別編集 / マップ置換でリースは失効し、遅れて届いた古い移動通知は無視される。自動配置の並べ替えのドラッグはグループを開かず、離したときの `reorderSibling` の1回の commit だけが履歴になる。
 - **二種類のリビジョン**:
   - `resetRevision`: JSON 読み込みと初回復元による**マップ置換**で増加する（マップの切り替えでは増やさず、`MapEditor` ごと作り直す）。ステージの viewport 初期化、解像度フィルターのリセットなど、マップを開き直したときの初期化に使う。
@@ -908,6 +912,13 @@ sequenceDiagram
 - **責務の分担**: 正規化・重複・比較・プロジェクションは純関数（`domain/map/relationGroupModel.ts`）。重複判定は `relationConflict.ts`、削除／マージ／枝移動時の GC・ID 書換は `relationGroupLifecycle.ts`。追加／削除／更新の計画は `mapRelationMutation.ts` / `mapGroupMutation.ts`。可用性は `mapRelationAvailability.ts` / `mapGroupAvailability.ts`。コンテキストメニュー項目の解決は `mapRelationGroupContextMenus.ts`。選択ガードは `mapCanvasSelectionGuards.ts`。キャンバス選択・CRUD・`isNodeOpBlocked` の正本は `useRelationGroupActions`（`addRelation` / `removeRelation` / `updateRelation` / `addGroup` / `removeGroup` / `updateGroupLabel` / `selectRelation` / `selectGroup` / `canvasSelection`）。`useNodes` は同 API の再公開と、ノード操作へのガード配線のファサード。描画は `renderMapRelations.ts` / `renderMapGroups.ts`。入口は `NodeContextMenu`（「関連線を追加」「関連線で結ぶ」「グループ化」「この枝をグループ化」）、相手ピッカーは `RelationPartnerPickerDialog.tsx`、意味／ラベル編集は右パネル `RelationDetailSection.tsx` / `GroupDetailSection.tsx`（`NodeDetailPanel`）。Delete 振替は `useNodeKeyboardShortcuts`。
 - **選択**: `MapCanvasSelection`。relation / group 選択時はノード主選択をクリアし、既存のノード対象操作を無効化する（inventory 正本）。
 - **永続化**: MapDocument V3 の文書級任意キー。不正要素はエントリ除去。エンコード時の空配列はキー省略（`mapDocumentEncoder` / `mapDocumentState`）。
+
+#### 自動配置の拡張の流れ（Phase 29・064/065/066）
+
+- **責務の分担**: 様式・枝方向の型と正規化は `types/layoutStyle.ts` / `types/branchLayout.ts`。配置は `layoutNodeForest`（`nodeAutoLayout.ts`）が `layoutStyle` で分岐し、放射は `nodeRadialLayout.ts`、orthogonal の枝方向は `nodeBranchLayoutEngine.ts` / `nodeBranchLayout.ts`、ピンは `nodeLayoutPinned.ts`。可用性は `mapLayoutStyleAvailability.ts` / `mapBranchLayoutAvailability.ts` / `mapLayoutPinnedAvailability.ts`。公開操作は `useNodes.setLayoutStyle` / `setBranchLayout` / `setNodeLayoutPinned` / `movePinnedNode` / `finalizePinnedNodeMove`（実装本体は `useNodeLayoutState`）。ヘッダーは `LayoutStyleControl.tsx` / `MapHeaderLayoutControls.tsx` / `useMapHeaderLayoutControls.ts`。コンテキスト／詳細パネルは `NodeContextMenu.tsx` / `NodeDetailPanel.tsx`。ピンドラッグは `stageInteractions.ts`。
+- **即時再配置**: `layoutStyle` 切替・`layoutPinned` 付与／解除は `auto` なら 1 Undo でリレイアウト。`branchLayouts` は `auto` かつ orthogonal のときのみ。radial 中は `treeDirection`／枝方向 UI を disabled（値保持）、`layoutSpacing` は有効。
+- **ガード**: 関連線／グループ選択・保護／競合・アウトラインでは入口無効。locked はピン操作・ピンドラッグ拒否（inventory 正本: `docs/superpowers/specs/2026-11-24-phase29-auto-layout-extensions-inventory.md`）。
+- **永続化**: MapDocument V3 の文書級任意キーとノード `layoutPinned`。未知様式は orthogonal 扱い、不正枝方向エントリは除去。エンコード時の `orthogonal`／空配列はキー省略。
 
 #### 一括置換の流れ
 
