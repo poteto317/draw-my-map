@@ -102,7 +102,7 @@ Root Node B (id: 5, parentId: null)
 
 ## 2. TypeScript 型定義リファレンス
 
-システムの中核を構成する共有型定義は `client/src/types/` 配下の全 22 ファイルに集約されています。
+システムの中核を構成する共有型定義は `client/src/types/` 配下の全 25 ファイルに集約されています。
 
 | ファイルパス | エクスポートされる型名 | 役割・用途 |
 | :--- | :--- | :--- |
@@ -110,7 +110,10 @@ Root Node B (id: 5, parentId: null)
 | `client/src/types/nodeKind.ts` | `NodeKind`, `NODE_KINDS`, `NODE_KIND_BAR_WIDTH_PX`, `NODE_KIND_BAR_CSS_VARS`, `NODE_KIND_BAR_FALLBACK_COLORS` | ノード種別（`"question" \| "conclusion" \| "evidence" \| "idea"`）、左端色バー幅・CSS 変数・Pixi／SVG 用フォールバック色 |
 | `client/src/types/nodeImportance.ts` | `NodeImportance` | ノード重要度レベル（`"high" \| "medium" \| "low"`） |
 | `client/src/types/nodeLayout.ts` | `NodeLayoutMode` | レイアウト配置モード（`"manual" \| "auto"`） |
-| `client/src/types/nodeMapState.ts` | `NodeMapState` | マップ全体のインメモリ状態（`layoutMode`, `nodes`） |
+| `client/src/types/nodeMapState.ts` | `NodeMapState` | マップ全体のインメモリ状態（`layoutMode`, `nodes`, 任意の `treeDirection` / `layoutSpacing` / `relations` / `groups`） |
+| `client/src/types/mapRelation.ts` | `MapRelation`, `RelationKind`, `RELATION_KINDS` | 親子以外の関連線（Phase 28・061/062） |
+| `client/src/types/mapGroup.ts` | `MapGroup`, `MAP_GROUP_LABEL_MAX_CODEPOINTS` | ノード集合のグループ枠（Phase 28・063） |
+| `client/src/types/mapCanvasSelection.ts` | `MapCanvasSelection` | キャンバス選択（`nodes` / `relation` / `group`） |
 | `client/src/types/nodeResolution.ts` | `ResolutionLevel`, `ResolutionFilterMode` | 解像度フィルタの表示レベルとフィルタモード |
 | `client/src/types/labelFontSize.ts` | `LABEL_FONT_SIZES`, `LabelFontSize` | ラベル文字サイズの許可集合 |
 | `client/src/types/treeDirection.ts` | `TreeDirection` | ツリー方向（`"lr" \| "tb"`） |
@@ -251,23 +254,65 @@ export type NodeImportance = "high" | "medium" | "low";
 アプリケーション内部のマップ状態を表す型です。
 
 ```typescript
+import type { LayoutSpacing } from "@/types/layoutSpacing";
+import type { MapGroup } from "@/types/mapGroup";
+import type { MapRelation } from "@/types/mapRelation";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
+import type { TreeDirection } from "@/types/treeDirection";
 
 export type NodeMapState = {
-  /** レイアウト配置モード */
   layoutMode: NodeLayoutMode;
-  /** マップを構成する全ノードの配列 */
   nodes: Node[];
+  // 自動レイアウトのツリー方向。無いときは lr
+  treeDirection?: TreeDirection;
+  // 自動レイアウトの間隔。無いときは config/shapes.ts の既定値
+  layoutSpacing?: LayoutSpacing;
+  // 親子以外の関連線。欠落キー＝空。空配列はエンコード時にキー省略
+  relations?: readonly MapRelation[];
+  // ノード集合のグループ枠。欠落キー＝空。空配列はエンコード時にキー省略
+  groups?: readonly MapGroup[];
 };
 ```
+
+#### `MapRelation` / `MapGroup` / `MapCanvasSelection`（Phase 28）
+
+```typescript
+// client/src/types/mapRelation.ts
+type RelationKind = "dependency" | "conflict" | "reference" | "related";
+type MapRelation = {
+  id: number;
+  fromId: number;
+  toId: number;       // fromId !== toId
+  kind: RelationKind;
+  directed: boolean;  // true = from→to 矢印
+};
+
+// client/src/types/mapGroup.ts
+type MapGroup = {
+  id: number;
+  nodeIds: readonly number[]; // 2 件以上・重複無し
+  label: string;              // 空可。最大 100 コードポイント
+};
+
+// client/src/types/mapCanvasSelection.ts
+type MapCanvasSelection =
+  | { type: "nodes"; ids: readonly number[] }
+  | { type: "relation"; id: number }
+  | { type: "group"; id: number };
+```
+
+- **ID 採番**: `MapRelation.id` / `MapGroup.id` はノード ID と同一の正整数空間を共有する。`nextAvailableEntityIds`（`nodeIdAllocator.ts`）と `collectUsedEntityIds`（`relationGroupModel.ts`）が nodes∪relations∪groups を見て採番する。
+- **重複規則**（追加・更新とも）: 無向は `{min(a,b), max(a,b), directed:false}` キー一致で拒否。有向は `(from,to,directed:true)` 一致で拒否。無向と有向の混在は拒否。逆向き有向は許可。衝突時は id 昇順で 1 本残す（`canCommitRelation` / `relationConflictKey`）。
+- **正規化**: `normalizeRelations` / `normalizeGroups`（`relationGroupModel.ts`）。不正要素（未知 kind、自己ループ、欠落端点、nodeIds が 2 未満、ラベル超過など）はエントリ除去で文書成功。配列全体が非配列ならキー無視。
+- **GC**: `pruneAfterRemovedNodeIds`・`rewriteAfterNodeMerge`・`remapClosedForNodeIdMap` が削除／統合／枝移動・切り出し／クリップボード経路で端点欠損・メンバー不足を処理する。
 
 #### 編集履歴（`client/src/domain/history/mapHistory.ts`）
 `NodeMapState` を1操作ぶんのスナップショットとして、過去・現在・未来の配列でメモリ上に保持します。
 
 - 上限は `MAP_HISTORY_LIMIT`（100操作）です。変更のないノードオブジェクトと画像文字列は履歴間で共有し、操作のたびに deep clone や JSON 化は行いません。
-- 復元対象は `nodes` と `layoutMode` です。選択、パン・ズーム、表示フィルター、枝の折りたたみ、イラスト生成のプレビューは含めません。
-- 履歴は保存も書き出しもしません。JSON と `localStorage` の Version 3 形式は変わりません。
+- 復元対象は `nodes`・`layoutMode` および任意の `treeDirection` / `layoutSpacing` / `relations` / `groups` です。選択、パン・ズーム、表示フィルター、枝の折りたたみ、イラスト生成のプレビューは含めません。`relations` / `groups` のみが違う場合も equal は偽です。
+- 履歴は保存も書き出しもしません。JSON と `localStorage` の Version 3 形式は版を上げず、文書級任意キーとして `relations` / `groups` を載せます（欠落＝空、空配列はエンコード時キー省略）。
 - 初回の保存データ復元と JSON 読み込みの成功は新しい起点となり、過去・未来・進行中のドラッグのグループを消去します。
 
 ### 2.2 レイアウト・解像度フィルタリング型
@@ -905,6 +950,10 @@ Phase 25 では、Version 3 のまま、編集ロックの任意項目 `locked`�
     └─ 循環参照 (サイクル) / 自己ループ検出
       │ 不正あり ──────────────────────────────► エラー: "親子関係が循環しています。" 等
       ▼ 正常
+ 5. 文書級 relations / groups 正規化（V3 のみ。`normalizeRelations` / `normalizeGroups`）
+    ├─ 不正要素はエントリ除去（文書全体は失敗させない）
+    ├─ 非配列ならキーごと無視
+    └─ relation/group id をノード id と衝突しないよう reserved に積む
  Version 3 ドキュメント オブジェクト (ok: true)
 ```
 
@@ -921,6 +970,7 @@ export function parseMapDocumentJsonWithVersion(
 - 入力文字列を `JSON.parse` し、オブジェクトであること、`version` が `1`, `2`, `3` のいずれかであること、`layoutMode` が `"manual"` または `"auto"` であること、`nodes` が配列であることを検証します。
 - 各ノードを `normalizeMapDocumentNode` に渡し、マイグレーションと正規化を適用します。
 - 全ノードが正規化された後、`validateMapDocumentGraph` でグラフ全体の構造的整合性を検証します。
+- V3 では続けて `normalizeRelations` / `normalizeGroups`（`domain/map/relationGroupModel.ts`）で文書級配列を正規化し、不正要素だけを除去します（`mapDocumentState.ts` が状態投影を担う）。
 - 成功時は、入力が Version 1 や 2 であっても、**常に最新の `MapDocumentV3` 形式へ自動アップグレード** されて返却されます（元のバージョンは `sourceVersion` として返されます）。
 
 ### 4.2 バージョンマイグレーション規則
