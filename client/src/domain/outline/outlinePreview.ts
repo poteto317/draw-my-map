@@ -25,18 +25,20 @@ export function truncateOutlinePreviewLabel(label: string): string {
   return truncateLabelByCodePoints(label, OUTLINE_PREVIEW_LABEL_LENGTH);
 }
 
-// items の先頭 maxItems 件を1回の走査で木にする。親は常に自分より前にあるので再帰を使わない。
-export function buildOutlinePreview(
-  outline: ParsedOutline,
+type ForestPreviewItem = { label: string; parentIndex: number | null };
+
+// ForestItem / ParsedOutline.items 共通。先頭 maxItems 件を1回の走査で木にする。
+export function buildForestItemsPreview(
+  items: readonly ForestPreviewItem[],
   maxItems = OUTLINE_PREVIEW_MAX_ITEMS,
 ): OutlinePreview {
-  const totalCount = outline.items.length;
+  const totalCount = items.length;
   const shownCount = Math.min(totalCount, maxItems);
   const nodes: OutlinePreviewNode[] = [];
   const roots: OutlinePreviewNode[] = [];
 
   for (let index = 0; index < shownCount; index += 1) {
-    const { label, parentIndex } = outline.items[index];
+    const { label, parentIndex } = items[index]!;
     const node: OutlinePreviewNode = {
       key: index,
       label: truncateOutlinePreviewLabel(label),
@@ -46,9 +48,16 @@ export function buildOutlinePreview(
     if (parentIndex === null) {
       roots.push(node);
     } else {
-      nodes[parentIndex].children.push(node);
+      nodes[parentIndex]!.children.push(node);
     }
   }
 
   return { roots, shownCount, totalCount, truncated: totalCount > shownCount };
+}
+
+export function buildOutlinePreview(
+  outline: ParsedOutline,
+  maxItems = OUTLINE_PREVIEW_MAX_ITEMS,
+): OutlinePreview {
+  return buildForestItemsPreview(outline.items, maxItems);
 }

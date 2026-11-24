@@ -5,6 +5,10 @@ import type {
   ForestInsertionTarget,
   ForestItem,
 } from "@/domain/nodes/nodeForestInsertion";
+import {
+  resolveForestImportInsertionTarget,
+  type OutlineImportTarget,
+} from "@/domain/nodes/resolveForestImportInsertionTarget";
 import { isOutlineTextTooLong } from "@/domain/outline/outlineLimits";
 import {
   formatOutlineImportSuccess,
@@ -25,8 +29,8 @@ import type { InsertForestResult } from "@/hooks/useNodes";
 import { useRevisionScopedNotice } from "@/hooks/useRevisionScopedNotice";
 import type { OperationNotice } from "@/types/operationNotice";
 
+export type { OutlineImportTarget } from "@/domain/nodes/resolveForestImportInsertionTarget";
 export type OutlineImportScreen = "closed" | "input" | "preview";
-export type OutlineImportTarget = "root" | "child";
 export type OutlineInputError = { sequence: number; message: string | null };
 export type OutlineDialogNotices = {
   sequence: number;
@@ -241,25 +245,21 @@ export function useOutlineImport(options: UseOutlineImportOptions): UseOutlineIm
     const current = stateRef.current;
     if (current.screen !== "preview" || current.outline === null) return;
 
-    let target: ForestInsertionTarget;
-    if (current.target === "child") {
-      // マップの置き換えの後は、同じ ID のノードがあっても別のノードなので、ID の存在だけで判定しない（L-037）。
-      // 黙って新しいルートへ変えず、失敗として選び直させる（L-002）
-      const stale = documentRevisionRef.current !== current.openedRevision;
-      if (current.parentCandidateId === null || stale) {
-        const message = formatOutlineInsertFailure("parent-missing");
-        setState((prev) => showInsertFailure(prev, message));
-        return;
-      }
-      target = { kind: "child", parentId: current.parentCandidateId };
-    } else {
-      target = { kind: "root" };
+    const resolved = resolveForestImportInsertionTarget({
+      placement: current.target,
+      parentCandidateId: current.parentCandidateId,
+      parentCandidateStale: documentRevisionRef.current !== current.openedRevision,
+    });
+    if (!resolved.ok) {
+      const message = formatOutlineInsertFailure(resolved.reason);
+      setState((prev) => showInsertFailure(prev, message));
+      return;
     }
 
-    const result = insertForestRef.current(current.outline.items, target);
+    const result = insertForestRef.current(current.outline.items, resolved.target);
     switch (result.ok) {
       case true:
-        if (target.kind === "child") expandNodesRef.current([target.parentId]);
+        if (resolved.target.kind === "child") expandNodesRef.current([resolved.target.parentId]);
         publishNoticeRef.current({
           kind: "status",
           message: formatOutlineImportSuccess(result.count),
