@@ -1,6 +1,7 @@
 import { projectLabelTextStyle } from "@/domain/nodes/labelTextStyle";
 import { projectNodeIcon } from "@/domain/nodes/nodeIcon";
 import { projectNodeKind } from "@/domain/nodes/nodeKindUpdate";
+import { projectMapDocumentNodeLayoutPinned } from "@/domain/persistence/mapDocumentNodeLayoutPinned";
 import type { Node } from "@/types/node";
 
 export function projectMapDocumentNode(node: Node): Node {
@@ -20,6 +21,7 @@ export function projectMapDocumentNode(node: Node): Node {
     ...(node.sources === undefined ? {} : { sources: node.sources }),
     ...(node.mapLinks === undefined ? {} : { mapLinks: node.mapLinks }),
     ...(node.locked === undefined ? {} : { locked: node.locked }),
+    ...projectMapDocumentNodeLayoutPinned(node.layoutPinned),
     ...projectLabelTextStyle(node),
     ...projectNodeIcon(node),
     ...projectNodeKind(node),

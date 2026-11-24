@@ -8,17 +8,27 @@ export function nodeMapStateFromDocument(document: MapDocumentV3): NodeMapState 
     nodes: document.nodes,
     ...(document.treeDirection === undefined ? {} : { treeDirection: document.treeDirection }),
     ...(document.layoutSpacing === undefined ? {} : { layoutSpacing: document.layoutSpacing }),
+    ...(document.layoutStyle === undefined ? {} : { layoutStyle: document.layoutStyle }),
+    ...(document.branchLayouts === undefined ? {} : { branchLayouts: document.branchLayouts }),
     ...(document.relations === undefined ? {} : { relations: document.relations }),
     ...(document.groups === undefined ? {} : { groups: document.groups }),
   };
 }
 
 export function mapDocumentOptionsFromState(
-  state: Pick<NodeMapState, "treeDirection" | "layoutSpacing" | "relations" | "groups">,
-): Pick<MapDocumentV3, "treeDirection" | "layoutSpacing" | "relations" | "groups"> {
+  state: Pick<
+    NodeMapState,
+    "treeDirection" | "layoutSpacing" | "layoutStyle" | "branchLayouts" | "relations" | "groups"
+  >,
+): Pick<
+  MapDocumentV3,
+  "treeDirection" | "layoutSpacing" | "layoutStyle" | "branchLayouts" | "relations" | "groups"
+> {
   return {
     treeDirection: state.treeDirection,
     layoutSpacing: state.layoutSpacing,
+    layoutStyle: state.layoutStyle,
+    branchLayouts: state.branchLayouts,
     relations: state.relations,
     groups: state.groups,
   };

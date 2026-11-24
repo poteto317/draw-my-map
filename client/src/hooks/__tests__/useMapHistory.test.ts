@@ -76,6 +76,26 @@ describe("useMapHistory", () => {
     expect(result.current.present).toEqual(a);
   });
 
+  it("lease.cancel は preview を破棄し past に積まない", () => {
+    const { result } = renderHook(() => useMapHistory(a));
+
+    act(() => {
+      result.current.commit(b);
+    });
+    act(() => {
+      const lease = result.current.beginGroup();
+      result.current.preview(c);
+      lease.cancel();
+      expect(lease.isActive()).toBe(false);
+      lease.cancel();
+    });
+    expect(result.current.present).toEqual(b);
+    act(() => {
+      result.current.undo();
+    });
+    expect(result.current.present).toEqual(a);
+  });
+
   it("reset後の古いleaseのfinishは何も変えない", () => {
     const { result } = renderHook(() => useMapHistory(a));
 

@@ -89,4 +89,26 @@ describe("MapDocument Codec", () => {
     expect(parsed.ok && parsed.value.nodes[0].sources).toEqual(sources);
     expect(parsed.ok && "sources" in parsed.value.nodes[1]).toBe(false);
   });
+
+  it("V3 の layoutStyle / branchLayouts / layoutPinned を往復し、既定はキー省略", () => {
+    const pinned = createTestNode({ ...node(1, null, "high"), layoutPinned: true });
+    const child = node(2, 1, "low");
+    const document = createMapDocument([pinned, child], "manual", {
+      layoutStyle: "radial",
+      branchLayouts: [{ nodeId: 2, direction: "rl" }],
+    });
+
+    const parsed = parseMapDocumentJson(serializeMapDocument(document));
+    expect(parsed).toEqual({ ok: true, value: document });
+    expect(parsed.ok && parsed.value.nodes[0].layoutPinned).toBe(true);
+    expect(parsed.ok && "layoutPinned" in parsed.value.nodes[1]).toBe(false);
+
+    const orthogonal = createMapDocument([child], "manual", {
+      layoutStyle: "orthogonal",
+      branchLayouts: [],
+    });
+    const orthogonalText = serializeMapDocument(orthogonal);
+    expect(orthogonalText).not.toContain("layoutStyle");
+    expect(orthogonalText).not.toContain("branchLayouts");
+  });
 });

@@ -451,3 +451,68 @@ describe("version 3 の locked", () => {
     expect(parsed.ok && "locked" in parsed.value.nodes[1]).toBe(false);
   });
 });
+
+describe("version 3 の layoutStyle / branchLayouts / layoutPinned", () => {
+  const baseDoc = {
+    version: 3,
+    layoutMode: "manual" as const,
+    nodes: [node(1, null), node(2, 1)],
+  };
+
+  it("radial と branchLayouts・layoutPinned を読み込む", () => {
+    const result = parseMapDocumentJson(JSON.stringify({
+      ...baseDoc,
+      layoutStyle: "radial",
+      branchLayouts: [{ nodeId: 2, direction: "rl" }],
+      nodes: [
+        { ...node(1, null), layoutPinned: true },
+        { ...node(2, 1), layoutPinned: false },
+      ],
+    }));
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        version: 3,
+        layoutMode: "manual",
+        layoutStyle: "radial",
+        branchLayouts: [{ nodeId: 2, direction: "rl" }],
+        nodes: [
+          { ...node(1, null), layoutPinned: true },
+          node(2, 1),
+        ],
+      },
+    });
+  });
+
+  it("未知 layoutStyle はキー省略で文書成功、不正 branchLayouts エントリは除去", () => {
+    const result = parseMapDocumentJson(JSON.stringify({
+      ...baseDoc,
+      layoutStyle: "grid",
+      branchLayouts: [
+        { nodeId: 2, direction: "rl" },
+        { nodeId: 9, direction: "lr" },
+        { nodeId: 1, direction: "grid" },
+      ],
+    }));
+    expect(result.ok && "layoutStyle" in result.value).toBe(false);
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        version: 3,
+        layoutMode: "manual",
+        nodes: [node(1, null), node(2, 1)],
+        branchLayouts: [{ nodeId: 2, direction: "rl" }],
+      },
+    });
+  });
+
+  it("空の branchLayouts と orthogonal はキー省略", () => {
+    const result = parseMapDocumentJson(JSON.stringify({
+      ...baseDoc,
+      layoutStyle: "orthogonal",
+      branchLayouts: [],
+    }));
+    expect(result.ok && "layoutStyle" in result.value).toBe(false);
+    expect(result.ok && "branchLayouts" in result.value).toBe(false);
+  });
+});

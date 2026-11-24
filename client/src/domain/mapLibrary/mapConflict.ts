@@ -6,6 +6,8 @@ import { areNodeLinksEqual } from "@/domain/nodes/nodeLink";
 import { areNodeMapLinksEqual } from "@/domain/nodes/nodeMapLink";
 import { areNodeSourcesEqual } from "@/domain/nodes/nodeSource";
 import { areNodeTagsEqual } from "@/domain/nodes/nodeTag";
+import { areBranchLayoutsEqual } from "@/types/branchLayout";
+import { areLayoutStylesEqual } from "@/types/layoutStyle";
 import type { MapDocumentV3 } from "@/types/mapDocument";
 import type { Node } from "@/types/node";
 
@@ -70,6 +72,7 @@ function areNodesEqual(a: Node, b: Node): boolean {
     areNodeSourcesEqual(a.sources, b.sources) &&
     areNodeMapLinksEqual(a.mapLinks, b.mapLinks) &&
     (a.locked === true) === (b.locked === true) &&
+    (a.layoutPinned === true) === (b.layoutPinned === true) &&
     areLabelTextStylesEqual(a, b) &&
     (a.icon ?? "") === (b.icon ?? "") &&
     (a.kind ?? "") === (b.kind ?? "")
@@ -91,6 +94,12 @@ export function isDocumentContentEqual(
     return false;
   }
   if (!areLayoutSpacingEqual(docA.layoutSpacing, docB.layoutSpacing)) {
+    return false;
+  }
+  if (!areLayoutStylesEqual(docA.layoutStyle, docB.layoutStyle)) {
+    return false;
+  }
+  if (!areBranchLayoutsEqual(docA.branchLayouts, docB.branchLayouts)) {
     return false;
   }
 

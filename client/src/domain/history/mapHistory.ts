@@ -3,6 +3,8 @@ import { areLayoutSpacingEqual } from "@/domain/persistence/mapDocumentLayoutSpa
 import { areLabelTextStylesEqual } from "@/domain/nodes/labelTextStyle";
 import { areNodeMapLinksEqual } from "@/domain/nodes/nodeMapLink";
 import { areNodeSourcesEqual } from "@/domain/nodes/nodeSource";
+import { areBranchLayoutsEqual } from "@/types/branchLayout";
+import { areLayoutStylesEqual } from "@/types/layoutStyle";
 import type { Node, NodeMapLink, NodeSource } from "@/types/node";
 import type { NodeMapState } from "@/types/nodeMapState";
 
@@ -21,6 +23,8 @@ export type MapHistoryState = {
 export type MapHistoryGroupLease = {
   isActive: () => boolean;
   finish: () => void;
+  /** グループ中の preview を破棄し groupStart へ戻す（past には積まない） */
+  cancel: () => void;
 };
 
 export function createMapHistory(initial: NodeMapState): MapHistoryState {
@@ -81,6 +85,8 @@ export function areMapStatesEqual(a: NodeMapState, b: NodeMapState): boolean {
   if (a.layoutMode !== b.layoutMode || a.nodes.length !== b.nodes.length) return false;
   if ((a.treeDirection ?? "lr") !== (b.treeDirection ?? "lr")) return false;
   if (!areLayoutSpacingEqual(a.layoutSpacing, b.layoutSpacing)) return false;
+  if (!areLayoutStylesEqual(a.layoutStyle, b.layoutStyle)) return false;
+  if (!areBranchLayoutsEqual(a.branchLayouts, b.branchLayouts)) return false;
   if (!areRelationsEqual(a.relations, b.relations)) return false;
   if (!areGroupsEqual(a.groups, b.groups)) return false;
   return a.nodes.every((node, index) => areNodesEqual(node, b.nodes[index]));
@@ -98,6 +104,17 @@ export function finishMapHistoryGroup(history: MapHistoryState): MapHistoryState
     ...history,
     past: appendPast(history.past, groupStart),
     future: [],
+    groupStart: null,
+  };
+}
+
+/** グループを破棄して present を開始時点へ戻す。past / future は触らない。 */
+export function cancelMapHistoryGroup(history: MapHistoryState): MapHistoryState {
+  const { groupStart } = history;
+  if (groupStart === null) return history;
+  return {
+    ...history,
+    present: groupStart,
     groupStart: null,
   };
 }
