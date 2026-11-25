@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  resolveAiAssistEntryAvailability,
+  entryAvailabilityForKind,
+  resolveAllAiAssistEntryAvailabilities,
   type AiAssistEntryAvailability,
+  type AiAssistEntryAvailabilityByKind,
   type AiAssistEntryBlockers,
   type AiAssistKind,
 } from "@/domain/aiAssist/aiAssistEntryAvailability";
@@ -12,9 +14,14 @@ import type {
   AiProposalsApplyOutcome,
   NoteApplyMode,
 } from "@/domain/aiAssist/aiProposal";
+import type {
+  AcceptedAiStructureProposal,
+  AiStructureApplyOutcome,
+} from "@/domain/aiAssist/aiStructureProposal";
 import {
   CLOSED_AI_ASSIST_DIALOG,
   acceptedAiProposals,
+  acceptedAiStructureProposals,
   closeAiAssistDialog,
   consumeAiAssistFocusRequest,
   decideAiProposal,
@@ -33,13 +40,20 @@ import {
   type AiAssistReviewInput,
 } from "@/hooks/aiAssistDialogState";
 import {
-  AI_APPLY_FAILED_MESSAGE,
-  AI_NOTE_TOO_LONG_APPLY_MESSAGE,
   aiApplyBlockedMessage,
+  aiAssistApplySuccessMessage,
+  aiAssistNoteTooLongApplyMessage,
+  planAiAssistApplyFollowUp,
+} from "@/hooks/aiAssistDialogApply";
+import {
   buildAiAssistDialogView,
   type AiAssistDialogView,
 } from "@/hooks/aiAssistDialogView";
-import { buildImportanceReview, buildSummaryReview, planAiAssistSend } from "@/hooks/aiAssistSendPlan";
+import {
+  isStructureAssistKind,
+  planAiAssistSend,
+  requestAiAssistReview,
+} from "@/hooks/aiAssistSendPlan";
 import { useLatestRef } from "@/hooks/useLatestRef";
 import {
   DEFAULT_AI_ASSIST_API,
@@ -49,7 +63,6 @@ import {
 import type { Node } from "@/types/node";
 import type { OperationNotice } from "@/types/operationNotice";
 
-// API は同期で呼び出し（呼び出した処理の中で通信を始める）、同期の throw も Promise の失敗として扱う（L-055）
 function startRequest<T>(request: () => Promise<T>): Promise<T> {
   try {
     return request();
@@ -62,10 +75,15 @@ export type UseAiAssistDialogOptions = {
   mapId: string;
   documentRevision: number;
   nodes: readonly Node[];
-  // マップ表示では選択集合、アウトライン表示では主選択だけ（MapEditor の importanceTargetIds）
   selectedNodeIds: readonly number[];
+  visibleNodeIds: ReadonlySet<number>;
   blockers: AiAssistEntryBlockers;
   applyAiProposals: (accepted: readonly AcceptedAiProposal[]) => AiProposalsApplyOutcome;
+  applyAiStructureProposals: (
+    accepted: readonly AcceptedAiStructureProposal[],
+    visibleNodeIds: ReadonlySet<number>,
+    currentMapId: string,
+  ) => AiStructureApplyOutcome;
   publishNotice: (notice: OperationNotice) => void;
   api?: AiAssistApi;
 };
@@ -75,6 +93,10 @@ export type UseAiAssistDialogReturn = {
   view: AiAssistDialogView | null;
   summaryEntry: AiAssistEntryAvailability;
   importanceEntry: AiAssistEntryAvailability;
+  childEntry: AiAssistEntryAvailability;
+  classifyEntry: AiAssistEntryAvailability;
+  duplicatesEntry: AiAssistEntryAvailability;
+  perspectivesEntry: AiAssistEntryAvailability;
   focusRequest: AiAssistFocusRequest;
   open: (kind: AiAssistKind, openedFrom: AiAssistOpenedFrom) => void;
   close: () => void;
@@ -86,8 +108,6 @@ export type UseAiAssistDialogReturn = {
   consumeFocusRequest: () => void;
 };
 
-// AI 支援のダイアログ。通信は同時に 1 件まで（ref で多重送信を防ぐ。L-101・L-653）。
-// 閉じる・取り消し・マップ ID か documentRevision の変化・アンマウントで進行中の通信を中断し、古い応答を捨てる（L-037・L-040）
 export function useAiAssistDialog(options: UseAiAssistDialogOptions): UseAiAssistDialogReturn {
   const [state, setState] = useState<AiAssistDialogState>(CLOSED_AI_ASSIST_DIALOG);
   const controllerRef = useRef<AbortController | null>(null);
@@ -95,22 +115,19 @@ export function useAiAssistDialog(options: UseAiAssistDialogOptions): UseAiAssis
   const stale = state.screen !== "closed"
     && (state.target.mapId !== options.mapId || state.target.revision !== options.documentRevision);
   const { nodes, selectedNodeIds, blockers } = options;
-  // 描画のたびに枝をたどらないよう、入力が変わったときだけ作り直す
-  const summaryEntry = useMemo(
-    () => resolveAiAssistEntryAvailability("branch-summary", nodes, selectedNodeIds, blockers),
+  const entries = useMemo(
+    () => resolveAllAiAssistEntryAvailabilities(nodes, selectedNodeIds, blockers),
     [nodes, selectedNodeIds, blockers],
   );
-  const importanceEntry = useMemo(
-    () => resolveAiAssistEntryAvailability("importance", nodes, selectedNodeIds, blockers),
-    [nodes, selectedNodeIds, blockers],
-  );
+  const { summary: summaryEntry, importance: importanceEntry, child: childEntry, classify: classifyEntry, duplicates: duplicatesEntry, perspectives: perspectivesEntry } = entries;
   const view = useMemo(
     () => buildAiAssistDialogView(state, stale, nodes, blockers),
     [state, stale, nodes, blockers],
   );
   const api = options.api ?? DEFAULT_AI_ASSIST_API;
-  // 古いハンドラを呼ばれても、最後に commit された値で判定する
-  const latest = useLatestRef({ options, state, stale, api, summaryEntry, importanceEntry });
+  const latest = useLatestRef({
+    options, state, stale, api, summaryEntry, importanceEntry, childEntry, classifyEntry, duplicatesEntry, perspectivesEntry,
+  });
 
   const abortInFlight = useCallback(() => {
     controllerRef.current?.abort();
@@ -123,7 +140,6 @@ export function useAiAssistDialog(options: UseAiAssistDialogOptions): UseAiAssis
     if (stale) abortInFlight();
   }, [stale, abortInFlight]);
 
-  // 通信を 1 件始め、中断されていなければ結果を状態へ写す。誤りは failed へ。終わったら進行中の印を外す
   const runRequest = useCallback(<T,>(
     request: (signal: AbortSignal) => Promise<T>,
     receive: (prev: AiAssistDialogState, value: T) => AiAssistDialogState,
@@ -150,9 +166,14 @@ export function useAiAssistDialog(options: UseAiAssistDialogOptions): UseAiAssis
   }, [latest, runRequest]);
 
   const open = useCallback((kind: AiAssistKind, openedFrom: AiAssistOpenedFrom) => {
-    const { options: current, state: snapshot, summaryEntry: summary, importanceEntry: importance } = latest.current;
+    const {
+      options: current, state: snapshot, summaryEntry: summary, importanceEntry: importance,
+      childEntry: child, classifyEntry: classify, duplicatesEntry: duplicates, perspectivesEntry: perspectives,
+    } = latest.current;
     if (snapshot.screen !== "closed") return;
-    const entry = kind === "branch-summary" ? summary : importance;
+    const entry = entryAvailabilityForKind(kind, {
+      summary, importance, child, classify, duplicates, perspectives,
+    } satisfies AiAssistEntryAvailabilityByKind);
     if (!entry.enabled) return;
     abortInFlight();
     submittedRef.current = false;
@@ -170,16 +191,20 @@ export function useAiAssistDialog(options: UseAiAssistDialogOptions): UseAiAssis
   const send = useCallback(() => {
     const { state: snapshot, options: current, stale: isStale, api: currentApi } = latest.current;
     if (snapshot.screen !== "confirm" || isStale || controllerRef.current !== null) return;
-    // 送信の時点の最新の状態から入力を作り直す
     const plan = planAiAssistSend(snapshot.target.kind, current.nodes, snapshot.target.rootId, current.blockers);
     if (!plan.ok) return;
 
     setState(startAiAssistGeneration);
-    const request = (signal: AbortSignal): Promise<AiAssistReviewInput> => (plan.kind === "branch-summary"
-      ? currentApi.requestBranchSummary(plan.input, { signal })
-        .then((summary) => buildSummaryReview(plan, summary))
-      : currentApi.requestImportanceSuggestions(plan.input, plan.targetIds, { signal })
-        .then((suggestions) => buildImportanceReview(plan, suggestions)));
+    const request = (signal: AbortSignal) => requestAiAssistReview(
+      plan,
+      {
+        api: currentApi,
+        nodes: current.nodes,
+        visibleNodeIds: current.visibleNodeIds,
+        mapId: current.mapId,
+      },
+      { signal },
+    );
     runRequest(request, receiveAiAssistProposals);
   }, [latest, runRequest]);
 
@@ -187,7 +212,6 @@ export function useAiAssistDialog(options: UseAiAssistDialogOptions): UseAiAssis
     const { state: snapshot, stale: isStale } = latest.current;
     if (isStale) return;
     if (snapshot.screen === "failed" && snapshot.status === null) {
-      // 同じ処理の中の 2 回目は、snapshot がまだ failed でも進行中の問い合わせがあるので何もしない（L-101）
       if (controllerRef.current !== null) return;
       setState(retryAiAssistDialog);
       runStatusCheck();
@@ -213,38 +237,46 @@ export function useAiAssistDialog(options: UseAiAssistDialogOptions): UseAiAssis
     const { state: snapshot, options: current, stale: isStale } = latest.current;
     if (snapshot.screen !== "review" || isStale || submittedRef.current) return;
     if (snapshot.review.staleKeys.length > 0) return;
-    const accepted = acceptedAiProposals(snapshot.review);
-    // 採用 0 件ではボタンが無効だが、ハンドラでも同じ条件を確かめる（L-058）
-    if (accepted.length === 0) return;
-    // 一覧の表示中に保護モード・競合・外部削除へ移った場合、applyNonStructuralChange はそれを理由に拒否しないので、
-    // 入口だけでなく確定の時点でも止め、入口と同じ文言の理由を添える（L-061）
     const blockedMessage = aiApplyBlockedMessage(current.blockers);
     if (blockedMessage !== null) {
       setState((prev) => failAiProposalsApply(prev, blockedMessage));
       return;
     }
 
-    const outcome = current.applyAiProposals(accepted);
-    if (outcome.ok) {
-      submittedRef.current = true;
-      // 成功したときだけ通知する（L-001）
-      current.publishNotice({
-        kind: "status",
-        message: `AIの提案を ${outcome.appliedCount} 件適用しました。元に戻すで取り消せます。`,
-      });
-      setState(closeAiAssistDialog);
+    const kind = snapshot.target.kind;
+    const applyFollowUp = (
+      outcome: AiProposalsApplyOutcome | AiStructureApplyOutcome,
+      noteTooLongKeys?: readonly string[],
+    ) => {
+      const followUp = planAiAssistApplyFollowUp(outcome, noteTooLongKeys);
+      if (followUp.kind === "success") {
+        submittedRef.current = true;
+        current.publishNotice({ kind: "status", message: aiAssistApplySuccessMessage(followUp.appliedCount) });
+        setState(closeAiAssistDialog);
+        return;
+      }
+      if (followUp.kind === "stale") {
+        setState((prev) => markAiProposalsStale(prev, followUp.staleKeys));
+        return;
+      }
+      if (followUp.kind === "note-too-long") {
+        setState((prev) => failAiProposalsApply(prev, aiAssistNoteTooLongApplyMessage, followUp.noteKeys));
+        return;
+      }
+      setState((prev) => failAiProposalsApply(prev, followUp.message));
+    };
+
+    if (isStructureAssistKind(kind)) {
+      const accepted = acceptedAiStructureProposals(snapshot.review);
+      if (accepted.length === 0) return;
+      applyFollowUp(current.applyAiStructureProposals(accepted, current.visibleNodeIds, current.mapId));
       return;
     }
-    if (outcome.reason === "stale") {
-      setState((prev) => markAiProposalsStale(prev, outcome.staleKeys));
-      return;
-    }
-    if (outcome.reason === "note-too-long") {
-      const noteKeys = accepted.filter((item) => "mode" in item).map((item) => item.proposal.key);
-      setState((prev) => failAiProposalsApply(prev, AI_NOTE_TOO_LONG_APPLY_MESSAGE, noteKeys));
-      return;
-    }
-    setState((prev) => failAiProposalsApply(prev, AI_APPLY_FAILED_MESSAGE));
+
+    const accepted = acceptedAiProposals(snapshot.review);
+    if (accepted.length === 0) return;
+    const noteTooLongKeys = accepted.filter((item) => "mode" in item).map((item) => item.proposal.key);
+    applyFollowUp(current.applyAiProposals(accepted), noteTooLongKeys);
   }, [latest]);
 
   const consumeFocusRequest = useCallback(() => {
@@ -256,6 +288,10 @@ export function useAiAssistDialog(options: UseAiAssistDialogOptions): UseAiAssis
     view,
     summaryEntry,
     importanceEntry,
+    childEntry,
+    classifyEntry,
+    duplicatesEntry,
+    perspectivesEntry,
     focusRequest: state.screen === "closed" ? state.focusRequest : null,
     open,
     close,

@@ -8,7 +8,7 @@ import {
   type AiAssistDialogTarget,
 } from "@/hooks/aiAssistDialogState";
 import { AI_ASSIST_SEND_MESSAGES } from "@/hooks/aiAssistSendPlan";
-import { aiApplyBlockedMessage, buildAiAssistDialogView } from "@/hooks/aiAssistDialogView";
+import { buildAiAssistDialogView } from "@/hooks/aiAssistDialogView";
 import { STALE_DIALOG_MESSAGE } from "@/hooks/dialogPreviewText";
 import { createTestNode } from "@/testing/createTestNode";
 
@@ -95,16 +95,3 @@ describe("buildAiAssistDialogView", () => {
   });
 });
 
-describe("aiApplyBlockedMessage", () => {
-  const none = { isProtectedMode: false, hasConflict: false, isExternallyDeleted: false, playingPresentation: false };
-
-  it.each<[string, Partial<typeof none>, string | null]>([
-    ["止める理由が無ければ null", {}, null],
-    ["プレゼン再生中だけでは確定を止めない（null）", { playingPresentation: true }, null],
-    ["保護モード", { isProtectedMode: true }, "適用できませんでした（保護モードのため実行できません）。"],
-    ["競合中", { hasConflict: true }, "適用できませんでした（競合中のため実行できません）。"],
-    ["外部削除が最優先", { isExternallyDeleted: true, hasConflict: true, isProtectedMode: true }, "適用できませんでした（マップが外部で削除されているため実行できません）。"],
-  ])("%s", (_name, blockers, expected) => {
-    expect(aiApplyBlockedMessage({ ...none, ...blockers })).toBe(expected);
-  });
-});

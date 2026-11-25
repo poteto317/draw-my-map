@@ -5,6 +5,7 @@ import type {
   AiProposalDecision,
   NoteApplyMode,
 } from "@/domain/aiAssist/aiProposal";
+import type { AcceptedAiStructureProposal } from "@/domain/aiAssist/aiStructureProposal";
 import type { AiAssistClientErrorKind, AiAssistStatus } from "@/services/aiAssist/aiAssistClient";
 
 export type AiAssistOpenedFrom = "panel" | "palette";
@@ -157,7 +158,30 @@ export function acceptedAiProposals(review: AiAssistReview): AcceptedAiProposal[
   return review.proposals.flatMap((proposal): AcceptedAiProposal[] => {
     if (review.decisions[proposal.key] !== "accepted") return [];
     if (proposal.kind === "importance") return [{ proposal }];
+    if (proposal.kind !== "note") return [];
     const mode = review.noteModes[proposal.key];
     return mode === null || mode === undefined ? [] : [{ proposal, mode }];
   });
+}
+
+export function acceptedAiStructureProposals(review: AiAssistReview): AcceptedAiStructureProposal[] {
+  return review.proposals.flatMap((proposal): AcceptedAiStructureProposal[] => {
+    if (review.decisions[proposal.key] !== "accepted") return [];
+    if (proposal.kind === "merge-pair") {
+      return [{ proposal }];
+    }
+    if (
+      proposal.kind === "add-child"
+      || proposal.kind === "add-sibling"
+      || proposal.kind === "reparent"
+      || proposal.kind === "reorder-siblings"
+    ) {
+      return [{ proposal }];
+    }
+    return [];
+  });
+}
+
+export function acceptedAiReviewCount(review: AiAssistReview): number {
+  return acceptedAiProposals(review).length + acceptedAiStructureProposals(review).length;
 }

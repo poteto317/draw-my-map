@@ -1,8 +1,4 @@
-import {
-  AI_ASSIST_ENTRY_MESSAGES,
-  type AiAssistEntryBlockers,
-  type AiAssistKind,
-} from "@/domain/aiAssist/aiAssistEntryAvailability";
+import type { AiAssistEntryBlockers, AiAssistKind } from "@/domain/aiAssist/aiAssistEntryAvailability";
 import {
   planNoteFromSummary,
   type AiProposalDecision,
@@ -10,7 +6,17 @@ import {
 } from "@/domain/aiAssist/aiProposal";
 import { NODE_IMPORTANCE_LABELS } from "@/domain/nodes/nodeImportance";
 import { NODE_NOTE_MAX_LENGTH, NODE_NOTE_MERGE_JOINER, formatNodeNoteLength } from "@/domain/nodes/nodeNote";
-import { acceptedAiProposals, type AiAssistDialogState, type AiAssistReview } from "@/hooks/aiAssistDialogState";
+import {
+  acceptedAiReviewCount,
+  type AiAssistDialogState,
+  type AiAssistReview,
+} from "@/hooks/aiAssistDialogState";
+import {
+  AI_MERGE_ATTRIBUTES_HINT,
+  describeStructureProposal,
+  type StructureAiProposal,
+} from "@/domain/aiAssist/aiStructureProposal";
+import { AI_NOTE_TOO_LONG_APPLY_MESSAGE } from "@/hooks/aiAssistDialogApply";
 import { planAiAssistSend } from "@/hooks/aiAssistSendPlan";
 import { STALE_DIALOG_MESSAGE, formatPreviewLabel } from "@/hooks/dialogPreviewText";
 import { describeAiAssistError } from "@/services/aiAssist/aiAssistClient";
@@ -19,6 +25,10 @@ import type { Node } from "@/types/node";
 export const AI_ASSIST_DIALOG_TITLES: Readonly<Record<AiAssistKind, string>> = {
   "branch-summary": "枝を要約してメモに入れる",
   importance: "重要度を提案",
+  "child-candidates": "子の候補を提案",
+  "classify-reorder": "分類・並べ替えを提案",
+  duplicates: "重複・類似を検出",
+  "missing-perspectives": "不足観点を提案",
 };
 
 // 文言の正本は aiAssistClient の not-configured（ダイアログの unavailable 画面と通信エラーで同じ文を出す）
@@ -26,19 +36,6 @@ export const AI_ASSIST_UNAVAILABLE_MESSAGE = describeAiAssistError("not-configur
 export const AI_PROPOSALS_STALE_MESSAGE =
   "提案を作った後にマップが変わったため、適用しませんでした。もう一度提案を作ってください。";
 export const AI_PROPOSAL_STALE_MARK = "提案を作った後に変わりました";
-export const AI_NOTE_TOO_LONG_APPLY_MESSAGE =
-  "追記するとメモの上限を超えるため、適用できませんでした。「置き換え」を選んでください。";
-export const AI_APPLY_FAILED_MESSAGE = "適用できませんでした。";
-
-// 確定の時点で保護モード・競合・外部削除なら、入口と同じ文言・同じ優先順の理由を添える。止めないなら null
-export function aiApplyBlockedMessage(blockers: AiAssistEntryBlockers): string | null {
-  const reason = blockers.isExternallyDeleted ? AI_ASSIST_ENTRY_MESSAGES.externallyDeleted
-    : blockers.hasConflict ? AI_ASSIST_ENTRY_MESSAGES.conflict
-      : blockers.isProtectedMode ? AI_ASSIST_ENTRY_MESSAGES.protected
-        : null;
-  return reason === null ? null : `適用できませんでした（${reason}）。`;
-}
-
 export type AiAssistConfirmView = {
   providerLabel: string;
   model: string;
@@ -60,6 +57,10 @@ export type AiProposalView =
   | {
     kind: "importance"; key: string; nodeLabel: string; decision: AiProposalDecision; stale: boolean;
     currentLabel: string; proposedLabel: string; reason: string;
+  }
+  | {
+    kind: "structure"; key: string; nodeLabel: string; decision: AiProposalDecision; stale: boolean;
+    summary: string; mergeHint: string | null;
   };
 
 export type AiAssistDialogBody =
@@ -88,10 +89,46 @@ function labelOf(nodes: readonly Node[], nodeId: number): string {
   return formatPreviewLabel(node?.label ?? "");
 }
 
+function structureProposalLabel(nodes: readonly Node[], proposal: StructureAiProposal): string {
+  switch (proposal.kind) {
+    case "add-child":
+      return formatPreviewLabel(nodes.find((node) => node.id === proposal.parentId)?.label ?? "");
+    case "add-sibling":
+      return formatPreviewLabel(nodes.find((node) => node.id === proposal.anchorId)?.label ?? "");
+    case "reparent":
+      return formatPreviewLabel(proposal.baseline.label);
+    case "reorder-siblings":
+      return formatPreviewLabel(nodes.find((node) => node.id === proposal.parentId)?.label ?? "");
+    case "merge-pair":
+      return formatPreviewLabel(proposal.baseline.primaryLabel);
+    default: {
+      const neverKind: never = proposal;
+      return neverKind;
+    }
+  }
+}
+
 export function buildAiProposalViews(nodes: readonly Node[], review: AiAssistReview): AiProposalView[] {
   return review.proposals.map((proposal): AiProposalView => {
     const decision = review.decisions[proposal.key] ?? "undecided";
     const stale = review.staleKeys.includes(proposal.key);
+    if (
+      proposal.kind === "add-child"
+      || proposal.kind === "add-sibling"
+      || proposal.kind === "reparent"
+      || proposal.kind === "reorder-siblings"
+      || proposal.kind === "merge-pair"
+    ) {
+      return {
+        kind: "structure",
+        key: proposal.key,
+        nodeLabel: structureProposalLabel(nodes, proposal),
+        decision,
+        stale,
+        summary: describeStructureProposal(nodes, proposal),
+        mergeHint: proposal.kind === "merge-pair" ? AI_MERGE_ATTRIBUTES_HINT : null,
+      };
+    }
     if (proposal.kind === "importance") {
       return {
         kind: "importance", key: proposal.key, nodeLabel: formatPreviewLabel(proposal.baseline.label), decision, stale,
@@ -165,7 +202,7 @@ function buildBody(
       return { body: { screen: "failed", message: describeAiAssistError(state.errorKind) }, statusText: "提案を作れませんでした。" };
     case "review": {
       const proposalsStale = state.review.staleKeys.length > 0;
-      const acceptedCount = acceptedAiProposals(state.review).length;
+      const acceptedCount = acceptedAiReviewCount(state.review);
       return {
         body: {
           screen: "review",

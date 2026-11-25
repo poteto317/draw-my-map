@@ -1,8 +1,9 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ImportanceSuggestion } from "@/domain/aiAssist/aiAssistOutput";
 import type { AiProposalsApplyOutcome } from "@/domain/aiAssist/aiProposal";
+import type { AiStructureApplyOutcome } from "@/domain/aiAssist/aiStructureProposal";
 import { AI_ASSIST_ENTRY_MESSAGES } from "@/domain/aiAssist/aiAssistEntryAvailability";
-import { AI_APPLY_FAILED_MESSAGE, AI_NOTE_TOO_LONG_APPLY_MESSAGE } from "@/hooks/aiAssistDialogView";
+import { AI_APPLY_FAILED_MESSAGE, AI_NOTE_TOO_LONG_APPLY_MESSAGE } from "@/hooks/aiAssistDialogApply";
 import { AI_ASSIST_SEND_MESSAGES } from "@/hooks/aiAssistSendPlan";
 import { useAiAssistDialog, type UseAiAssistDialogOptions } from "@/hooks/useAiAssistDialog";
 import {
@@ -44,12 +45,28 @@ function setup(overrides: Partial<UseAiAssistDialogOptions> = {}) {
     fetchStatus: jest.fn(() => status.promise),
     requestBranchSummary: jest.fn(() => summary.promise),
     requestImportanceSuggestions: jest.fn(() => importance.promise),
+    requestChildCandidates: jest.fn(),
+    requestMissingPerspectives: jest.fn(),
+    requestClassifyReorder: jest.fn(),
+    requestDuplicatePairs: jest.fn(),
   };
   const applyAiProposals = jest.fn((): AiProposalsApplyOutcome => ({ ok: true, appliedCount: 1 }));
+  const applyAiStructureProposals = jest.fn(
+    (): AiStructureApplyOutcome => ({ ok: true, appliedCount: 1 }),
+  );
   const publishNotice = jest.fn();
   const initialProps: UseAiAssistDialogOptions = {
-    mapId: "map-a", documentRevision: 0, nodes: baseNodes(), selectedNodeIds: [1], blockers: NONE,
-    applyAiProposals, publishNotice, api, ...overrides,
+    mapId: "map-a",
+    documentRevision: 0,
+    nodes: baseNodes(),
+    selectedNodeIds: [1],
+    visibleNodeIds: new Set([1, 2, 3]),
+    blockers: NONE,
+    applyAiProposals,
+    applyAiStructureProposals,
+    publishNotice,
+    api,
+    ...overrides,
   };
   const view = renderHook((props: UseAiAssistDialogOptions) => useAiAssistDialog(props), { initialProps });
   return { ...view, api, status, summary, importance, applyAiProposals, publishNotice, initialProps };
@@ -356,6 +373,51 @@ describe("useAiAssistDialog", () => {
     expect(result.current.screen).toBe("generating");
     await act(async () => { summary.resolve("要約"); });
     expect(result.current.screen).toBe("review");
+  });
+
+  it("child-candidates は構造提案を applyAiStructureProposals で適用する", async () => {
+    const candidates = deferred<{ label: string }[]>();
+    const status = deferred<AiAssistStatus>();
+    const api: AiAssistApi = {
+      fetchStatus: jest.fn(() => status.promise),
+      requestBranchSummary: jest.fn(),
+      requestImportanceSuggestions: jest.fn(),
+      requestChildCandidates: jest.fn(() => candidates.promise),
+      requestMissingPerspectives: jest.fn(),
+      requestClassifyReorder: jest.fn(),
+      requestDuplicatePairs: jest.fn(),
+    };
+    const applyAiStructureProposals = jest.fn(
+      (): AiStructureApplyOutcome => ({ ok: true, appliedCount: 1 }),
+    );
+    const { result } = renderHook(
+      () => useAiAssistDialog({
+        mapId: "map-a",
+        documentRevision: 0,
+        nodes: baseNodes(),
+        selectedNodeIds: [1],
+        visibleNodeIds: new Set([1, 2, 3]),
+        blockers: NONE,
+        applyAiProposals: jest.fn(),
+        applyAiStructureProposals,
+        publishNotice: jest.fn(),
+        api,
+      }),
+    );
+    act(() => result.current.open("child-candidates", "panel"));
+    status.resolve(AVAILABLE);
+    await waitFor(() => expect(result.current.screen).toBe("confirm"));
+    act(() => result.current.send());
+    candidates.resolve([{ label: "新しい子" }]);
+    await waitFor(() => expect(result.current.screen).toBe("review"));
+    const key = result.current.view?.body.screen === "review"
+      ? result.current.view.body.proposals[0]?.key
+      : undefined;
+    expect(key).toBeDefined();
+    act(() => result.current.decide(key!, "accepted"));
+    act(() => result.current.apply());
+    expect(applyAiStructureProposals).toHaveBeenCalled();
+    expect(result.current.screen).toBe("closed");
   });
 
   it("アンマウントで進行中の通信を中断する", async () => {

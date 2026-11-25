@@ -108,12 +108,21 @@ import {
 } from "@/domain/nodes/nodeSplit";
 import { replaceNodeLabels } from "@/domain/nodes/nodeLabelUpdate";
 import { replaceNodeNote } from "@/domain/nodes/nodeNote";
+import { MERGE_DEFAULT_SEPARATOR } from "@/domain/nodes/nodeSeparator";
 import {
   applyAiProposals as computeAiProposalsApplication,
   summaryInputFingerprintOf,
   type AcceptedAiProposal,
   type AiProposalsApplyOutcome,
 } from "@/domain/aiAssist/aiProposal";
+import {
+  applyAiStructureProposals as computeAiStructureProposalsApplication,
+} from "@/domain/aiAssist/aiStructureProposal";
+import { aiStructureInputFingerprintOf } from "@/domain/aiAssist/aiBranchInput";
+import type {
+  AcceptedAiStructureProposal,
+  AiStructureApplyOutcome,
+} from "@/domain/aiAssist/aiStructureProposal";
 import {
   addNodeLink as computeNodeLinkAddition,
   removeNodeLink as computeNodeLinkRemoval,
@@ -256,6 +265,12 @@ type UseNodesReturn = {
   // AI の提案の採用分を適用する（Phase 32）。最新の状態から照合し、成功なら1操作として確定する（1 回の Undo）。
   // 古い・上限超過・変化なし・拒否（関連線の選択中など）は何も変えず理由を返す。documentRevision は変えない
   applyAiProposals: (accepted: readonly AcceptedAiProposal[]) => AiProposalsApplyOutcome;
+  // AI の構造提案の採用分を適用する（Phase 33）。最新の状態から照合し、成功なら1操作として確定する（1 回の Undo）。
+  applyAiStructureProposals: (
+    accepted: readonly AcceptedAiStructureProposal[],
+    visibleNodeIds: ReadonlySet<number>,
+    currentMapId: string,
+  ) => AiStructureApplyOutcome;
   // URL の追加（右パネルの「リンク」節）。最新の状態から判定し、成功なら1操作として確定する。
   // 失敗は理由を返し、何も変えない。documentRevision は変えない
   addNodeLink: (id: number, input: string) => AddNodeLinkOutcome;
@@ -689,6 +704,27 @@ export function useNodes(): UseNodesReturn {
     if (!applyNonStructuralChange(() => result.nodes)) return { ok: false, reason: "rejected" };
     return { ok: true, appliedCount: result.appliedCount };
   }, [getCurrentState, applyNonStructuralChange]);
+
+  const applyAiStructureProposals = useCallback((
+    accepted: readonly AcceptedAiStructureProposal[],
+    visibleNodeIds: ReadonlySet<number>,
+    currentMapId: string,
+  ): AiStructureApplyOutcome => {
+    const current = getCurrentState();
+    const result = computeAiStructureProposalsApplication({
+      state: current,
+      accepted,
+      rebuildInputFingerprint: (rootId, kind) =>
+        aiStructureInputFingerprintOf(current.nodes, rootId, kind),
+      allocateNodeIds: (count) => allocateEntityIds(current.nodes, count),
+      mergeJoiner: MERGE_DEFAULT_SEPARATOR,
+      visibleNodeIds,
+      currentMapId,
+    });
+    if (!result.ok) return result;
+    if (!applyStateChange(() => result.state)) return { ok: false, reason: "rejected" };
+    return { ok: true, appliedCount: result.appliedCount };
+  }, [getCurrentState, applyStateChange, allocateEntityIds]);
 
   // 判定と確定は同じ最新の状態（getCurrentState と applyNonStructuralChange は同じ ref を読む）で行う。
   // 同じイベントの中で続けて呼んでも、直前の追加を反映した状態から判定する（L-453）
@@ -1280,6 +1316,7 @@ export function useNodes(): UseNodesReturn {
     removeIllustration,
     previewNodeNote,
     applyAiProposals,
+    applyAiStructureProposals,
     addNodeLink,
     removeNodeLink,
     addNodeTag,
