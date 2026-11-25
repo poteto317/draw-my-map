@@ -1,15 +1,26 @@
 import { excerptText } from "@/domain/aiAssist/aiBranchInput";
 import { moveNodeBranch } from "@/domain/nodes/nodeBranchMove";
 import { isNodeImportanceValue } from "@/domain/nodes/nodeImportance";
-import { DEFAULT_LAYOUT_NODE_FOREST_OPTIONS } from "@/domain/nodes/nodeAutoLayout";
+import {
+  DEFAULT_LAYOUT_NODE_FOREST_OPTIONS,
+  type LayoutNodeForestOptions,
+} from "@/domain/nodes/nodeAutoLayout";
+import {
+  resolveLayoutNodeForestOptions,
+  resolveLayoutSpacing,
+  type NodeMapLayoutContext,
+} from "@/domain/nodes/nodeMapLayoutContext";
 import { planNodeMerge } from "@/domain/nodes/nodeMerge";
 import { MERGE_DEFAULT_SEPARATOR } from "@/domain/nodes/nodeSeparator";
 import { reorderAllSiblings } from "@/domain/nodes/reorderAllSiblings";
 import { collectSubtreeIds } from "@/domain/nodes/nodeTree";
 import { DEFAULT_LAYOUT_SPACING } from "@/domain/persistence/mapDocumentLayoutSpacing";
 import { hasOnlyKeys, hasOwn, isPlainRecord } from "@/domain/shared/unknownRecord";
+import type { LayoutSpacing } from "@/types/layoutSpacing";
 import type { Node } from "@/types/node";
 import type { NodeImportance } from "@/types/nodeImportance";
+import type { NodeLayoutMode } from "@/types/nodeLayout";
+import type { NodeMapState } from "@/types/nodeMapState";
 
 export const AI_SUMMARY_MAX_LENGTH = 400;
 // 重要度の理由は表示専用（保存しない）。超えたら excerptText で切る
@@ -38,6 +49,38 @@ export type AiClassifyReparentMove = { type: "reparent"; nodeId: number; newPare
 export type AiClassifyReorderMove = { type: "reorder"; parentId: number; childIds: number[] };
 export type AiClassifyMove = AiClassifyReparentMove | AiClassifyReorderMove;
 export type DuplicatePair = { primaryId: number; secondaryId: number; reason: string };
+
+/** 079 検証の move 試行に使う配置（`applyAiStructureProposals` と揃える） */
+export type ClassifyReorderSimLayout = {
+  layoutMode: NodeLayoutMode;
+  spacing: LayoutSpacing;
+  layoutOptions: LayoutNodeForestOptions;
+};
+
+const DEFAULT_CLASSIFY_REORDER_SIM_LAYOUT: ClassifyReorderSimLayout = {
+  layoutMode: "manual",
+  spacing: DEFAULT_LAYOUT_SPACING,
+  layoutOptions: DEFAULT_LAYOUT_NODE_FOREST_OPTIONS,
+};
+
+export function classifyReorderSimLayoutFromState(
+  state: Pick<
+    NodeMapState,
+    "layoutMode" | "treeDirection" | "layoutSpacing" | "layoutStyle" | "branchLayouts"
+  >,
+): ClassifyReorderSimLayout {
+  const layoutContext: NodeMapLayoutContext = {
+    treeDirection: state.treeDirection,
+    layoutSpacing: state.layoutSpacing,
+    layoutStyle: state.layoutStyle,
+    branchLayouts: state.branchLayouts,
+  };
+  return {
+    layoutMode: state.layoutMode,
+    spacing: resolveLayoutSpacing(state),
+    layoutOptions: resolveLayoutNodeForestOptions(layoutContext),
+  };
+}
 
 // C0・DEL・C1 の制御文字を除く。keepNewline なら LF だけ残す（正規表現の制御文字を避けて 1 文字ずつ見る）
 function stripControlCharacters(value: string, keepNewline: boolean): string {
@@ -219,6 +262,7 @@ function tryApplyClassifyMove(
   nodes: readonly Node[],
   move: AiClassifyMove,
   branchIds: ReadonlySet<number>,
+  layout: ClassifyReorderSimLayout,
 ): readonly Node[] | null {
   if (move.type === "reparent") {
     if (!isValidReparentMove(move, branchIds, nodes)) return null;
@@ -226,9 +270,9 @@ function tryApplyClassifyMove(
       nodes,
       move.nodeId,
       move.newParentId,
-      "manual",
-      DEFAULT_LAYOUT_SPACING,
-      DEFAULT_LAYOUT_NODE_FOREST_OPTIONS,
+      layout.layoutMode,
+      layout.spacing,
+      layout.layoutOptions,
     );
     return moved.ok ? moved.nodes : null;
   }
@@ -237,8 +281,8 @@ function tryApplyClassifyMove(
     nodes,
     move.parentId,
     move.childIds,
-    "manual",
-    DEFAULT_LAYOUT_NODE_FOREST_OPTIONS,
+    layout.layoutMode,
+    layout.layoutOptions,
   );
   if (!reordered.ok) {
     if (reordered.reason === "unchanged") return nodes;
@@ -252,6 +296,7 @@ export function validateClassifyReorderOutput(
   value: unknown,
   branchIds: ReadonlySet<number>,
   nodes: readonly Node[],
+  layout: ClassifyReorderSimLayout = DEFAULT_CLASSIFY_REORDER_SIM_LAYOUT,
 ): { ok: true; moves: AiClassifyMove[] } | { ok: false } {
   if (!isPlainRecord(value) || !hasOnlyKeys(value, CLASSIFY_KEYS)) return { ok: false };
   if (!Array.isArray(value.moves)) return { ok: false };
@@ -270,7 +315,7 @@ export function validateClassifyReorderOutput(
   let working: readonly Node[] = nodes;
   const acceptedIndices = new Set<number>();
   for (const { move, originalIndex } of sorted) {
-    const next = tryApplyClassifyMove(working, move, branchIds);
+    const next = tryApplyClassifyMove(working, move, branchIds, layout);
     if (next === null) continue;
     working = next;
     acceptedIndices.add(originalIndex);
