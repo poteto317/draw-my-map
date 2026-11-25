@@ -227,7 +227,11 @@ export async function requestDuplicatePairs(
   currentMapId: string,
   options: AiAssistRequestOptions,
 ): Promise<DuplicatePair[]> {
-  const reply = await postJson("/api/ai-assist/duplicates", { branch, mapId: currentMapId }, options);
+  const reply = await postJson(
+    "/api/ai-assist/duplicates",
+    { branch, mapId: currentMapId, visibleNodeIds: [...visibleNodeIds] },
+    options,
+  );
   if (!reply.ok) throw new AiAssistRequestError(kindFromFailure(reply));
   const branchIds = collectSubtreeIds(nodes, branch.rootId);
   const result = validateDuplicatesOutput(reply.body, branchIds, { nodes, visibleNodeIds, currentMapId });
