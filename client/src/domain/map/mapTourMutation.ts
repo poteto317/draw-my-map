@@ -66,10 +66,6 @@ function normalizeSnapshotForTour(
   return normalized;
 }
 
-function withTour(tour: MapTour | undefined): Pick<NodeMapState, "tour"> {
-  return tour === undefined ? {} : { tour };
-}
-
 export function planCreateTour(title: string): TourMutationResult<{ tour: MapTour }> {
   const normalizedTitle = normalizeEditableTourTitle(title);
   if (normalizedTitle === null) return { ok: false, reason: "invalid-title" };
@@ -124,11 +120,14 @@ export function planAddTourStep(
 export function planRemoveTourStep(
   state: NodeMapState,
   stepId: string,
-): TourMutationResult<{ tour: MapTour }> {
+): TourMutationResult<{ tour: MapTour | undefined }> {
   if (state.tour === undefined) return { ok: false, reason: "missing-tour" };
   const nextSteps = state.tour.steps.filter((step) => step.id !== stepId);
   if (nextSteps.length === state.tour.steps.length) return { ok: false, reason: "missing-step" };
-  return { ok: true, tour: { ...state.tour, steps: nextSteps } };
+  const tour = nextSteps.length === 0
+    ? undefined
+    : { ...state.tour, steps: nextSteps };
+  return { ok: true, tour };
 }
 
 export function planReorderTourSteps(
@@ -203,5 +202,10 @@ export function planSetTourStepCaption(
 }
 
 export function applyTourToState(state: NodeMapState, tour: MapTour | undefined): NodeMapState {
-  return { ...state, ...withTour(tour) };
+  if (tour === undefined) {
+    const next = { ...state };
+    delete next.tour;
+    return next;
+  }
+  return { ...state, tour };
 }

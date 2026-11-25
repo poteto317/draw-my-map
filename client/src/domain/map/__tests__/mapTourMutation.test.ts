@@ -1,4 +1,5 @@
 import {
+  applyTourToState,
   planAddTourStep,
   planCreateTour,
   planRemoveTour,
@@ -72,7 +73,7 @@ describe("mapTourMutation", () => {
 
     const removed = planRemoveTourStep({ ...state, tour: reordered.tour }, "s2");
     expect(removed.ok).toBe(true);
-    if (!removed.ok) return;
+    if (!removed.ok || removed.tour === undefined) return;
     expect(removed.tour.steps).toHaveLength(1);
     expect(removed.tour.steps[0]?.id).toBe("s1");
   });
@@ -119,6 +120,16 @@ describe("mapTourMutation", () => {
     if (invalid.ok) return;
     expect(invalid.reason).toBe("invalid-caption");
     expect(caption.tour.steps[0]?.caption).toBe("新しい");
+  });
+
+  it("最後のステップを削除すると tour が undefined になる", () => {
+    const state = baseState({
+      tour: { version: 1, title: "t", steps: [{ id: "s1", snapshot: snapshot() }] },
+    });
+    const removed = planRemoveTourStep(state, "s1");
+    expect(removed).toEqual({ ok: true, tour: undefined });
+    if (!removed.ok) return;
+    expect(applyTourToState(state, removed.tour).tour).toBeUndefined();
   });
 
   it("タイトル変更とツアー削除", () => {
