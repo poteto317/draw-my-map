@@ -4,11 +4,13 @@ import {
   normalizeAiSummary,
   validateBranchSummaryOutput,
   validateChildCandidatesOutput,
+  classifyReorderSimLayoutFromState,
   validateClassifyReorderOutput,
   validateDuplicatesOutput,
   validateImportanceOutput,
   validateMissingPerspectivesOutput,
 } from "@/domain/aiAssist/aiAssistOutput";
+import { layoutNodeForest } from "@/domain/nodes/nodeAutoLayout";
 import { createTestNode } from "@/testing/createTestNode";
 
 describe("normalizeAiSummary", () => {
@@ -222,6 +224,30 @@ describe("validateClassifyReorderOutput", () => {
     expect(validateClassifyReorderOutput({
       moves: [{ type: "bogus" }, null],
     }, branchIds, nodes)).toEqual({ ok: false });
+  });
+
+  it("auto layoutMode でも reparent+reorder をシミュレーションできる", () => {
+    const raw = [
+      createTestNode({ id: 1, label: "根" }),
+      createTestNode({ id: 2, parentId: 1, label: "子A" }),
+      createTestNode({ id: 3, parentId: 1, label: "子B" }),
+    ];
+    const laidOut = layoutNodeForest(raw);
+    if (laidOut === null) throw new Error("layout");
+    const autoLayout = classifyReorderSimLayoutFromState({ layoutMode: "auto" });
+    const result = validateClassifyReorderOutput({
+      moves: [
+        { type: "reparent", nodeId: 3, newParentId: 2 },
+        { type: "reorder", parentId: 1, childIds: [2] },
+      ],
+    }, branchIds, laidOut, autoLayout);
+    expect(result).toEqual({
+      ok: true,
+      moves: [
+        { type: "reparent", nodeId: 3, newParentId: 2 },
+        { type: "reorder", parentId: 1, childIds: [2] },
+      ],
+    });
   });
 });
 

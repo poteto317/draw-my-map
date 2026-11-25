@@ -1,4 +1,4 @@
-import { validateClassifyReorderOutput } from "@/domain/aiAssist/aiAssistOutput";
+import { classifyReorderSimLayoutFromState, validateClassifyReorderOutput } from "@/domain/aiAssist/aiAssistOutput";
 import {
   addChildProposalKey,
   addSiblingProposalKey,
@@ -260,7 +260,7 @@ describe("applyAiStructureProposals", () => {
         { type: "reparent", nodeId: 3, newParentId: 2 },
         { type: "reorder", parentId: 1, childIds: [2] },
       ],
-    }, branchIds, nodes);
+    }, branchIds, nodes, classifyReorderSimLayoutFromState({ layoutMode: "manual" }));
     if (!validated.ok) throw new Error("validated");
     const proposals = buildClassifyReorderProposals(nodes, validated.moves);
     const result = apply(
