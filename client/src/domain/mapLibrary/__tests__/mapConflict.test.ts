@@ -601,6 +601,47 @@ describe("mapConflict", () => {
     });
   });
 
+  describe("isDocumentContentEqual（tour）", () => {
+    const baseDoc: MapDocumentV3 = {
+      version: 3,
+      layoutMode: "manual",
+      nodes: [
+        {
+          id: 1,
+          parentId: null,
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 40,
+          label: "ルート",
+          importance: "medium",
+        },
+      ],
+    };
+    const snapshot = {
+      viewport: { offsetX: 0, offsetY: 0, scale: 1 },
+      selectedNodeId: null,
+      selectedNodeIds: [] as number[],
+      focusRootId: null,
+      collapsedNodeIds: [] as number[],
+      resolutionMode: "all" as const,
+      autoResolutionLevel: "all" as const,
+    };
+
+    it("tour だけ違うと false", () => {
+      expect(
+        isDocumentContentEqual(baseDoc, {
+          ...baseDoc,
+          tour: {
+            version: 1,
+            title: "t",
+            steps: [{ id: "s1", snapshot }],
+          },
+        }),
+      ).toBe(false);
+    });
+  });
+
   describe("mapConflictMessages", () => {
     it("定数値が設計書と整合していること", () => {
       expect(CONFLICT_NOTICE_MESSAGE).toBe(

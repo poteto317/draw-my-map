@@ -111,4 +111,37 @@ describe("MapDocument Codec", () => {
     expect(orthogonalText).not.toContain("layoutStyle");
     expect(orthogonalText).not.toContain("branchLayouts");
   });
+
+  it("V3 の tour を往復し、steps 0 件は tour キー省略", () => {
+    const snapshot = {
+      viewport: { offsetX: 0, offsetY: 0, scale: 1 },
+      selectedNodeId: 1,
+      selectedNodeIds: [1],
+      focusRootId: null,
+      collapsedNodeIds: [] as number[],
+      resolutionMode: "all" as const,
+      autoResolutionLevel: "all" as const,
+    };
+    const withTour = createMapDocument([node(1, null, "high")], "manual", {
+      tour: {
+        version: 1,
+        title: "往復",
+        steps: [{ id: "s1", snapshot, caption: "注釈" }],
+      },
+    });
+    expect(parseMapDocumentJson(serializeMapDocument(withTour))).toEqual({
+      ok: true,
+      value: withTour,
+    });
+
+    const emptySteps = createMapDocument([node(1, null, "high")], "manual", {
+      tour: { version: 1, title: "下書き", steps: [] },
+    });
+    const emptyText = serializeMapDocument(emptySteps);
+    expect(emptyText).not.toContain("tour");
+    expect(parseMapDocumentJson(emptyText)).toEqual({
+      ok: true,
+      value: { version: 3, layoutMode: "manual", nodes: emptySteps.nodes },
+    });
+  });
 });

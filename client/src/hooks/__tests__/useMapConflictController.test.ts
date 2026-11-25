@@ -10,6 +10,7 @@ import { createTestStorageSession } from "@/testing/createTestStorageSession";
 import { createTestNode } from "@/testing/createTestNode";
 import {
   createMapDocument,
+  parseMapDocumentJson,
   serializeMapDocument,
 } from "@/domain/persistence/mapDocumentCodec";
 import type { Node } from "@/types/node";
@@ -455,6 +456,38 @@ describe("useMapConflictController", () => {
       );
       expect(result.current.conflictState).toBe("none");
       expect(result.current.conflictActionNotice).toBeNull();
+    });
+
+    it("別名保存の JSON に tour を含めない", () => {
+      const onSaveCurrentAsNewMap = jest.fn().mockReturnValue({ ok: true, mapId: "new-map" });
+      const { result } = setupController({
+        onSaveCurrentAsNewMap,
+        tour: {
+          version: 1,
+          title: "含めない",
+          steps: [{
+            id: "s1",
+            snapshot: {
+              viewport: { offsetX: 0, offsetY: 0, scale: 1 },
+              selectedNodeId: 1,
+              selectedNodeIds: [1],
+              focusRootId: null,
+              collapsedNodeIds: [],
+              resolutionMode: "all",
+              autoResolutionLevel: "all",
+            },
+          }],
+        },
+      });
+
+      act(() => {
+        result.current.onWriteConflict();
+        result.current.handleSaveAsCopy();
+      });
+
+      const json = onSaveCurrentAsNewMap.mock.calls[0]![1] as string;
+      const parsed = parseMapDocumentJson(json);
+      expect(parsed.ok && "tour" in parsed.value).toBe(false);
     });
 
     it("別名保存が失敗した場合は conflictActionNotice にエラー通知を表示する", () => {

@@ -372,5 +372,38 @@ describe("mapHistory", () => {
         expect(areMapStatesEqual(withRelations, reordered)).toBe(true);
       });
     });
+
+    describe("文書級 tour", () => {
+      const snapshot = {
+        viewport: { offsetX: 0, offsetY: 0, scale: 1 },
+        selectedNodeId: null,
+        selectedNodeIds: [] as number[],
+        focusRootId: null,
+        collapsedNodeIds: [] as number[],
+        resolutionMode: "all" as const,
+        autoResolutionLevel: "all" as const,
+      };
+      const n1 = createTestNode({ id: 1 });
+      const base = (extra: Partial<NodeMapState> = {}): NodeMapState => ({
+        layoutMode: "manual",
+        nodes: [n1],
+        ...extra,
+      });
+
+      it("tour だけ違うと等しくない", () => {
+        expect(
+          areMapStatesEqual(
+            base(),
+            base({
+              tour: {
+                version: 1,
+                title: "t",
+                steps: [{ id: "s1", snapshot }],
+              },
+            }),
+          ),
+        ).toBe(false);
+      });
+    });
   });
 });

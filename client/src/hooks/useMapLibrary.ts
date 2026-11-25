@@ -116,6 +116,7 @@ import { planLibraryRestore, writeLibraryRestore } from "@/services/persistence/
 import { hasStoredMapViewBookmarks } from "@/services/persistence/mapViewBookmarkStorage";
 import { parseMapDocumentJson } from "@/domain/persistence/mapDocumentDecoder";
 import { serializeMapDocument } from "@/domain/persistence/mapDocumentEncoder";
+import { omitTourFromMapDocument } from "@/domain/persistence/mapDocumentState";
 import { findBuiltinTemplate } from "@/domain/templates/builtinTemplates";
 import { isEligibleMapBackupSnapshot } from "@/domain/persistence/mapBackupSnapshot";
 import {
@@ -940,7 +941,7 @@ export function useMapLibrary(deps: MapLibraryDeps): UseMapLibraryResult {
           return failedOperation(mapIdUnavailableNotice());
         }
 
-        const snapshotJson = serializeMapDocument(template.document);
+        const snapshotJson = serializeMapDocument(omitTourFromMapDocument(template.document));
         const writtenBody = writeMapBody(storage, id, snapshotJson);
         if (!writtenBody.ok) {
           return failedOperation(indexWriteFailedNotice("マップを作成"));

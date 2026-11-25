@@ -10,7 +10,10 @@ import { BRANCH_EXTRACT_STORED_ERROR_MESSAGE } from "@/domain/mapLibrary/mapLibr
 import { extractBranchToNewMap } from "@/domain/nodes/extractBranchToMap";
 import { createNodeIdAllocator } from "@/domain/nodes/nodeIdAllocator";
 import { createMapDocument, parseMapDocumentJson, serializeMapDocument } from "@/domain/persistence/mapDocumentCodec";
-import { mapDocumentOptionsFromState } from "@/domain/persistence/mapDocumentState";
+import {
+  mapDocumentOptionsForNewMap,
+  mapDocumentOptionsFromState,
+} from "@/domain/persistence/mapDocumentState";
 import type { NodeMapState } from "@/types/nodeMapState";
 import { readBranchMoveIndex } from "./mapBranchTransfer";
 import { writeBranchMove } from "./branchMoveTransaction";
@@ -100,7 +103,7 @@ export function extractStoredBranch(
     targetAfter: serializeMapDocument(createMapDocument(
       extracted.target.nodes,
       extracted.target.layoutMode,
-      mapDocumentOptionsFromState(extracted.target),
+      mapDocumentOptionsForNewMap(extracted.target),
     )),
     indexAfter: encodeMapIndex(next),
   });

@@ -10,6 +10,7 @@ import { projectLayoutStyle, type LayoutStyle } from "@/types/layoutStyle";
 import type { MapDocument, MapDocumentV3 } from "@/types/mapDocument";
 import type { MapGroup } from "@/types/mapGroup";
 import type { MapRelation } from "@/types/mapRelation";
+import { projectTour, type MapTour } from "@/types/mapTour";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 import type { LayoutSpacing } from "@/types/layoutSpacing";
@@ -24,6 +25,7 @@ function projectMapDocument(
   branchLayouts?: readonly BranchLayout[],
   relations?: readonly MapRelation[],
   groups?: readonly MapGroup[],
+  tour?: MapTour,
 ): MapDocumentV3 {
   return {
     version: 3,
@@ -35,6 +37,7 @@ function projectMapDocument(
     ...projectBranchLayouts(branchLayouts),
     ...projectRelations(relations),
     ...projectGroups(groups),
+    ...projectTour(tour),
   };
 }
 
@@ -43,7 +46,7 @@ export function createMapDocument(
   layoutMode: NodeLayoutMode,
   options?: Pick<
     MapDocumentV3,
-    "treeDirection" | "layoutSpacing" | "layoutStyle" | "branchLayouts" | "relations" | "groups"
+    "treeDirection" | "layoutSpacing" | "layoutStyle" | "branchLayouts" | "relations" | "groups" | "tour"
   >,
 ): MapDocumentV3 {
   return projectMapDocument(
@@ -55,6 +58,7 @@ export function createMapDocument(
     options?.branchLayouts,
     options?.relations,
     options?.groups,
+    options?.tour,
   );
 }
 
@@ -69,6 +73,7 @@ export function serializeMapDocument(document: MapDocument): string {
       document.branchLayouts,
       document.relations,
       document.groups,
+      document.tour,
     ),
     null,
     2,
