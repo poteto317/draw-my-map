@@ -1125,7 +1125,7 @@ cd client && npm run verify
 1. `npm run tailwind:scan`: Tailwind CSS v4 のクラススキャン検証。
 2. `npm run lint`: ESLint による静的構文解析とルールチェック。
 3. `npm run typecheck`: TypeScript コンパイラ（`tsc --noEmit`）による厳格な型整合性チェック。
-4. `npm test -- --runInBand`: Jest による全ユニット・統合テストの実行（2026-11-25 時点で 635 テストファイル、9,007 テストケース）。
+4. `npm test -- --runInBand`: Jest による全ユニット・統合テストの実行（2026-11-25 時点で 635 テストファイル、9,018 テストケース）。
 5. `npm run build`: Next.js 本番ビルドの成否確認（SSR・バンドル最適化エラーの早期検出）。
 
 ## アウトライン編集（Phase 15・候補004）
