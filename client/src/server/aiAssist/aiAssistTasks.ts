@@ -48,12 +48,22 @@ export const AI_DUPLICATES_MAX_OUTPUT_TOKENS = 12000;
 const SUMMARY_BODY_KEYS: ReadonlySet<string> = new Set(["branch"]);
 const IMPORTANCE_BODY_KEYS: ReadonlySet<string> = new Set(["branch", "targetIds"]);
 const STRUCTURE_BRANCH_BODY_KEYS: ReadonlySet<string> = new Set(["branch"]);
-const DUPLICATES_BODY_KEYS: ReadonlySet<string> = new Set(["branch", "mapId"]);
+const DUPLICATES_BODY_KEYS: ReadonlySet<string> = new Set(["branch", "mapId", "visibleNodeIds"]);
 
 export type BranchSummaryBody = { branch: AiBranchInput };
 export type ImportanceBody = { branch: AiBranchInput; targetIds: number[] };
 export type StructureBranchBody = { branch: AiBranchInput };
-export type DuplicatesBody = { branch: AiBranchInput; mapId: string };
+export type DuplicatesBody = { branch: AiBranchInput; mapId: string; visibleNodeIds: readonly number[] };
+
+function readVisibleNodeIds(value: unknown, branchIds: ReadonlySet<number>): readonly number[] | null {
+  if (!Array.isArray(value)) return null;
+  const ids: number[] = [];
+  for (const item of value) {
+    if (typeof item !== "number" || !Number.isSafeInteger(item) || !branchIds.has(item)) return null;
+    ids.push(item);
+  }
+  return ids;
+}
 
 // 課題ごとの定義。共通の処理（handleAiAssistRequest）が受け取る
 export type AiAssistTask<Body> = {
@@ -211,7 +221,10 @@ export const DUPLICATES_TASK: AiAssistTask<DuplicatesBody> = {
     const branch = validateAiBranchInput(value.branch, { maxNodes: AI_DUPLICATES_MAX_NODES });
     if (!branch.ok || branch.input.nodes.length < 2) return null;
     if (!isValidMapId(value.mapId)) return null;
-    return { branch: branch.input, mapId: value.mapId };
+    const branchIds = branchIdsOf(branch.input);
+    const visibleNodeIds = readVisibleNodeIds(value.visibleNodeIds, branchIds);
+    if (visibleNodeIds === null) return null;
+    return { branch: branch.input, mapId: value.mapId, visibleNodeIds };
   },
   buildRequest(body) {
     return {
@@ -227,7 +240,7 @@ export const DUPLICATES_TASK: AiAssistTask<DuplicatesBody> = {
     const nodes = nodesFromBranch(body.branch);
     const result = validateDuplicatesOutput(value, branchIds, {
       nodes,
-      visibleNodeIds: branchIds,
+      visibleNodeIds: new Set(body.visibleNodeIds),
       currentMapId: body.mapId,
     });
     return result.ok ? { pairs: result.pairs } : null;

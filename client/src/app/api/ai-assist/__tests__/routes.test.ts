@@ -51,7 +51,7 @@ describe("/api/ai-assist/*", () => {
     expect((await postImportance(post("importance", { branch, targetIds: [2] }))).status).toBe(503);
     expect((await postChildCandidates(post("child-candidates", { branch }))).status).toBe(503);
     expect((await postClassifyReorder(post("classify-reorder", { branch }))).status).toBe(503);
-    expect((await postDuplicates(post("duplicates", { branch, mapId: "map-a" }))).status).toBe(503);
+    expect((await postDuplicates(post("duplicates", { branch, mapId: "map-a", visibleNodeIds: [1, 2] }))).status).toBe(503);
     expect((await postMissingPerspectives(post("missing-perspectives", { branch }))).status).toBe(503);
   });
 
@@ -92,7 +92,7 @@ describe("/api/ai-assist/*", () => {
       ...branch,
       nodes: [...branch.nodes, { id: 3, parentId: 1, label: "子2", importance: "medium" }],
     };
-    expect(await (await postDuplicates(post("duplicates", { branch: trio, mapId: "map-a" }))).json()).toEqual({ pairs: [{ primaryId: 2, secondaryId: 3, reason: "似" }] });
+    expect(await (await postDuplicates(post("duplicates", { branch: trio, mapId: "map-a", visibleNodeIds: [1, 2, 3] }))).json()).toEqual({ pairs: [{ primaryId: 2, secondaryId: 3, reason: "似" }] });
     expect(await (await postMissingPerspectives(post("missing-perspectives", { branch }))).json()).toEqual({ items: [{ label: "不足", placement: "child" }] });
   });
 
@@ -118,7 +118,7 @@ describe("/api/ai-assist/*", () => {
     };
     expect((await postChildCandidates(post("child-candidates", { branch }))).status).toBe(502);
     expect((await postClassifyReorder(post("classify-reorder", { branch }))).status).toBe(502);
-    expect((await postDuplicates(post("duplicates", { branch: trio, mapId: "map-a" }))).status).toBe(502);
+    expect((await postDuplicates(post("duplicates", { branch: trio, mapId: "map-a", visibleNodeIds: [1, 2, 3] }))).status).toBe(502);
     expect((await postMissingPerspectives(post("missing-perspectives", { branch }))).status).toBe(502);
   });
 

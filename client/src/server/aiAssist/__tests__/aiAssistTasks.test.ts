@@ -210,12 +210,13 @@ describe("DUPLICATES_TASK", () => {
       { id: 3, parentId: 1, label: "子2", importance: "medium" },
     ],
   };
-  const body = { branch: trio, mapId: "map-a" };
+  const body = { branch: trio, mapId: "map-a", visibleNodeIds: [1, 2, 3] };
 
-  it("branch と mapId を読む", () => {
+  it("branch と mapId と visibleNodeIds を読む", () => {
     expect(DUPLICATES_TASK.parseBody(body)).toEqual(body);
-    expect(DUPLICATES_TASK.parseBody({ branch, mapId: "bad id" })).toBeNull();
-    expect(DUPLICATES_TASK.parseBody({ branch })).toBeNull();
+    expect(DUPLICATES_TASK.parseBody({ branch, mapId: "bad id", visibleNodeIds: [1, 2, 3] })).toBeNull();
+    expect(DUPLICATES_TASK.parseBody({ branch, mapId: "map-a" })).toBeNull();
+    expect(DUPLICATES_TASK.parseBody({ branch, mapId: "map-a", visibleNodeIds: [9] })).toBeNull();
     expect(DUPLICATES_TASK.buildRequest(body)).toMatchObject({
       schemaName: "duplicate_pairs",
       schema: DUPLICATES_SCHEMA,
@@ -223,10 +224,17 @@ describe("DUPLICATES_TASK", () => {
     });
   });
 
-  it("枝 ID を visible に planNodeMerge で検証する", () => {
+  it("visibleNodeIds 前提で planNodeMerge 検証する", () => {
     expect(DUPLICATES_TASK.validateOutput({
       pairs: [{ primaryId: 2, secondaryId: 2, reason: "x" }, { primaryId: 2, secondaryId: 3, reason: "類似" }],
     }, body)).toEqual({ pairs: [{ primaryId: 2, secondaryId: 3, reason: "類似" }] });
+  });
+
+  it("非表示ノードを含む pair は除外する", () => {
+    const hiddenBody = { ...body, visibleNodeIds: [1, 2] };
+    expect(DUPLICATES_TASK.validateOutput({
+      pairs: [{ primaryId: 2, secondaryId: 3, reason: "類似" }],
+    }, hiddenBody)).toBeNull();
   });
 
   it("locked を含む枝入力ではロックノードを含む pair を除外する", () => {
@@ -240,6 +248,7 @@ describe("DUPLICATES_TASK", () => {
         ],
       },
       mapId: "map-a",
+      visibleNodeIds: [1, 2, 3],
     };
     expect(DUPLICATES_TASK.validateOutput({
       pairs: [{ primaryId: 2, secondaryId: 3, reason: "類似" }],
@@ -250,6 +259,7 @@ describe("DUPLICATES_TASK", () => {
     expect(DUPLICATES_TASK.parseBody({
       branch: { rootId: 1, nodes: [branch.nodes[0]] },
       mapId: "map-a",
+      visibleNodeIds: [1],
     })).toBeNull();
   });
 });
