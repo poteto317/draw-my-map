@@ -78,6 +78,32 @@ describe("usePresentationPlaybackKeyboard", () => {
     expect(onBack).not.toHaveBeenCalled();
   });
 
+  it("テキスト入力フォーカス中はショートカットを無視する", () => {
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    input.focus();
+    const onEnd = jest.fn();
+    const onForward = jest.fn();
+    mountKeyboard({
+      enabled: true,
+      canGoBack: false,
+      canGoForward: true,
+      onBack: jest.fn(),
+      onForward,
+      onEnd,
+    });
+    const escape = new KeyboardEvent("keydown", { key: "Escape", cancelable: true, bubbles: true });
+    Object.defineProperty(escape, "target", { value: input });
+    act(() => window.dispatchEvent(escape));
+    expect(onEnd).not.toHaveBeenCalled();
+
+    const right = new KeyboardEvent("keydown", { key: "ArrowRight", cancelable: true, bubbles: true });
+    Object.defineProperty(right, "target", { value: input });
+    act(() => window.dispatchEvent(right));
+    expect(onForward).not.toHaveBeenCalled();
+    input.remove();
+  });
+
   it("ArrowRight は canGoForward のときだけ preventDefault して進む", () => {
     const onForward = jest.fn();
     const { rerender } = mountKeyboard({
