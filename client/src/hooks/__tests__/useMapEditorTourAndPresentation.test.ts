@@ -23,7 +23,7 @@ const tour: MapTour = {
 
 const noopTourMutation = () => ({ ok: true } as const);
 
-function mountHook(conflictState: "idle" | "conflict", storageMode: "persistent" | "protected") {
+function mountHook(conflictState: "none" | "conflict", storageMode: "persistent" | "protected") {
   return renderHook(() => useMapEditorTourAndPresentation({
     tour,
     storageMode,
@@ -43,7 +43,7 @@ function mountHook(conflictState: "idle" | "conflict", storageMode: "persistent"
 
 describe("useMapEditorTourAndPresentation", () => {
   it("保護モードではツアー編集不可だが再生開始は競合・外部削除時のみ止める", () => {
-    const { result: protectedResult } = mountHook("idle", "protected");
+    const { result: protectedResult } = mountHook("none", "protected");
     expect(protectedResult.current.tourEditDisabled).toBe(true);
     expect(protectedResult.current.presentationStartDisabled).toBe(false);
 
@@ -77,7 +77,7 @@ describe("useMapEditorTourAndPresentation", () => {
     const { result } = renderHook(() => useMapEditorTourAndPresentation({
       tour,
       storageMode: "persistent",
-      conflictState: "idle",
+      conflictState: "none",
       captureView: () => view(0),
       applyView,
       createTour: noopTourMutation,
@@ -98,7 +98,7 @@ describe("useMapEditorTourAndPresentation", () => {
     const { result } = renderHook(() => useMapEditorTourAndPresentation({
       tour,
       storageMode: "persistent",
-      conflictState: "idle",
+      conflictState: "none",
       captureView: () => view(0),
       applyView,
       createTour: noopTourMutation,
