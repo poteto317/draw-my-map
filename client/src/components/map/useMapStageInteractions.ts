@@ -36,6 +36,8 @@ type UseMapStageInteractionsOptions = {
   onReorderSibling: (nodeId: number, request: SiblingReorderRequest) => void;
   layoutSnapPrefs?: LayoutSnapGesturePrefs;
   shouldIgnorePointerDown?: () => boolean;
+  /** false のときノード移動・並べ替え・接続ドラッグを始めない（パンは別経路で有効） */
+  structureEditEnabled?: boolean;
 };
 
 function bindPixiStage(
@@ -69,8 +71,10 @@ export function useMapStageInteractions({
   onReorderSibling,
   layoutSnapPrefs,
   shouldIgnorePointerDown = () => false,
+  structureEditEnabled = true,
 }: UseMapStageInteractionsOptions) {
   const shouldIgnorePointerDownRef = useLatestRef(shouldIgnorePointerDown);
+  const structureEditEnabledRef = useLatestRef(structureEditEnabled);
   const onToggleNodeSelectionRef = useLatestRef(onToggleNodeSelection);
   const onSelectNodeRangeRef = useLatestRef(onSelectNodeRange);
   const onSetSelectionFromMarqueeRef = useLatestRef(onSetSelectionFromMarquee);
@@ -135,6 +139,7 @@ export function useMapStageInteractions({
       onReorderSiblingRef,
       onSiblingReorderPreviewChangeRef,
       shouldIgnorePointerDownRef,
+      structureEditEnabledRef,
     }),
   );
 

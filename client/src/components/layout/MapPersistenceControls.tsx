@@ -9,6 +9,7 @@ type MapPersistenceControlsProps = {
   exportButtonRef?: Ref<HTMLButtonElement>;
   jsonExportEnabled?: boolean;
   jsonExportDisabledReason?: string;
+  jsonImportEnabled?: boolean;
 };
 
 export function MapPersistenceControls({
@@ -17,6 +18,7 @@ export function MapPersistenceControls({
   exportButtonRef,
   jsonExportEnabled = true,
   jsonExportDisabledReason,
+  jsonImportEnabled = true,
 }: MapPersistenceControlsProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -55,7 +57,8 @@ export function MapPersistenceControls({
       </button>
       <button
         type="button"
-        className="rounded-md bg-zinc-100 px-3 py-1 text-sm text-zinc-700 transition-colors dark:bg-zinc-700 dark:text-zinc-200"
+        className="rounded-md bg-zinc-100 px-3 py-1 text-sm text-zinc-700 transition-colors disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-700 dark:text-zinc-200"
+        disabled={!jsonImportEnabled}
         onClick={() => fileInputRef.current?.click()}
       >
         JSON読み込み

@@ -493,8 +493,11 @@ describe("MapEditor", () => {
   });
 
   it("shortcutsEnabled が false なら根に inert を付け、Ctrl+Z でも Delete でもノードを変えない", async () => {
-    await renderEditor({ shortcutsEnabled: false });
-    addNodeAt(300, 200);
+    // shortcutsEnabled が false だとキャンバスのダブルクリック追加も止まるため、保存済みノードで開始する
+    await renderEditor({
+      shortcutsEnabled: false,
+      storage: createTestStorageSession({ initialJson: savedJson }),
+    });
     expect(exportedMap().nodes).toHaveLength(1);
 
     // jsdom は inert でイベントを止めないため、inert は属性の有無だけを確かめる。

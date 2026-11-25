@@ -122,4 +122,21 @@ describe("useMapHeaderLayoutControls layout style / direction / spacing disabled
     );
     expect(result.current.headerLayoutControls?.layoutStyleDisabled).toBe(true);
   });
+
+  it("プレゼン再生中はヘッダーレイアウト操作をすべて disabled", () => {
+    const { result } = renderHook(() =>
+      useMapHeaderLayoutControls(baseArgs({
+        layoutMode: "auto",
+        layoutEditingBlocked: true,
+      })),
+    );
+    expect(result.current.headerLayoutControls).toMatchObject({
+      layoutStyleDisabled: true,
+      treeDirectionDisabled: true,
+      layoutSpacingDisabled: true,
+      selectionLayoutDisabled: true,
+      labelTextStyleDisabled: true,
+      layoutEditingBlocked: true,
+    });
+  });
 });

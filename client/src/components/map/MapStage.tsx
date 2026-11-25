@@ -307,6 +307,7 @@ export function MapStage({
       gridStep: layoutSnapPrefs.gridStep,
     },
     shouldIgnorePointerDown: isOverlayFollowUpClick,
+    structureEditEnabled: shortcutsEnabled,
   });
 
   const supersededFocusSequence = useRef<number | null>(null);
@@ -584,6 +585,7 @@ export function MapStage({
 
   const handleDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
     if (isOverlayFollowUpClick()) return;
+    if (!shortcutsEnabled) return;
     // 関連線／グループ選択中はノードラベル編集・空キャンバス追加を始めない（L-061）
     if (selectedRelationId !== null || selectedGroupId !== null) return;
     const container = containerRef.current;
@@ -624,7 +626,7 @@ export function MapStage({
         isTextEntryTarget: isTextEntryTarget(event.target),
         isInsideMenu: isInsideNodeContextMenu(event.target),
         hasActiveGesture: hasActiveGesture(),
-        canOpenMenu: canOpenContextMenu,
+        canOpenMenu: canOpenContextMenu && shortcutsEnabled,
         client: { x: event.clientX, y: event.clientY },
         bounds: container.getBoundingClientRect(),
         viewport: viewportRef.current,

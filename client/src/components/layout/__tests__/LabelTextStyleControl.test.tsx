@@ -98,9 +98,10 @@ describe("LabelTextStyleControl", () => {
 
   it("disabled のときサイズ・太字・下線を操作できない", async () => {
     const user = userEvent.setup();
-    render(<LabelTextStyleControl {...defaultProps} disabled />);
+    const { rerender } = render(<LabelTextStyleControl {...defaultProps} />);
 
     await user.click(screen.getByRole("button", { name: "文字" }));
+    rerender(<LabelTextStyleControl {...defaultProps} disabled />);
 
     expect(screen.getByRole("combobox", { name: "文字サイズ" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "太字" })).toBeDisabled();

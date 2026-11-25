@@ -337,10 +337,7 @@ describe("ページの箇条書きから追加", () => {
     await waitFor(() => expect(screen.getByText("マップを読み込みました。")).toBeInTheDocument());
     const replaced = exportedMap(mockDownloadMapJson).nodes;
     expect(replaced.map((node) => node.label)).toEqual(["別1", "別2"]);
-    // 置き換えで外れた選択を、置き換わったマップのノードで選び直しておく
-    passDialogDoubleClickWindow();
-    selectNode(0, 2);
-    expect(selectedLabel()).toBe("別1");
+    // ダイアログ開放中はキャンバス選択が止まるため、親候補の消失は openedRevision 差分で判定する
     const asMissing = dialog().getByRole("radio", { name: "選択していたノードの子として追加" });
     expect(asMissing).toBeChecked();
     const undoDisabled = (undoButton() as HTMLButtonElement).disabled;
@@ -353,7 +350,6 @@ describe("ページの箇条書きから追加", () => {
     expect(dialog().getByRole("heading", { name: "変換結果の確認" })).toBeInTheDocument();
     expect(exportedMap(mockDownloadMapJson).nodes).toEqual(replaced);
     expect((undoButton() as HTMLButtonElement).disabled).toBe(undoDisabled);
-    expect(selectedLabel()).toBe("別1");
   });
 
   describe("入力のエラー", () => {

@@ -11,11 +11,18 @@ type NodeNoteEditorProps = {
   selectionCount: number;
   onPreviewNote: (id: number, note: string) => boolean;
   onBeginNoteEdit: () => MapHistoryGroupLease;
+  editDisabled?: boolean;
 };
 
 // 選択中のノードの詳細メモの編集。NodeDetailPanel が対象の ID と documentRevision を key にして作り直す
 // （古い下書きを別のノード・新しい文書へ引き継がない。L-588）
-export function NodeNoteEditor({ node, selectionCount, onPreviewNote, onBeginNoteEdit }: NodeNoteEditorProps) {
+export function NodeNoteEditor({
+  node,
+  selectionCount,
+  onPreviewNote,
+  onBeginNoteEdit,
+  editDisabled = false,
+}: NodeNoteEditorProps) {
   const [mode, setMode] = useState<NodeNoteViewMode>("edit");
   const editing = useNodeNoteEditing({
     nodeId: node.id,
@@ -27,7 +34,7 @@ export function NodeNoteEditor({ node, selectionCount, onPreviewNote, onBeginNot
     <NodeNoteSection
       targetLabel={node.label}
       selectionCount={selectionCount}
-      editing={editing}
+      editing={editDisabled ? null : editing}
       mode={mode}
       onModeChange={setMode}
     />

@@ -79,6 +79,8 @@ type NodeDetailPanelProps = {
   onGenerate: (nodeId: number) => void;
   onAttach: (nodeId: number, dataUrl: string) => void;
   onRemove: (nodeId: number) => void;
+  /** 再生中等、属性の読取以外の編集を止める */
+  attributeEditDisabled?: boolean;
 };
 
 // 右のパネル。関連線／グループ選択時はその節だけ、それ以外はノードの詳細メモ〜イラストを縦に積み、内容が高さを超えたら縦にスクロールする
@@ -118,6 +120,7 @@ export function NodeDetailPanel({
   onGenerate,
   onAttach,
   onRemove,
+  attributeEditDisabled = false,
 }: NodeDetailPanelProps) {
   // 関連線／グループ節と同条件でノード節を抑止（アウトラインでは残ってもノード UI を出す）
   const relationVisible = selectedRelation !== null && viewMode === "map";
@@ -173,10 +176,11 @@ export function NodeDetailPanel({
           selectionCount={selectionCount}
           onPreviewNote={onPreviewNote}
           onBeginNoteEdit={onBeginNoteEdit}
+          editDisabled={attributeEditDisabled}
         />
       )}
       {nonNodeDetailVisible ? null : (
-        <>
+        <fieldset disabled={attributeEditDisabled} className="contents flex flex-col gap-6">
           <NodeAppearanceSection
             key={selectedNode === null ? "appearance:none" : `appearance:${selectedNode.id}`}
             visible={appearanceVisible}
@@ -258,9 +262,10 @@ export function NodeDetailPanel({
               selectedNode?.locked === true
               || storageMode === "protected"
               || selectionCount !== 1
+              || attributeEditDisabled
             }
           />
-        </>
+        </fieldset>
       )}
     </aside>
   );
