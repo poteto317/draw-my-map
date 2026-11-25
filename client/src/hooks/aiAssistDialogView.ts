@@ -8,13 +8,13 @@ import {
   type AiProposalDecision,
   type NoteApplyMode,
 } from "@/domain/aiAssist/aiProposal";
+import { NODE_IMPORTANCE_LABELS } from "@/domain/nodes/nodeImportance";
 import { NODE_NOTE_MAX_LENGTH, NODE_NOTE_MERGE_JOINER, formatNodeNoteLength } from "@/domain/nodes/nodeNote";
 import { acceptedAiProposals, type AiAssistDialogState, type AiAssistReview } from "@/hooks/aiAssistDialogState";
 import { planAiAssistSend } from "@/hooks/aiAssistSendPlan";
 import { STALE_DIALOG_MESSAGE, formatPreviewLabel } from "@/hooks/dialogPreviewText";
 import { describeAiAssistError } from "@/services/aiAssist/aiAssistClient";
 import type { Node } from "@/types/node";
-import type { NodeImportance } from "@/types/nodeImportance";
 
 export const AI_ASSIST_DIALOG_TITLES: Readonly<Record<AiAssistKind, string>> = {
   "branch-summary": "枝を要約してメモに入れる",
@@ -38,8 +38,6 @@ export function aiApplyBlockedMessage(blockers: AiAssistEntryBlockers): string |
         : null;
   return reason === null ? null : `適用できませんでした（${reason}）。`;
 }
-
-const IMPORTANCE_LABELS: Readonly<Record<NodeImportance, string>> = { high: "高", medium: "中", low: "低" };
 
 export type AiAssistConfirmView = {
   providerLabel: string;
@@ -97,8 +95,8 @@ export function buildAiProposalViews(nodes: readonly Node[], review: AiAssistRev
     if (proposal.kind === "importance") {
       return {
         kind: "importance", key: proposal.key, nodeLabel: formatPreviewLabel(proposal.baseline.label), decision, stale,
-        currentLabel: IMPORTANCE_LABELS[proposal.baseline.importance],
-        proposedLabel: IMPORTANCE_LABELS[proposal.proposed],
+        currentLabel: NODE_IMPORTANCE_LABELS[proposal.baseline.importance],
+        proposedLabel: NODE_IMPORTANCE_LABELS[proposal.proposed],
         reason: proposal.reason,
       };
     }
