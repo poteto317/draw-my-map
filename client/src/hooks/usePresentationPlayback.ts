@@ -72,12 +72,12 @@ export function usePresentationPlayback({
 
   const end = useCallback(() => {
     if (screen !== "playing") return false;
-    playingRef.current = false;
     const baseline = baselineRef.current;
+    if (baseline !== null && !applyView(baseline)) return false;
+    playingRef.current = false;
     baselineRef.current = null;
     setScreen("closed");
     setStepIndex(0);
-    if (baseline !== null) applyView(baseline);
     return true;
   }, [applyView, screen]);
 
@@ -101,12 +101,12 @@ export function usePresentationPlayback({
   useEffect(() => {
     if (screen !== "playing") return;
     if (stepCount === 0) {
-      playingRef.current = false;
       const baseline = baselineRef.current;
+      if (baseline !== null && !applyView(baseline)) return;
+      playingRef.current = false;
       baselineRef.current = null;
       setScreen("closed");
       setStepIndex(0);
-      if (baseline !== null) applyView(baseline);
       return;
     }
     if (stepIndex >= stepCount) {

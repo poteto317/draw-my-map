@@ -52,9 +52,28 @@ describe("usePresentationPlayback", () => {
     act(() => result.current.goBack());
     expect(applyView).toHaveBeenLastCalledWith(view(10));
 
-    act(() => result.current.end());
+    act(() => expect(result.current.end()).toBe(true));
     expect(applyView).toHaveBeenLastCalledWith(view(99));
     applyView.mock.calls.forEach((call) => expect(call).toHaveLength(1));
+    expect(result.current.screen).toBe("closed");
+  });
+
+  it("end が baseline 復元に失敗したら playing を維持する", () => {
+    const applyView = jest.fn((snap: MapViewSnapshot) => snap.viewport.offsetX !== 99);
+    const captureView = jest.fn(() => view(99));
+    const { result } = renderHook(() => usePresentationPlayback({
+      tour: tourWithSteps([{ id: "a", offsetX: 10 }]),
+      startBlocked: false,
+      captureView,
+      applyView,
+    }));
+
+    act(() => expect(result.current.start()).toBe(true));
+    act(() => expect(result.current.end()).toBe(false));
+    expect(result.current.screen).toBe("playing");
+
+    applyView.mockImplementation(() => true);
+    act(() => expect(result.current.end()).toBe(true));
     expect(result.current.screen).toBe("closed");
   });
 
