@@ -2,6 +2,7 @@ import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event";
 import { MapEditor } from "@/components/map/MapEditor";
 import {
+  mockGraphicsPointerHandlers,
   mockNodePointerHandlers,
   mockStageHandlers,
   pointer,
@@ -58,6 +59,16 @@ function seedWithTour(): string {
 }
 
 const STATUS = { available: true, provider: "anthropic", providerLabel: "Anthropic（Claude API）", model: "claude-opus-5-5" };
+
+const viewNavigationJsonWithRelation = JSON.stringify({
+  version: 3,
+  layoutMode: "manual",
+  nodes: [
+    { id: 1, parentId: null, label: "親ルート", importance: "high", x: 100, y: 100, width: 100, height: 60 },
+    { id: 2, parentId: 1, label: "子", importance: "low", x: 220, y: 100, width: 100, height: 60 },
+  ],
+  relations: [{ id: 10, fromId: 1, toId: 2, kind: "related", directed: false }],
+});
 
 // jest の jsdom 環境には Response が無いため、aiAssistClient が使う ok・status・text だけを持つ値を返す
 // （クライアントは response.text() と JSON.parse で読む）
@@ -292,5 +303,57 @@ describe("MapEditor の AI 支援（Phase 32）", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "プレゼン開始" })[0]!);
     await waitFor(() => expect(summaryButton()).toBeDisabled());
     expect(summaryButton()).toHaveAccessibleDescription("プレゼン再生中は使えません");
+  });
+});
+
+describe("MapEditor の AI 構造支援（Phase 33・078–081）", () => {
+  it("右パネルに 078–081 の 4 ボタンがあり、子候補ダイアログを開ける", async () => {
+    routeFetch({
+      "/api/ai-assist/status": { status: 200, body: STATUS },
+      "/api/ai-assist/child-candidates": { status: 200, body: { candidates: [{ label: "新子" }] } },
+    });
+    await renderEditor();
+    const user = userEvent.setup();
+    await selectBySearch(user, "ルート");
+
+    expect(screen.getByRole("button", { name: "子の候補を提案…" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "分類・並べ替えを提案…" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "重複・類似を検出…" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "不足観点を提案…" })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "子の候補を提案…" }));
+    const dialog = await screen.findByRole("dialog", { name: "子の候補を提案" });
+    await user.click(within(dialog).getByRole("button", { name: "送信して提案を作る" }));
+    await within(dialog).findByText(/新子/);
+  });
+
+  it("関連線選択中は AI 支援の節を出さない", async () => {
+    const storage = createTestStorageSession({ initialJson: viewNavigationJsonWithRelation });
+    await renderReady(
+      <MapEditor
+        mapId={storage.session.mapId}
+        exportButtonRef={{ current: null }}
+        mapMoveTargets={[{ id: storage.session.mapId, name: "テストのマップ", createdAt: "2026-11-25T00:00:00.000Z", updatedAt: "2026-11-25T00:00:00.000Z" }]}
+        libraryMeta={createEmptyMapLibraryMeta()}
+        onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "移動先がありません。" } })}
+        onExtractBranchToNewMap={() => ({ ok: false, notice: { kind: "error", message: "切り出せません。" } })}
+        mapName="テストのマップ"
+        storageSession={storage.session}
+        storageMode="persistent"
+        mapControls={null}
+        shortcutsEnabled
+        dialogMouseClickedAtRef={{ current: null }}
+        onSaveCurrentAsNewMap={undefined}
+        pendingNavigation={null}
+        onConsumePendingNavigation={() => {}}
+        onSwitchToMapTarget={() => {}}
+        brokenLinksDialogRequest={0}
+        onBrokenLinksDialogClosed={() => {}}
+      />,
+    );
+    const relationHandler = mockGraphicsPointerHandlers.at(-1)?.pointerdown;
+    act(() => relationHandler?.(pointer(150, 80)));
+    expect(screen.getByRole("heading", { name: "関連線" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "子の候補を提案…" })).not.toBeInTheDocument();
   });
 });

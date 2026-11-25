@@ -252,6 +252,7 @@ export function MapEditor({
     updateNodeLabel,
     updateNodesImportance,
     applyAiProposals,
+    applyAiStructureProposals,
     moveNode,
     movePinnedNode,
     finalizePinnedNodeMove,
@@ -869,14 +870,30 @@ export function MapEditor({
     mapId,
     documentRevision,
     nodes,
-    // アウトライン表示では主選択だけ
     selectedNodeIds: importanceTargetIds,
+    visibleNodeIds: displayState.visibleNodeIds,
     blockers: aiAssistBlockers,
     applyAiProposals,
+    applyAiStructureProposals,
     publishNotice: publishTreeEditNotice,
   });
-  const { open: openAiAssist, summaryEntry: aiSummaryEntry, importanceEntry: aiImportanceEntry } = aiAssist;
-  const { summaryButtonRef: aiSummaryButtonRef, importanceButtonRef: aiImportanceButtonRef } = useAiAssistFocusReturn({
+  const {
+    open: openAiAssist,
+    summaryEntry: aiSummaryEntry,
+    importanceEntry: aiImportanceEntry,
+    childEntry: aiChildEntry,
+    classifyEntry: aiClassifyEntry,
+    duplicatesEntry: aiDuplicatesEntry,
+    perspectivesEntry: aiPerspectivesEntry,
+  } = aiAssist;
+  const {
+    summaryButtonRef: aiSummaryButtonRef,
+    importanceButtonRef: aiImportanceButtonRef,
+    childCandidatesButtonRef: aiChildCandidatesButtonRef,
+    classifyReorderButtonRef: aiClassifyReorderButtonRef,
+    duplicatesButtonRef: aiDuplicatesButtonRef,
+    missingPerspectivesButtonRef: aiMissingPerspectivesButtonRef,
+  } = useAiAssistFocusReturn({
     focusRequest: aiAssist.focusRequest,
     consumeFocusRequest: aiAssist.consumeFocusRequest,
     viewMode,
@@ -1067,6 +1084,14 @@ export function MapEditor({
         aiBranchSummaryDisabledReason: aiSummaryEntry.enabled ? null : aiSummaryEntry.reason,
         canOpenAiImportance: !nodeOpsBlockedByCanvasSelection && aiImportanceEntry.enabled,
         aiImportanceDisabledReason: aiImportanceEntry.enabled ? null : aiImportanceEntry.reason,
+        canOpenAiChildCandidates: !nodeOpsBlockedByCanvasSelection && aiChildEntry.enabled,
+        aiChildCandidatesDisabledReason: aiChildEntry.enabled ? null : aiChildEntry.reason,
+        canOpenAiClassifyReorder: !nodeOpsBlockedByCanvasSelection && aiClassifyEntry.enabled,
+        aiClassifyReorderDisabledReason: aiClassifyEntry.enabled ? null : aiClassifyEntry.reason,
+        canOpenAiDuplicates: !nodeOpsBlockedByCanvasSelection && aiDuplicatesEntry.enabled,
+        aiDuplicatesDisabledReason: aiDuplicatesEntry.enabled ? null : aiDuplicatesEntry.reason,
+        canOpenAiMissingPerspectives: !nodeOpsBlockedByCanvasSelection && aiPerspectivesEntry.enabled,
+        aiMissingPerspectivesDisabledReason: aiPerspectivesEntry.enabled ? null : aiPerspectivesEntry.reason,
         canRegisterPart: !nodeOpsBlockedByCanvasSelection && partsLibrary.canRegister,
         canInsertPart: !nodeOpsBlockedByCanvasSelection && partsLibrary.parts.length > 0,
         canDeletePart: partsLibrary.parts.length > 0,
@@ -1086,7 +1111,7 @@ export function MapEditor({
       outlineActions.structureCanMoveUp, outlineActions.structureCanMoveDown,
       outlineActions.structureCanIndent, outlineActions.structureCanOutdent, nodes.length,
       nodeSplit.canOpen, nodeSplit.disabledReason, nodeMerge.canOpen, nodeMerge.disabledReason,
-      aiSummaryEntry, aiImportanceEntry,
+      aiSummaryEntry, aiImportanceEntry, aiChildEntry, aiClassifyEntry, aiDuplicatesEntry, aiPerspectivesEntry,
       partsLibrary.canRegister, partsLibrary.parts.length,
       outlineModel.duplicateIds, outlineModel.invalidStructure, outlineModel.allNodeIds,
     ],
@@ -1179,6 +1204,10 @@ export function MapEditor({
       openNodeMerge: nodeMerge.open,
       openAiBranchSummary: () => openAiAssist("branch-summary", "palette"),
       openAiImportance: () => openAiAssist("importance", "palette"),
+      openAiChildCandidates: () => openAiAssist("child-candidates", "palette"),
+      openAiClassifyReorder: () => openAiAssist("classify-reorder", "palette"),
+      openAiDuplicates: () => openAiAssist("duplicates", "palette"),
+      openAiMissingPerspectives: () => openAiAssist("missing-perspectives", "palette"),
       openCrossMapSearch: crossMapDialogs.openCrossMapSearch,
       openRegisterPart: () => {
         partsLibrary.refresh();
@@ -1725,10 +1754,22 @@ export function MapEditor({
               aiAssist={{
                 summary: aiAssist.summaryEntry,
                 importance: aiAssist.importanceEntry,
+                childCandidates: aiAssist.childEntry,
+                classifyReorder: aiAssist.classifyEntry,
+                duplicates: aiAssist.duplicatesEntry,
+                missingPerspectives: aiAssist.perspectivesEntry,
                 summaryButtonRef: aiSummaryButtonRef,
                 importanceButtonRef: aiImportanceButtonRef,
+                childCandidatesButtonRef: aiChildCandidatesButtonRef,
+                classifyReorderButtonRef: aiClassifyReorderButtonRef,
+                duplicatesButtonRef: aiDuplicatesButtonRef,
+                missingPerspectivesButtonRef: aiMissingPerspectivesButtonRef,
                 onOpenSummary: () => openAiAssist("branch-summary", "panel"),
                 onOpenImportance: () => openAiAssist("importance", "panel"),
+                onOpenChildCandidates: () => openAiAssist("child-candidates", "panel"),
+                onOpenClassifyReorder: () => openAiAssist("classify-reorder", "panel"),
+                onOpenDuplicates: () => openAiAssist("duplicates", "panel"),
+                onOpenMissingPerspectives: () => openAiAssist("missing-perspectives", "panel"),
               }}
               onAddTag={addNodeTag}
               onRemoveTag={removeNodeTag}

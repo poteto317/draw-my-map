@@ -103,6 +103,13 @@ export function AiProposalReviewList({ proposals, disabled, onDecide, onNoteMode
                 placeholderId={placeholderId}
                 onNoteModeChange={onNoteModeChange}
               />
+            ) : proposal.kind === "structure" ? (
+              <div className="flex flex-col gap-1">
+                <p className={textClassName}>{proposal.summary}</p>
+                {proposal.mergeHint !== null && (
+                  <p className="text-xs text-zinc-600 dark:text-zinc-300">{proposal.mergeHint}</p>
+                )}
+              </div>
             ) : (
               <p>
                 {`${proposal.currentLabel} → ${proposal.proposedLabel}`}
