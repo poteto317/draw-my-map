@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { isTextEntryTarget } from "@/components/map/textEntryTarget";
 
 type UsePresentationPlaybackKeyboardOptions = {
   enabled: boolean;
@@ -22,6 +23,7 @@ export function usePresentationPlaybackKeyboard({
   useEffect(() => {
     if (!enabled) return;
     const onKeyDown = (event: KeyboardEvent) => {
+      if (isTextEntryTarget(event.target)) return;
       if (event.key === "Escape") {
         event.preventDefault();
         onEnd();
