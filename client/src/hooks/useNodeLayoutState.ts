@@ -33,6 +33,7 @@ type UseNodeLayoutStateReturn = {
   branchLayouts: NodeMapState["branchLayouts"];
   relations: NodeMapState["relations"];
   groups: NodeMapState["groups"];
+  tour: NodeMapState["tour"];
   canUndo: boolean;
   canRedo: boolean;
   // 同じイベント内の直前の変更も含めた最新の状態を読み取る。状態と履歴は変えない
@@ -262,6 +263,7 @@ export function useNodeLayoutState(): UseNodeLayoutStateReturn {
     branchLayouts: present.branchLayouts,
     relations: present.relations,
     groups: present.groups,
+    tour: present.tour,
     canUndo,
     canRedo,
     getCurrentState: getPresent,
