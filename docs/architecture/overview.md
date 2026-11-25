@@ -1154,6 +1154,10 @@ canvasフォーカスは`MapEditor`内の1つの`useRevisionScopedNodeRequest(do
 
 `domain/exchange/` に `opmlCodec`・`csvTsvCodec`・`parseExchangeContent`・`exchangePreview`・`exchangeMessages` を置き、書き出しは `domain/exportScope/closeExportSubtree.ts` と `resolveExchangeExportNodes.ts` が JSON／Markdown 経路と分離して祖先閉包した `Node[]` を codec へ渡します。`MapEditor` は `useOutlineExport` の隣で `useExchangeExport`（閉包済みノード・マップ名）と `useExchangeImport`（`insertForest`・追加先・成功通知）を配線し、`ExchangeExportControls` と `ExchangeImportControl` / `ExchangeImportDialog` をヘッダーへ載せます。`editorShortcutsEnabled` は `exchangeImport.screen === "closed"` を OutlineImport と同積に含めます。取り込み成功・書き出し結果はそれぞれ専用の操作通知枠に出し、Undo は取り込み成功の 1 回のみです。
 
+## プレゼンテーションと案内（Phase 31・候補072・073）
+
+文書級 `tour`（`types/mapTour.ts` の `MapTour`）は `MapViewSnapshot` のステップ列と任意キャプションを V3 JSON・`localStorage` に載せます。`mapDocumentDecoder` / `mapDocumentEncoder` と `mapDocumentState` の投影が `relations` / `groups` と同型で往復し、`mapHistory` / `mapConflict` の equal に接続します。編集は `domain/map/mapTourMutation.ts` と `useMapTourActions` が `useNodes` の文書変更として 1 Undo に載せ、`useMapTourEditor` がダイアログ状態（`tourEditor.screen`）を持ちます。再生はメモリ専用の `usePresentationPlayback`（`presentation.screen`）が開始直前の表示を保持し、`useMapViewNavigation.applyView` で各ステップを適用します（第2引数なし＝閲覧履歴に載せない）。`MapEditor` は `TourEditorControl` / `PresentationStartControl` / `PresentationPlaybackBar` をヘッダーとマップ上に配線し、`editorShortcutsEnabled` に `tourEditor.screen` / `presentation.screen` を積みます。再生中は根 `inert` を付けず編集ショートカットのみ停止し、パン・ズームと再生バー操作を可能にします。新規マップ・別名保存・テンプレ新規・枝切り出し先では `mapDocumentOptionsForNewMap` が `tour` を落とします。
+
 ## 複数マップの検索とリンク（Phase 19・候補013・024・031・032・056・057）
 
 複数マップの横断検索・マップ間リンク・被リンク・リンク切れ検出・お気に入り／最近使用・フォルダー管理は、既存のレイヤー境界と保護モード・複数タブ競合検出の安全性を崩さずに以下 3 系統のフローで連携します。

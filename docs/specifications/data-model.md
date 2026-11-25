@@ -110,7 +110,8 @@ Root Node B (id: 5, parentId: null)
 | `client/src/types/nodeKind.ts` | `NodeKind`, `NODE_KINDS`, `NODE_KIND_BAR_WIDTH_PX`, `NODE_KIND_BAR_CSS_VARS`, `NODE_KIND_BAR_FALLBACK_COLORS` | ノード種別（`"question" \| "conclusion" \| "evidence" \| "idea"`）、左端色バー幅・CSS 変数・Pixi／SVG 用フォールバック色 |
 | `client/src/types/nodeImportance.ts` | `NodeImportance` | ノード重要度レベル（`"high" \| "medium" \| "low"`） |
 | `client/src/types/nodeLayout.ts` | `NodeLayoutMode` | レイアウト配置モード（`"manual" \| "auto"`） |
-| `client/src/types/nodeMapState.ts` | `NodeMapState` | マップ全体のインメモリ状態（`layoutMode`, `nodes`, 任意の `treeDirection` / `layoutSpacing` / `layoutStyle` / `branchLayouts` / `relations` / `groups`） |
+| `client/src/types/nodeMapState.ts` | `NodeMapState` | マップ全体のインメモリ状態（`layoutMode`, `nodes`, 任意の `treeDirection` / `layoutSpacing` / `layoutStyle` / `branchLayouts` / `relations` / `groups` / `tour`） |
+| `client/src/types/mapTour.ts` | `MapTour`, `MapTourStep`, `normalizeTour`, `projectTour`, `areMapToursEqual` | プレゼンテーションツアー（Phase 31・072/073） |
 | `client/src/types/mapRelation.ts` | `MapRelation`, `RelationKind`, `RELATION_KINDS` | 親子以外の関連線（Phase 28・061/062） |
 | `client/src/types/mapGroup.ts` | `MapGroup`, `MAP_GROUP_LABEL_MAX_CODEPOINTS` | ノード集合のグループ枠（Phase 28・063） |
 | `client/src/types/mapCanvasSelection.ts` | `MapCanvasSelection` | キャンバス選択（`nodes` / `relation` / `group`） |
@@ -266,6 +267,7 @@ import type { LayoutSpacing } from "@/types/layoutSpacing";
 import type { LayoutStyle } from "@/types/layoutStyle";
 import type { MapGroup } from "@/types/mapGroup";
 import type { MapRelation } from "@/types/mapRelation";
+import type { MapTour } from "@/types/mapTour";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 import type { TreeDirection } from "@/types/treeDirection";
@@ -285,8 +287,31 @@ export type NodeMapState = {
   relations?: readonly MapRelation[];
   // ノード集合のグループ枠。欠落キー＝空。空配列はエンコード時にキー省略
   groups?: readonly MapGroup[];
+  // プレゼンテーションツアー。欠落キー＝ツアーなし。steps が空の下書きは永続化時にキー省略
+  tour?: MapTour;
 };
 ```
+
+#### `MapTour` / `MapTourStep`（Phase 31）
+
+```typescript
+// client/src/types/mapTour.ts
+type MapTourStep = {
+  id: string; // ツアー内一意（ノード id と別）
+  snapshot: MapViewSnapshot;
+  caption?: string; // 空白・不正は省略
+};
+type MapTour = {
+  version: 1;
+  title: string; // 1〜80 コードポイント（trim 後）
+  steps: readonly MapTourStep[]; // 永続化時 1〜50。0 件なら tour キーごと省略
+};
+```
+
+- **正規化**: `normalizeTour`（`mapDocumentDecoder`）。`version !== 1`・不正 `title`・非オブジェクト → `tour` 項目ごと削除。不正ステップは個別除外。51 件超は先頭 50。残 0 なら `tour` 削除。`caption` 不正はキャプション無しでステップ残存。
+- **投影**: `projectTour`（エンコード）。`steps.length === 0` ならキー省略。
+- **equal**: `areMapToursEqual` が `mapHistory` / `mapConflict` に接続。
+- **§3.2**: 新規マップ・別名保存・テンプレ新規・枝切り出し先には `tour` を含めない（`mapDocumentOptionsForNewMap`）。
 
 #### `LayoutStyle` / `BranchLayout`（Phase 29）
 
@@ -341,8 +366,8 @@ type MapCanvasSelection =
 `NodeMapState` を1操作ぶんのスナップショットとして、過去・現在・未来の配列でメモリ上に保持します。
 
 - 上限は `MAP_HISTORY_LIMIT`（100操作）です。変更のないノードオブジェクトと画像文字列は履歴間で共有し、操作のたびに deep clone や JSON 化は行いません。
-- 復元対象は `nodes`・`layoutMode` および任意の `treeDirection` / `layoutSpacing` / `layoutStyle` / `branchLayouts` / `relations` / `groups` です（ノード任意属性 `layoutPinned` も含む）。選択、パン・ズーム、表示フィルター、枝の折りたたみ、イラスト生成のプレビューは含めません。`layoutStyle` / `branchLayouts` / `relations` / `groups` のみが違う場合も equal は偽です。
-- 履歴は保存も書き出しもしません。JSON と `localStorage` の Version 3 形式は版を上げず、文書級任意キーとして `layoutStyle` / `branchLayouts` / `relations` / `groups` を載せます（欠落＝既定／空、空配列・`orthogonal` はエンコード時キー省略）。
+- 復元対象は `nodes`・`layoutMode` および任意の `treeDirection` / `layoutSpacing` / `layoutStyle` / `branchLayouts` / `relations` / `groups` / `tour` です（ノード任意属性 `layoutPinned` も含む）。選択、パン・ズーム、表示フィルター、枝の折りたたみ、イラスト生成のプレビューは含めません。`layoutStyle` / `branchLayouts` / `relations` / `groups` / `tour` のみが違う場合も equal は偽です。
+- 履歴は保存も書き出しもしません。JSON と `localStorage` の Version 3 形式は版を上げず、文書級任意キーとして `layoutStyle` / `branchLayouts` / `relations` / `groups` / `tour` を載せます（欠落＝既定／空、空配列・`orthogonal`・空ツアーはエンコード時キー省略）。
 - 初回の保存データ復元と JSON 読み込みの成功は新しい起点となり、過去・未来・進行中のドラッグのグループを消去します。
 
 ### 2.2 レイアウト・解像度フィルタリング型
@@ -890,6 +915,7 @@ Phase 19 では、Version 3 のまま（版は上げません）、別マップ�
 Phase 25 では、Version 3 のまま、編集ロックの任意項目 `locked`（`true` のみ）がノードに追加されました。ロックが無いノードは項目ごと持ちません。
 #53（ラベル文字サイズ・太字・下線）では、Version 3 のまま、任意項目 `labelFontSize`（`12 | 14 | 18 | 24`。欠落＝14、encode 時 14 はキー省略）・`labelBold`（`true` のみ）・`labelUnderline`（`true` のみ）がノードに追加されました。標準・通常・下線なしのノードは項目ごと持ちません。不正値は項目削除（文書全体は失敗させません）。
 Phase 29 では、Version 3 のまま、文書級任意項目 `layoutStyle`（`"orthogonal" | "radial"`。欠落＝orthogonal、`orthogonal` はエンコード時キー省略）・`branchLayouts`（`{ nodeId, direction }[]`。欠落＝空、空配列はキー省略）と、ノード任意項目 `layoutPinned`（`true` のみ。欠落＝非固定）が追加されました。未知の `layoutStyle` はキー削除、不正な `branchLayouts` 要素はエントリ除去で文書成功です。
+Phase 31 では、Version 3 のまま、文書級任意項目 `tour`（オブジェクト。`version: 1`・`title`・`steps[]`。各ステップは `id`・`snapshot`・任意 `caption`）が追加されました。不正な `tour` 全体は項目削除、不正ステップは除外、0 ステップならキー省略です（[features.md の 36 章](./features.md#36-プレゼンテーションと案内phase-31)）。
 
 #### JSON サンプル (Version 3)
 ```json
@@ -935,6 +961,7 @@ Phase 29 では、Version 3 のまま、文書級任意項目 `layoutStyle`（`"
 | `nodes[].mapLinks` | `object[]` | △ (任意) | マップ間リンク（最大 10 件。各要素は `targetMapId`（必須・`MAP_ID_PATTERN`）と任意の `targetNodeId`（1 以上の安全な整数））。読み込みでは件数・要素のプレーンオブジェクト型・未知キー・各フィールド型を正規化より先に判定し、`normalizeNodeMapLink` を通して `nodeMapLinkKey` が同じものは後のものを捨て、空なら項目ごと持たない。無い場合はキー自体を含めない。V1/V2 では存在しても無視する |
 | `layoutStyle` | `string` | △ (任意) | `"orthogonal"` または `"radial"`（Phase 29）。欠落＝orthogonal。未知値はキー削除。`orthogonal` はエンコード時キー省略。V1/V2 では無視 |
 | `branchLayouts` | `object[]` | △ (任意) | 枝ごとの配置方向（Phase 29。各要素は `nodeId`・`direction`=`"lr"\|"rl"\|"tb"\|"bt"`）。不正要素は除去。空ならキー省略。V1/V2 では無視 |
+| `tour` | `object` | △ (任意) | プレゼンテーションツアー（Phase 31）。`version: 1`・`title`（1〜80 CP）・`steps`（1〜50。各要素は `id`・`snapshot`・任意 `caption` 500 CP）。0 ステップ・不正全体はキー省略／削除。V1/V2 では無視 |
 | `nodes[].layoutPinned` | `true` | △ (任意) | 自動配置時の位置固定（Phase 29）。`true` のみ。不正・欠落はキー削除／省略。V1/V2 では無視 |
 | `nodes[].icon` | `string` | △ (任意) | 絵文字アイコン（書記素ちょうど 1・CP 1〜16・Extended_Pictographic 必須）。不正・欠落はキー削除／省略。V1/V2 では存在しても無視する |
 | `nodes[].kind` | `string` | △ (任意) | ノード種別（`question` / `conclusion` / `evidence` / `idea`）。許可外・欠落はキー削除／省略。V1/V2 では存在しても無視する |
@@ -999,6 +1026,10 @@ Phase 29 では、Version 3 のまま、文書級任意項目 `layoutStyle`（`"
     ├─ 不正要素はエントリ除去（文書全体は失敗させない）
     ├─ 非配列ならキーごと無視
     └─ relation/group id をノード id と衝突しないよう reserved に積む
+ 6. 文書級 tour 正規化（V3 のみ。`normalizeTour`）
+    ├─ 不正 tour 全体は項目削除
+    ├─ 不正ステップは個別除外。0 件なら tour 削除
+    └─ 51 件超は先頭 50 に切り詰め
  Version 3 ドキュメント オブジェクト (ok: true)
 ```
 

@@ -24,6 +24,7 @@
 16. [関連線・グループ枠のクライアントAPI](#16-関連線グループ枠のクライアントapi)
 17. [自動配置の拡張のクライアントAPI](#17-自動配置の拡張のクライアントapi)
 18. [OPML・CSV/TSV 交換のクライアントAPI](#18-opmlcsvtsv-交換のクライアントapi)
+19. [プレゼンテーションと案内のクライアントAPI](#19-プレゼンテーションと案内のクライアントapi)
 
 ---
 
@@ -968,3 +969,83 @@ exportTsv(): void;
 
 - 取込: `ExchangeImportControl.tsx` → `ExchangeImportDialog.tsx`（`ExchangeImportInputScreen` / `ExchangeImportPreviewScreen`）。
 - 書出: `ExchangeExportControls.tsx`（`ExportScopeControl` と同列。`resolveExportFormatControls` に従う disabled）。
+
+## 19. プレゼンテーションと案内のクライアントAPI
+
+Phase 31（候補072・073）。HTTP エンドポイントと MapDocument V3 の版は増やしません。操作入口のガード正本は inventory（`docs/superpowers/specs/2026-11-25-phase31-presentation-guide-inventory.md`）。
+
+### 19.1 型・正規化（`types/mapTour.ts`）
+
+```typescript
+export const MAP_TOUR_VERSION = 1;
+export const MAP_TOUR_TITLE_MAX_CODEPOINTS = 80;
+export const MAP_TOUR_CAPTION_MAX_CODEPOINTS = 500;
+export const MAP_TOUR_STEP_MAX = 50;
+
+export type MapTourStep = {
+  id: string;
+  snapshot: MapViewSnapshot;
+  caption?: string;
+};
+export type MapTour = {
+  version: typeof MAP_TOUR_VERSION;
+  title: string;
+  steps: readonly MapTourStep[];
+};
+
+export function normalizeTour(
+  raw: unknown,
+  nodeIdSet: ReadonlySet<number>,
+  nodes: readonly Node[],
+): MapTour | undefined;
+export function projectTour(tour: MapTour | undefined): { tour?: MapTour };
+export function areMapToursEqual(a: MapTour | undefined, b: MapTour | undefined): boolean;
+```
+
+- 変異計画: `mapTourMutation.ts`（`planCreateTour`・`planAddTourStep` ほか）。フック経路: `useMapTourActions.ts`。
+
+### 19.2 `useNodes.ts`（文書変更）
+
+```typescript
+tour: NodeMapState["tour"];
+createTour: (title: string) => CreateTourOutcome;
+removeTour: () => TourMutationOutcome;
+setTourTitle: (title: string) => TourMutationOutcome;
+addTourStep: (snapshot: MapViewSnapshot, stepId?: string) => TourStepOutcome;
+removeTourStep: (stepId: string) => TourMutationOutcome;
+reorderTourStep: (fromIndex: number, toIndex: number) => TourMutationOutcome;
+overwriteTourStepSnapshot: (stepId: string, snapshot: MapViewSnapshot) => TourMutationOutcome;
+setTourStepCaption: (stepId: string, caption: string) => TourMutationOutcome;
+```
+
+- 成功時のみ 1 操作の Undo / Redo。保護・競合・再生中のガードは UI 層（`MapEditor`）と inventory に従う。
+
+### 19.3 編集・再生フック
+
+```typescript
+// useMapTourEditor.ts
+export type TourEditorScreen = "closed" | "open";
+export function useMapTourEditor(options: UseMapTourEditorOptions): UseMapTourEditorReturn;
+
+// usePresentationPlayback.ts
+export type PresentationScreen = "closed" | "playing";
+export type ApplyMapView = (
+  snapshot: MapViewSnapshot,
+  beforeChange?: (before: MapViewSnapshot) => void,
+) => boolean;
+export function usePresentationPlayback(
+  options: UsePresentationPlaybackOptions,
+): UsePresentationPlaybackReturn;
+
+// usePresentationPlaybackKeyboard.ts — 再生中 ← / → / Escape
+export function usePresentationPlaybackKeyboard(options: UsePresentationPlaybackKeyboardOptions): void;
+```
+
+- `usePresentationPlayback` のステップ適用は `applyView(snapshot)` の **第2引数なし**（閲覧履歴に載せない）。終了時は開始前 `captureView()` の baseline へ `applyView` で復元。
+- `MapEditor` は `tourEditor.screen === "closed"` と `presentation.screen === "closed"` を `editorShortcutsEnabled` に積み、ツアー編集ダイアログ中は根 `inert`。再生中は `inert={!editorShortcutsEnabled && presentation.screen !== "playing"}`。
+
+### 19.4 UI 連携
+
+- ヘッダー: `TourEditorControl.tsx` / `TourEditorDialog.tsx` / `PresentationStartControl.tsx`。
+- 再生バー: `PresentationPlaybackBar.tsx`（キャプション・1/N・前後・終了）。
+- 投影: `mapDocumentState.ts` の `mapDocumentOptionsForNewMap` / `omitTourFromMapDocument` が §3.2「含めない」経路を実装。
