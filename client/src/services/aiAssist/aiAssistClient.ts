@@ -1,9 +1,19 @@
 import {
   validateBranchSummaryOutput,
+  validateChildCandidatesOutput,
+  validateClassifyReorderOutput,
+  validateDuplicatesOutput,
   validateImportanceOutput,
+  validateMissingPerspectivesOutput,
+  type AiClassifyMove,
+  type ChildCandidate,
+  type DuplicatePair,
   type ImportanceSuggestion,
+  type MissingPerspectiveItem,
 } from "@/domain/aiAssist/aiAssistOutput";
 import type { AiBranchInput } from "@/domain/aiAssist/aiBranchInput";
+import { collectSubtreeIds } from "@/domain/nodes/nodeTree";
+import type { Node } from "@/types/node";
 import { readProperty } from "@/domain/shared/unknownRecord";
 
 // サーバーの 120 秒より長くし、サーバーの timeout の応答を先に受け取れるようにする
@@ -174,6 +184,57 @@ export async function requestImportanceSuggestions(
   return result.suggestions;
 }
 
+export async function requestChildCandidates(
+  branch: AiBranchInput,
+  options: AiAssistRequestOptions,
+): Promise<ChildCandidate[]> {
+  const reply = await postJson("/api/ai-assist/child-candidates", { branch }, options);
+  if (!reply.ok) throw new AiAssistRequestError(kindFromFailure(reply));
+  const result = validateChildCandidatesOutput(reply.body);
+  if (!result.ok) throw new AiAssistRequestError("invalid-output");
+  return result.candidates;
+}
+
+export async function requestMissingPerspectives(
+  branch: AiBranchInput,
+  rootHasParent: boolean,
+  options: AiAssistRequestOptions,
+): Promise<MissingPerspectiveItem[]> {
+  const reply = await postJson("/api/ai-assist/missing-perspectives", { branch }, options);
+  if (!reply.ok) throw new AiAssistRequestError(kindFromFailure(reply));
+  const result = validateMissingPerspectivesOutput(reply.body, rootHasParent);
+  if (!result.ok) throw new AiAssistRequestError("invalid-output");
+  return result.items;
+}
+
+export async function requestClassifyReorder(
+  branch: AiBranchInput,
+  nodes: readonly Node[],
+  options: AiAssistRequestOptions,
+): Promise<AiClassifyMove[]> {
+  const reply = await postJson("/api/ai-assist/classify-reorder", { branch }, options);
+  if (!reply.ok) throw new AiAssistRequestError(kindFromFailure(reply));
+  const branchIds = collectSubtreeIds(nodes, branch.rootId);
+  const result = validateClassifyReorderOutput(reply.body, branchIds, nodes);
+  if (!result.ok) throw new AiAssistRequestError("invalid-output");
+  return result.moves;
+}
+
+export async function requestDuplicatePairs(
+  branch: AiBranchInput,
+  nodes: readonly Node[],
+  visibleNodeIds: ReadonlySet<number>,
+  currentMapId: string,
+  options: AiAssistRequestOptions,
+): Promise<DuplicatePair[]> {
+  const reply = await postJson("/api/ai-assist/duplicates", { branch, mapId: currentMapId }, options);
+  if (!reply.ok) throw new AiAssistRequestError(kindFromFailure(reply));
+  const branchIds = collectSubtreeIds(nodes, branch.rootId);
+  const result = validateDuplicatesOutput(reply.body, branchIds, { nodes, visibleNodeIds, currentMapId });
+  if (!result.ok) throw new AiAssistRequestError("invalid-output");
+  return result.pairs;
+}
+
 export type AiAssistApi = {
   fetchStatus: (options: AiAssistRequestOptions) => Promise<AiAssistStatus>;
   requestBranchSummary: (branch: AiBranchInput, options: AiAssistRequestOptions) => Promise<string>;
@@ -182,10 +243,32 @@ export type AiAssistApi = {
     targetIds: readonly number[],
     options: AiAssistRequestOptions,
   ) => Promise<ImportanceSuggestion[]>;
+  requestChildCandidates: (branch: AiBranchInput, options: AiAssistRequestOptions) => Promise<ChildCandidate[]>;
+  requestMissingPerspectives: (
+    branch: AiBranchInput,
+    rootHasParent: boolean,
+    options: AiAssistRequestOptions,
+  ) => Promise<MissingPerspectiveItem[]>;
+  requestClassifyReorder: (
+    branch: AiBranchInput,
+    nodes: readonly Node[],
+    options: AiAssistRequestOptions,
+  ) => Promise<AiClassifyMove[]>;
+  requestDuplicatePairs: (
+    branch: AiBranchInput,
+    nodes: readonly Node[],
+    visibleNodeIds: ReadonlySet<number>,
+    currentMapId: string,
+    options: AiAssistRequestOptions,
+  ) => Promise<DuplicatePair[]>;
 };
 
 export const DEFAULT_AI_ASSIST_API: AiAssistApi = {
   fetchStatus: fetchAiAssistStatus,
   requestBranchSummary,
   requestImportanceSuggestions,
+  requestChildCandidates,
+  requestMissingPerspectives,
+  requestClassifyReorder,
+  requestDuplicatePairs,
 };
