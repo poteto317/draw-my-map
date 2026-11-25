@@ -51,6 +51,10 @@ export type CommandAvailabilityContext = {
   readonly nodeSplitDisabledReason: string | null;
   readonly canOpenNodeMerge: boolean;
   readonly nodeMergeDisabledReason: string | null;
+  readonly canOpenAiBranchSummary: boolean;
+  readonly aiBranchSummaryDisabledReason: string | null;
+  readonly canOpenAiImportance: boolean;
+  readonly aiImportanceDisabledReason: string | null;
   readonly canRegisterPart: boolean;
   readonly canInsertPart: boolean;
   readonly canDeletePart: boolean;

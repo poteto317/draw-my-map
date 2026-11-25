@@ -50,6 +50,14 @@ export const COMMAND_CATALOG: readonly CommandDefinition[] = Object.freeze([
   }),
   define("edit.open-node-split", "edit", "編集", "ノードを分割…", { opensDialog: true }),
   define("edit.open-node-merge", "edit", "編集", "ノードを統合…", { opensDialog: true }),
+  define("edit.open-ai-branch-summary", "edit", "編集", "枝を要約してメモに入れる（AI）…", {
+    aliases: ["AI", "要約"],
+    opensDialog: true,
+  }),
+  define("edit.open-ai-importance", "edit", "編集", "重要度を提案（AI）…", {
+    aliases: ["AI", "重要度"],
+    opensDialog: true,
+  }),
   define("edit.register-part", "edit", "編集", "選択を部品に登録…", {
     aliases: ["部品登録"],
     opensDialog: true,

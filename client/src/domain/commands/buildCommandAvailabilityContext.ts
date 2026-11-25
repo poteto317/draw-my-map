@@ -28,6 +28,10 @@ export type CommandAvailabilityContextInput = {
   readonly nodeSplitDisabledReason: string | null;
   readonly canOpenNodeMerge: boolean;
   readonly nodeMergeDisabledReason: string | null;
+  readonly canOpenAiBranchSummary: boolean;
+  readonly aiBranchSummaryDisabledReason: string | null;
+  readonly canOpenAiImportance: boolean;
+  readonly aiImportanceDisabledReason: string | null;
   readonly canRegisterPart: boolean;
   readonly canInsertPart: boolean;
   readonly canDeletePart: boolean;
@@ -69,6 +73,10 @@ export function buildCommandAvailabilityContext(
     nodeSplitDisabledReason: input.nodeSplitDisabledReason,
     canOpenNodeMerge: input.canOpenNodeMerge,
     nodeMergeDisabledReason: input.nodeMergeDisabledReason,
+    canOpenAiBranchSummary: input.canOpenAiBranchSummary,
+    aiBranchSummaryDisabledReason: input.aiBranchSummaryDisabledReason,
+    canOpenAiImportance: input.canOpenAiImportance,
+    aiImportanceDisabledReason: input.aiImportanceDisabledReason,
     canRegisterPart: input.canRegisterPart,
     canInsertPart: input.canInsertPart,
     canDeletePart: input.canDeletePart,

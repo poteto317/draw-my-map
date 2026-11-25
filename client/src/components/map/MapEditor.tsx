@@ -49,6 +49,7 @@ import { LabelReplaceControl } from "@/components/layout/LabelReplaceControl";
 import { LabelReplaceDialog } from "@/components/layout/LabelReplaceDialog";
 import { NodeMergeControl } from "@/components/layout/NodeMergeControl";
 import { NodeMergeDialog } from "@/components/layout/NodeMergeDialog";
+import { AiAssistDialog } from "@/components/layout/AiAssistDialog";
 import { NodeSplitControl } from "@/components/layout/NodeSplitControl";
 import { NodeSplitDialog } from "@/components/layout/NodeSplitDialog";
 import {
@@ -61,6 +62,8 @@ import { useCommandPalette } from "@/hooks/useCommandPalette";
 import { useHeaderFocusReturn } from "@/hooks/useHeaderFocusReturn";
 import { useLabelReplaceDialog } from "@/hooks/useLabelReplaceDialog";
 import { useNodeMergeDialog } from "@/hooks/useNodeMergeDialog";
+import { useAiAssistDialog } from "@/hooks/useAiAssistDialog";
+import { useAiAssistFocusReturn } from "@/hooks/useAiAssistFocusReturn";
 import { useNodeSplitDialog } from "@/hooks/useNodeSplitDialog";
 import { useLatestRef } from "@/hooks/useLatestRef";
 import type { MapLibraryOperationResult } from "@/hooks/useMapLibrary";
@@ -248,6 +251,7 @@ export function MapEditor({
     updateGroupLabel,
     updateNodeLabel,
     updateNodesImportance,
+    applyAiProposals,
     moveNode,
     movePinnedNode,
     finalizePinnedNodeMove,
@@ -850,6 +854,34 @@ export function MapEditor({
     buttonRef: nodeMergeButtonRef,
     fallbackRefs: mergeFocusFallbacks,
   });
+  // AI 支援（Phase 32）。入口の可否は右パネルとコマンドパレットで同じ値を使う（L-057・L-061）。
+  // blockers はフック内の useMemo を効かせるため、値が変わったときだけ作り直す
+  const isProtectedMode = storageMode === "protected";
+  const hasMapConflict = persistence.conflictState === "conflict";
+  const isMapExternallyDeleted = persistence.conflictState === "externallyDeleted";
+  const aiAssistBlockers = useMemo(() => ({
+    isProtectedMode,
+    hasConflict: hasMapConflict,
+    isExternallyDeleted: isMapExternallyDeleted,
+    playingPresentation,
+  }), [isProtectedMode, hasMapConflict, isMapExternallyDeleted, playingPresentation]);
+  const aiAssist = useAiAssistDialog({
+    mapId,
+    documentRevision,
+    nodes,
+    // アウトライン表示では主選択だけ
+    selectedNodeIds: importanceTargetIds,
+    blockers: aiAssistBlockers,
+    applyAiProposals,
+    publishNotice: publishTreeEditNotice,
+  });
+  const { open: openAiAssist, summaryEntry: aiSummaryEntry, importanceEntry: aiImportanceEntry } = aiAssist;
+  const { summaryButtonRef: aiSummaryButtonRef, importanceButtonRef: aiImportanceButtonRef } = useAiAssistFocusReturn({
+    focusRequest: aiAssist.focusRequest,
+    consumeFocusRequest: aiAssist.consumeFocusRequest,
+    viewMode,
+    canvasRef: canvasContainerRef,
+  });
   const { moveSelected: moveSelectedSibling } = siblingReorder;
   const moveSelectedSiblingUp = useCallback(() => moveSelectedSibling("up"), [moveSelectedSibling]);
   const moveSelectedSiblingDown = useCallback(() => moveSelectedSibling("down"), [moveSelectedSibling]);
@@ -887,6 +919,7 @@ export function MapEditor({
     && labelReplace.screen === "closed"
     && nodeSplit.screen === "closed"
     && nodeMerge.screen === "closed"
+    && aiAssist.screen === "closed"
     && partsDialogMode === null
     && relationPartnerFromId === null
     && !crossMapDialogs.crossMapSearchOpen
@@ -1030,6 +1063,10 @@ export function MapEditor({
         nodeSplitDisabledReason: nodeSplit.disabledReason,
         canOpenNodeMerge: !nodeOpsBlockedByCanvasSelection && nodeMerge.canOpen,
         nodeMergeDisabledReason: nodeMerge.disabledReason,
+        canOpenAiBranchSummary: !nodeOpsBlockedByCanvasSelection && aiSummaryEntry.enabled,
+        aiBranchSummaryDisabledReason: aiSummaryEntry.enabled ? null : aiSummaryEntry.reason,
+        canOpenAiImportance: !nodeOpsBlockedByCanvasSelection && aiImportanceEntry.enabled,
+        aiImportanceDisabledReason: aiImportanceEntry.enabled ? null : aiImportanceEntry.reason,
         canRegisterPart: !nodeOpsBlockedByCanvasSelection && partsLibrary.canRegister,
         canInsertPart: !nodeOpsBlockedByCanvasSelection && partsLibrary.parts.length > 0,
         canDeletePart: partsLibrary.parts.length > 0,
@@ -1049,6 +1086,7 @@ export function MapEditor({
       outlineActions.structureCanMoveUp, outlineActions.structureCanMoveDown,
       outlineActions.structureCanIndent, outlineActions.structureCanOutdent, nodes.length,
       nodeSplit.canOpen, nodeSplit.disabledReason, nodeMerge.canOpen, nodeMerge.disabledReason,
+      aiSummaryEntry, aiImportanceEntry,
       partsLibrary.canRegister, partsLibrary.parts.length,
       outlineModel.duplicateIds, outlineModel.invalidStructure, outlineModel.allNodeIds,
     ],
@@ -1139,6 +1177,8 @@ export function MapEditor({
       openBranchMove: branchMove.open,
       openNodeSplit: nodeSplit.open,
       openNodeMerge: nodeMerge.open,
+      openAiBranchSummary: () => openAiAssist("branch-summary", "palette"),
+      openAiImportance: () => openAiAssist("importance", "palette"),
       openCrossMapSearch: crossMapDialogs.openCrossMapSearch,
       openRegisterPart: () => {
         partsLibrary.refresh();
@@ -1153,7 +1193,7 @@ export function MapEditor({
         setPartsDialogMode("delete");
       },
     });
-  }, [labelReplace, branchMove, nodeSplit, nodeMerge, crossMapDialogs, partsLibrary]);
+  }, [labelReplace, branchMove, nodeSplit, nodeMerge, openAiAssist, crossMapDialogs, partsLibrary]);
   const handleExecutePaletteActive = useCallback(() => {
     const item = filteredPalette.items[commandPalette.activeIndex];
     if (!item) return;
@@ -1682,6 +1722,14 @@ export function MapEditor({
               storageMode={storageMode}
               onPreviewNote={previewNodeNote}
               onBeginNoteEdit={beginMoveHistory}
+              aiAssist={{
+                summary: aiAssist.summaryEntry,
+                importance: aiAssist.importanceEntry,
+                summaryButtonRef: aiSummaryButtonRef,
+                importanceButtonRef: aiImportanceButtonRef,
+                onOpenSummary: () => openAiAssist("branch-summary", "panel"),
+                onOpenImportance: () => openAiAssist("importance", "panel"),
+              }}
               onAddTag={addNodeTag}
               onRemoveTag={removeNodeTag}
               onAddLink={addNodeLink}
@@ -1813,6 +1861,20 @@ export function MapEditor({
           onCustomSeparatorChange={nodeMerge.setCustomSeparator}
           onCancel={nodeMerge.close}
           onSubmit={nodeMerge.submit}
+          onMouseClick={() => {
+            dialogMouseClickedAtRef.current = Date.now();
+          }}
+        />
+      )}
+      {aiAssist.view !== null && (
+        <AiAssistDialog
+          view={aiAssist.view}
+          onClose={aiAssist.close}
+          onSend={aiAssist.send}
+          onRetry={aiAssist.retry}
+          onDecide={aiAssist.decide}
+          onNoteModeChange={aiAssist.setNoteMode}
+          onApply={aiAssist.apply}
           onMouseClick={() => {
             dialogMouseClickedAtRef.current = Date.now();
           }}

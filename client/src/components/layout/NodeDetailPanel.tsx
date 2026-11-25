@@ -1,3 +1,4 @@
+import { AiAssistSection, type AiAssistSectionProps } from "@/components/layout/AiAssistSection";
 import { IllustrationPanel } from "@/components/layout/IllustrationPanel";
 import { NodeAppearanceSection } from "@/components/layout/NodeAppearanceSection";
 import { NodeBacklinksSection } from "@/components/layout/NodeBacklinksSection";
@@ -54,6 +55,8 @@ type NodeDetailPanelProps = {
   storageMode: "persistent" | "protected";
   onPreviewNote: (id: number, note: string) => boolean;
   onBeginNoteEdit: () => MapHistoryGroupLease;
+  /** 「AI支援」の節（Phase 32）。MapEditor が useAiAssistDialog の入口の可否と開く関数を渡す */
+  aiAssist: AiAssistSectionProps;
   onAddTag: (id: number, input: string) => AddNodeTagOutcome;
   onRemoveTag: (id: number, tag: string) => boolean;
   onAddLink: (id: number, input: string) => AddNodeLinkOutcome;
@@ -99,6 +102,7 @@ export function NodeDetailPanel({
   storageMode,
   onPreviewNote,
   onBeginNoteEdit,
+  aiAssist,
   onAddTag,
   onRemoveTag,
   onAddLink,
@@ -179,6 +183,7 @@ export function NodeDetailPanel({
           editDisabled={attributeEditDisabled}
         />
       )}
+      {nonNodeDetailVisible ? null : <AiAssistSection {...aiAssist} />}
       {nonNodeDetailVisible ? null : (
         <fieldset disabled={attributeEditDisabled} className="contents flex flex-col gap-6">
           <NodeAppearanceSection

@@ -40,6 +40,8 @@ const MUTATING_IDS = new Set<CommandId>([
   "edit.open-branch-move",
   "edit.open-node-split",
   "edit.open-node-merge",
+  "edit.open-ai-branch-summary",
+  "edit.open-ai-importance",
   "edit.register-part",
   "edit.insert-part",
   "edit.delete-part",
@@ -148,6 +150,16 @@ function resolveOperationAvailability(
       return fromFlag(
         context.canOpenNodeMerge,
         context.nodeMergeDisabledReason ?? "2 つ以上のノードを選択してください。",
+      );
+    case "edit.open-ai-branch-summary":
+      return fromFlag(
+        context.canOpenAiBranchSummary,
+        context.aiBranchSummaryDisabledReason ?? "要約できるノードが選択されていません",
+      );
+    case "edit.open-ai-importance":
+      return fromFlag(
+        context.canOpenAiImportance,
+        context.aiImportanceDisabledReason ?? "重要度を提案できるノードが選択されていません",
       );
     case "edit.register-part":
       return fromFlag(

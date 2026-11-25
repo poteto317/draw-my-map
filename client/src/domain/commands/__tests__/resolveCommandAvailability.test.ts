@@ -29,6 +29,10 @@ function baseContext(overrides: Partial<CommandAvailabilityContext> = {}): Comma
     nodeSplitDisabledReason: null,
     canOpenNodeMerge: true,
     nodeMergeDisabledReason: null,
+    canOpenAiBranchSummary: true,
+    aiBranchSummaryDisabledReason: null,
+    canOpenAiImportance: true,
+    aiImportanceDisabledReason: null,
     canRegisterPart: true,
     canInsertPart: true,
     canDeletePart: true,
@@ -228,5 +232,20 @@ describe("resolveCommandAvailability", () => {
       modeMismatch: false,
       disabledReason: "未知のコマンドです",
     });
+  });
+  it.each(["edit.open-ai-branch-summary", "edit.open-ai-importance"])("%s は保護モード・競合・外部削除で既存の理由により無効", (id) => {
+    expect(resolveCommandAvailability(id, baseContext({ isProtectedMode: true })).disabledReason).toBe("保護モードのため実行できません");
+    expect(resolveCommandAvailability(id, baseContext({ hasConflict: true })).disabledReason).toBe("競合中のため実行できません");
+    expect(resolveCommandAvailability(id, baseContext({ isExternallyDeleted: true })).disabledReason).toBe("マップが外部で削除されているため実行できません");
+  });
+
+  it("AI 支援はアウトライン表示でも使え、入口の理由をそのまま出す", () => {
+    expect(resolveCommandAvailability("edit.open-ai-importance", baseContext({ viewMode: "outline" })).enabled).toBe(true);
+    expect(resolveCommandAvailability("edit.open-ai-branch-summary", baseContext({
+      canOpenAiBranchSummary: false, aiBranchSummaryDisabledReason: "子孫が無いため要約できません",
+    }))).toEqual({ enabled: false, modeMismatch: false, disabledReason: "子孫が無いため要約できません" });
+    expect(resolveCommandAvailability("edit.open-ai-importance", baseContext({
+      canOpenAiImportance: false, aiImportanceDisabledReason: "1 件のノードを選んでください",
+    })).disabledReason).toBe("1 件のノードを選んでください");
   });
 });
