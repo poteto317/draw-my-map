@@ -315,6 +315,8 @@ type MapTour = {
 
 Phase 32 の AI 支援（候補075・076・077）は提案・採否を保存せず、適用の結果は既存の `note`・`importance` の更新なので、保存形式（`MapDocument` V3・`localStorage`）は変わらない。
 
+Phase 33 の AI 支援（候補078–081）も提案・採否を保存しません。適用の結果は通常のノード追加・`parentId`・兄弟順・既存の統合によるノード削除として V3 に残るだけで、AI 用の新しい任意属性は増やしません（`MapDocument` V3・`localStorage` の形は変わらない）。
+
 #### `LayoutStyle` / `BranchLayout`（Phase 29）
 
 ```typescript

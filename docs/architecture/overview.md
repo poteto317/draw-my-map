@@ -1175,6 +1175,20 @@ AI（Claude API・OpenAI API）に枝の要約と重要度を提案させ、利�
 
 依存の向きは components → hooks → services / domain、server → domain です。domain は server・services・React を import しません。`MapEditor` は `editorShortcutsEnabled` の積に `aiAssist.screen === "closed"` を加え、ダイアログの表示中は根を `inert` にして編集のショートカット（Undo / Redo を含む）を止めます。閉じたときは `useAiAssistFocusReturn` が入口のボタン（パレットから開いたときはキャンバス）へフォーカスを戻します。コマンドパレットの可否と理由は `aiAssist.summaryEntry`・`importanceEntry` から直接作ります。
 
+## AIによる発想・整理支援（Phase 33・候補078・079・080・081）
+
+Phase 32 のダイアログと差分プレビューを **6 種の `AiAssistKind`** で再利用し、078–081 の構造提案を同じ確認・採否フローで適用します。082–084 は実装しません。
+
+- `domain/aiAssist/aiStructureProposal.ts`: 構造提案の適用計画と `applyAiStructureProposals`（stale の再照合・merge → reparent → reorder → add の順・`AiStructureApplyOutcome`）。
+- `aiAssistOutput.ts`: 4 課題の出力検証（`validateChildCandidatesOutput` など）。サーバーとクライアントで共有。
+- `aiProposal.ts` / `AiProposalReviewList`: 提案 kind の拡張（`add-child`・`add-sibling`・`reparent`・`reorder-siblings`・`merge-pair`）と表示差し替え。
+- `server/aiAssist/aiAssistTasks.ts`: `CHILD_CANDIDATES_TASK` など 4 タスクと `aiAssistPrompt.ts` の課題別メッセージ・JSON スキーマ。
+- `app/api/ai-assist/{child-candidates,classify-reorder,duplicates,missing-perspectives}/route.ts`
+- `services/aiAssist/aiAssistClient.ts`: `requestChildCandidates` など 4 関数を追加。
+- `hooks/useAiAssistDialog.ts`: kind に応じた POST 分岐。構造 kind は `applyAiStructureProposals`、属性 kind は既存の `applyAiProposals`。
+- `hooks/useNodes.ts`: `applyAiStructureProposals` を公開（`applyStateChange` 1 回・ブロック時 `rejected`）。
+- `MapEditor` / `AiAssistSection`: 右パネル 4 ボタンと `childEntry`・`classifyEntry`・`duplicatesEntry`・`perspectivesEntry`。コマンドパレット 4 件（`COMMAND_CATALOG`）。関連線／グループ選択中は `nodeOpsBlockedByCanvasSelection` と入口可否で AI 節を抑止。
+
 ## 複数マップの検索とリンク（Phase 19・候補013・024・031・032・056・057）
 
 複数マップの横断検索・マップ間リンク・被リンク・リンク切れ検出・お気に入り／最近使用・フォルダー管理は、既存のレイヤー境界と保護モード・複数タブ競合検出の安全性を崩さずに以下 3 系統のフローで連携します。
