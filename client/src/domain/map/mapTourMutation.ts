@@ -120,13 +120,11 @@ export function planAddTourStep(
 export function planRemoveTourStep(
   state: NodeMapState,
   stepId: string,
-): TourMutationResult<{ tour: MapTour | undefined }> {
+): TourMutationResult<{ tour: MapTour }> {
   if (state.tour === undefined) return { ok: false, reason: "missing-tour" };
   const nextSteps = state.tour.steps.filter((step) => step.id !== stepId);
   if (nextSteps.length === state.tour.steps.length) return { ok: false, reason: "missing-step" };
-  const tour = nextSteps.length === 0
-    ? undefined
-    : { ...state.tour, steps: nextSteps };
+  const tour: MapTour = { ...state.tour, steps: nextSteps };
   return { ok: true, tour };
 }
 
