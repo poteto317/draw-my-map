@@ -313,6 +313,8 @@ type MapTour = {
 - **equal**: `areMapToursEqual` が `mapHistory` / `mapConflict` に接続。
 - **§3.2**: 新規マップ・別名保存・テンプレ新規・枝切り出し先には `tour` を含めない（`mapDocumentOptionsForNewMap`）。
 
+Phase 32 の AI 支援（候補075・076・077）は提案・採否を保存せず、適用の結果は既存の `note`・`importance` の更新なので、保存形式（`MapDocument` V3・`localStorage`）は変わらない。
+
 #### `LayoutStyle` / `BranchLayout`（Phase 29）
 
 ```typescript

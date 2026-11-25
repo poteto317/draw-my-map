@@ -151,6 +151,10 @@ Figma のような自由度の高い無限キャンバスと、マインドマ�
    - **マップ間リンク・被リンク一覧・リンク切れの検出**（候補024・056・057）: 右パネル「ノードの詳細」の「マップ間リンク」節で別マップ・特定ノードへのリンクを 1 ノード最大 10 件（V3 任意項目 `mapLinks`、1 回ずつ Undo / Redo）追加・削除・移動でき、「被リンク」節で選択ノード（「このノードへ」）または現在マップ全体（「このマップ全体へ」）を参照しているノードを確認・移動できます。マップ一覧の「リンク切れを確認」から全マップのリンク切れ（マップなし・ノードなし・読込失敗）を一括検出・参照元移動・現在マップリンクの直接削除ができます。
    - **マップのお気に入り・最近使用・フォルダー管理**（候補031・032）: マップ一覧で「すべて」「お気に入り」「最近使用」（最大 20 件・`最終閲覧` 表示）タブと 1 階層フォルダー（最大 50 件・未分類対応）による絞り込み・管理ができ、独立ストレージキー `draw-my-map.library-meta.v1` に保存されます（破損時もマップ本体を保護モードに落とさず明示初期化で回復可能）。
    - 詳細は [features.md の 28 章](./docs/specifications/features.md#28-複数マップの検索とリンク)。実ブラウザでの確認（[AK 節](./docs/testing/browser-test-cases.md#ak-複数マップの検索とリンクphase-19候補013024031032056057)）は、2026-11-20 にアプリ内ブラウザ（Chromium）と `next dev` で全 15 ケースを確認済み（12 ケースは ○、AK-02 の実 IME・AK-05 の 10 件超過での統合拒否・AK-12 の「リンク切れの確認」のダークモードは未実施。スクリーンリーダー・Safari・Firefox・本番ビルドは未確認。その後に追加した AK-11d（2 タブでのメタデータの書き込み）は未実施）です。
+26. **確認して適用するAI支援（枝の要約・重要度の提案。Phase 32）**
+   - 右パネル「ノードの詳細」の「AI支援」の節、またはコマンドパレットから、選んだノードの枝を AI に要約させて詳細メモに入れたり（候補076）、枝の各ノードの重要度を提案させたり（候補077）できます。AI は Claude API（既定）か OpenAI API で、サーバーの環境変数（`ANTHROPIC_API_KEY`・`OPENAI_API_KEY` ほか）で選びます。キーはブラウザへ出しません。
+   - 送る前に毎回、送信先と送るもの（枝のラベルとメモの抜粋だけ。イラスト・URL・タグ・出典・他のマップは送らない）を確認画面で示します。提案は自動では適用せず、変更ごとに「現在の値 → 提案」を見て採用・却下を選び（候補075の差分プレビュー。既定は未決）、採用分はまとめて 1 回の Undo で戻せます。提案を作った後にマップが変わっていれば何も適用しません。提案・採否は保存せず、保存形式は V3 のままです。
+   - 設定の手順は [AI 支援の設定ガイド](docs/setup/ai-assist-setup.md)、詳細は [features.md の 37 章](./docs/specifications/features.md#37-確認して適用するai支援phase-32)。実 API と実ブラウザでの確認（[AL 節](./docs/testing/browser-test-cases.md#al-確認して適用するai支援phase-32候補075076077)）は未実施です。
 
 ---
 
@@ -212,6 +216,12 @@ cp -n .env.example .env.local
 # .env.local に CLOUDFLARE_ACCOUNT_ID と CLOUDFLARE_API_TOKEN を設定
 ```
 
+### AI 支援（枝の要約・重要度の提案）のセットアップ（任意）
+
+AI 支援を使うには、Anthropic（Claude API）か OpenAI の API キーを `client/.env.local` に設定します（従量課金）。  
+詳細は [AI 支援の設定ガイド](docs/setup/ai-assist-setup.md) を参照してください。  
+AI 支援の API（`/api/ai-assist/*`）にも認証・レート制限がありません。キーを入れたまま公開 URL へデプロイしないでください（[SECURITY.md](SECURITY.md)）。
+
 ---
 
 ## プロジェクト構成
@@ -222,13 +232,14 @@ draw-my-map/
 │   ├── src/
 │   │   ├── app/                # App Router ページ & API Route Handler
 │   │   │   ├── api/illustrations/ # イラスト生成エンドポイント
+│   │   │   ├── api/ai-assist/  # AI 支援エンドポイント（status・branch-summary・importance）
 │   │   │   ├── layout.tsx
 │   │   │   └── page.tsx        # シェル（マップの一覧・ダイアログ・現在のマップの MapEditor）
 │   │   ├── components/         # React UI コンポーネント（ヘッダー、パネル、メニュー、アウトライン編集等）
 │   │   ├── config/             # 設定値・定数定義
 │   │   ├── domain/             # 純粋ドメインロジック（ノード計算、レイアウト、画像変換、複数マップのインデックス `mapLibrary/`、箇条書きの解析 `outline/` 等）
 │   │   ├── hooks/              # カスタムフック（状態管理、操作連携、Pixi 連携等）
-│   │   ├── server/             # サーバーサイド処理（Cloudflare AI連携、翻訳等）
+│   │   ├── server/             # サーバーサイド処理（Cloudflare AI連携、翻訳、AI 支援のアダプタ `aiAssist/` 等）
 │   │   ├── services/           # アプリケーションサービス（永続化、画像/アウトラインエクスポート、イラスト通信等）
 │   │   ├── testing/            # 共通テストユーティリティ・フィクスチャ（createTestNode, jpegFixture, mapLibraryTestStorage 等）
 │   │   └── types/              # 型定義（MapDocument, Node, エッジ等）
@@ -248,7 +259,8 @@ draw-my-map/
 - **[システムアーキテクチャ概要](docs/architecture/overview.md)**: Pixi.js と React 19 の協調モデル、レイヤード設計
 - **[機能仕様・操作マニュアル](docs/specifications/features.md)**: 全機能仕様、キーボードショートカット一覧
 - **[データモデル・永続化仕様](docs/specifications/data-model.md)**: `MapDocument` JSON スキーマ（V1/V2/V3）、マイグレーション、複数マップの `localStorage` 保存構造
-- **[イラスト生成 API 仕様](docs/specifications/api.md)**: `POST /api/illustrations` Route Handler 詳細
+- **[イラスト生成と AI 支援の API 仕様](docs/specifications/api.md)**: `POST /api/illustrations`・`/api/ai-assist/*` Route Handler 詳細
 - **[イラスト生成環境構築ガイド](docs/setup/illustration-generation-setup.md)**: Cloudflare Workers AI セットアップ手順
+- **[AI 支援の設定ガイド](docs/setup/ai-assist-setup.md)**: Claude API・OpenAI API のキーと提供元・モデルの設定、外部へ送る内容、誤りの対処
 - **[実ブラウザテストケース](docs/testing/browser-test-cases.md)**: ブラウザ手動検証項目一覧
 - **[開発ロードマップ](ROADMAP.md)**: フェーズ別開発進捗と完了状況

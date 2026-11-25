@@ -68,13 +68,14 @@ Draw My Map の設計・仕様・環境構築・テスト・開発運用に関�
   - 削除マップのゴミ箱（5.14。キー `draw-my-map.trash.v1` / `draw-my-map.trash.v1.doc.<id>`）およびマップライブラリメタデータ（5.15。独立キー `draw-my-map.library-meta.v1`、お気に入り・最近使用・1階層フォルダー、破損時非保護モード維持と明示初期化）。
   - 枝の折りたたみなど表示専用の状態を保存形式・編集履歴に含めない方針（1.2）。
 
-- **[API 仕様](specifications/api.md)** (`docs/specifications/api.md`)
+- **[イラスト生成と AI 支援の API 仕様](specifications/api.md)** (`docs/specifications/api.md`)
   - アウトライン書き出しのクライアントAPI（11章。整形、ダウンロード、通知の契約）。
   - 一括バックアップ・追加復元のクライアントAPI（13章。snapshot 登録、4操作、結果と通知先）。
   - ノードだけ削除のクライアントAPI（`api.md` 9章。純粋変換・hook・action・Controlの公開契約）。
   - Route Handler: `POST /api/illustrations` のリクエスト / レスポンス JSON スキーマ。
   - 処理パイプライン（入力検証 → 日本語自動翻訳 `@cf/meta/m2m100-1.2b` → 画像生成 `@cf/black-forest-labs/flux-1-schnell` → NSFW 誤判定リトライ機構）。
   - エラー仕様（400, 422, 429, 502, 503）と本番運用に向けた推奨事項。
+  - AI 支援の API（20章。`GET /api/ai-assist/status`・`POST /api/ai-assist/branch-summary`・`POST /api/ai-assist/importance`、送信元の確認、誤りの表、送るデータ、時間切れ、公開時の注意）。
 
 ### 3. 環境構築・セットアップ
 
@@ -82,11 +83,15 @@ Draw My Map の設計・仕様・環境構築・テスト・開発運用に関�
   - Cloudflare Workers AI のアカウント作成手順（無料プラン）。
   - アカウント ID および API トークンの取得方法。
   - `client/.env.local` への環境変数設定と無料枠（1 日 10,000 Neurons / 約 57 枚）の管理。
+- **[AI 支援の設定ガイド](setup/ai-assist-setup.md)** (`docs/setup/ai-assist-setup.md`)
+  - Phase 32 の AI 支援（枝の要約・重要度の提案）で外部へ送る内容と送らない内容。
+  - Claude API・OpenAI API のキーの取得と `client/.env.local` の書き方、提供元とモデルの選び方（上書きできるモデルの条件）、止め方。
+  - 誤りの種類ごとの原因と対処、課金の目安、公開時の注意。
 
 ### 4. テスト・品質保証
 
 - **[実ブラウザテストケース](testing/browser-test-cases.md)** (`docs/testing/browser-test-cases.md`)
-  - 自動テスト（Jest + jsdom）では検証が難しいキャンバス描画・インタラクション・実ブラウザ固有挙動の確認テスト項目（Phase 0〜19。Phase 14 は Q〜U 節、Phase 15 候補004は V 節、候補005は W 節、保存状態は X 節、一括バックアップ・追加復元は Y 節、複数タブの編集競合検出は Z 節、削除マップのゴミ箱は AA 節、Phase 17 の複数ノード選択は AB 節・選択ノードの一括編集は AC 節・一括置換は AD 節・ノードの分割・統合は AE 節、Phase 18 の詳細メモは AF 節・URLの添付は AG 節・タグは AH 節・Markdownメモは AI 節・出典情報は AJ 節、Phase 19 の複数マップの検索とリンクは AK 節）。
+  - 自動テスト（Jest + jsdom）では検証が難しいキャンバス描画・インタラクション・実ブラウザ固有挙動の確認テスト項目（Phase 0〜19・32。Phase 14 は Q〜U 節、Phase 15 候補004は V 節、候補005は W 節、保存状態は X 節、一括バックアップ・追加復元は Y 節、複数タブの編集競合検出は Z 節、削除マップのゴミ箱は AA 節、Phase 17 の複数ノード選択は AB 節・選択ノードの一括編集は AC 節・一括置換は AD 節・ノードの分割・統合は AE 節、Phase 18 の詳細メモは AF 節・URLの添付は AG 節・タグは AH 節・Markdownメモは AI 節・出典情報は AJ 節、Phase 19 の複数マップの検索とリンクは AK 節、Phase 32 の確認して適用するAI支援は AL 節）。
   - 優先度別テストケース（起動、操作、フィルタリング、イラスト生成、エクスポート、編集履歴、枝の複製、枝のコピー＆ペースト、ノード検索、枝の折りたたみ、複数マップの保存・切り替え、箇条書きからの追加、兄弟ノードの順序変更、階層の上げ下げ、途中への親ノード挿入、全マップ横断検索・マップ間リンク・お気に入り／最近使用・フォルダー管理・被リンク・リンク切れ検出等）。
 
 ### 5. プロジェクト管理・開発履歴
@@ -116,9 +121,10 @@ docs/
 ├── specifications/                     # 機能・データ・API 仕様書
 │   ├── features.md                     # 全機能仕様・操作マニュアル
 │   ├── data-model.md                   # データモデル・永続化仕様
-│   └── api.md                          # イラスト生成 API 仕様
+│   └── api.md                          # イラスト生成と AI 支援の API 仕様
 ├── setup/                              # 環境構築ガイド
-│   └── illustration-generation-setup.md # イラスト生成設定
+│   ├── illustration-generation-setup.md # イラスト生成設定
+│   └── ai-assist-setup.md              # AI 支援（Claude API・OpenAI API）の設定
 ├── testing/                            # テスト関連
 │   └── browser-test-cases.md           # 実ブラウザテストケース
 ├── review-findings/                    # 過去のレビュー指摘記録

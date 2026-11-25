@@ -206,7 +206,7 @@ client/src/
 #### 3. Application State & Coordination Layer (Hooks) (`src/hooks/`, `src/components/map/use*.ts`)
 - **責務**: アプリケーション状態の保持（React State / Ref / Reducer）、ライフサイクル制御、および Domain / Services 層の呼び出し調停。
 - **構成モジュール**:
-  - **アプリケーション状態フック (`src/hooks/` 全 85 ファイル)**:
+  - **アプリケーション状態フック (`src/hooks/` 全 98 ファイル)**:
     - `useNodeNoteEditing.ts`: 詳細メモのテキスト欄の下書き・途中反映（300ms のデバウンス、直前の反映の後の最初の入力から 2 秒の打ち切り、IME 変換中は張らず `compositionend` で張る）・`blur` での確定（履歴グループを閉じる）・`Escape` の取り消し・アンマウントでの反映（グループが有効なときだけ）。
     - `nodeNotePreviewDelay.ts`: 詳細メモの途中反映の待ち時間の純関数（`getNodeNotePreviewDelay(pendingSince, now)`。デバウンスの 300ms（`NODE_NOTE_PREVIEW_DELAY_MS`）と、打ち切り（`NODE_NOTE_PREVIEW_MAX_WAIT_MS = 2000`）までの残りの短い方。過ぎていれば 0）。`useNodeNoteEditing` がタイマーを張るときに使う（定数の import 元はこのファイルだけ）。React に依存しない。
     - `useNodes.ts`, `useNodeLayoutState.ts`: ノードツリーの CRUD・選択・重要度（`updateNodesImportance` は選択集合の重要度を1操作で一括変更する）・ラベルの一括置換（`updateNodeLabels`。`applyNonStructuralChange` で `replaceNodeLabels` を1回だけ呼んで1操作として記録し、受理したかを返す）・ラベル書式の更新（`setLabelFontSize`・`toggleLabelBold`・`toggleLabelUnderline`。いずれも `applyNonStructuralChange` で domain の `updateNodeLabelFontSize` / `toggleNodeLabelBold` / `toggleNodeLabelUnderline` を1回だけ呼び、受理したかを返す）・詳細メモの更新（`previewNodeNote`。メモの唯一の更新経路で、履歴グループ中は履歴に積まない。`useNodeLayoutState` の `applyNonStructuralPreview`（配置モードに依存しない `preview`）を呼ぶ）・タグの追加と削除（`addNodeTag`・`removeNodeTag`。最新の状態から判定し、成功なら `applyNonStructuralChange` で 1 回の履歴。失敗は理由（`AddNodeTagOutcome`）を返して何も変えない）・出典の追加と削除（`addNodeSource`・`removeNodeSource`。最新の状態から判定し、成功なら `applyNonStructuralChange` で 1 回の履歴。失敗は理由（`AddNodeSourceOutcome`）を返して何も変えない。削除は index）・マップ間リンクの追加と削除（`addNodeMapLink`・`removeNodeMapLink`。最新 ref の状態から判定し、成功なら `applyNonStructuralChange` で 1 回の履歴。削除は `nodeMapLinkKey` の値一致）・URL の追加と削除（`addNodeLink`・`removeNodeLink`。`applyNonStructuralChange` で 1 回の履歴。`addNodeLink` は `getCurrentState` の最新の状態から判定し、失敗は理由（`AddNodeLinkOutcome`）を返して何も変えない）・イラスト更新・枝の複製（`duplicateSubtree`）・枝のコピー（`copySubtree`）と貼り付け（`pasteSubtree`）・箇条書きの森の追加（`insertForest`）・兄弟の順序変更（`reorderSibling`。`applyTreeChange` を1回だけ呼ぶ）・階層の上げ下げ（`changeNodeIndent`。`applyTreeChange` を1回だけ呼び、結果 `ChangeNodeIndentResult` を返す）・親の挿入（`insertParentNode`。`applyTreeChange` を1回だけ呼び、その中の最新の配列で対象を解決して新しい ID を採番し、成功したときだけ新しいノードを選択する。結果 `InsertParentNodeResult` を返す）・ノードの分割（`splitNode(nodeId, separator, visibleNodeIds, expected)`。`applyTreeChangeWithOutcome` の中で最新の配列から `planNodeSplit` を作り直して `expected` と `isSameNodeSplitPlan` で照合し、違えば何も変えず `plan-changed` を返す。再計画の失敗はその理由を返す。新しい ID は計画が通った後に `nextAvailableIds` で 1 回だけ（断片数 − 1 個）採番し、選択と `documentRevision` は変えない）・ノードの統合（`mergeNodes(ids, primaryId, joiner, visibleNodeIds, expected, currentMapId)`。`currentMapId` は統合するノード（残すノード・吸収されるノード）を指すマップ間リンクを除くために使う。同じく最新の配列から `planNodeMerge` を作り直して `isSameNodeMergePlan` で照合し、成功したときだけ残したノードを `selectOnly` で選択する。`documentRevision` は変えない）と、手動/自動レイアウトモードの状態管理（複製・貼り付け・森の追加の挿入処理は内部関数 `applySubtreeInsertion` を共有する）・ツリー変更時の `layoutNodeForest` 自動整列トリガー。関連線／グループ／キャンバス選択 API（`relations` / `groups` / `canvasSelection` / `addRelation` / `removeRelation` / `updateRelation` / `addGroup` / `removeGroup` / `updateGroupLabel` / `selectRelation` / `selectGroup`）は `useRelationGroupActions` を呼び出し再公開するファサード（正本は `useRelationGroupActions`。ノード操作ガードも同フックの `isNodeOpBlocked` を配線）。
@@ -1125,7 +1125,7 @@ cd client && npm run verify
 1. `npm run tailwind:scan`: Tailwind CSS v4 のクラススキャン検証。
 2. `npm run lint`: ESLint による静的構文解析とルールチェック。
 3. `npm run typecheck`: TypeScript コンパイラ（`tsc --noEmit`）による厳格な型整合性チェック。
-4. `npm test -- --runInBand`: Jest による全ユニット・統合テストの実行（2026-10-30 時点で 275 テストファイル、約 3,950 テストケース）。
+4. `npm test -- --runInBand`: Jest による全ユニット・統合テストの実行（2026-11-25 時点で 635 テストファイル、9,007 テストケース）。
 5. `npm run build`: Next.js 本番ビルドの成否確認（SSR・バンドル最適化エラーの早期検出）。
 
 ## アウトライン編集（Phase 15・候補004）
@@ -1157,6 +1157,23 @@ canvasフォーカスは`MapEditor`内の1つの`useRevisionScopedNodeRequest(do
 ## プレゼンテーションと案内（Phase 31・候補072・073）
 
 文書級 `tour`（`types/mapTour.ts` の `MapTour`）は `MapViewSnapshot` のステップ列と任意キャプションを V3 JSON・`localStorage` に載せます。`mapDocumentDecoder` / `mapDocumentEncoder` と `mapDocumentState` の投影が `relations` / `groups` と同型で往復し、`mapHistory` / `mapConflict` の equal に接続します。編集は `domain/map/mapTourMutation.ts` と `useMapTourActions` が `useNodes` の文書変更として 1 Undo に載せ、`useMapTourEditor` がダイアログ状態（`tourEditor.screen`）を持ちます。再生はメモリ専用の `usePresentationPlayback`（`presentation.screen`）が開始直前の表示を保持し、`useMapViewNavigation.applyView` で各ステップを適用します（第2引数なし＝閲覧履歴に載せない）。`MapEditor` は `TourEditorControl` / `PresentationStartControl` / `PresentationPlaybackBar` をヘッダーとマップ上に配線し、`editorShortcutsEnabled` に `tourEditor.screen` / `presentation.screen` を積みます。再生中は根 `inert` を付けず編集ショートカットのみ停止し、パン・ズームと再生バー操作を可能にします。新規マップ・別名保存・テンプレ新規・枝切り出し先では `mapDocumentOptionsForNewMap` が `tour` を落とします。
+
+## 確認して適用するAI支援（Phase 32・候補075・076・077）
+
+AI（Claude API・OpenAI API）に枝の要約と重要度を提案させ、利用者が変更ごとに採否を選んだものだけを 1 回の Undo で適用します。AI を呼ぶのはサーバーの API ルートだけで、提案・採否は保存しません（保存形式は V3 のまま）。
+
+- `domain/aiAssist/`（React・SDK・`fetch` に依存しない純粋関数。ブラウザとサーバーの両方が使う）
+  - `aiBranchInput.ts`: 送る入力の組み立て（`buildAiBranchInput`。先行順・隠れたノードも含む・抜粋 `excerptText`・上限）、指紋（`aiBranchInputFingerprint`）、サーバー側の本文の検証（`validateAiBranchInput`）、重要度の対象 ID（`importanceTargetIds`）。
+  - `aiAssistOutput.ts`: AI の出力の検証と正規化（`validateBranchSummaryOutput`・`validateImportanceOutput`）。サーバーは返す前、クライアントは受け取った後に同じ関数を使う。
+  - `aiProposal.ts`: 075 の共通の基盤。提案の型と作り方、メモの計画（`planNoteFromSummary`）、古さの判定（`findStaleAiProposals`）、適用（`applyAiProposals`。1 件でも古ければ何も返さない）。
+  - `aiAssistEntryAvailability.ts`: 入口の可否と理由（`resolveAiAssistEntryAvailability`・`AI_ASSIST_ENTRY_MESSAGES`）。右パネル・コマンドパレット・確認画面の作り直しが同じ判定を使う。
+- `server/aiAssist/`: 共通インターフェース `AiTextGenerator` と誤りの型 `AiAssistError`、提供元をまたいで同じ HTTP ステータスから誤りの種類への写像 `aiAssistErrorKindFromStatus`（`aiTextGenerator.ts`。SDK の誤りのクラスの判定は各アダプタに残す）、環境変数の読み取りと提供元の選択（`aiAssistConfig.ts`）、2 つのアダプタ（`anthropicTextGenerator.ts`・`openaiTextGenerator.ts`）、設定からアダプタを選ぶ配線（`createAiTextGenerator.ts`）、プロンプトと区切りタグの無害化・JSON スキーマ（`aiAssistPrompt.ts`）、課題の定義（`aiAssistTasks.ts`）、送信元の確認（`aiAssistRequestOrigin.ts`）、共通のハンドラと状態のハンドラ（`handleAiAssistRequest.ts`）。SDK（`@anthropic-ai/sdk`・`openai`）を import するのは 2 つのアダプタだけで、`server/aiAssist` の外から import しないことを `sdkImportBoundary.test.ts` で検査する。
+- `app/api/ai-assist/{status,branch-summary,importance}/route.ts`: `env: process.env` と（POST の 2 ルートは）`createAiTextGenerator` をハンドラへ渡すだけ。
+- `services/aiAssist/aiAssistClient.ts`: ブラウザ側の通信（`fetchAiAssistStatus`・`requestBranchSummary`・`requestImportanceSuggestions`）、誤りの種類と文言（`describeAiAssistError`）、150 秒の打ち切り。応答はドメインの関数で検証し直す。
+- `hooks/`: `aiAssistDialogState.ts`（ダイアログの状態遷移の純関数）、`aiAssistSendPlan.ts`（送信の計画＝最新の状態からの入力の作り直しと確認画面の値、提案の組み立て）、`aiAssistDialogView.ts`（画面に渡す表示用の値の純関数）、`useAiAssistDialog.ts`（状態（useState と aiAssistDialogState の遷移関数）・`AbortController`・ref による多重送信の防止・マップ ID と `documentRevision` の監視・適用と成功時だけの通知）、`useAiAssistFocusReturn.ts`（閉じた後のフォーカスの戻し。右パネルの 2 つのボタンの ref を作って返し、右パネルから開いたときはそのボタン（無効ならキャンバス）、パレットから開いたときはキャンバス（アウトライン表示では選択行など）へ `useLayoutEffect` で当てる）。`useNodes.applyAiProposals` が最新の状態で再照合し、`applyNonStructuralChange` を 1 回だけ呼ぶ（1 回の Undo）。
+- `components/layout/`: `AiAssistSection`（右パネル「AI支援」の節。`NodeDetailPanel` の必須 props `aiAssist`）、`AiAssistDialog`（確認・生成中・誤り・提案の各画面）、`AiProposalReviewList`（075 の共通の差分プレビューと採否。種類ごとの「現在の値」「提案」の表示だけを差し替える）。コマンドパレットの 2 件は `domain/commands/*` と `commandPaletteCoreDispatch.ts`。
+
+依存の向きは components → hooks → services / domain、server → domain です。domain は server・services・React を import しません。`MapEditor` は `editorShortcutsEnabled` の積に `aiAssist.screen === "closed"` を加え、ダイアログの表示中は根を `inert` にして編集のショートカット（Undo / Redo を含む）を止めます。閉じたときは `useAiAssistFocusReturn` が入口のボタン（パレットから開いたときはキャンバス）へフォーカスを戻します。コマンドパレットの可否と理由は `aiAssist.summaryEntry`・`importanceEntry` から直接作ります。
 
 ## 複数マップの検索とリンク（Phase 19・候補013・024・031・032・056・057）
 
