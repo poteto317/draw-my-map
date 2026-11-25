@@ -1,7 +1,13 @@
 import { collectSubtreeIds } from "@/domain/nodes/nodeTree";
 import type { Node } from "@/types/node";
 
-export type AiAssistKind = "branch-summary" | "importance";
+export type AiAssistKind =
+  | "branch-summary"
+  | "importance"
+  | "child-candidates"
+  | "classify-reorder"
+  | "duplicates"
+  | "missing-perspectives";
 
 export type AiAssistEntryBlockers = {
   readonly isProtectedMode: boolean;
@@ -22,6 +28,8 @@ export const AI_ASSIST_ENTRY_MESSAGES = {
   locked: "ロック中のノードには入れられません",
   noDescendants: "子孫が無いため要約できません",
   noUnlocked: "ロックされていないノードがありません",
+  tooFewBranchNodes: "枝内にノードが 2 件未満のため実行できません",
+  tooFewUnlocked: "ロックされていないノードが 2 件未満のため実行できません",
 } as const;
 
 function disabled(reason: string): AiAssistEntryAvailability {
@@ -44,14 +52,82 @@ export function resolveAiAssistEntryAvailability(
   const root = nodes.find((node) => node.id === rootId);
   if (root === undefined) return disabled(AI_ASSIST_ENTRY_MESSAGES.selectOne);
 
-  if (kind === "branch-summary") {
-    if (root.locked === true) return disabled(AI_ASSIST_ENTRY_MESSAGES.locked);
-    if (!nodes.some((node) => node.parentId === rootId)) return disabled(AI_ASSIST_ENTRY_MESSAGES.noDescendants);
-    return { enabled: true, rootId };
-  }
   const branchIds = collectSubtreeIds(nodes, rootId);
-  if (!nodes.some((node) => branchIds.has(node.id) && node.locked !== true)) {
-    return disabled(AI_ASSIST_ENTRY_MESSAGES.noUnlocked);
+
+  switch (kind) {
+    case "branch-summary":
+      if (root.locked === true) return disabled(AI_ASSIST_ENTRY_MESSAGES.locked);
+      if (!nodes.some((node) => node.parentId === rootId)) return disabled(AI_ASSIST_ENTRY_MESSAGES.noDescendants);
+      return { enabled: true, rootId };
+    case "importance":
+      if (!nodes.some((node) => branchIds.has(node.id) && node.locked !== true)) {
+        return disabled(AI_ASSIST_ENTRY_MESSAGES.noUnlocked);
+      }
+      return { enabled: true, rootId };
+    case "child-candidates":
+    case "missing-perspectives":
+      if (root.locked === true) return disabled(AI_ASSIST_ENTRY_MESSAGES.locked);
+      return { enabled: true, rootId };
+    case "classify-reorder":
+      if (branchIds.size < 2) return disabled(AI_ASSIST_ENTRY_MESSAGES.tooFewBranchNodes);
+      return { enabled: true, rootId };
+    case "duplicates": {
+      const unlockedCount = nodes.filter((node) => branchIds.has(node.id) && node.locked !== true).length;
+      if (unlockedCount < 2) return disabled(AI_ASSIST_ENTRY_MESSAGES.tooFewUnlocked);
+      return { enabled: true, rootId };
+    }
+    default: {
+      const neverKind: never = kind;
+      return disabled(neverKind);
+    }
   }
-  return { enabled: true, rootId };
+}
+
+export type AiAssistEntryAvailabilityByKind = {
+  readonly summary: AiAssistEntryAvailability;
+  readonly importance: AiAssistEntryAvailability;
+  readonly child: AiAssistEntryAvailability;
+  readonly classify: AiAssistEntryAvailability;
+  readonly duplicates: AiAssistEntryAvailability;
+  readonly perspectives: AiAssistEntryAvailability;
+};
+
+// パネル・コマンドパレット・ダイアログで同じ入口判定を一度に取る
+export function resolveAllAiAssistEntryAvailabilities(
+  nodes: readonly Node[],
+  selectedNodeIds: readonly number[],
+  blockers: AiAssistEntryBlockers,
+): AiAssistEntryAvailabilityByKind {
+  return {
+    summary: resolveAiAssistEntryAvailability("branch-summary", nodes, selectedNodeIds, blockers),
+    importance: resolveAiAssistEntryAvailability("importance", nodes, selectedNodeIds, blockers),
+    child: resolveAiAssistEntryAvailability("child-candidates", nodes, selectedNodeIds, blockers),
+    classify: resolveAiAssistEntryAvailability("classify-reorder", nodes, selectedNodeIds, blockers),
+    duplicates: resolveAiAssistEntryAvailability("duplicates", nodes, selectedNodeIds, blockers),
+    perspectives: resolveAiAssistEntryAvailability("missing-perspectives", nodes, selectedNodeIds, blockers),
+  };
+}
+
+export function entryAvailabilityForKind(
+  kind: AiAssistKind,
+  entries: AiAssistEntryAvailabilityByKind,
+): AiAssistEntryAvailability {
+  switch (kind) {
+    case "branch-summary":
+      return entries.summary;
+    case "importance":
+      return entries.importance;
+    case "child-candidates":
+      return entries.child;
+    case "classify-reorder":
+      return entries.classify;
+    case "duplicates":
+      return entries.duplicates;
+    case "missing-perspectives":
+      return entries.perspectives;
+    default: {
+      const neverKind: never = kind;
+      return neverKind;
+    }
+  }
 }

@@ -1,9 +1,18 @@
+import type { AiAssistKind } from "@/domain/aiAssist/aiAssistEntryAvailability";
 import { AI_SUMMARY_MAX_NODES, aiBranchInputFingerprint, buildAiBranchInput } from "@/domain/aiAssist/aiBranchInput";
 import type { ImportanceSuggestion } from "@/domain/aiAssist/aiAssistOutput";
+import type { NodeMergePlan } from "@/domain/nodes/nodeMerge";
 import { assertNodesEditable } from "@/domain/nodes/nodeEditLock";
 import { NODE_NOTE_MAX_LENGTH, NODE_NOTE_MERGE_JOINER, normalizeNodeNote, withNodeNote } from "@/domain/nodes/nodeNote";
 import type { Node } from "@/types/node";
 import type { NodeImportance } from "@/types/nodeImportance";
+
+export type AiStructureProposalKind =
+  | "add-child"
+  | "add-sibling"
+  | "reparent"
+  | "reorder-siblings"
+  | "merge-pair";
 
 // AI の提案 1 件。baseline は提案を作った時点の値で、採用の時点の値と ID と値の組で照合する（L-036）
 export type AiProposal =
@@ -16,6 +25,37 @@ export type AiProposal =
     key: string; kind: "importance"; nodeId: number;
     baseline: { importance: NodeImportance; label: string }; // label は抜粋前の元のラベル全文
     proposed: NodeImportance; reason: string;
+  }
+  | {
+    key: string; kind: "add-child"; parentId: number; label: string;
+    baseline: { parentId: number; inputFingerprint: string; assistKind: AiAssistKind };
+  }
+  | {
+    key: string; kind: "add-sibling"; anchorId: number; label: string;
+    baseline: { anchorId: number; parentId: number | null; inputFingerprint: string; assistKind: AiAssistKind };
+  }
+  | {
+    key: string; kind: "reparent"; nodeId: number; newParentId: number;
+    baseline: {
+      nodeId: number; oldParentId: number | null; label: string;
+      inputFingerprint: string; assistKind: AiAssistKind;
+    };
+  }
+  | {
+    key: string; kind: "reorder-siblings"; parentId: number; childIds: readonly number[];
+    baseline: {
+      parentId: number; childIdsBefore: readonly number[];
+      inputFingerprint: string; assistKind: AiAssistKind;
+    };
+  }
+  | {
+    key: string; kind: "merge-pair"; primaryId: number; secondaryId: number; reason: string;
+    baseline: {
+      primaryId: number; secondaryId: number;
+      primaryLabel: string; secondaryLabel: string; parentId: number | null;
+      inputFingerprint: string; assistKind: AiAssistKind;
+    };
+    expectedPlan: Extract<NodeMergePlan, { ok: true }>;
   };
 
 export type AiProposalDecision = "undecided" | "accepted" | "rejected";
@@ -125,6 +165,7 @@ function isStale(
   nodes: readonly Node[],
   rebuildInputFingerprint: (rootId: number) => string | null,
 ): boolean {
+  if (proposal.kind !== "note" && proposal.kind !== "importance") return true;
   const node = nodesById.get(proposal.nodeId);
   if (node === undefined || !assertNodesEditable([proposal.nodeId], nodes).ok) return true;
   if (proposal.kind === "note") {

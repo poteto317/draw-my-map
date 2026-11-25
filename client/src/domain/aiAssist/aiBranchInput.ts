@@ -1,3 +1,4 @@
+import type { AiAssistKind } from "@/domain/aiAssist/aiAssistEntryAvailability";
 import { hasOnlyKeys, hasOwn, isPlainRecord } from "@/domain/shared/unknownRecord";
 import { isNodeImportanceValue } from "@/domain/nodes/nodeImportance";
 import type { Node } from "@/types/node";
@@ -6,13 +7,17 @@ import type { NodeImportance } from "@/types/nodeImportance";
 // AI に送る枝の上限。数え方は string.length（UTF-16 のコード単位。詳細メモと同じ。L-858）。サーバーの検証も同じ値を使う
 export const AI_SUMMARY_MAX_NODES = 200;
 export const AI_IMPORTANCE_MAX_NODES = 100;
+export const AI_CHILD_CANDIDATES_MAX_NODES = 80;
+export const AI_MISSING_PERSPECTIVES_MAX_NODES = 80;
+export const AI_CLASSIFY_REORDER_MAX_NODES = 100;
+export const AI_DUPLICATES_MAX_NODES = 120;
 export const AI_LABEL_EXCERPT_MAX_LENGTH = 200;
 export const AI_NOTE_EXCERPT_MAX_LENGTH = 500;
 export const AI_BRANCH_MAX_TOTAL_LENGTH = 40000;
 
 const EXCERPT_ELLIPSIS = "…";
 const INPUT_KEYS: ReadonlySet<string> = new Set(["rootId", "nodes"]);
-const NODE_KEYS: ReadonlySet<string> = new Set(["id", "parentId", "label", "note", "importance"]);
+const NODE_KEYS: ReadonlySet<string> = new Set(["id", "parentId", "label", "note", "importance", "locked"]);
 
 export type AiBranchInputNode = {
   id: number;
@@ -20,10 +25,17 @@ export type AiBranchInputNode = {
   label: string; // 抜粋済み
   note?: string; // 抜粋済み。無い・空白だけなら持たない
   importance: NodeImportance;
+  locked?: true;
 };
 
 // nodes は先行順（兄弟はマップのノード配列の順）
 export type AiBranchInput = { rootId: number; nodes: AiBranchInputNode[] };
+
+// 不足観点の sibling 配置可否。送信・検証・サーバーが同じ判定を使う
+export function aiBranchRootHasParent(branch: AiBranchInput): boolean {
+  const root = branch.nodes.find((node) => node.id === branch.rootId);
+  return root !== undefined && root.parentId !== null;
+}
 
 export type BuildAiBranchInputResult =
   | { ok: true; input: AiBranchInput; truncatedCount: number; totalLength: number }
@@ -53,9 +65,10 @@ function hasNoteText(note: string | undefined): note is string {
 // キーの順を固定した新しいオブジェクトにする（指紋と検証の結果で同じ形にする）
 function canonicalNode(node: AiBranchInputNode): AiBranchInputNode {
   const base = { id: node.id, parentId: node.parentId, label: node.label };
-  return node.note === undefined
+  const withFields = node.note === undefined
     ? { ...base, importance: node.importance }
     : { ...base, note: node.note, importance: node.importance };
+  return node.locked === true ? { ...withFields, locked: true } : withFields;
 }
 
 // 根から先行順に集める。maxNodes を超えた時点で null。循環した不正な配列でも各ノードを一度だけ訪れる
@@ -100,14 +113,15 @@ export function buildAiBranchInput(
     if (label !== node.label) truncatedCount += 1;
     totalLength += label.length;
     const parentId = node.id === rootId ? null : node.parentId;
+    const locked = node.locked === true ? ({ locked: true as const }) : {};
     const includeNote = node.id !== rootId || options.includeRootNote;
     if (!includeNote || !hasNoteText(node.note)) {
-      return canonicalNode({ id: node.id, parentId, label, importance: node.importance });
+      return canonicalNode({ id: node.id, parentId, label, importance: node.importance, ...locked });
     }
     const note = excerptText(node.note, AI_NOTE_EXCERPT_MAX_LENGTH);
     if (note !== node.note) truncatedCount += 1;
     totalLength += note.length;
-    return canonicalNode({ id: node.id, parentId, label, note, importance: node.importance });
+    return canonicalNode({ id: node.id, parentId, label, note, importance: node.importance, ...locked });
   });
 
   if (totalLength > AI_BRANCH_MAX_TOTAL_LENGTH) return { ok: false, reason: "too-large" };
@@ -116,6 +130,38 @@ export function buildAiBranchInput(
 
 export function aiBranchInputFingerprint(input: AiBranchInput): string {
   return JSON.stringify({ rootId: input.rootId, nodes: input.nodes.map(canonicalNode) });
+}
+
+function buildOptionsForKind(kind: AiAssistKind): { includeRootNote: boolean; maxNodes: number } {
+  switch (kind) {
+    case "branch-summary":
+      return { includeRootNote: false, maxNodes: AI_SUMMARY_MAX_NODES };
+    case "importance":
+      return { includeRootNote: true, maxNodes: AI_IMPORTANCE_MAX_NODES };
+    case "child-candidates":
+      return { includeRootNote: true, maxNodes: AI_CHILD_CANDIDATES_MAX_NODES };
+    case "missing-perspectives":
+      return { includeRootNote: true, maxNodes: AI_MISSING_PERSPECTIVES_MAX_NODES };
+    case "classify-reorder":
+      return { includeRootNote: true, maxNodes: AI_CLASSIFY_REORDER_MAX_NODES };
+    case "duplicates":
+      return { includeRootNote: true, maxNodes: AI_DUPLICATES_MAX_NODES };
+    default: {
+      const neverKind: never = kind;
+      return neverKind;
+    }
+  }
+}
+
+// 構造提案用の入力指紋。枝が大きすぎるときは null（L-018）
+export function aiStructureInputFingerprintOf(
+  nodes: readonly Node[],
+  rootId: number,
+  kind: AiAssistKind,
+): string | null {
+  const built = buildAiBranchInput(nodes, rootId, buildOptionsForKind(kind));
+  if (!built.ok) return null;
+  return aiBranchInputFingerprint(built.input);
 }
 
 // 重要度の提案の対象: 枝のうち、nodes 上でロックされていないノードの ID（先行順）
@@ -138,9 +184,11 @@ function readInputNode(value: unknown): AiBranchInputNode | null {
   if (parentId === undefined) return null;
   if (typeof label !== "string" || label.length > AI_LABEL_EXCERPT_MAX_LENGTH) return null;
   if (!isNodeImportanceValue(importance)) return null;
-  if (!hasOwn(value, "note")) return canonicalNode({ id, parentId, label, importance });
+  if (hasOwn(value, "locked") && value.locked !== true) return null;
+  const locked = hasOwn(value, "locked") ? ({ locked: true as const }) : {};
+  if (!hasOwn(value, "note")) return canonicalNode({ id, parentId, label, importance, ...locked });
   if (typeof note !== "string" || note.length > AI_NOTE_EXCERPT_MAX_LENGTH || note.trim() === "") return null;
-  return canonicalNode({ id, parentId, label, note, importance });
+  return canonicalNode({ id, parentId, label, note, importance, ...locked });
 }
 
 function reachesRoot(nodesById: ReadonlyMap<number, AiBranchInputNode>, startId: number): boolean {

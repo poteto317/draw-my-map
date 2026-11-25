@@ -1,6 +1,8 @@
 import {
   AI_ASSIST_ENTRY_MESSAGES,
+  entryAvailabilityForKind,
   resolveAiAssistEntryAvailability,
+  resolveAllAiAssistEntryAvailabilities,
   type AiAssistEntryBlockers,
 } from "@/domain/aiAssist/aiAssistEntryAvailability";
 import { createTestNode } from "@/testing/createTestNode";
@@ -23,6 +25,17 @@ describe("resolveAiAssistEntryAvailability", () => {
     expect(resolveAiAssistEntryAvailability("importance", nodes, [4], NONE)).toEqual({ enabled: true, rootId: 4 });
   });
 
+  it("構造提案: 子候補・不足観点は根ロック不可で子孫 0 でも可。分類は枝 2 件以上。重複は非ロック 2 件以上", () => {
+    expect(resolveAiAssistEntryAvailability("child-candidates", nodes, [3], NONE)).toEqual({ enabled: true, rootId: 3 });
+    expect(resolveAiAssistEntryAvailability("missing-perspectives", nodes, [1], NONE)).toEqual({ enabled: true, rootId: 1 });
+    expect(resolveAiAssistEntryAvailability("classify-reorder", nodes, [1], NONE)).toEqual({ enabled: true, rootId: 1 });
+    expect(resolveAiAssistEntryAvailability("classify-reorder", nodes, [4], NONE)).toEqual({ enabled: true, rootId: 4 });
+    expect(resolveAiAssistEntryAvailability("duplicates", nodes, [1], NONE)).toEqual({ enabled: true, rootId: 1 });
+    expect(resolveAiAssistEntryAvailability("child-candidates", nodes, [4], NONE)).toEqual({ enabled: false, reason: AI_ASSIST_ENTRY_MESSAGES.locked });
+    expect(resolveAiAssistEntryAvailability("classify-reorder", nodes, [3], NONE)).toEqual({ enabled: false, reason: AI_ASSIST_ENTRY_MESSAGES.tooFewBranchNodes });
+    expect(resolveAiAssistEntryAvailability("duplicates", nodes, [6], NONE)).toEqual({ enabled: false, reason: AI_ASSIST_ENTRY_MESSAGES.tooFewUnlocked });
+  });
+
   it.each<[string, "branch-summary" | "importance", readonly number[], Partial<AiAssistEntryBlockers>, string]>([
     ["外部削除", "branch-summary", [1], { isExternallyDeleted: true }, AI_ASSIST_ENTRY_MESSAGES.externallyDeleted],
     ["競合中", "importance", [1], { hasConflict: true }, AI_ASSIST_ENTRY_MESSAGES.conflict],
@@ -42,5 +55,12 @@ describe("resolveAiAssistEntryAvailability", () => {
     expect(AI_ASSIST_ENTRY_MESSAGES.protected).toBe("保護モードのため実行できません");
     expect(AI_ASSIST_ENTRY_MESSAGES.conflict).toBe("競合中のため実行できません");
     expect(AI_ASSIST_ENTRY_MESSAGES.externallyDeleted).toBe("マップが外部で削除されているため実行できません");
+  });
+
+  it("resolveAll と entryAvailabilityForKind は kind ごとに同じ結果", () => {
+    const all = resolveAllAiAssistEntryAvailabilities(nodes, [1], NONE);
+    expect(entryAvailabilityForKind("branch-summary", all)).toEqual(all.summary);
+    expect(entryAvailabilityForKind("duplicates", all)).toEqual(all.duplicates);
+    expect(all.child).toEqual(resolveAiAssistEntryAvailability("child-candidates", nodes, [1], NONE));
   });
 });

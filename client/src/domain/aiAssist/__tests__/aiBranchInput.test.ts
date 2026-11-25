@@ -1,8 +1,14 @@
 import {
   AI_BRANCH_MAX_TOTAL_LENGTH,
+  AI_CHILD_CANDIDATES_MAX_NODES,
+  AI_CLASSIFY_REORDER_MAX_NODES,
+  AI_DUPLICATES_MAX_NODES,
   AI_IMPORTANCE_MAX_NODES,
+  AI_MISSING_PERSPECTIVES_MAX_NODES,
   AI_SUMMARY_MAX_NODES,
   aiBranchInputFingerprint,
+  aiBranchRootHasParent,
+  aiStructureInputFingerprintOf,
   buildAiBranchInput,
   excerptText,
   importanceTargetIds,
@@ -70,6 +76,20 @@ describe("buildAiBranchInput", () => {
     });
   });
 
+  it("ロック中のノードには locked: true を載せる", () => {
+    const nodes = [
+      createTestNode({ id: 1, label: "根" }),
+      createTestNode({ id: 2, parentId: 1, label: "通常", locked: true }),
+    ];
+    const result = buildAiBranchInput(nodes, 1, IMPORTANCE);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.input.nodes[1]).toEqual({
+      id: 2, parentId: 1, label: "通常", importance: "medium", locked: true,
+    });
+    expect(validateAiBranchInput(result.input, { maxNodes: AI_IMPORTANCE_MAX_NODES })).toEqual({ ok: true, input: result.input });
+  });
+
   it("要約では根のメモを送らず、重要度では送る。空白だけのメモは持たない", () => {
     const nodes = [
       createTestNode({ id: 1, label: "根", note: "根のメモ" }),
@@ -134,6 +154,10 @@ describe("buildAiBranchInput", () => {
   it.each([
     ["要約", SUMMARY, AI_SUMMARY_MAX_NODES],
     ["重要度", IMPORTANCE, AI_IMPORTANCE_MAX_NODES],
+    ["子候補", { includeRootNote: true, maxNodes: AI_CHILD_CANDIDATES_MAX_NODES }, AI_CHILD_CANDIDATES_MAX_NODES],
+    ["分類", { includeRootNote: true, maxNodes: AI_CLASSIFY_REORDER_MAX_NODES }, AI_CLASSIFY_REORDER_MAX_NODES],
+    ["重複", { includeRootNote: true, maxNodes: AI_DUPLICATES_MAX_NODES }, AI_DUPLICATES_MAX_NODES],
+    ["不足観点", { includeRootNote: true, maxNodes: AI_MISSING_PERSPECTIVES_MAX_NODES }, AI_MISSING_PERSPECTIVES_MAX_NODES],
   ])("%s: 上限ちょうどは送れ、1 件超えは too-many-nodes", (_name, options, max) => {
     expect(buildAiBranchInput(flatBranch(max), 1, options).ok).toBe(true);
     expect(buildAiBranchInput(flatBranch(max + 1), 1, options)).toEqual({ ok: false, reason: "too-many-nodes" });
@@ -150,6 +174,24 @@ describe("buildAiBranchInput", () => {
 
   it("根が無ければ node-missing", () => {
     expect(buildAiBranchInput(flatBranch(2), 99, SUMMARY)).toEqual({ ok: false, reason: "node-missing" });
+  });
+});
+
+describe("aiStructureInputFingerprintOf", () => {
+  it("課題ごとの maxNodes と includeRootNote で指紋を作る。枝が大きすぎるなら null", () => {
+    const nodes = flatBranch(3);
+    const child = aiStructureInputFingerprintOf(nodes, 1, "child-candidates");
+    const classify = aiStructureInputFingerprintOf(nodes, 1, "classify-reorder");
+    expect(child).toBe(classify);
+    const built = buildAiBranchInput(nodes, 1, { includeRootNote: true, maxNodes: AI_CHILD_CANDIDATES_MAX_NODES });
+    if (!built.ok) throw new Error("前提");
+    expect(child).toBe(aiBranchInputFingerprint(built.input));
+
+    expect(aiStructureInputFingerprintOf(flatBranch(AI_CHILD_CANDIDATES_MAX_NODES + 1), 1, "child-candidates")).toBeNull();
+    expect(aiStructureInputFingerprintOf(flatBranch(AI_CLASSIFY_REORDER_MAX_NODES), 1, "classify-reorder")).not.toBeNull();
+    expect(aiStructureInputFingerprintOf(flatBranch(AI_CLASSIFY_REORDER_MAX_NODES + 1), 1, "classify-reorder")).toBeNull();
+    expect(aiStructureInputFingerprintOf(flatBranch(AI_DUPLICATES_MAX_NODES), 1, "duplicates")).not.toBeNull();
+    expect(aiStructureInputFingerprintOf(flatBranch(AI_MISSING_PERSPECTIVES_MAX_NODES), 1, "missing-perspectives")).not.toBeNull();
   });
 });
 
@@ -177,6 +219,25 @@ describe("importanceTargetIds", () => {
 
     expect(importanceTargetIds(result.input, nodes)).toEqual([1, 3]);
     expect(result.input.nodes.map((n) => n.id)).toEqual([1, 2, 3]);
+  });
+});
+
+describe("aiBranchRootHasParent", () => {
+  it("根の parentId が null なら false", () => {
+    expect(aiBranchRootHasParent({
+      rootId: 1,
+      nodes: [{ id: 1, parentId: null, label: "根", importance: "medium" }],
+    })).toBe(false);
+  });
+
+  it("根に親があれば true", () => {
+    expect(aiBranchRootHasParent({
+      rootId: 2,
+      nodes: [
+        { id: 1, parentId: null, label: "上", importance: "medium" },
+        { id: 2, parentId: 1, label: "根", importance: "medium" },
+      ],
+    })).toBe(true);
   });
 });
 
