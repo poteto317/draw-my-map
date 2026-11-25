@@ -1053,7 +1053,7 @@ export function usePresentationPlaybackKeyboard(options: UsePresentationPlayback
 
 ## 20. AI 支援の API（`/api/ai-assist/*`）
 
-Phase 32（候補075・076・077）。AI（Claude API または OpenAI API）を呼ぶのはこの 3 つのルートだけで、ブラウザは自分のサーバーの `/api/ai-assist/*` だけを呼びます。機能の仕様は [features.md の 37 章](./features.md#37-確認して適用するai支援phase-32)、設定は [`docs/setup/ai-assist-setup.md`](../setup/ai-assist-setup.md)、設計は `docs/superpowers/specs/2026-11-25-phase32-ai-assist-review-design.md` です。
+Phase 32（候補075・076・077）と Phase 33（候補078–081）。AI（Claude API または OpenAI API）を呼ぶのは下記の **POST 6 ルート**（＋ `GET /status`）だけで、ブラウザは自分のサーバーの `/api/ai-assist/*` だけを呼びます。属性提案の仕様は [features.md の 37 章](./features.md#37-確認して適用するai支援phase-32)、構造提案は [38 章](./features.md#38-aiによる発想整理支援phase-33-078081)、設定は [`docs/setup/ai-assist-setup.md`](../setup/ai-assist-setup.md) です。
 
 ### 20.1 エンドポイント
 
@@ -1069,12 +1069,17 @@ POST /api/ai-assist/branch-summary
 POST /api/ai-assist/importance
   { "branch": AiBranchInput, "targetIds": [1, 2, 3] }
   200 { "suggestions": [{ "id": 2, "importance": "high", "reason": "..." }] }
+
+POST /api/ai-assist/child-candidates     — 078。200 { "candidates": [{ "label": "..." }] }
+POST /api/ai-assist/classify-reorder       — 079。200 { "moves": [{ "type": "reparent", ... } | { "type": "reorder", ... }] }
+POST /api/ai-assist/duplicates           — 080。200 { "pairs": [{ "primaryId", "secondaryId", "reason" }] }（本文に `mapId` 必須。サーバーは形式のみ検証し、ブラウザ上で開いているマップとの一致は見ない。ローカル前提では改ざんされた `mapId` もクライアント再検証で救済される）
+POST /api/ai-assist/missing-perspectives — 081。200 { "items": [{ "label", "placement": "child" | "sibling" }] }
 ```
 
-- `AiBranchInput` は `{ rootId: number; nodes: { id; parentId; label; note?; importance }[] }`（先行順。根だけ `parentId: null`。`label`・`note` は抜粋済み）。型と上限は `client/src/domain/aiAssist/aiBranchInput.ts`。
+- `AiBranchInput` は `{ rootId: number; nodes: { id; parentId; label; note?; importance; locked? }[] }`（先行順。根だけ `parentId: null`。`label`・`note` は抜粋済み。ロック中は `locked: true` のみ）。型と課題ごとの `maxNodes` は `client/src/domain/aiAssist/aiBranchInput.ts`（要約 200・重要度 100・078/081 は 80・079 は 100・080 は 120）。
 - `providerLabel` は `Anthropic（Claude API）` か `OpenAI（GPT API）`。`model` は環境変数で上書きしたモデル ID（既定は `claude-opus-5-5`・`gpt-5`）。
 - 要約の `summary` は前後の空白を除いて 1〜400 文字（改行以外の制御文字を除き、3 行以上の連続改行は 2 行にまとめた後）。重要度の `suggestions` の `id` は `targetIds` の中だけ・重複なし、`importance` は `high` | `medium` | `low`、`reason` は 30 文字を超えたら「…」付きで切る。提案の無い `targetIds` は「提案なし」として扱います。
-- 3 ルートとも `export const dynamic = "force-dynamic"` で、`handle*` に `env: process.env`（と `createGenerator`）を渡すだけです。
+- POST ルートはすべて `export const dynamic = "force-dynamic"` で、`handleAiAssistRequest` に `env: process.env`（と `createGenerator`）を渡すだけです。
 
 ### 20.2 処理の順
 
@@ -1091,7 +1096,7 @@ POST /api/ai-assist/importance
 2. 本文の検証: JSON として読めない・形が違う（`validateAiBranchInput`、余分なキー、`targetIds` が空・重複・枝の外）、要約で子孫が 0 件 → 400 `invalid-request`。
 3. 設定: `readAiAssistConfig(env)` が `null` → 503 `not-configured`（入力の検証の後）。
 4. 生成: 設定から選んだアダプタ（`createAiTextGenerator`）で呼ぶ。
-5. 出力の検証: 課題ごとの検証（`validateBranchSummaryOutput`・`validateImportanceOutput`）に違反すれば 502 `invalid-output`。
+5. 出力の検証: 課題ごとの検証（`validateBranchSummaryOutput`・`validateImportanceOutput`・`validateChildCandidatesOutput`・`validateClassifyReorderOutput`・`validateDuplicatesOutput`・`validateMissingPerspectivesOutput`）に違反すれば 502 `invalid-output`。
 
 ### 20.3 誤り
 
@@ -1125,7 +1130,7 @@ POST /api/ai-assist/importance
 |------|----|
 | サーバー | 120 秒（SDK のクライアントの `timeout: 120_000`）。再試行は SDK に任せない（`maxRetries: 0`）。ストリーミングは使わない |
 | クライアント | 150 秒（`AI_ASSIST_CLIENT_TIMEOUT_MS`。本文の読み込みまで守る）。サーバーの `timeout` 応答を先に受け取れるよう長くしている |
-| 出力の上限 | 要約 4,000・重要度 12,000 トークン（`maxOutputTokens`。思考・推論のトークンを含む） |
+| 出力の上限 | 要約 4,000・重要度 12,000・子候補 8,000・不足観点 8,000・分類／並べ替え 12,000・重複 12,000 トークン（`maxOutputTokens`。思考・推論のトークンを含む） |
 | 自動の再試行 | しない。利用者が「もう一度」を押したときだけ送り直す |
 
 ### 20.6 公開時の注意
@@ -1139,6 +1144,6 @@ POST /api/ai-assist/importance
 ### 20.7 関連ソース
 
 - `client/src/server/aiAssist/*`（`aiTextGenerator.ts`・`aiAssistConfig.ts`・`anthropicTextGenerator.ts`・`openaiTextGenerator.ts`・`createAiTextGenerator.ts`・`aiAssistPrompt.ts`・`aiAssistTasks.ts`・`aiAssistRequestOrigin.ts`・`handleAiAssistRequest.ts`）
-- `client/src/app/api/ai-assist/*`（`status`・`branch-summary`・`importance` の `route.ts`）
+- `client/src/app/api/ai-assist/*`（`status`・`branch-summary`・`importance`・`child-candidates`・`classify-reorder`・`duplicates`・`missing-perspectives` の `route.ts`）
 - `client/src/services/aiAssist/aiAssistClient.ts`
-- `client/src/domain/aiAssist/*`（`aiBranchInput.ts`・`aiAssistOutput.ts`・`aiProposal.ts`・`aiAssistEntryAvailability.ts`）
+- `client/src/domain/aiAssist/*`（`aiBranchInput.ts`・`aiAssistOutput.ts`・`aiProposal.ts`・`aiStructureProposal.ts`・`aiAssistEntryAvailability.ts`）
