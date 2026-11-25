@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ComponentProps } from "react";
+import { createRef, type ComponentProps } from "react";
 import { NodeDetailPanel } from "@/components/layout/NodeDetailPanel";
 import type { CrossMapCorpus } from "@/domain/mapLibrary/crossMapCorpus";
 import type { MapIndexEntry } from "@/domain/mapLibrary/mapIndex";
@@ -104,6 +104,14 @@ function renderPanel(overrides: Partial<Props> = {}) {
     storageMode: "persistent",
     onPreviewNote: jest.fn(() => true),
     onBeginNoteEdit: jest.fn(() => createTestMapHistoryLease()),
+    aiAssist: {
+      summary: { enabled: true, rootId: 1 },
+      importance: { enabled: true, rootId: 1 },
+      summaryButtonRef: createRef<HTMLButtonElement>(),
+      importanceButtonRef: createRef<HTMLButtonElement>(),
+      onOpenSummary: jest.fn(),
+      onOpenImportance: jest.fn(),
+    },
     onAddTag: jest.fn((): AddNodeTagOutcome => ({ ok: true })),
     onRemoveTag: jest.fn(() => true),
     onAddLink: jest.fn((): AddNodeLinkOutcome => ({ ok: true })),
@@ -153,18 +161,30 @@ function sourceUrlInput(): HTMLInputElement {
 }
 
 describe("NodeDetailPanel", () => {
+  it("「AI支援」の節を詳細メモの節のすぐ下に置く", () => {
+    renderPanel();
+    const headings = screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent);
+    expect(headings.indexOf("AI支援")).toBe(headings.indexOf("詳細メモ") + 1);
+  });
+
+  it("関連線の選択中は「AI支援」の節を出さない", () => {
+    renderPanel({ selectedRelation: { id: 10, kind: "related", directed: false } });
+    expect(screen.queryByRole("region", { name: "AI支援" })).not.toBeInTheDocument();
+  });
+
   it("名前付きの補足領域で、幅 w-72・縮まない・内容が高さを超えたら縦にスクロールする", () => {
     renderPanel();
 
     expect(panel()).toHaveClass("w-72", "shrink-0", "min-h-0", "overflow-y-auto");
   });
 
-  it("上から詳細メモ、見た目、タグ、リンク、出典、マップ間リンク、被リンク、イラストの順に置く", () => {
+  it("上から詳細メモ、AI支援、見た目、タグ、リンク、出典、マップ間リンク、被リンク、イラストの順に置く", () => {
     renderPanel();
 
     const headings = within(panel()).getAllByRole("heading").map((heading) => heading.textContent);
     expect(headings).toEqual([
       "詳細メモ",
+      "AI支援",
       "見た目",
       "タグ",
       "リンク",

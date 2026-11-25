@@ -31,6 +31,8 @@ export type CommandPaletteDialogHandlers = {
   openBranchMove: () => void;
   openNodeSplit: () => void;
   openNodeMerge: () => void;
+  openAiBranchSummary: () => void;
+  openAiImportance: () => void;
   openCrossMapSearch: () => void;
   openRegisterPart: () => void;
   openInsertPart: () => void;
@@ -129,6 +131,12 @@ export function openCommandPaletteDialog(
       return true;
     case "edit.open-node-merge":
       handlers.openNodeMerge();
+      return true;
+    case "edit.open-ai-branch-summary":
+      handlers.openAiBranchSummary();
+      return true;
+    case "edit.open-ai-importance":
+      handlers.openAiImportance();
       return true;
     case "search.open-cross-map":
       handlers.openCrossMapSearch();

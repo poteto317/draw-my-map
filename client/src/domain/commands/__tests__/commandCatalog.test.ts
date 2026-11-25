@@ -23,6 +23,8 @@ const REQUIRED_V1_IDS: readonly CommandId[] = [
   "edit.open-branch-move",
   "edit.open-node-split",
   "edit.open-node-merge",
+  "edit.open-ai-branch-summary",
+  "edit.open-ai-importance",
   "edit.register-part",
   "edit.insert-part",
   "edit.delete-part",
@@ -39,6 +41,8 @@ const OPENS_DIALOG_IDS = new Set<CommandId>([
   "edit.open-branch-move",
   "edit.open-node-split",
   "edit.open-node-merge",
+  "edit.open-ai-branch-summary",
+  "edit.open-ai-importance",
   "edit.register-part",
   "edit.insert-part",
   "edit.delete-part",
@@ -92,5 +96,13 @@ describe("COMMAND_CATALOG", () => {
     expect(getCommandDefinition("edit.undo")?.label).toBe("元に戻す");
     expect(getCommandDefinition("io.export-json")).toBeUndefined();
     expect(getCommandDefinition("view.nav-back")).toBeUndefined();
+  });
+  it("AI 支援の 2 件は編集のカテゴリで、別名に AI と要約／重要度を持つ", () => {
+    expect(getCommandDefinition("edit.open-ai-branch-summary")).toMatchObject({
+      categoryLabel: "編集", label: "枝を要約してメモに入れる（AI）…", aliases: ["AI", "要約"], opensDialog: true,
+    });
+    expect(getCommandDefinition("edit.open-ai-importance")).toMatchObject({
+      categoryLabel: "編集", label: "重要度を提案（AI）…", aliases: ["AI", "重要度"], opensDialog: true,
+    });
   });
 });
