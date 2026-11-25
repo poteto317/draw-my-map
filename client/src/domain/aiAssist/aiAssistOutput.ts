@@ -1,8 +1,12 @@
 import { excerptText } from "@/domain/aiAssist/aiBranchInput";
+import { moveNodeBranch } from "@/domain/nodes/nodeBranchMove";
 import { isNodeImportanceValue } from "@/domain/nodes/nodeImportance";
+import { DEFAULT_LAYOUT_NODE_FOREST_OPTIONS } from "@/domain/nodes/nodeAutoLayout";
 import { planNodeMerge } from "@/domain/nodes/nodeMerge";
 import { MERGE_DEFAULT_SEPARATOR } from "@/domain/nodes/nodeSeparator";
+import { reorderAllSiblings } from "@/domain/nodes/reorderAllSiblings";
 import { collectSubtreeIds } from "@/domain/nodes/nodeTree";
+import { DEFAULT_LAYOUT_SPACING } from "@/domain/persistence/mapDocumentLayoutSpacing";
 import { hasOnlyKeys, hasOwn, isPlainRecord } from "@/domain/shared/unknownRecord";
 import type { Node } from "@/types/node";
 import type { NodeImportance } from "@/types/nodeImportance";
@@ -211,7 +215,39 @@ function readClassifyMove(item: unknown): AiClassifyMove | null {
   return null;
 }
 
-// 構文不正な move は importance と同様に黙って除外し、意味不正（循環・ロック等）も除外する。残り 0 件なら不正。
+function tryApplyClassifyMove(
+  nodes: readonly Node[],
+  move: AiClassifyMove,
+  branchIds: ReadonlySet<number>,
+): readonly Node[] | null {
+  if (move.type === "reparent") {
+    if (!isValidReparentMove(move, branchIds, nodes)) return null;
+    const moved = moveNodeBranch(
+      nodes,
+      move.nodeId,
+      move.newParentId,
+      "manual",
+      DEFAULT_LAYOUT_SPACING,
+      DEFAULT_LAYOUT_NODE_FOREST_OPTIONS,
+    );
+    return moved.ok ? moved.nodes : null;
+  }
+  if (!isValidReorderMove(move, branchIds, nodes)) return null;
+  const reordered = reorderAllSiblings(
+    nodes,
+    move.parentId,
+    move.childIds,
+    "manual",
+    DEFAULT_LAYOUT_NODE_FOREST_OPTIONS,
+  );
+  if (!reordered.ok) {
+    if (reordered.reason === "unchanged") return nodes;
+    return null;
+  }
+  return reordered.nodes;
+}
+
+// 構文不正な move は importance と同様に黙って除外する。意味不正は除外し、apply 順（reparent → reorder）で仮適用できない組み合わせも除外。残り 0 件なら不正。
 export function validateClassifyReorderOutput(
   value: unknown,
   branchIds: ReadonlySet<number>,
@@ -220,16 +256,30 @@ export function validateClassifyReorderOutput(
   if (!isPlainRecord(value) || !hasOnlyKeys(value, CLASSIFY_KEYS)) return { ok: false };
   if (!Array.isArray(value.moves)) return { ok: false };
   if (value.moves.length === 0 || value.moves.length > AI_CLASSIFY_MOVE_MAX_COUNT) return { ok: false };
-  const moves: AiClassifyMove[] = [];
-  for (const item of value.moves) {
+  const candidates: { move: AiClassifyMove; originalIndex: number }[] = [];
+  value.moves.forEach((item, originalIndex) => {
     const move = readClassifyMove(item);
-    if (move === null) continue;
-    if (move.type === "reparent") {
-      if (isValidReparentMove(move, branchIds, nodes)) moves.push(move);
-    } else if (isValidReorderMove(move, branchIds, nodes)) {
-      moves.push(move);
-    }
+    if (move !== null) candidates.push({ move, originalIndex });
+  });
+  const sorted = [...candidates].sort((left, right) => {
+    const leftSort = left.move.type === "reparent" ? 0 : 1;
+    const rightSort = right.move.type === "reparent" ? 0 : 1;
+    return leftSort - rightSort || left.originalIndex - right.originalIndex;
+  });
+
+  let working: readonly Node[] = nodes;
+  const acceptedIndices = new Set<number>();
+  for (const { move, originalIndex } of sorted) {
+    const next = tryApplyClassifyMove(working, move, branchIds);
+    if (next === null) continue;
+    working = next;
+    acceptedIndices.add(originalIndex);
   }
+
+  const moves = candidates
+    .filter((candidate) => acceptedIndices.has(candidate.originalIndex))
+    .sort((left, right) => left.originalIndex - right.originalIndex)
+    .map((candidate) => candidate.move);
   if (moves.length === 0) return { ok: false };
   return { ok: true, moves };
 }

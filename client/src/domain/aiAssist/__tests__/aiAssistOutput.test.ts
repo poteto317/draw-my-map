@@ -175,7 +175,22 @@ describe("validateClassifyReorderOutput", () => {
       ok: true,
       moves: [
         { type: "reparent", nodeId: 3, newParentId: 2 },
-        { type: "reorder", parentId: 1, childIds: [3, 2] },
+      ],
+    });
+  });
+
+  it("適用順（reparent → reorder）で整合する reorder だけ残す", () => {
+    const result = validateClassifyReorderOutput({
+      moves: [
+        { type: "reparent", nodeId: 3, newParentId: 2 },
+        { type: "reorder", parentId: 1, childIds: [2] },
+      ],
+    }, branchIds, nodes);
+    expect(result).toEqual({
+      ok: true,
+      moves: [
+        { type: "reparent", nodeId: 3, newParentId: 2 },
+        { type: "reorder", parentId: 1, childIds: [2] },
       ],
     });
   });
@@ -199,10 +214,7 @@ describe("validateClassifyReorderOutput", () => {
       ],
     }, branchIds, nodes)).toEqual({
       ok: true,
-      moves: [
-        { type: "reparent", nodeId: 3, newParentId: 2 },
-        { type: "reorder", parentId: 1, childIds: [3, 2] },
-      ],
+      moves: [{ type: "reparent", nodeId: 3, newParentId: 2 }],
     });
   });
 
