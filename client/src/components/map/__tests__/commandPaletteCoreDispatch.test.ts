@@ -42,6 +42,10 @@ function dialogHandlers(
     openNodeMerge: jest.fn(),
     openAiBranchSummary: jest.fn(),
     openAiImportance: jest.fn(),
+    openAiChildCandidates: jest.fn(),
+    openAiClassifyReorder: jest.fn(),
+    openAiDuplicates: jest.fn(),
+    openAiMissingPerspectives: jest.fn(),
     openCrossMapSearch: jest.fn(),
     openRegisterPart: jest.fn(),
     openInsertPart: jest.fn(),
@@ -88,11 +92,19 @@ describe("openCommandPaletteDialog", () => {
   it("未知 ID は false", () => {
     expect(openCommandPaletteDialog("view.map", dialogHandlers())).toBe(false);
   });
-  it("AI 支援の 2 件を対応する open へ委譲する", () => {
+  it("AI 支援の 6 件を対応する open へ委譲する", () => {
     const handlers = dialogHandlers();
     expect(openCommandPaletteDialog("edit.open-ai-branch-summary", handlers)).toBe(true);
     expect(openCommandPaletteDialog("edit.open-ai-importance", handlers)).toBe(true);
+    expect(openCommandPaletteDialog("edit.open-ai-child-candidates", handlers)).toBe(true);
+    expect(openCommandPaletteDialog("edit.open-ai-classify-reorder", handlers)).toBe(true);
+    expect(openCommandPaletteDialog("edit.open-ai-duplicates", handlers)).toBe(true);
+    expect(openCommandPaletteDialog("edit.open-ai-missing-perspectives", handlers)).toBe(true);
     expect(handlers.openAiBranchSummary).toHaveBeenCalledTimes(1);
     expect(handlers.openAiImportance).toHaveBeenCalledTimes(1);
+    expect(handlers.openAiChildCandidates).toHaveBeenCalledTimes(1);
+    expect(handlers.openAiClassifyReorder).toHaveBeenCalledTimes(1);
+    expect(handlers.openAiDuplicates).toHaveBeenCalledTimes(1);
+    expect(handlers.openAiMissingPerspectives).toHaveBeenCalledTimes(1);
   });
 });

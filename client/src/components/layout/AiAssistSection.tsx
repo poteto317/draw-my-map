@@ -7,11 +7,22 @@ import type { AiAssistEntryAvailability } from "@/domain/aiAssist/aiAssistEntryA
 export type AiAssistSectionProps = {
   summary: AiAssistEntryAvailability;
   importance: AiAssistEntryAvailability;
-  // ダイアログを閉じたときのフォーカスの戻し先
+  childCandidates: AiAssistEntryAvailability;
+  classifyReorder: AiAssistEntryAvailability;
+  duplicates: AiAssistEntryAvailability;
+  missingPerspectives: AiAssistEntryAvailability;
   summaryButtonRef: RefObject<HTMLButtonElement | null>;
   importanceButtonRef: RefObject<HTMLButtonElement | null>;
+  childCandidatesButtonRef: RefObject<HTMLButtonElement | null>;
+  classifyReorderButtonRef: RefObject<HTMLButtonElement | null>;
+  duplicatesButtonRef: RefObject<HTMLButtonElement | null>;
+  missingPerspectivesButtonRef: RefObject<HTMLButtonElement | null>;
   onOpenSummary: () => void;
   onOpenImportance: () => void;
+  onOpenChildCandidates: () => void;
+  onOpenClassifyReorder: () => void;
+  onOpenDuplicates: () => void;
+  onOpenMissingPerspectives: () => void;
 };
 
 const buttonClassName =
@@ -48,18 +59,33 @@ function EntryButton({
   );
 }
 
-// 右パネル「ノードの詳細」の「AI支援」の節（Phase 32）。無効の理由はボタンの説明に結び付ける（L-057）
 export function AiAssistSection({
   summary,
   importance,
+  childCandidates,
+  classifyReorder,
+  duplicates,
+  missingPerspectives,
   summaryButtonRef,
   importanceButtonRef,
+  childCandidatesButtonRef,
+  classifyReorderButtonRef,
+  duplicatesButtonRef,
+  missingPerspectivesButtonRef,
   onOpenSummary,
   onOpenImportance,
+  onOpenChildCandidates,
+  onOpenClassifyReorder,
+  onOpenDuplicates,
+  onOpenMissingPerspectives,
 }: AiAssistSectionProps) {
   const headingId = useId();
   const summaryReasonId = useId();
   const importanceReasonId = useId();
+  const childReasonId = useId();
+  const classifyReasonId = useId();
+  const duplicatesReasonId = useId();
+  const perspectivesReasonId = useId();
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-2">
       <h2 id={headingId} className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">AI支援</h2>
@@ -68,6 +94,10 @@ export function AiAssistSection({
       </p>
       <EntryButton label="枝を要約してメモに入れる…" entry={summary} buttonRef={summaryButtonRef} reasonId={summaryReasonId} onOpen={onOpenSummary} />
       <EntryButton label="重要度を提案…" entry={importance} buttonRef={importanceButtonRef} reasonId={importanceReasonId} onOpen={onOpenImportance} />
+      <EntryButton label="子の候補を提案…" entry={childCandidates} buttonRef={childCandidatesButtonRef} reasonId={childReasonId} onOpen={onOpenChildCandidates} />
+      <EntryButton label="分類・並べ替えを提案…" entry={classifyReorder} buttonRef={classifyReorderButtonRef} reasonId={classifyReasonId} onOpen={onOpenClassifyReorder} />
+      <EntryButton label="重複・類似を検出…" entry={duplicates} buttonRef={duplicatesButtonRef} reasonId={duplicatesReasonId} onOpen={onOpenDuplicates} />
+      <EntryButton label="不足観点を提案…" entry={missingPerspectives} buttonRef={missingPerspectivesButtonRef} reasonId={perspectivesReasonId} onOpen={onOpenMissingPerspectives} />
     </section>
   );
 }

@@ -33,6 +33,10 @@ export type CommandPaletteDialogHandlers = {
   openNodeMerge: () => void;
   openAiBranchSummary: () => void;
   openAiImportance: () => void;
+  openAiChildCandidates: () => void;
+  openAiClassifyReorder: () => void;
+  openAiDuplicates: () => void;
+  openAiMissingPerspectives: () => void;
   openCrossMapSearch: () => void;
   openRegisterPart: () => void;
   openInsertPart: () => void;
@@ -137,6 +141,18 @@ export function openCommandPaletteDialog(
       return true;
     case "edit.open-ai-importance":
       handlers.openAiImportance();
+      return true;
+    case "edit.open-ai-child-candidates":
+      handlers.openAiChildCandidates();
+      return true;
+    case "edit.open-ai-classify-reorder":
+      handlers.openAiClassifyReorder();
+      return true;
+    case "edit.open-ai-duplicates":
+      handlers.openAiDuplicates();
+      return true;
+    case "edit.open-ai-missing-perspectives":
+      handlers.openAiMissingPerspectives();
       return true;
     case "search.open-cross-map":
       handlers.openCrossMapSearch();
