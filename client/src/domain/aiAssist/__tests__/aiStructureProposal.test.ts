@@ -1,8 +1,10 @@
+import { validateClassifyReorderOutput } from "@/domain/aiAssist/aiAssistOutput";
 import {
   addChildProposalKey,
   addSiblingProposalKey,
   applyAiStructureProposals,
   buildChildCandidateProposals,
+  buildClassifyReorderProposals,
   buildDuplicatePairProposals,
   findStaleAiStructureProposals,
   mergePairProposalKey,
@@ -11,6 +13,7 @@ import {
   structureInputFingerprintOf,
   type AcceptedAiStructureProposal,
 } from "@/domain/aiAssist/aiStructureProposal";
+import { collectSubtreeIds } from "@/domain/nodes/nodeTree";
 import type { AiProposal } from "@/domain/aiAssist/aiProposal";
 import { MERGE_DEFAULT_SEPARATOR } from "@/domain/nodes/nodeSeparator";
 import { directChildIdsInArrayOrder } from "@/domain/nodes/reorderAllSiblings";
@@ -243,6 +246,30 @@ describe("applyAiStructureProposals", () => {
     const proposal = reparentProposal(nodes, 2, 99);
     const result = apply(baseState(nodes), [{ proposal }]);
     expect(result).toEqual({ ok: false, reason: "placement-failed" });
+  });
+
+  it("079 検証済みの reparent+reorder を一括適用できる", () => {
+    const nodes = [
+      createTestNode({ id: 1, label: "根" }),
+      createTestNode({ id: 2, parentId: 1, label: "子A" }),
+      createTestNode({ id: 3, parentId: 1, label: "子B" }),
+    ];
+    const branchIds = collectSubtreeIds(nodes, 1);
+    const validated = validateClassifyReorderOutput({
+      moves: [
+        { type: "reparent", nodeId: 3, newParentId: 2 },
+        { type: "reorder", parentId: 1, childIds: [2] },
+      ],
+    }, branchIds, nodes);
+    if (!validated.ok) throw new Error("validated");
+    const proposals = buildClassifyReorderProposals(nodes, validated.moves);
+    const result = apply(
+      baseState(nodes),
+      proposals.map((proposal) => ({ proposal })) as AcceptedAiStructureProposal[],
+    );
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    expect(directChildIdsInArrayOrder(result.state.nodes, 1)).toEqual([2]);
+    expect(result.state.nodes.find((node) => node.id === 3)?.parentId).toBe(2);
   });
 });
 
