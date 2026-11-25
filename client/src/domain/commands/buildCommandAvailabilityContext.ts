@@ -32,6 +32,14 @@ export type CommandAvailabilityContextInput = {
   readonly aiBranchSummaryDisabledReason: string | null;
   readonly canOpenAiImportance: boolean;
   readonly aiImportanceDisabledReason: string | null;
+  readonly canOpenAiChildCandidates: boolean;
+  readonly aiChildCandidatesDisabledReason: string | null;
+  readonly canOpenAiClassifyReorder: boolean;
+  readonly aiClassifyReorderDisabledReason: string | null;
+  readonly canOpenAiDuplicates: boolean;
+  readonly aiDuplicatesDisabledReason: string | null;
+  readonly canOpenAiMissingPerspectives: boolean;
+  readonly aiMissingPerspectivesDisabledReason: string | null;
   readonly canRegisterPart: boolean;
   readonly canInsertPart: boolean;
   readonly canDeletePart: boolean;
@@ -77,6 +85,14 @@ export function buildCommandAvailabilityContext(
     aiBranchSummaryDisabledReason: input.aiBranchSummaryDisabledReason,
     canOpenAiImportance: input.canOpenAiImportance,
     aiImportanceDisabledReason: input.aiImportanceDisabledReason,
+    canOpenAiChildCandidates: input.canOpenAiChildCandidates,
+    aiChildCandidatesDisabledReason: input.aiChildCandidatesDisabledReason,
+    canOpenAiClassifyReorder: input.canOpenAiClassifyReorder,
+    aiClassifyReorderDisabledReason: input.aiClassifyReorderDisabledReason,
+    canOpenAiDuplicates: input.canOpenAiDuplicates,
+    aiDuplicatesDisabledReason: input.aiDuplicatesDisabledReason,
+    canOpenAiMissingPerspectives: input.canOpenAiMissingPerspectives,
+    aiMissingPerspectivesDisabledReason: input.aiMissingPerspectivesDisabledReason,
     canRegisterPart: input.canRegisterPart,
     canInsertPart: input.canInsertPart,
     canDeletePart: input.canDeletePart,

@@ -58,6 +58,22 @@ export const COMMAND_CATALOG: readonly CommandDefinition[] = Object.freeze([
     aliases: ["AI", "重要度"],
     opensDialog: true,
   }),
+  define("edit.open-ai-child-candidates", "edit", "編集", "子の候補を提案（AI）…", {
+    aliases: ["AI", "子候補"],
+    opensDialog: true,
+  }),
+  define("edit.open-ai-classify-reorder", "edit", "編集", "分類・並べ替えを提案（AI）…", {
+    aliases: ["AI", "分類"],
+    opensDialog: true,
+  }),
+  define("edit.open-ai-duplicates", "edit", "編集", "重複・類似を検出（AI）…", {
+    aliases: ["AI", "重複"],
+    opensDialog: true,
+  }),
+  define("edit.open-ai-missing-perspectives", "edit", "編集", "不足観点を提案（AI）…", {
+    aliases: ["AI", "観点"],
+    opensDialog: true,
+  }),
   define("edit.register-part", "edit", "編集", "選択を部品に登録…", {
     aliases: ["部品登録"],
     opensDialog: true,
