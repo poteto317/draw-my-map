@@ -1239,8 +1239,8 @@ export function MapEditor({
   useEffect(() => {
     if (viewMode !== "map" || !pendingPresentationStartRef.current) return;
     if (viewportHandleRef.current?.getScreenSize() === null) return;
-    pendingPresentationStartRef.current = false;
     presentationPlayback.start();
+    pendingPresentationStartRef.current = false;
   }, [viewMode, viewportFrame, presentationPlayback]);
 
   return (
