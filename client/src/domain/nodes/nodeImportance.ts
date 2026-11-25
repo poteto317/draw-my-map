@@ -17,3 +17,8 @@ export function maxNodeImportance(values: readonly NodeImportance[]): NodeImport
   }
   return highest ?? DEFAULT_NODE_IMPORTANCE;
 }
+
+// 値が重要度（"high" / "medium" / "low"）かどうか。外部からの値（AI の応答・保存データなど）の判定に使う
+export function isNodeImportanceValue(value: unknown): value is NodeImportance {
+  return value === "high" || value === "medium" || value === "low";
+}

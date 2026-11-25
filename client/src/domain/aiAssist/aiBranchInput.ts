@@ -1,4 +1,5 @@
 import { hasOnlyKeys, hasOwn, isPlainRecord } from "@/domain/shared/unknownRecord";
+import { isNodeImportanceValue } from "@/domain/nodes/nodeImportance";
 import type { Node } from "@/types/node";
 import type { NodeImportance } from "@/types/nodeImportance";
 
@@ -27,10 +28,6 @@ export type AiBranchInput = { rootId: number; nodes: AiBranchInputNode[] };
 export type BuildAiBranchInputResult =
   | { ok: true; input: AiBranchInput; truncatedCount: number; totalLength: number }
   | { ok: false; reason: "node-missing" | "too-many-nodes" | "too-large" };
-
-export function isNodeImportanceValue(value: unknown): value is NodeImportance {
-  return value === "high" || value === "medium" || value === "low";
-}
 
 function isSafeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value);

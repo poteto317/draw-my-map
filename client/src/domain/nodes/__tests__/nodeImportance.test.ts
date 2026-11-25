@@ -1,6 +1,7 @@
 import {
   DEFAULT_NODE_IMPORTANCE,
   IMPORTANCE_RANK,
+  isNodeImportanceValue,
   maxNodeImportance,
 } from "@/domain/nodes/nodeImportance";
 import type { NodeImportance } from "@/types/nodeImportance";
@@ -24,5 +25,14 @@ describe("maxNodeImportance", () => {
 
   it("空の配列は既定の重要度を返す", () => {
     expect(maxNodeImportance([])).toBe(DEFAULT_NODE_IMPORTANCE);
+  });
+});
+
+describe("isNodeImportanceValue", () => {
+  it.each(["high", "medium", "low"])("%s は重要度の値", (value) => {
+    expect(isNodeImportanceValue(value)).toBe(true);
+  });
+  it.each(["", "HIGH", null, undefined, 1, {}])("%p は重要度の値ではない", (value) => {
+    expect(isNodeImportanceValue(value)).toBe(false);
   });
 });
