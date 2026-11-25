@@ -1072,7 +1072,7 @@ POST /api/ai-assist/importance
 
 POST /api/ai-assist/child-candidates     — 078。200 { "candidates": [{ "label": "..." }] }
 POST /api/ai-assist/classify-reorder       — 079。200 { "moves": [{ "type": "reparent", ... } | { "type": "reorder", ... }] }
-POST /api/ai-assist/duplicates           — 080。200 { "pairs": [{ "primaryId", "secondaryId", "reason" }] }（本文に `mapId` 必須。サーバーは形式のみ検証し、ブラウザ上で開いているマップとの一致は見ない。ローカル前提では改ざんされた `mapId` もクライアント再検証で救済される）
+POST /api/ai-assist/duplicates           — 080。200 { "pairs": [{ "primaryId", "secondaryId", "reason" }] }（本文に `mapId` と `visibleNodeIds`（表示集合の ID 配列）必須。`planNodeMerge` はクライアントと同じ可視前提で検証する。`mapId` のセッション一致は見ない。ローカル前提では改ざんもクライアント再検証で救済される）
 POST /api/ai-assist/missing-perspectives — 081。200 { "items": [{ "label", "placement": "child" | "sibling" }] }
 ```
 
