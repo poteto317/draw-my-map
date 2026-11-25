@@ -1341,8 +1341,8 @@ export function MapEditor({
                 buttonRef={commandPaletteButtonRef}
               />
               <MapHistoryControls
-                canUndo={canUndo && !playingPresentation}
-                canRedo={canRedo && !playingPresentation}
+                canUndo={canUndo && editorShortcutsEnabled && !playingPresentation}
+                canRedo={canRedo && editorShortcutsEnabled && !playingPresentation}
                 onUndo={undo}
                 onRedo={redo}
               />

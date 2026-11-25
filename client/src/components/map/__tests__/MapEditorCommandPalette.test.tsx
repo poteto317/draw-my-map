@@ -382,17 +382,13 @@ describe("MapEditor コマンドパレット配線", () => {
     expect(exportedMap().nodes).toHaveLength(0);
   });
 
-  it("documentRevision 進行で stale 閉じ、restore-opener 列へフォーカス", async () => {
+  it("パレット表示中はヘッダーの元に戻すが無効", async () => {
     await renderEditor();
     addNodeAt(300, 200);
-    commandButton().focus();
     await openPaletteViaHeader();
 
-    // jsdom は inert でも click 可能。Undo で revision を進めて stale を起こす
-    fireEvent.click(screen.getByRole("button", { name: "元に戻す" }));
-
-    expect(screen.queryByRole("dialog", { name: "コマンドパレット" })).not.toBeInTheDocument();
-    expect(commandButton()).toHaveFocus();
+    expect(screen.getByRole("button", { name: "元に戻す" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "やり直す" })).toBeDisabled();
   });
 
   it("mapId 変化でも stale 閉じる", async () => {
