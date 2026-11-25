@@ -21,8 +21,8 @@ export const AI_ASSIST_DIALOG_TITLES: Readonly<Record<AiAssistKind, string>> = {
   importance: "重要度を提案",
 };
 
-export const AI_ASSIST_UNAVAILABLE_MESSAGE =
-  "AI 支援が設定されていません。ANTHROPIC_API_KEY または OPENAI_API_KEY を設定し、提供元の指定（AI_ASSIST_PROVIDER）も確認してください（手順: docs/setup/ai-assist-setup.md）";
+// 文言の正本は aiAssistClient の not-configured（ダイアログの unavailable 画面と通信エラーで同じ文を出す）
+export const AI_ASSIST_UNAVAILABLE_MESSAGE = describeAiAssistError("not-configured");
 export const AI_PROPOSALS_STALE_MESSAGE =
   "提案を作った後にマップが変わったため、適用しませんでした。もう一度提案を作ってください。";
 export const AI_PROPOSAL_STALE_MARK = "提案を作った後に変わりました";

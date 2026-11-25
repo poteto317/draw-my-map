@@ -3333,7 +3333,7 @@ Phase 32 の候補075（AI変更の差分プレビュー）・076（枝の要約
 
 | 種類 | 文言 |
 |------|------|
-| `not-configured` | AI 支援が設定されていません。docs/setup/ai-assist-setup.md の手順で API キーを設定し、提供元の指定（AI_ASSIST_PROVIDER）も確認してください。 |
+| `not-configured` | AI 支援が設定されていません。ANTHROPIC_API_KEY または OPENAI_API_KEY を設定し、提供元の指定（AI_ASSIST_PROVIDER）も確認してください（手順: docs/setup/ai-assist-setup.md） |
 | `auth-failed` | AI の提供元が API キーを受け付けませんでした。キーの値と権限を確認してください。 |
 | `rate-limited` | AI の利用上限に達しました（短時間の送りすぎか、契約の上限の可能性があります）。時間をおいて再度お試しください。 |
 | `timeout` | AI の応答が時間内に返りませんでした。枝を小さくするか、時間をおいて再度お試しください。 |
