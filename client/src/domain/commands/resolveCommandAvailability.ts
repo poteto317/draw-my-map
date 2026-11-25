@@ -42,6 +42,10 @@ const MUTATING_IDS = new Set<CommandId>([
   "edit.open-node-merge",
   "edit.open-ai-branch-summary",
   "edit.open-ai-importance",
+  "edit.open-ai-child-candidates",
+  "edit.open-ai-classify-reorder",
+  "edit.open-ai-duplicates",
+  "edit.open-ai-missing-perspectives",
   "edit.register-part",
   "edit.insert-part",
   "edit.delete-part",
@@ -160,6 +164,26 @@ function resolveOperationAvailability(
       return fromFlag(
         context.canOpenAiImportance,
         context.aiImportanceDisabledReason ?? "重要度を提案できるノードが選択されていません",
+      );
+    case "edit.open-ai-child-candidates":
+      return fromFlag(
+        context.canOpenAiChildCandidates,
+        context.aiChildCandidatesDisabledReason ?? "子の候補を提案できるノードが選択されていません",
+      );
+    case "edit.open-ai-classify-reorder":
+      return fromFlag(
+        context.canOpenAiClassifyReorder,
+        context.aiClassifyReorderDisabledReason ?? "分類・並べ替えを提案できるノードが選択されていません",
+      );
+    case "edit.open-ai-duplicates":
+      return fromFlag(
+        context.canOpenAiDuplicates,
+        context.aiDuplicatesDisabledReason ?? "重複・類似を検出できるノードが選択されていません",
+      );
+    case "edit.open-ai-missing-perspectives":
+      return fromFlag(
+        context.canOpenAiMissingPerspectives,
+        context.aiMissingPerspectivesDisabledReason ?? "不足観点を提案できるノードが選択されていません",
       );
     case "edit.register-part":
       return fromFlag(

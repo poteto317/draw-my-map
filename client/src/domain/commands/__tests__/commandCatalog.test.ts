@@ -25,6 +25,10 @@ const REQUIRED_V1_IDS: readonly CommandId[] = [
   "edit.open-node-merge",
   "edit.open-ai-branch-summary",
   "edit.open-ai-importance",
+  "edit.open-ai-child-candidates",
+  "edit.open-ai-classify-reorder",
+  "edit.open-ai-duplicates",
+  "edit.open-ai-missing-perspectives",
   "edit.register-part",
   "edit.insert-part",
   "edit.delete-part",
@@ -43,6 +47,10 @@ const OPENS_DIALOG_IDS = new Set<CommandId>([
   "edit.open-node-merge",
   "edit.open-ai-branch-summary",
   "edit.open-ai-importance",
+  "edit.open-ai-child-candidates",
+  "edit.open-ai-classify-reorder",
+  "edit.open-ai-duplicates",
+  "edit.open-ai-missing-perspectives",
   "edit.register-part",
   "edit.insert-part",
   "edit.delete-part",
@@ -97,12 +105,30 @@ describe("COMMAND_CATALOG", () => {
     expect(getCommandDefinition("io.export-json")).toBeUndefined();
     expect(getCommandDefinition("view.nav-back")).toBeUndefined();
   });
-  it("AI 支援の 2 件は編集のカテゴリで、別名に AI と要約／重要度を持つ", () => {
+  it("AI 支援（078–081 含む 6 件）は編集カテゴリで opensDialog", () => {
     expect(getCommandDefinition("edit.open-ai-branch-summary")).toMatchObject({
       categoryLabel: "編集", label: "枝を要約してメモに入れる（AI）…", aliases: ["AI", "要約"], opensDialog: true,
     });
     expect(getCommandDefinition("edit.open-ai-importance")).toMatchObject({
       categoryLabel: "編集", label: "重要度を提案（AI）…", aliases: ["AI", "重要度"], opensDialog: true,
     });
+    expect(getCommandDefinition("edit.open-ai-child-candidates")).toMatchObject({
+      categoryLabel: "編集", label: "子の候補を提案（AI）…", opensDialog: true,
+    });
+    expect(getCommandDefinition("edit.open-ai-classify-reorder")).toMatchObject({
+      categoryLabel: "編集", label: "分類・並べ替えを提案（AI）…", opensDialog: true,
+    });
+    expect(getCommandDefinition("edit.open-ai-duplicates")).toMatchObject({
+      categoryLabel: "編集", label: "重複・類似を検出（AI）…", opensDialog: true,
+    });
+    expect(getCommandDefinition("edit.open-ai-missing-perspectives")).toMatchObject({
+      categoryLabel: "編集", label: "不足観点を提案（AI）…", opensDialog: true,
+    });
+  });
+
+  it("082–084 の AI 入口は登録しない", () => {
+    expect(getCommandDefinition("edit.open-ai-structuring")).toBeUndefined();
+    expect(getCommandDefinition("edit.open-ai-illustration-style")).toBeUndefined();
+    expect(getCommandDefinition("edit.open-ai-grounded-qa")).toBeUndefined();
   });
 });

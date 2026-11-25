@@ -55,6 +55,14 @@ export type CommandAvailabilityContext = {
   readonly aiBranchSummaryDisabledReason: string | null;
   readonly canOpenAiImportance: boolean;
   readonly aiImportanceDisabledReason: string | null;
+  readonly canOpenAiChildCandidates: boolean;
+  readonly aiChildCandidatesDisabledReason: string | null;
+  readonly canOpenAiClassifyReorder: boolean;
+  readonly aiClassifyReorderDisabledReason: string | null;
+  readonly canOpenAiDuplicates: boolean;
+  readonly aiDuplicatesDisabledReason: string | null;
+  readonly canOpenAiMissingPerspectives: boolean;
+  readonly aiMissingPerspectivesDisabledReason: string | null;
   readonly canRegisterPart: boolean;
   readonly canInsertPart: boolean;
   readonly canDeletePart: boolean;
