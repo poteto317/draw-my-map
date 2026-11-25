@@ -30,6 +30,7 @@ export interface UseMapPersistenceOptions {
   branchLayouts?: NodeMapState["branchLayouts"];
   relations?: NodeMapState["relations"];
   groups?: NodeMapState["groups"];
+  tour?: NodeMapState["tour"];
   replaceMap: (state: NodeMapState) => void;
   storageSession: MapStorageSession;
   storageMode: "persistent" | "protected";
@@ -67,6 +68,7 @@ export function useMapPersistence({
   branchLayouts,
   relations,
   groups,
+  tour,
   replaceMap,
   storageSession,
   storageMode,
@@ -86,8 +88,9 @@ export function useMapPersistence({
       branchLayouts,
       relations,
       groups,
+      tour,
     }),
-    [treeDirection, layoutSpacing, layoutStyle, branchLayouts, relations, groups],
+    [treeDirection, layoutSpacing, layoutStyle, branchLayouts, relations, groups, tour],
   );
   const currentSnapshot = useMemo(
     () => serializeMapDocument(createMapDocument(nodes, layoutMode, documentOptions)),
@@ -118,6 +121,7 @@ export function useMapPersistence({
     branchLayouts,
     relations,
     groups,
+    tour,
     mapName,
     getHasPendingEdits: () => (
       !hydratedRef.current && canonicalInitialSnapshot !== null

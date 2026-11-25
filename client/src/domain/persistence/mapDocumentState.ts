@@ -12,18 +12,21 @@ export function nodeMapStateFromDocument(document: MapDocumentV3): NodeMapState 
     ...(document.branchLayouts === undefined ? {} : { branchLayouts: document.branchLayouts }),
     ...(document.relations === undefined ? {} : { relations: document.relations }),
     ...(document.groups === undefined ? {} : { groups: document.groups }),
+    ...(document.tour === undefined ? {} : { tour: document.tour }),
   };
 }
 
-export function mapDocumentOptionsFromState(
-  state: Pick<
-    NodeMapState,
-    "treeDirection" | "layoutSpacing" | "layoutStyle" | "branchLayouts" | "relations" | "groups"
-  >,
-): Pick<
+type MapDocumentStateFields = Pick<
+  NodeMapState,
+  "treeDirection" | "layoutSpacing" | "layoutStyle" | "branchLayouts" | "relations" | "groups" | "tour"
+>;
+
+type MapDocumentOptions = Pick<
   MapDocumentV3,
-  "treeDirection" | "layoutSpacing" | "layoutStyle" | "branchLayouts" | "relations" | "groups"
-> {
+  "treeDirection" | "layoutSpacing" | "layoutStyle" | "branchLayouts" | "relations" | "groups" | "tour"
+>;
+
+function mapDocumentLayoutOptions(state: MapDocumentStateFields): Omit<MapDocumentOptions, "tour"> {
   return {
     treeDirection: state.treeDirection,
     layoutSpacing: state.layoutSpacing,
@@ -32,4 +35,22 @@ export function mapDocumentOptionsFromState(
     relations: state.relations,
     groups: state.groups,
   };
+}
+
+export function mapDocumentOptionsFromState(state: MapDocumentStateFields): MapDocumentOptions {
+  return {
+    ...mapDocumentLayoutOptions(state),
+    tour: state.tour,
+  };
+}
+
+/** §3.2: 別名保存・新規作成・テンプレ新規・枝切り出し先では tour を含めない */
+export function mapDocumentOptionsForNewMap(state: MapDocumentStateFields): Omit<MapDocumentOptions, "tour"> {
+  return mapDocumentLayoutOptions(state);
+}
+
+export function omitTourFromMapDocument(document: MapDocumentV3): MapDocumentV3 {
+  const rest = { ...document };
+  delete rest.tour;
+  return rest;
 }

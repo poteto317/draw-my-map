@@ -10,7 +10,7 @@ import {
   serializeMapDocument,
 } from "@/domain/persistence/mapDocumentCodec";
 import {
-  mapDocumentOptionsFromState,
+  mapDocumentOptionsForNewMap,
   nodeMapStateFromDocument,
 } from "@/domain/persistence/mapDocumentState";
 import type { MapLibraryOperationResult } from "@/hooks/useMapLibrary";
@@ -33,6 +33,7 @@ export interface UseMapConflictControllerOptions {
   branchLayouts?: NodeMapState["branchLayouts"];
   relations?: NodeMapState["relations"];
   groups?: NodeMapState["groups"];
+  tour?: NodeMapState["tour"];
   mapName: string;
   getHasPendingEdits: () => boolean;
   replaceMapAndReset: (state: NodeMapState) => void;
@@ -61,6 +62,7 @@ export function useMapConflictController({
   branchLayouts,
   relations,
   groups,
+  tour,
   mapName,
   getHasPendingEdits,
   replaceMapAndReset,
@@ -126,13 +128,14 @@ export function useMapConflictController({
     const currentSnapshotJson = serializeMapDocument(createMapDocument(
       nodes,
       layoutMode,
-      mapDocumentOptionsFromState({
+      mapDocumentOptionsForNewMap({
         treeDirection,
         layoutSpacing,
         layoutStyle,
         branchLayouts,
         relations,
         groups,
+        tour,
       }),
     ));
     const result = onSaveCurrentAsNewMap(copyName, currentSnapshotJson);
@@ -151,6 +154,7 @@ export function useMapConflictController({
     branchLayouts,
     relations,
     groups,
+    tour,
     onSaveCurrentAsNewMap,
   ]);
 

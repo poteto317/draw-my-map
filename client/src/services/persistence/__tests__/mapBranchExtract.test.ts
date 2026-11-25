@@ -45,6 +45,33 @@ describe("extractStoredBranch", () => {
     expect(storage.getItem(BRANCH_MOVE_JOURNAL_KEY)).toBeNull();
   });
 
+  it("元マップに tour があっても切り出し先 JSON には含めない", () => {
+    const snap = {
+      viewport: { offsetX: 0, offsetY: 0, scale: 1 },
+      selectedNodeId: 2,
+      selectedNodeIds: [2],
+      focusRootId: null,
+      collapsedNodeIds: [],
+      resolutionMode: "all" as const,
+      autoResolutionLevel: "all" as const,
+    };
+    const withTour = serializeMapDocument(createMapDocument([
+      createTestNode({ id: 1, parentId: null, label: "旅行の計画", x: 0, y: 0 }),
+      createTestNode({ id: 2, parentId: 1, label: "枝", x: 120, y: 40 }),
+    ], "manual", {
+      tour: { version: 1, title: "案内", steps: [{ id: "s1", snapshot: snap }] },
+    }));
+    const recording = createRecordingStorage();
+    const index = seedMapLibrary(recording.storage, [{ id: "a", json: withTour, name: "旅行の計画" }]);
+
+    const result = extractStoredBranch(recording.storage, index, "a", "new-map", 2, now);
+    expect(result.ok).toBe(true);
+    const sourceDoc = parseMapDocumentJson(recording.storage.getItem(mapBodyKey("a"))!);
+    const targetDoc = parseMapDocumentJson(recording.storage.getItem(mapBodyKey("new-map"))!);
+    expect(sourceDoc.ok && sourceDoc.value.tour?.title).toBe("案内");
+    expect(targetDoc.ok && "tour" in targetDoc.value).toBe(false);
+  });
+
   it("閉じた relations/groups を新マップへ保存し、元は prune する", () => {
     const withClosed = serializeMapDocument(createMapDocument([
       createTestNode({ id: 1, parentId: null, label: "旅行の計画", x: 0, y: 0 }),

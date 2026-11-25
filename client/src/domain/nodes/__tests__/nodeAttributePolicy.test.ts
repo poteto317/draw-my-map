@@ -228,3 +228,32 @@ describe("マップ文書の treeDirection / layoutSpacing / layoutStyle / branc
     expect(areMapStatesEqual(base(), other)).toBe(false);
   });
 });
+
+describe("マップ文書の tour", () => {
+  const snapshot = {
+    viewport: { offsetX: 0, offsetY: 0, scale: 1 },
+    selectedNodeId: null,
+    selectedNodeIds: [] as number[],
+    focusRootId: null,
+    collapsedNodeIds: [] as number[],
+    resolutionMode: "all" as const,
+    autoResolutionLevel: "all" as const,
+  };
+  const base = (): MapDocumentV3 => ({ version: 3, layoutMode: "manual", nodes: [SAMPLE] });
+  const withTour = (): MapDocumentV3 => ({
+    ...base(),
+    tour: { version: 1, title: "t", steps: [{ id: "s1", snapshot }] },
+  });
+
+  it("tour が違えば競合・履歴とも不一致", () => {
+    const other = withTour();
+    expect(isDocumentContentEqual(base(), other)).toBe(false);
+    expect(areMapStatesEqual(base(), other)).toBe(false);
+    expect(
+      isDocumentContentEqual(other, {
+        ...other,
+        tour: { ...other.tour!, title: "別" },
+      }),
+    ).toBe(false);
+  });
+});

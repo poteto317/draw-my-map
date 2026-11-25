@@ -516,3 +516,74 @@ describe("version 3 の layoutStyle / branchLayouts / layoutPinned", () => {
     expect(result.ok && "branchLayouts" in result.value).toBe(false);
   });
 });
+
+describe("version 3 の tour", () => {
+  const baseDoc = {
+    version: 3,
+    layoutMode: "manual" as const,
+    nodes: [node(1, null), node(2, 1)],
+  };
+
+  const stepSnapshot = {
+    viewport: { offsetX: 0, offsetY: 0, scale: 1 },
+    selectedNodeId: 1,
+    selectedNodeIds: [1],
+    focusRootId: null,
+    collapsedNodeIds: [] as number[],
+    resolutionMode: "all" as const,
+    autoResolutionLevel: "all" as const,
+  };
+
+  it("不正 tour でもマップは開き、tour だけ落とす", () => {
+    const result = parseMapDocumentJson(JSON.stringify({
+      ...baseDoc,
+      tour: { version: 2, title: "x", steps: [] },
+    }));
+    expect(result.ok).toBe(true);
+    expect(result.ok && "tour" in result.value).toBe(false);
+  });
+
+  it("不正ステップを除外し caption 不正はキャプション無しで残す", () => {
+    const result = parseMapDocumentJson(JSON.stringify({
+      ...baseDoc,
+      tour: {
+        version: 1,
+        title: "  案内  ",
+        steps: [
+          { id: "ok", snapshot: stepSnapshot, caption: "あ".repeat(501) },
+          { id: "ok2", snapshot: stepSnapshot, caption: "" },
+          { id: "", snapshot: stepSnapshot },
+          { id: "bad", snapshot: { viewport: { offsetX: 0, offsetY: 0, scale: 0.01 } } },
+        ],
+      },
+    }));
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        ...baseDoc,
+        tour: {
+          version: 1,
+          title: "案内",
+          steps: [
+            { id: "ok", snapshot: stepSnapshot },
+            { id: "ok2", snapshot: stepSnapshot },
+          ],
+        },
+      },
+    });
+  });
+
+  it("51 件超は先頭 50 に切り詰める", () => {
+    const steps = Array.from({ length: 51 }, (_, index) => ({
+      id: `s${index}`,
+      snapshot: stepSnapshot,
+    }));
+    const result = parseMapDocumentJson(JSON.stringify({
+      ...baseDoc,
+      tour: { version: 1, title: "long", steps },
+    }));
+    expect(result.ok && result.value.tour?.steps.length).toBe(50);
+    expect(result.ok && result.value.tour?.steps[0]?.id).toBe("s0");
+    expect(result.ok && result.value.tour?.steps[49]?.id).toBe("s49");
+  });
+});
