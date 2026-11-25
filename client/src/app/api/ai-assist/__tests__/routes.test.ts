@@ -1,6 +1,10 @@
 /** @jest-environment node */
 import { POST as postBranchSummary } from "@/app/api/ai-assist/branch-summary/route";
+import { POST as postChildCandidates } from "@/app/api/ai-assist/child-candidates/route";
+import { POST as postClassifyReorder } from "@/app/api/ai-assist/classify-reorder/route";
+import { POST as postDuplicates } from "@/app/api/ai-assist/duplicates/route";
 import { POST as postImportance } from "@/app/api/ai-assist/importance/route";
+import { POST as postMissingPerspectives } from "@/app/api/ai-assist/missing-perspectives/route";
 import { GET as getStatus } from "@/app/api/ai-assist/status/route";
 
 const mockAnthropicCreate = jest.fn();
@@ -41,10 +45,14 @@ afterEach(() => {
 });
 
 describe("/api/ai-assist/*", () => {
-  it("環境変数が無ければ status は available: false、2 つの POST は 503", async () => {
+  it("環境変数が無ければ status は available: false、POST は 503", async () => {
     expect(await getStatus(new Request("http://localhost/api/ai-assist/status", { headers: { host: "localhost" } })).json()).toEqual({ available: false });
     expect((await postBranchSummary(post("branch-summary", { branch }))).status).toBe(503);
     expect((await postImportance(post("importance", { branch, targetIds: [2] }))).status).toBe(503);
+    expect((await postChildCandidates(post("child-candidates", { branch }))).status).toBe(503);
+    expect((await postClassifyReorder(post("classify-reorder", { branch }))).status).toBe(503);
+    expect((await postDuplicates(post("duplicates", { branch, mapId: "map-a" }))).status).toBe(503);
+    expect((await postMissingPerspectives(post("missing-perspectives", { branch }))).status).toBe(503);
   });
 
   it("ANTHROPIC_API_KEY があれば Claude のアダプタへ配線する", async () => {
@@ -68,6 +76,50 @@ describe("/api/ai-assist/*", () => {
     expect(await response.json()).toEqual({ suggestions: [{ id: 2, importance: "high", reason: "主要" }] });
     expect(mockOpenAICreate).toHaveBeenCalledWith({ provider: "openai", apiKey: "o-key", model: "gpt-5" });
     expect(mockAnthropicCreate).not.toHaveBeenCalled();
+  });
+
+  it("Phase 33 の 4 ルートはフェイク generator で応答する", async () => {
+    process.env.ANTHROPIC_API_KEY = "a-key";
+    mockAnthropicCreate.mockReturnValue(jest.fn()
+      .mockResolvedValueOnce({ candidates: [{ label: "案" }] })
+      .mockResolvedValueOnce({ moves: [{ type: "reorder", parentId: 1, childIds: [2] }] })
+      .mockResolvedValueOnce({ pairs: [{ primaryId: 2, secondaryId: 3, reason: "似" }] })
+      .mockResolvedValueOnce({ items: [{ label: "不足", placement: "child" }] }));
+
+    expect(await (await postChildCandidates(post("child-candidates", { branch }))).json()).toEqual({ candidates: [{ label: "案" }] });
+    expect(await (await postClassifyReorder(post("classify-reorder", { branch }))).json()).toEqual({ moves: [{ type: "reorder", parentId: 1, childIds: [2] }] });
+    const trio = {
+      ...branch,
+      nodes: [...branch.nodes, { id: 3, parentId: 1, label: "子2", importance: "medium" }],
+    };
+    expect(await (await postDuplicates(post("duplicates", { branch: trio, mapId: "map-a" }))).json()).toEqual({ pairs: [{ primaryId: 2, secondaryId: 3, reason: "似" }] });
+    expect(await (await postMissingPerspectives(post("missing-perspectives", { branch }))).json()).toEqual({ items: [{ label: "不足", placement: "child" }] });
+  });
+
+  it("Phase 33 の 4 ルートは不正な body で 400", async () => {
+    process.env.ANTHROPIC_API_KEY = "a-key";
+    expect((await postChildCandidates(post("child-candidates", { notBranch: true }))).status).toBe(400);
+    expect((await postClassifyReorder(post("classify-reorder", { branch: "x" }))).status).toBe(400);
+    expect((await postDuplicates(post("duplicates", { branch }))).status).toBe(400);
+    expect((await postMissingPerspectives(post("missing-perspectives", {}))).status).toBe(400);
+  });
+
+  it("Phase 33 の 4 ルートは出力検証に失敗すると 502", async () => {
+    process.env.ANTHROPIC_API_KEY = "a-key";
+    const invalid = jest.fn()
+      .mockResolvedValueOnce({ candidates: [] })
+      .mockResolvedValueOnce({ moves: [] })
+      .mockResolvedValueOnce({ pairs: [] })
+      .mockResolvedValueOnce({ items: [] });
+    mockAnthropicCreate.mockReturnValue(invalid);
+    const trio = {
+      ...branch,
+      nodes: [...branch.nodes, { id: 3, parentId: 1, label: "子2", importance: "medium" }],
+    };
+    expect((await postChildCandidates(post("child-candidates", { branch }))).status).toBe(502);
+    expect((await postClassifyReorder(post("classify-reorder", { branch }))).status).toBe(502);
+    expect((await postDuplicates(post("duplicates", { branch: trio, mapId: "map-a" }))).status).toBe(502);
+    expect((await postMissingPerspectives(post("missing-perspectives", { branch }))).status).toBe(502);
   });
 
   it("Host の許可リストは process.env の AI_ASSIST_ALLOWED_HOSTS から読む", async () => {

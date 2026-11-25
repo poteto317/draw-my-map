@@ -4,6 +4,7 @@ import {
   describeAiAssistError,
   fetchAiAssistStatus,
   requestBranchSummary,
+  requestChildCandidates,
   requestImportanceSuggestions,
   type AiAssistClientErrorKind,
 } from "@/services/aiAssist/aiAssistClient";
@@ -185,6 +186,14 @@ describe("requestImportanceSuggestions", () => {
   it("対象外の ID を含む応答は invalid-output", async () => {
     const fetchImpl = jest.fn().mockResolvedValue(reply({ suggestions: [{ id: 1, importance: "high", reason: "" }] }));
     expect(await kindOf(requestImportanceSuggestions(branch, [2], options(fetchImpl)))).toBe("invalid-output");
+  });
+});
+
+describe("requestChildCandidates", () => {
+  it("枝を POST し、検証し直した候補を返す", async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(reply({ candidates: [{ label: "案A" }] }));
+    await expect(requestChildCandidates(branch, options(fetchImpl))).resolves.toEqual([{ label: "案A" }]);
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/ai-assist/child-candidates");
   });
 });
 
