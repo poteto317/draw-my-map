@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useRef, type RefObject } from "react";
 import { resolveTourPresentationGuards } from "@/domain/map/mapTourPresentationAvailability";
+import type { ConflictState } from "@/domain/mapLibrary/mapConflict";
 import type { CreateTourOutcome, TourMutationOutcome, TourStepOutcome } from "@/hooks/useMapTourActions";
 import { useHeaderFocusReturn } from "@/hooks/useHeaderFocusReturn";
 import { useMapTourEditor, type UseMapTourEditorReturn } from "@/hooks/useMapTourEditor";
@@ -14,16 +15,12 @@ import { usePresentationPlaybackKeyboard } from "@/hooks/usePresentationPlayback
 import type { MapTour } from "@/types/mapTour";
 import type { MapViewSnapshot } from "@/types/mapViewSnapshot";
 
-export type MapEditorConflictState =
-  | "idle"
-  | "conflict"
-  | "externallyDeleted"
-  | (string & {});
+export type MapEditorConflictState = ConflictState;
 
 export type UseMapEditorTourAndPresentationOptions = {
   tour: MapTour | undefined;
   storageMode: "persistent" | "protected";
-  conflictState: MapEditorConflictState;
+  conflictState: ConflictState;
   captureView: () => MapViewSnapshot;
   applyView: ApplyMapView;
   createTour: (title: string) => CreateTourOutcome;
