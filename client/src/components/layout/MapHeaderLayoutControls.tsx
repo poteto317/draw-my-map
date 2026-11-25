@@ -24,6 +24,7 @@ export type MapHeaderLayoutControlsProps = {
   layoutStyle: NodeMapState["layoutStyle"];
   treeDirection: NodeMapState["treeDirection"];
   layoutSpacing: NodeMapState["layoutSpacing"];
+  layoutEditingBlocked: boolean;
   layoutStyleDisabled: boolean;
   treeDirectionDisabled: boolean;
   treeDirectionDisabledReason: HeaderControlDisabledReason;
@@ -60,6 +61,7 @@ export function MapHeaderLayoutControls({
   layoutStyle,
   treeDirection,
   layoutSpacing,
+  layoutEditingBlocked,
   layoutStyleDisabled,
   treeDirectionDisabled,
   treeDirectionDisabledReason,
@@ -121,6 +123,7 @@ export function MapHeaderLayoutControls({
         layoutMode={layoutMode}
         selectionActive={selectionActiveForSpacing}
         prefs={snapPrefs}
+        disabled={layoutEditingBlocked}
         onEnabledChange={onSnapEnabledChange}
         onShowGridChange={onSnapShowGridChange}
         onGridStepChange={onSnapGridStepChange}
@@ -128,6 +131,7 @@ export function MapHeaderLayoutControls({
       <LockControls
         selectionActive={lockControlsActive}
         nodeLocked={nodeLocked}
+        disabled={layoutEditingBlocked}
         onToggleLock={onToggleNodeLock}
         onLockSubtree={onLockSubtree}
         onUnlockSubtree={onUnlockSubtree}

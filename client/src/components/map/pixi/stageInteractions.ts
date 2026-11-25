@@ -57,6 +57,7 @@ type StageInteractionOptions = {
   onReorderSiblingRef: LatestValue<(nodeId: number, request: SiblingReorderRequest) => void>;
   onSiblingReorderPreviewChangeRef: LatestValue<(preview: SiblingReorderPreview | null) => void>;
   shouldIgnorePointerDownRef?: LatestValue<() => boolean>;
+  structureEditEnabledRef?: LatestValue<boolean>;
   isApplePlatformRef?: LatestValue<() => boolean>;
   dragThreshold?: number;
 };
@@ -106,6 +107,7 @@ export function createStageInteractions({
   onReorderSiblingRef,
   onSiblingReorderPreviewChangeRef,
   shouldIgnorePointerDownRef,
+  structureEditEnabledRef,
   isApplePlatformRef,
   dragThreshold = 4,
 }: StageInteractionOptions) {
@@ -129,6 +131,8 @@ export function createStageInteractions({
 
   const isToggleModifier = (modifiers: ModifierKeys) =>
     isApple() ? modifiers.metaKey : modifiers.ctrlKey;
+
+  const structureEditEnabled = () => structureEditEnabledRef?.current !== false;
 
   const clearSelection = () => {
     onClearSelectionRef?.current();
@@ -172,6 +176,7 @@ export function createStageInteractions({
       siblingReorderLease?: "self" | "currentLease";
     },
   ): PointerGesture | null => {
+    if (!structureEditEnabled()) return null;
     const threshold = options?.dragThreshold ?? dragThreshold;
     if (layoutModeRef.current === "auto") {
       const target = nodesRef.current.find((node) => node.id === nodeId);
@@ -247,6 +252,9 @@ export function createStageInteractions({
     sample: PointerSample,
     modifiers: ModifierKeys,
   ): PointerGesture | null => {
+    if (!structureEditEnabled() && (modifiers.shiftKey || isToggleModifier(modifiers))) {
+      return null;
+    }
     if (modifiers.shiftKey) {
       return createShiftNodePendingGesture({
         nodeId,

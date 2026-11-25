@@ -14,6 +14,7 @@ type NodeSearchBoxProps = {
   onSelectResult: (nodeId: number) => void;
   /** マップ内検索フォーカス用（コマンドパレット search.focus-in-map）。未指定時は内部 ref */
   inputRef?: RefObject<HTMLInputElement | null>;
+  disabled?: boolean;
 };
 
 // 候補のアクセシブルネーム。「ラベル（親: X、非表示、URL 一致）」の形で、該当するものだけを並べる
@@ -34,6 +35,7 @@ export function NodeSearchBox({
   total,
   onSelectResult,
   inputRef: inputRefProp,
+  disabled = false,
 }: NodeSearchBoxProps) {
   const idPrefix = useId();
   const listboxId = `${idPrefix}-node-search-results`;
@@ -63,6 +65,7 @@ export function NodeSearchBox({
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (disabled) return;
     const action = resolveNodeSearchKeyAction({
       key: event.key,
       isComposing: event.nativeEvent.isComposing,
@@ -94,6 +97,7 @@ export function NodeSearchBox({
   };
 
   const selectResult = (nodeId: number) => {
+    if (disabled) return;
     setSelectedNodeId(nodeId);
     onSelectResult(nodeId);
     inputRef.current?.focus();
@@ -124,6 +128,7 @@ export function NodeSearchBox({
         placeholder="ノードを検索"
         autoComplete="off"
         spellCheck={false}
+        disabled={disabled}
         className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
         onChange={(event) => {
           onQueryChange(event.target.value);

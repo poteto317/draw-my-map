@@ -49,6 +49,7 @@ type UseMapHeaderLayoutControlsArgs = {
   setLabelFontSize: (id: number, size: LabelFontSize) => boolean;
   toggleLabelBold: (id: number) => boolean;
   toggleLabelUnderline: (id: number) => boolean;
+  layoutEditingBlocked?: boolean;
 };
 
 type UseMapHeaderLayoutControlsReturn = {
@@ -80,6 +81,7 @@ export function useMapHeaderLayoutControls({
   setLabelFontSize,
   toggleLabelBold,
   toggleLabelUnderline,
+  layoutEditingBlocked = false,
 }: UseMapHeaderLayoutControlsArgs): UseMapHeaderLayoutControlsReturn {
   const layoutSnap = useLayoutSnapPrefs();
   const selectionLayoutActions = useSelectionLayoutActions({
@@ -157,13 +159,14 @@ export function useMapHeaderLayoutControls({
       layoutStyle,
       treeDirection,
       layoutSpacing,
-      layoutStyleDisabled: styleHeader.disabled,
-      treeDirectionDisabled: treeHeader.disabled,
+      layoutEditingBlocked,
+      layoutStyleDisabled: styleHeader.disabled || layoutEditingBlocked,
+      treeDirectionDisabled: treeHeader.disabled || layoutEditingBlocked,
       treeDirectionDisabledReason: treeHeader.disabledReason,
-      layoutSpacingDisabled: spacingHeader.disabled,
+      layoutSpacingDisabled: spacingHeader.disabled || layoutEditingBlocked,
       selectionActiveForSpacing: selectedNodeId !== null,
       selectionLayoutActive,
-      selectionLayoutDisabled: !selectionLayoutActions.canUse,
+      selectionLayoutDisabled: !selectionLayoutActions.canUse || layoutEditingBlocked,
       onLayoutStyleChange: setLayoutStyle,
       onTreeDirectionChange: setTreeDirection,
       onLayoutSpacingChange: setLayoutSpacing,
@@ -179,7 +182,7 @@ export function useMapHeaderLayoutControls({
       onLockSubtree,
       onUnlockSubtree,
       labelTextStyleVisible,
-      labelTextStyleDisabled: selectedNodeLocked,
+      labelTextStyleDisabled: selectedNodeLocked || layoutEditingBlocked,
       labelFontSize: resolveLabelFontSize(selectedNode ?? {}),
       labelBold: resolveLabelBold(selectedNode ?? {}),
       labelUnderline: resolveLabelUnderline(selectedNode ?? {}),
@@ -219,6 +222,7 @@ export function useMapHeaderLayoutControls({
     setLayoutStyle,
     setTreeDirection,
     setLayoutSpacing,
+    layoutEditingBlocked,
   ]);
 
   return {

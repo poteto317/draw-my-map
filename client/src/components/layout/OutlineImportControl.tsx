@@ -2,6 +2,7 @@ import type { KeyboardEvent, Ref } from "react";
 
 type OutlineImportControlProps = {
   expanded: boolean;
+  disabled?: boolean;
   onOpen: () => void;
   buttonRef: Ref<HTMLButtonElement>;
 };
@@ -15,7 +16,12 @@ function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
   }
 }
 
-export function OutlineImportControl({ expanded, onOpen, buttonRef }: OutlineImportControlProps) {
+export function OutlineImportControl({
+  expanded,
+  disabled = false,
+  onOpen,
+  buttonRef,
+}: OutlineImportControlProps) {
   return (
     <button
       ref={buttonRef}
@@ -23,6 +29,7 @@ export function OutlineImportControl({ expanded, onOpen, buttonRef }: OutlineImp
       className={buttonClassName}
       aria-haspopup="dialog"
       aria-expanded={expanded}
+      disabled={disabled}
       onClick={onOpen}
       onKeyDown={handleKeyDown}
     >

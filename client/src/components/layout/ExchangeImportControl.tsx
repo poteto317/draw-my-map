@@ -4,6 +4,7 @@ import type { ExchangeFormatEntry } from "@/domain/exchange/parseExchangeContent
 type ExchangeImportControlProps = {
   opmlExpanded: boolean;
   csvExpanded: boolean;
+  disabled?: boolean;
   onOpen: (entry: ExchangeFormatEntry) => void;
   opmlButtonRef: Ref<HTMLButtonElement>;
   csvButtonRef: Ref<HTMLButtonElement>;
@@ -21,6 +22,7 @@ function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
 export function ExchangeImportControl({
   opmlExpanded,
   csvExpanded,
+  disabled = false,
   onOpen,
   opmlButtonRef,
   csvButtonRef,
@@ -33,6 +35,7 @@ export function ExchangeImportControl({
         className={buttonClassName}
         aria-haspopup="dialog"
         aria-expanded={opmlExpanded}
+        disabled={disabled}
         onClick={() => onOpen("opml")}
         onKeyDown={handleKeyDown}
       >
@@ -44,6 +47,7 @@ export function ExchangeImportControl({
         className={buttonClassName}
         aria-haspopup="dialog"
         aria-expanded={csvExpanded}
+        disabled={disabled}
         onClick={() => onOpen("csv-tsv")}
         onKeyDown={handleKeyDown}
       >

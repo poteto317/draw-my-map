@@ -32,6 +32,13 @@ describe("MapPersistenceControls", () => {
     expect(fireEvent.keyDown(button, { key: "a", repeat: true })).toBe(true);
   });
 
+  it("jsonImportEnabled が false なら JSON 読み込みボタンが無効", () => {
+    render(
+      <MapPersistenceControls onExport={jest.fn()} onImport={jest.fn()} jsonImportEnabled={false} />,
+    );
+    expect(screen.getByRole("button", { name: "JSON読み込み" })).toBeDisabled();
+  });
+
   it("JSON読み込みボタンから非表示ファイル入力を開く", async () => {
     const user = userEvent.setup();
     const { container } = render(

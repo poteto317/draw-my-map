@@ -5,6 +5,7 @@ import { useEffect, useId, useState } from "react";
 type LockControlsProps = {
   selectionActive: boolean;
   nodeLocked: boolean;
+  disabled?: boolean;
   onToggleLock: () => void;
   onLockSubtree: () => void;
   onUnlockSubtree: () => void;
@@ -21,6 +22,7 @@ const menuItemClassName =
 export function LockControls({
   selectionActive,
   nodeLocked,
+  disabled = false,
   onToggleLock,
   onLockSubtree,
   onUnlockSubtree,
@@ -48,7 +50,7 @@ export function LockControls({
         aria-haspopup="menu"
         aria-expanded={menuOpen}
         aria-controls={menuOpen ? menuId : undefined}
-        disabled={!selectionActive}
+        disabled={!selectionActive || disabled}
         onClick={() => setMenuOpen((open) => !open)}
       >
         編集ロック

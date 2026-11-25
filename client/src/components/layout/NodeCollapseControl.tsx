@@ -9,6 +9,7 @@ type NodeCollapseControlProps = {
   collapsed: boolean;
   hiddenCount: number;
   onToggle: (nodeId: number) => void;
+  disabled?: boolean;
 };
 
 const buttonClassName =
@@ -20,15 +21,16 @@ export function NodeCollapseControl({
   collapsed,
   hiddenCount,
   onToggle,
+  disabled: interactionDisabled = false,
 }: NodeCollapseControlProps) {
   const idPrefix = useId();
   const hiddenCountId = `${idPrefix}-hidden-count`;
   const persistenceNoteId = `${idPrefix}-persistence-note`;
   const layoutNoteId = `${idPrefix}-layout-note`;
-  const disabled = selectedNodeId === null || !canToggle;
+  const disabled = interactionDisabled || selectedNodeId === null || !canToggle;
 
   function handleToggle() {
-    if (selectedNodeId === null || !canToggle) return;
+    if (disabled || selectedNodeId === null || !canToggle) return;
     onToggle(selectedNodeId);
   }
 

@@ -402,6 +402,24 @@ describe("MapStage context menu boundary", () => {
 });
 
 describe("MapStage context menu shortcutsEnabled", () => {
+  it("shortcutsEnabledがfalseのとき右クリックではメニューを開かない", async () => {
+    const onSelectNode = jest.fn();
+    const { queryByRole } = await renderReady(
+      <MapStage
+        {...defaultProps}
+        nodes={sampleNodes}
+        shortcutsEnabled={false}
+        onSelectNode={onSelectNode}
+        onGenerateIllustration={jest.fn()}
+      />,
+    );
+    const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+    mockStageBounds(container);
+    fireEvent.contextMenu(container, { clientX: 100, clientY: 60 });
+    expect(onSelectNode).toHaveBeenCalledWith(1);
+    expect(queryByRole("menu")).not.toBeInTheDocument();
+  });
+
   it("shortcutsEnabledがfalseの間は開いているメニューがEscapeで閉じず、trueへ戻すと閉じる", async () => {
     const props = { ...defaultProps, nodes: sampleNodes, onGenerateIllustration: jest.fn() };
     const { getByRole, queryByRole, rerender } = await renderReady(<MapStage {...props} />);

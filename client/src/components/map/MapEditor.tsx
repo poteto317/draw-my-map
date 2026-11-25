@@ -98,6 +98,10 @@ import { MapConflictNotice } from "@/components/layout/MapConflictNotice";
 import { MapConflictConfirmDialog } from "@/components/layout/MapConflictConfirmDialog";
 import { OutlineImportControl } from "@/components/layout/OutlineImportControl";
 import { OutlineImportDialog } from "@/components/layout/OutlineImportDialog";
+import { TourEditorControl } from "@/components/layout/TourEditorControl";
+import { TourEditorDialog } from "@/components/layout/TourEditorDialog";
+import { PresentationStartControl } from "@/components/layout/PresentationStartControl";
+import { PresentationPlaybackBar } from "@/components/layout/PresentationPlaybackBar";
 import { resolveOutlineParentCandidate } from "@/components/layout/outlineParentCandidate";
 import { NodeSearchBox } from "@/components/layout/NodeSearchBox";
 import { NodeDetailPanel } from "@/components/layout/NodeDetailPanel";
@@ -143,6 +147,7 @@ import { useBranchFocus } from "@/hooks/useBranchFocus";
 import { useNodeSearchNavigation } from "@/hooks/useNodeSearchNavigation";
 import { useOutlineImport } from "@/hooks/useOutlineImport";
 import { useExchangeImport } from "@/hooks/useExchangeImport";
+import { useMapEditorTourAndPresentation } from "@/hooks/useMapEditorTourAndPresentation";
 import { useSiblingReorderAction } from "@/hooks/useSiblingReorderAction";
 import { useNodeIndentAction } from "@/hooks/useNodeIndentAction";
 import { useNodeOnlyDeletionAction } from "@/hooks/useNodeOnlyDeletionAction";
@@ -294,6 +299,15 @@ export function MapEditor({
     canRedo,
     undo,
     redo,
+    tour,
+    createTour,
+    removeTour,
+    setTourTitle,
+    addTourStep,
+    removeTourStep,
+    reorderTourStep,
+    overwriteTourStepSnapshot,
+    setTourStepCaption,
   } = useNodes();
   const [viewMode, setViewMode] = useState<EditorViewMode>("map");
   const [exportScope, setExportScope] = useState<ExportScope>("all");
@@ -453,36 +467,12 @@ export function MapEditor({
     branchLayouts,
     relations,
     groups,
+    tour,
     replaceMap: replaceMapAndReset,
     storageSession,
     storageMode,
     mapName,
     onSaveCurrentAsNewMap,
-  });
-  const { headerLayoutControls, layoutSnapPrefs } = useMapHeaderLayoutControls({
-    viewMode,
-    isProtectedMode: storageMode === "protected",
-    hasConflict: persistence.conflictState === "conflict",
-    isExternallyDeleted: persistence.conflictState === "externallyDeleted",
-    canvasSelection,
-    nodes,
-    layoutMode,
-    layoutStyle,
-    treeDirection,
-    layoutSpacing,
-    selectedNodeId,
-    selectedNodeIds,
-    selectedNodeLocked: selectedNode?.locked === true,
-    setLayoutStyle,
-    setTreeDirection,
-    setLayoutSpacing,
-    commitManualNodes,
-    toggleNodeEditLock,
-    lockNodeSubtree,
-    unlockNodeSubtree,
-    setLabelFontSize,
-    toggleLabelBold,
-    toggleLabelUnderline,
   });
   const relationEditDisabled = !resolveRelationMeaningEditAvailability({
     viewMode,
@@ -682,6 +672,56 @@ export function MapEditor({
     insertForest,
     expandNodes: branchCollapse.expandNodes,
   });
+  const {
+    tourEditor,
+    presentationPlayback,
+    tourEditorButtonRef,
+    presentationStartButtonRef,
+    playingPresentation,
+    tourHeaderDisabled,
+    presentationStartDisabled,
+    previewTourStep,
+  } = useMapEditorTourAndPresentation({
+    tour,
+    storageMode,
+    conflictState: persistence.conflictState,
+    captureView: viewNavigation.captureView,
+    applyView: viewNavigation.applyView,
+    createTour,
+    removeTour,
+    setTourTitle,
+    addTourStep,
+    removeTourStep,
+    reorderTourStep,
+    overwriteTourStepSnapshot,
+    setTourStepCaption,
+  });
+  const { headerLayoutControls, layoutSnapPrefs } = useMapHeaderLayoutControls({
+    viewMode,
+    isProtectedMode: storageMode === "protected",
+    hasConflict: persistence.conflictState === "conflict",
+    isExternallyDeleted: persistence.conflictState === "externallyDeleted",
+    canvasSelection,
+    nodes,
+    layoutMode,
+    layoutStyle,
+    treeDirection,
+    layoutSpacing,
+    selectedNodeId,
+    selectedNodeIds,
+    selectedNodeLocked: selectedNode?.locked === true,
+    setLayoutStyle,
+    setTreeDirection,
+    setLayoutSpacing,
+    commitManualNodes,
+    toggleNodeEditLock,
+    lockNodeSubtree,
+    unlockNodeSubtree,
+    setLabelFontSize,
+    toggleLabelBold,
+    toggleLabelUnderline,
+    layoutEditingBlocked: playingPresentation,
+  });
   const siblingReorder = useSiblingReorderAction({
     selectedNodeId,
     nodes,
@@ -840,6 +880,8 @@ export function MapEditor({
     && commandPalette.screen === "closed"
     && outlineImport.screen === "closed"
     && exchangeImport.screen === "closed"
+    && tourEditor.screen === "closed"
+    && presentationPlayback.screen === "closed"
     && branchMove.screen === "closed"
     && branchExtract.screen === "closed"
     && labelReplace.screen === "closed"
@@ -916,7 +958,7 @@ export function MapEditor({
     setViewMode(nextMode);
   }, [viewModeRef, viewNavigation, resolutionFilter, returnToCanvas, clearNonNodeSelection]);
   function changeViewMode(nextMode: EditorViewMode) {
-    if (!editorShortcutsEnabled) return;
+    if (!editorShortcutsEnabled || playingPresentation) return;
     applyViewMode(nextMode);
   }
   useLayoutEffect(() => {
@@ -1181,18 +1223,43 @@ export function MapEditor({
     consumeExchangeFocusRequest();
   }, [exchangeFocusRequest, consumeExchangeFocusRequest, exchangeLastEntry]);
 
+  const pendingPresentationStartRef = useRef(false);
+  const handleNodeSearchSelect = useCallback((nodeId: number) => {
+    if (playingPresentation) return;
+    navigateToNode(nodeId);
+  }, [navigateToNode, playingPresentation]);
+  const handlePresentationStart = useCallback(() => {
+    if (viewMode !== "map") {
+      pendingPresentationStartRef.current = true;
+      applyViewMode("map");
+      return;
+    }
+    presentationPlayback.start();
+  }, [applyViewMode, presentationPlayback, viewMode]);
+  useEffect(() => {
+    if (viewMode !== "map" || !pendingPresentationStartRef.current) return;
+    if (viewportHandleRef.current?.getScreenSize() === null) return;
+    pendingPresentationStartRef.current = false;
+    presentationPlayback.start();
+  }, [viewMode, viewportFrame, presentationPlayback]);
+
   return (
     <>
-      <div className="flex min-h-0 flex-1 flex-col" data-map-id={mapId} inert={!editorShortcutsEnabled}>
+      <div
+        className="flex min-h-0 flex-1 flex-col"
+        data-map-id={mapId}
+        inert={!editorShortcutsEnabled && !playingPresentation}
+      >
         <AppHeader
           layoutMode={layoutMode}
           onLayoutModeChange={setLayoutMode}
+          layoutModeDisabled={playingPresentation}
           layoutDirectionControls={headerLayoutControls
             ? <MapHeaderLayoutControls {...headerLayoutControls} />
             : null}
           mapControls={mapControls}
           saveStatus={persistence.saveStatus}
-          viewControls={<EditorViewModeControl mode={viewMode} onChange={changeViewMode} />}
+          viewControls={<EditorViewModeControl mode={viewMode} onChange={changeViewMode} disabled={playingPresentation} />}
           showCanvasHints={viewMode === "map"}
           searchControls={(
             <div className="flex flex-wrap items-center gap-2">
@@ -1203,8 +1270,9 @@ export function MapEditor({
                   hasQuery={nodeSearch.hasQuery}
                   matches={nodeSearch.matches}
                   total={nodeSearch.total}
-                  onSelectResult={navigateToNode}
+                  onSelectResult={handleNodeSearchSelect}
                   inputRef={nodeSearchInputRef}
+                  disabled={playingPresentation}
                 />
               )}
               <button
@@ -1212,8 +1280,12 @@ export function MapEditor({
                 type="button"
                 aria-haspopup="dialog"
                 aria-expanded={crossMapDialogs.crossMapSearchOpen}
-                onClick={crossMapDialogs.openCrossMapSearch}
-                className="shrink-0 rounded-md bg-zinc-100 px-3 py-1 text-sm text-zinc-700 transition-colors hover:bg-zinc-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:bg-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-600"
+                disabled={playingPresentation}
+                onClick={() => {
+                  if (playingPresentation) return;
+                  crossMapDialogs.openCrossMapSearch();
+                }}
+                className="shrink-0 rounded-md bg-zinc-100 px-3 py-1 text-sm text-zinc-700 transition-colors hover:bg-zinc-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-600"
               >
                 全マップ検索
               </button>
@@ -1222,7 +1294,7 @@ export function MapEditor({
           importanceControls={(
             <NodeImportanceSelector
               importance={importanceSummary.kind === "uniform" ? importanceSummary.importance : null}
-              disabled={importanceSummary.kind === "none"}
+              disabled={importanceSummary.kind === "none" || playingPresentation}
               selectionCount={importanceSummary.kind === "none" ? 0 : importanceSummary.count}
               mixed={importanceSummary.kind === "mixed"}
               onChange={(importance) => {
@@ -1269,38 +1341,59 @@ export function MapEditor({
                 buttonRef={commandPaletteButtonRef}
               />
               <MapHistoryControls
-                canUndo={canUndo}
-                canRedo={canRedo}
+                canUndo={canUndo && !playingPresentation}
+                canRedo={canRedo && !playingPresentation}
                 onUndo={undo}
                 onRedo={redo}
+              />
+              <TourEditorControl
+                expanded={tourEditor.screen === "open"}
+                disabled={tourHeaderDisabled}
+                onOpen={tourEditor.open}
+                buttonRef={tourEditorButtonRef}
+              />
+              <PresentationStartControl
+                disabled={presentationStartDisabled}
+                onStart={handlePresentationStart}
+                buttonRef={presentationStartButtonRef}
               />
               {viewMode === "map" && (
                 <>
                   <BranchNavigationControls
                     breadcrumb={breadcrumb}
                     focusing={focusRootId !== null}
-                    canFocus={selectedBranchIds !== null}
-                    canExpand={canExpandSelectedBranch}
-                    canCollapse={canCollapseSelectedBranch}
-                    canFitAll={displayState.fitNodes.length > 0}
-                    canFitSelection={selectedFitNodes.length > 0}
-                    canGoBack={viewNavigation.canGoBack}
-                    canGoForward={viewNavigation.canGoForward}
+                    canGoBack={editorShortcutsEnabled && viewNavigation.canGoBack}
+                    canGoForward={editorShortcutsEnabled && viewNavigation.canGoForward}
                     onTravel={(direction) => {
+                      if (!editorShortcutsEnabled) return;
                       if (viewNavigation.travel(direction)) canvasContainerRef.current?.focus();
                     }}
-                    onFitAll={() => viewportHandleRef.current?.fitNodes(displayState.fitNodes, recordBeforeViewportChange)}
-                    onFitSelection={() => viewportHandleRef.current?.fitNodes(selectedFitNodes, recordBeforeViewportChange)}
+                    canFocus={editorShortcutsEnabled && selectedBranchIds !== null}
+                    canExpand={editorShortcutsEnabled && canExpandSelectedBranch}
+                    canCollapse={editorShortcutsEnabled && canCollapseSelectedBranch}
+                    canFitAll={editorShortcutsEnabled && displayState.fitNodes.length > 0}
+                    canFitSelection={editorShortcutsEnabled && selectedFitNodes.length > 0}
+                    onFitAll={() => {
+                      if (!editorShortcutsEnabled) return;
+                      viewportHandleRef.current?.fitNodes(displayState.fitNodes, recordBeforeViewportChange);
+                    }}
+                    onFitSelection={() => {
+                      if (!editorShortcutsEnabled) return;
+                      viewportHandleRef.current?.fitNodes(selectedFitNodes, recordBeforeViewportChange);
+                    }}
                     onToggleFocus={() => {
+                      if (!editorShortcutsEnabled) return;
                       const nextFocusId = focusRootId === null ? selectedNodeId : null;
                       if (nextFocusId === focusRootId) return;
                       recordBeforeViewportChange();
                       setFocusRootId(nextFocusId);
                     }}
                     onSetSubtreeCollapsed={(collapsed) => {
+                      if (!editorShortcutsEnabled) return;
                       if (selectedNodeId !== null) branchCollapse.setSubtreeCollapsed(selectedNodeId, collapsed);
                     }}
                     onNavigate={(id) => {
+                      if (!editorShortcutsEnabled) return;
                       if (navigateToNode(id) !== "missing") canvasContainerRef.current?.focus();
                     }}
                   />
@@ -1323,55 +1416,56 @@ export function MapEditor({
                     collapsed={selectedNodeId !== null && branchCollapse.collapsedNodeIds.has(selectedNodeId)}
                     hiddenCount={selectedNodeId === null ? 0 : branchCollapse.hiddenCountById.get(selectedNodeId) ?? 0}
                     onToggle={branchCollapse.toggle}
+                    disabled={playingPresentation}
                   />
                   <NodeDuplicateControl
-                    disabled={selectedNode === null}
+                    disabled={selectedNode === null || !editorShortcutsEnabled}
                     onDuplicate={duplication.duplicateSelected}
                   />
                   <BranchMoveControl
                     expanded={branchMove.screen !== "closed"}
-                    disabled={selectedNode === null}
+                    disabled={selectedNode === null || !editorShortcutsEnabled}
                     onOpen={branchMove.open}
                     buttonRef={branchMoveButtonRef}
                   />
                   <LabelReplaceControl
                     expanded={labelReplace.screen !== "closed"}
-                    disabled={nodes.length === 0}
+                    disabled={nodes.length === 0 || !editorShortcutsEnabled}
                     onOpen={labelReplace.open}
                     buttonRef={labelReplaceButtonRef}
                   />
                   <NodeSplitControl
                     expanded={nodeSplit.screen !== "closed"}
-                    disabled={!nodeSplit.canOpen}
+                    disabled={!nodeSplit.canOpen || !editorShortcutsEnabled}
                     disabledReason={nodeSplit.disabledReason}
                     onOpen={nodeSplit.open}
                     buttonRef={nodeSplitButtonRef}
                   />
                   <NodeMergeControl
                     expanded={nodeMerge.screen !== "closed"}
-                    disabled={!nodeMerge.canOpen}
+                    disabled={!nodeMerge.canOpen || !editorShortcutsEnabled}
                     disabledReason={nodeMerge.disabledReason}
                     onOpen={nodeMerge.open}
                     buttonRef={nodeMergeButtonRef}
                   />
                   <NodeSiblingOrderControl
-                    canMoveUp={siblingReorder.canMoveUp}
-                    canMoveDown={siblingReorder.canMoveDown}
+                    canMoveUp={siblingReorder.canMoveUp && editorShortcutsEnabled}
+                    canMoveDown={siblingReorder.canMoveDown && editorShortcutsEnabled}
                     onMoveUp={moveSelectedSiblingUp}
                     onMoveDown={moveSelectedSiblingDown}
                   />
                   <NodeIndentControl
-                    canOutdent={nodeIndent.canOutdent}
-                    canIndent={nodeIndent.canIndent}
+                    canOutdent={nodeIndent.canOutdent && editorShortcutsEnabled}
+                    canIndent={nodeIndent.canIndent && editorShortcutsEnabled}
                     onOutdent={outdentSelected}
                     onIndent={indentSelected}
                   />
                   <NodeParentInsertControl
-                    canInsert={nodeParentInsertion.canInsert}
+                    canInsert={nodeParentInsertion.canInsert && editorShortcutsEnabled}
                     onInsert={nodeParentInsertion.insertSelected}
                   />
                   <NodeOnlyDeleteControl
-                    canDelete={nodeOnlyDeletion.canDelete}
+                    canDelete={nodeOnlyDeletion.canDelete && editorShortcutsEnabled}
                     onDelete={nodeOnlyDeletion.deleteSelected}
                   />
                   <span className="text-sm text-zinc-600 dark:text-zinc-400">
@@ -1381,12 +1475,14 @@ export function MapEditor({
               )}
               <OutlineImportControl
                 expanded={outlineImport.screen !== "closed"}
+                disabled={!editorShortcutsEnabled}
                 onOpen={outlineImport.open}
                 buttonRef={outlineImportButtonRef}
               />
               <ExchangeImportControl
                 opmlExpanded={exchangeImport.screen !== "closed" && exchangeImport.entry === "opml"}
                 csvExpanded={exchangeImport.screen !== "closed" && exchangeImport.entry === "csv-tsv"}
+                disabled={!editorShortcutsEnabled}
                 onOpen={exchangeImport.open}
                 opmlButtonRef={exchangeOpmlButtonRef}
                 csvButtonRef={exchangeCsvButtonRef}
@@ -1402,6 +1498,7 @@ export function MapEditor({
                 exportButtonRef={exportButtonRef}
                 jsonExportEnabled={exportFormatControls.json.enabled}
                 jsonExportDisabledReason={exportFormatControls.json.disabledReason}
+                jsonImportEnabled={editorShortcutsEnabled}
               />
               <MapImageExportControls
                 onExportPng={imageExport.exportPng}
@@ -1553,15 +1650,28 @@ export function MapEditor({
                 onZoomIn={handleZoomIn}
                 onZoomOut={handleZoomOut}
               />
+              {playingPresentation && (
+                <PresentationPlaybackBar
+                  stepIndex={presentationPlayback.stepIndex}
+                  stepCount={presentationPlayback.stepCount}
+                  caption={presentationPlayback.currentStep?.caption}
+                  canGoBack={presentationPlayback.canGoBack}
+                  canGoForward={presentationPlayback.canGoForward}
+                  onBack={presentationPlayback.goBack}
+                  onForward={presentationPlayback.goForward}
+                  onEnd={presentationPlayback.end}
+                />
+              )}
             </div>
           )}
           sidePanel={(
             <NodeDetailPanel
               selectedNode={selectedNode}
               selectedRelation={selectedRelation}
-              relationEditDisabled={relationEditDisabled}
+              relationEditDisabled={relationEditDisabled || playingPresentation}
               selectedGroup={selectedGroup}
-              groupEditDisabled={groupEditDisabled}
+              groupEditDisabled={groupEditDisabled || playingPresentation}
+              attributeEditDisabled={playingPresentation}
               // アウトライン表示では主選択だけ（キャンバスで残った複数選択の件数を見せない）
               selectionCount={importanceTargetIds.length}
               documentRevision={documentRevision}
@@ -1584,7 +1694,7 @@ export function MapEditor({
               onSetNodeIcon={setNodeIcon}
               onSetNodeKind={setNodeKind}
               layoutPinnedVisible={layoutPinnedPanel.visible}
-              layoutPinnedDisabled={layoutPinnedPanel.disabled}
+              layoutPinnedDisabled={layoutPinnedPanel.disabled || playingPresentation}
               onSetLayoutPinned={(nodeId, pinned) => {
                 setNodeLayoutPinned(nodeId, pinned);
               }}
@@ -1796,6 +1906,35 @@ export function MapEditor({
           onBack={exchangeImport.back}
           onTargetChange={exchangeImport.setTarget}
           onSubmit={exchangeImport.submit}
+          onMouseClick={() => {
+            dialogMouseClickedAtRef.current = Date.now();
+          }}
+        />
+      )}
+      {tourEditor.screen === "open" && (
+        <TourEditorDialog
+          tour={tour}
+          selectedStepId={tourEditor.selectedStepId}
+          titleDraft={tourEditor.titleDraft}
+          captionDraft={tourEditor.captionDraft}
+          editDisabled={tourHeaderDisabled}
+          dialogNotices={tourEditor.dialogNotices}
+          focusRequest={tourEditor.focusRequest}
+          onFocusRequestApplied={tourEditor.consumeFocusRequest}
+          onTitleDraftChange={tourEditor.setTitleDraft}
+          onCaptionDraftChange={tourEditor.setCaptionDraft}
+          onSelectStep={tourEditor.selectStep}
+          onPreviewStep={previewTourStep}
+          onCreateTour={tourEditor.submitCreateTour}
+          onSetTitle={tourEditor.submitSetTitle}
+          onRemoveTour={tourEditor.submitRemoveTour}
+          onAddStep={tourEditor.submitAddStep}
+          onRemoveStep={tourEditor.submitRemoveSelectedStep}
+          onMoveStepUp={tourEditor.submitMoveSelectedStepUp}
+          onMoveStepDown={tourEditor.submitMoveSelectedStepDown}
+          onOverwriteStep={tourEditor.submitOverwriteSelectedStep}
+          onSetCaption={tourEditor.submitSetCaption}
+          onClose={tourEditor.close}
           onMouseClick={() => {
             dialogMouseClickedAtRef.current = Date.now();
           }}
