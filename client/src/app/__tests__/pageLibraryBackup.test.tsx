@@ -92,9 +92,10 @@ it("実Homeから空本体を名前確認して書き出し、追加復元して
   expect(window.localStorage.getItem(mapBodyKey("b"))).toBeNull();
   expect(window.localStorage.getItem(mapBodyKey("a"))).toBe(beforeA);
   expect(editorRoot()).toBe(root);
-  expect(undoButton()).toBeEnabled();
+  expect(undoButton()).toBeDisabled();
   expect(screen.getByRole("button", { name: "重要度 高" })).toBeEnabled();
   await user.click(dialog().getByRole("button", { name: "閉じる" }));
+  expect(undoButton()).toBeEnabled();
   expect(exportedMap(mockDownloadMapJson).nodes).toHaveLength(2);
 });
 
