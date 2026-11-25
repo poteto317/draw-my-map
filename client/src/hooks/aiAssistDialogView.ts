@@ -124,9 +124,10 @@ export function buildAiProposalViews(nodes: readonly Node[], review: AiAssistRev
 function reviewStatusText(kind: AiAssistKind, review: AiAssistReview): string {
   if (review.staleKeys.length > 0) return "提案は古くなりました。";
   if (review.proposals.length > 0) return `提案が ${review.proposals.length} 件あります`;
-  return kind === "importance"
-    ? `提案はすべて現在の重要度と同じでした（${review.unchangedCount} 件）`
-    : "提案はありませんでした。";
+  if (kind !== "importance") return "提案はありませんでした。";
+  return review.missingCount > 0
+    ? `提案はありませんでした（現在と同じ ${review.unchangedCount} 件、提案なし ${review.missingCount} 件）`
+    : `提案はすべて現在の重要度と同じでした（${review.unchangedCount} 件）`;
 }
 
 function buildBody(

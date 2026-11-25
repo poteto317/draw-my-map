@@ -76,6 +76,17 @@ describe("buildAiAssistDialogView", () => {
     expect(noChange?.statusText).toBe("提案はすべて現在の重要度と同じでした（2 件）");
   });
 
+  it("重要度の提案が 0 件で AI が答えなかった対象があるときは「提案なし」の語を含む状態文にする", () => {
+    const nodes = [createTestNode({ id: 1, label: "根" }), createTestNode({ id: 2, parentId: 1, label: "子" })];
+    const opened = startAiAssistGeneration(receiveAiAssistStatus(openAiAssistDialog(target("importance")), STATUS));
+    const text = (unchangedCount: number, missingCount: number) =>
+      buildAiAssistDialogView(receiveAiAssistProposals(opened, { proposals: [], unchangedCount, missingCount, noteModes: {} }), false, nodes, NONE)?.statusText;
+
+    expect(text(0, 2)).toBe("提案はありませんでした（現在と同じ 0 件、提案なし 2 件）");
+    expect(text(2, 1)).toBe("提案はありませんでした（現在と同じ 2 件、提案なし 1 件）");
+    expect(text(2, 0)).toBe("提案はすべて現在の重要度と同じでした（2 件）");
+  });
+
   it("開いた後にマップが更新されたら stale にし、状態文を STALE_DIALOG_MESSAGE にする", () => {
     const nodes = [createTestNode({ id: 1, label: "根" }), createTestNode({ id: 2, parentId: 1, label: "子" })];
     const view = buildAiAssistDialogView(openAiAssistDialog(target("branch-summary")), true, nodes, NONE);
