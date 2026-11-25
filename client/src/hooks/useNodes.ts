@@ -45,6 +45,7 @@ import {
 import type { BranchLayoutDirection } from "@/types/branchLayout";
 import type { MapCanvasSelection } from "@/types/mapCanvasSelection";
 import type { MapRelation } from "@/types/mapRelation";
+import type { MapViewSnapshot } from "@/types/mapViewSnapshot";
 import {
   reorderSiblingByRequest,
   type ReorderSiblingResult,
@@ -73,6 +74,12 @@ import {
   resolveLayoutNodeForestOptions,
   resolveLayoutSpacing,
 } from "@/domain/nodes/nodeMapLayoutContext";
+import {
+  type CreateTourOutcome,
+  type TourMutationOutcome,
+  type TourStepOutcome,
+  useMapTourActions,
+} from "@/hooks/useMapTourActions";
 import { applyStateChangeWithOutcome } from "@/hooks/stateChangeOutcome";
 import { applyTreeChangeWithOutcome } from "@/hooks/treeChangeOutcome";
 import { insertParentNode as computeParentInsertion, type InsertParentNodeResult } from "@/domain/nodes/nodeParentInsertion";
@@ -172,6 +179,9 @@ export type {
   AddGroupOutcome,
   RemoveGroupOutcome,
   UpdateGroupLabelOutcome,
+  CreateTourOutcome,
+  TourMutationOutcome,
+  TourStepOutcome,
 };
 
 type UseNodesReturn = {
@@ -187,6 +197,7 @@ type UseNodesReturn = {
   branchLayouts: NodeMapState["branchLayouts"];
   relations: NodeMapState["relations"];
   groups: NodeMapState["groups"];
+  tour: NodeMapState["tour"];
   addNode: (x: number, y: number) => number;
   addChildNode: (parentId: number) => number | null;
   addSiblingNode: (nodeId: number) => number | null;
@@ -214,6 +225,14 @@ type UseNodesReturn = {
   addGroup: (nodeIds: readonly number[], label?: string) => AddGroupOutcome;
   removeGroup: (groupId: number) => RemoveGroupOutcome;
   updateGroupLabel: (groupId: number, label: string) => UpdateGroupLabelOutcome;
+  createTour: (title: string) => CreateTourOutcome;
+  removeTour: () => TourMutationOutcome;
+  setTourTitle: (title: string) => TourMutationOutcome;
+  addTourStep: (snapshot: MapViewSnapshot, stepId?: string) => TourStepOutcome;
+  removeTourStep: (stepId: string) => TourMutationOutcome;
+  reorderTourStep: (fromIndex: number, toIndex: number) => TourMutationOutcome;
+  overwriteTourStepSnapshot: (stepId: string, snapshot: MapViewSnapshot) => TourMutationOutcome;
+  setTourStepCaption: (stepId: string, caption: string) => TourMutationOutcome;
   updateNodeLabel: (id: number, label: string) => void;
   updateNodeLabels: (replacements: ReadonlyMap<number, string>) => boolean;
   setLabelFontSize: (id: number, size: LabelFontSize) => boolean;
@@ -356,6 +375,7 @@ export function useNodes(): UseNodesReturn {
     branchLayouts,
     relations,
     groups,
+    tour,
     getCurrentState,
     applyNonStructuralChange: applyNonStructuralChangeRaw,
     applyNonStructuralPreview: applyNonStructuralPreviewRaw,
@@ -401,6 +421,33 @@ export function useNodes(): UseNodesReturn {
     applyStateChangeRaw,
     nodeIdAllocator,
   });
+
+  const newTourStepId = useCallback(
+    () => globalThis.crypto?.randomUUID?.() ?? `tour-step-${Math.random().toString(36).slice(2)}`,
+    [],
+  );
+  const {
+    createTour: createTourRaw,
+    removeTour: removeTourRaw,
+    setTourTitle: setTourTitleRaw,
+    addTourStep: addTourStepRaw,
+    removeTourStep: removeTourStepRaw,
+    reorderTourStep: reorderTourStepRaw,
+    overwriteTourStepSnapshot: overwriteTourStepSnapshotRaw,
+    setTourStepCaption: setTourStepCaptionRaw,
+  } = useMapTourActions({
+    applyStateChangeRaw: applyStateChangeRaw,
+    newStepId: newTourStepId,
+  });
+
+  const createTour = createTourRaw;
+  const removeTour = removeTourRaw;
+  const setTourTitle = setTourTitleRaw;
+  const addTourStep = addTourStepRaw;
+  const removeTourStep = removeTourStepRaw;
+  const reorderTourStep = reorderTourStepRaw;
+  const overwriteTourStepSnapshot = overwriteTourStepSnapshotRaw;
+  const setTourStepCaption = setTourStepCaptionRaw;
 
   // 復元したマップでは以前の選択と編集対象が無効になるため、選択を外して版を進める
   const markDocumentRestored = useCallback(() => {
@@ -1169,6 +1216,7 @@ export function useNodes(): UseNodesReturn {
     branchLayouts,
     relations,
     groups,
+    tour,
     addNode,
     addChildNode,
     addSiblingNode,
@@ -1188,6 +1236,14 @@ export function useNodes(): UseNodesReturn {
     addGroup,
     removeGroup,
     updateGroupLabel,
+    createTour,
+    removeTour,
+    setTourTitle,
+    addTourStep,
+    removeTourStep,
+    reorderTourStep,
+    overwriteTourStepSnapshot,
+    setTourStepCaption,
     updateNodeLabel,
     updateNodeLabels,
     setLabelFontSize,
