@@ -3,6 +3,7 @@ import type { LayoutSpacing } from "@/types/layoutSpacing";
 import type { LayoutStyle } from "@/types/layoutStyle";
 import type { MapGroup } from "@/types/mapGroup";
 import type { MapRelation } from "@/types/mapRelation";
+import type { MapTour } from "@/types/mapTour";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
 import type { TreeDirection } from "@/types/treeDirection";
@@ -22,4 +23,6 @@ export type NodeMapState = {
   relations?: readonly MapRelation[];
   // ノード集合のグループ枠。欠落キー＝空。空配列はエンコード時にキー省略
   groups?: readonly MapGroup[];
+  // プレゼンテーションツアー（Phase 31・072/073）。欠落キー＝ツアーなし。steps が空の下書きは永続化時にキー省略（`types/mapTour.ts` の `normalizeTour` / `projectTour`）
+  tour?: MapTour;
 };
