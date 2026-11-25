@@ -1,4 +1,5 @@
-import { excerptText, isNodeImportanceValue } from "@/domain/aiAssist/aiBranchInput";
+import { excerptText } from "@/domain/aiAssist/aiBranchInput";
+import { isNodeImportanceValue } from "@/domain/nodes/nodeImportance";
 import { hasOnlyKeys, hasOwn, isPlainRecord } from "@/domain/shared/unknownRecord";
 import type { NodeImportance } from "@/types/nodeImportance";
 
