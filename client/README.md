@@ -36,6 +36,7 @@ Draw My Map のフロントエンドおよびエッジバックエンドの主�
    - タグ（Phase 18・候補023）。右パネル「ノードの詳細」の「タグ」の節（`NodeTagsSection`。詳細メモの下）で、選択中のノードに自由入力のタグを 10 件（各 30 文字）まで追加・削除できます（`useNodes.addNodeTag` / `removeNodeTag`。規則は `domain/nodes/nodeTag.ts`。大文字小文字・全角半角の違いは同じタグとみなす）。保存形式は V3 の任意項目 `tags`。任意の属性の扱いは `domain/nodes/nodeAttributePolicy.ts` の表に宣言します。
    - 出典情報（Phase 18・候補054）。右パネル「ノードの詳細」の「出典」の節（`NodeSourcesSection`。リンクの下、マップ間リンクの上）で、選択中のノードにタイトル必須・ページ任意・URL 任意の出典を 10 件まで追加・削除できます（`useNodes.addNodeSource` / `removeNodeSource`。規則は `domain/nodes/nodeSource.ts`。URL は `normalizeNodeLinkUrl` を再利用）。保存形式は V3 の任意項目 `sources`。任意の属性の扱いは `domain/nodes/nodeAttributePolicy.ts` の表に宣言します。
    - 複数マップの検索とリンク（Phase 19・候補013・024・031・032・056・057）。ヘッダーの「全マップ検索」ボタンおよび `Cmd`/`Ctrl`+`Shift`+`F`（`CrossMapSearchDialog`・`domain/search/crossMapSearch.ts`・`hooks/useCrossMapCorpus.ts`）で全マップのラベル・メモ・タグ・リンク・出典を横断検索し、他マップ特定ノードへ `PendingMapNodeNavigation`（`types/pendingMapNavigation.ts`）経由で復元後に直接ジャンプします。右パネル「ノードの詳細」に「マップ間リンク」（`NodeMapLinksSection`・`domain/nodes/nodeMapLink.ts`、V3 任意項目 `mapLinks`・最大 10 件・値一致削除・1 操作 Undo / Redo）と「被リンク」（`NodeBacklinksSection`・`domain/mapLibrary/mapLinkGraph.ts`）を追加し、マップ一覧には「リンク切れを確認」（`BrokenMapLinksDialog`）、お気に入り／最近使用（最大 20 件）・1 階層フォルダー管理（`MapFolderManagerScreen`・最大 50 件、独立キー `draw-my-map.library-meta.v1`、`domain/mapLibrary/mapLibraryMeta.ts`・`services/persistence/mapLibraryMetaStorage.ts`・`hooks/mapLibraryMetaActions.ts`）を備えます（詳細は [features.md の 28 章](../docs/specifications/features.md#28-複数マップの検索とリンク)）。実ブラウザ確認は [AK 節](../docs/testing/browser-test-cases.md#ak-複数マップの検索とリンクphase-19候補013024031032056057) に記録しています（2026-11-20 にアプリ内ブラウザ（Chromium）と `next dev` で全 15 ケースを確認済み（12 ケースは ○、AK-02 の実 IME・AK-05 の 10 件超過での統合拒否・AK-12 の「リンク切れの確認」のダークモードは未実施。スクリーンリーダー・Safari・Firefox・本番ビルドは未確認。その後に追加した AK-11d（2 タブでのメタデータの書き込み）は未実施））。
+   - 確認して適用するAI支援（Phase 32・候補075・076・077）。右パネル「ノードの詳細」の「AI支援」の節（`AiAssistSection`。詳細メモの下）とコマンドパレットの 2 件（「枝を要約してメモに入れる（AI）…」「重要度を提案（AI）…」）から、選んだノードの枝の要約を詳細メモへ入れる提案と、枝の各ノードの重要度の提案を AI（Claude API か OpenAI API。サーバーの `/api/ai-assist/*` だけが呼ぶ）に作らせます。送る前に毎回、確認画面で送信先と送るもの（ラベルとメモの抜粋だけ）を示し、差分プレビュー（`AiProposalReviewList`）で変更ごとに「現在の値 → 提案」の採否を選び（既定は未決）、採用分をまとめて 1 回の Undo で戻せる形で適用します。提案を作った後に対象が変わっていれば何も適用しません。提案・採否は保存しません。詳細は [features.md の 37 章](../docs/specifications/features.md#37-確認して適用するai支援phase-32)。
 3. **データ永続化とエクスポート (Domain & Services)**:
    - `localStorage` へのマップごとの変更後300msの自動保存と復元。マップの一覧（インデックス）を `draw-my-map.maps.v1`、各マップの本体（Version 3 の JSON）を `draw-my-map.maps.v1.doc.<id>` に保存し、`localStorage` を直接読み書きするのは `services/persistence/mapLibraryStorage.ts` だけです（枝の移動のジャーナルの書き込みと復旧の `branchMoveTransaction.ts` と、移動の前のインデックスの読み取り `mapBranchTransfer.ts` の `readBranchMoveIndex` は、注入された storage を直接呼びます）。Phase 11 までの単一のキー `draw-my-map.map.v1` は、起動時に1件のマップとして移行し、次の起動で消します。保存はセッション番号で照合し、切り替えの後に前のマップの保存待ちが届いても書き込みません。
    - `useMapStorageAutoSave` は現在のマップ本体の復元由来・確認済み snapshot・書き込み結果、および複数タブ競合状態から9種類の保存状態を導き、`MapSaveStatus` がヘッダーに常設表示します（通常状態のほか、別タブでの更新・削除時には警告バッジ「競合が発生しました」「削除されました」を表示）。競合検知時は自動保存タイマーを即座にブロックします（[機能仕様 6.1 節](../docs/specifications/features.md#61-localstorage-自動保存)）。
@@ -48,6 +49,9 @@ Draw My Map のフロントエンドおよびエッジバックエンドの主�
    - `POST /api/illustrations` エンドポイントによる Cloudflare Workers AI 連携。
    - 日本語ノードテキストの自動英訳（`@cf/meta/m2m100-1.2b`）と画像生成（`@cf/black-forest-labs/flux-1-schnell`）。
    - クライアント側での 128px JPEG 縮小とノードへの紐付け・再生成・削除。
+5. **AI 支援 API (Next.js Route Handler)**:
+   - `GET /api/ai-assist/status`・`POST /api/ai-assist/branch-summary`・`POST /api/ai-assist/importance` による Claude API（`@anthropic-ai/sdk`）・OpenAI API（`openai`）連携。SDK は `server/aiAssist/` のアダプタだけが使います。
+   - 構造化出力（JSON スキーマ）で受けた応答を、サーバーとクライアントの両方で同じ検証関数（`domain/aiAssist/`）で検証します。
 
 ---
 
@@ -107,6 +111,7 @@ client/src/
 │   └── outline/          # 階層アウトライン編集ビュー、ツールバー
 ├── config/               # 定数設定 (ノード形状、初期値、スタイル、イラスト設定)
 ├── domain/               # フレームワーク非依存の純粋ビジネスロジック (コアロジック)
+│   ├── aiAssist/         # AI 支援の送る入力・出力の検証・提案と古さの判定・適用・入口の可否（サーバーとブラウザの共通）
 │   ├── clipboard/        # 枝のクリップボード専用形式の書き出し・検証
 │   ├── history/          # 編集履歴（Undo / Redo）の純粋な遷移
 │   ├── illustration/     # イラストのトリミング、プロンプト加工、データ URL 処理
@@ -119,8 +124,10 @@ client/src/
 │   └── persistence/      # MapDocument スキーマ定義、エンコード/デコード、移行処理
 ├── hooks/                # React カスタムフック (状態管理、UIとドメインの仲介)
 ├── server/               # サーバーサイド処理 (Route Handler から呼び出されるサービス)
+│   ├── aiAssist/         # AI 支援の設定・Claude / OpenAI のアダプタ・プロンプト・送信元の確認・Route Handler の共通処理
 │   └── illustration/     # Cloudflare Workers AI クライアント、翻訳、プロンプト生成
 ├── services/             # 外部環境との入出力・副作用アダプター (ブラウザ / Web API)
+│   ├── aiAssist/         # AI 支援の Route Handler クライアント（打ち切り・誤りの種類と文言）
 │   ├── illustration/     # Route Handler クライアント、サムネイル縮小処理
 │   ├── imageExport/      # DOM Canvas / SVG のラスタライズとファイルダウンロード
 │   ├── outlineExport/    # Markdown / 箇条書きテキストファイルダウンロード
@@ -202,6 +209,25 @@ client/src/
 
 ---
 
+## 環境変数の設定（AI 支援）
+
+確認して適用するAI支援（枝の要約・重要度の提案。Phase 32）は、Claude API か OpenAI API を使います。キーはサーバー側（Route Handler）でだけ読み、ブラウザへは送りません。手順の詳細は [AI 支援の設定ガイド](../docs/setup/ai-assist-setup.md) を参照してください（`.env.local` が既にあるときは `cp` で上書きせず追記する、シェルの同名の変数が優先される、`ANTHROPIC_CUSTOM_HEADERS`・`OPENAI_CUSTOM_HEADERS` を設定しない、などの注意もそこにあります）。
+
+| 変数 | 既定 | 意味 |
+|------|------|------|
+| `ANTHROPIC_API_KEY` | なし | Claude API のキー |
+| `OPENAI_API_KEY` | なし | OpenAI API のキー |
+| `AI_ASSIST_PROVIDER` | 空（自動） | `anthropic` か `openai`。空なら `ANTHROPIC_API_KEY` を優先し、無ければ `OPENAI_API_KEY`。指定した提供元のキーが無い・値が不正なときは、もう一方へ切り替えず無効 |
+| `AI_ASSIST_ANTHROPIC_MODEL` | `claude-opus-5-5` | Claude のモデル ID |
+| `AI_ASSIST_OPENAI_MODEL` | `gpt-5` | OpenAI のモデル ID |
+| `AI_ASSIST_ALLOWED_HOSTS` | 空（localhost・127.0.0.1・[::1] だけ） | 受け付ける Host のホスト名の追加（カンマ区切り） |
+
+- どちらのキーも無いときは、ダイアログに「AI 支援が設定されていません」と出すだけで、外部へは何も送りません。
+- 従量課金です。1 回の要求の出力の上限は要約 4,000・重要度 12,000 トークン（思考・推論を含む）です。
+- **公開時の注意**: AI 支援の API（`/api/ai-assist/*`）にも認証・レート制限がありません。キーを入れたまま公開 URL へデプロイしないでください。ブラウザで取り消しても、提供元では処理が続き課金されることがあります（詳細はリポジトリ直下の `SECURITY.md` と `docs/specifications/api.md` の第 20 章）。
+
+---
+
 ## テストと検証方針
 
 Draw My Map では、コードの信頼性と保守性を維持するため、以下の開発方針を徹底しています。
@@ -247,5 +273,6 @@ Draw My Map では、コードの信頼性と保守性を維持するため、�
 - [システムアーキテクチャ概要](../docs/architecture/overview.md): Pixi.js と React の協調モデル、設計原則
 - [機能仕様・操作マニュアル](../docs/specifications/features.md): ショートカット、ノード操作、フィルタリング仕様
 - [データモデル・永続化仕様](../docs/specifications/data-model.md): `MapDocument` JSON スキーマと、複数マップの `localStorage` 保存仕様
-- [イラスト生成 API 仕様](../docs/specifications/api.md): Route Handler エンドポイント仕様
+- [イラスト生成と AI 支援の API 仕様](../docs/specifications/api.md): Route Handler エンドポイント仕様
 - [イラスト生成環境構築ガイド](../docs/setup/illustration-generation-setup.md): Cloudflare 設定の詳細手順書
+- [AI 支援の設定ガイド](../docs/setup/ai-assist-setup.md): Claude API・OpenAI API のキーと提供元・モデルの設定
