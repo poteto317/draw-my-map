@@ -56,11 +56,14 @@ import {
 } from "@/hooks/aiAssistSendPlan";
 import { useLatestRef } from "@/hooks/useLatestRef";
 import {
+  classifyReorderSimLayoutFromState,
   DEFAULT_AI_ASSIST_API,
   toAiAssistClientErrorKind,
   type AiAssistApi,
 } from "@/services/aiAssist/aiAssistClient";
 import type { Node } from "@/types/node";
+import type { NodeLayoutMode } from "@/types/nodeLayout";
+import type { NodeMapState } from "@/types/nodeMapState";
 import type { OperationNotice } from "@/types/operationNotice";
 
 function startRequest<T>(request: () => Promise<T>): Promise<T> {
@@ -77,6 +80,11 @@ export type UseAiAssistDialogOptions = {
   nodes: readonly Node[];
   selectedNodeIds: readonly number[];
   visibleNodeIds: ReadonlySet<number>;
+  layoutMode: NodeLayoutMode;
+  treeDirection?: NodeMapState["treeDirection"];
+  layoutSpacing?: NodeMapState["layoutSpacing"];
+  layoutStyle?: NodeMapState["layoutStyle"];
+  branchLayouts?: NodeMapState["branchLayouts"];
   blockers: AiAssistEntryBlockers;
   applyAiProposals: (accepted: readonly AcceptedAiProposal[]) => AiProposalsApplyOutcome;
   applyAiStructureProposals: (
@@ -114,7 +122,13 @@ export function useAiAssistDialog(options: UseAiAssistDialogOptions): UseAiAssis
   const submittedRef = useRef(false);
   const stale = state.screen !== "closed"
     && (state.target.mapId !== options.mapId || state.target.revision !== options.documentRevision);
-  const { nodes, selectedNodeIds, blockers } = options;
+  const { nodes, selectedNodeIds, blockers, layoutMode, treeDirection, layoutSpacing, layoutStyle, branchLayouts } = options;
+  const classifyReorderLayout = useMemo(
+    () => classifyReorderSimLayoutFromState({
+      layoutMode, treeDirection, layoutSpacing, layoutStyle, branchLayouts,
+    }),
+    [layoutMode, treeDirection, layoutSpacing, layoutStyle, branchLayouts],
+  );
   const entries = useMemo(
     () => resolveAllAiAssistEntryAvailabilities(nodes, selectedNodeIds, blockers),
     [nodes, selectedNodeIds, blockers],
@@ -126,7 +140,8 @@ export function useAiAssistDialog(options: UseAiAssistDialogOptions): UseAiAssis
   );
   const api = options.api ?? DEFAULT_AI_ASSIST_API;
   const latest = useLatestRef({
-    options, state, stale, api, summaryEntry, importanceEntry, childEntry, classifyEntry, duplicatesEntry, perspectivesEntry,
+    options, state, stale, api, classifyReorderLayout,
+    summaryEntry, importanceEntry, childEntry, classifyEntry, duplicatesEntry, perspectivesEntry,
   });
 
   const abortInFlight = useCallback(() => {
@@ -189,7 +204,13 @@ export function useAiAssistDialog(options: UseAiAssistDialogOptions): UseAiAssis
   }, [abortInFlight]);
 
   const send = useCallback(() => {
-    const { state: snapshot, options: current, stale: isStale, api: currentApi } = latest.current;
+    const {
+      state: snapshot,
+      options: current,
+      stale: isStale,
+      api: currentApi,
+      classifyReorderLayout: currentClassifyLayout,
+    } = latest.current;
     if (snapshot.screen !== "confirm" || isStale || controllerRef.current !== null) return;
     const plan = planAiAssistSend(snapshot.target.kind, current.nodes, snapshot.target.rootId, current.blockers);
     if (!plan.ok) return;
@@ -202,6 +223,7 @@ export function useAiAssistDialog(options: UseAiAssistDialogOptions): UseAiAssis
         nodes: current.nodes,
         visibleNodeIds: current.visibleNodeIds,
         mapId: current.mapId,
+        classifyReorderLayout: currentClassifyLayout,
       },
       { signal },
     );

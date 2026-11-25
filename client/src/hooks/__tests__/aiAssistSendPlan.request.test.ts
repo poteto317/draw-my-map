@@ -1,6 +1,6 @@
 /** @jest-environment node */
 import { planAiAssistSend, requestAiAssistReview } from "@/hooks/aiAssistSendPlan";
-import type { AiAssistApi } from "@/services/aiAssist/aiAssistClient";
+import { classifyReorderSimLayoutFromState, type AiAssistApi } from "@/services/aiAssist/aiAssistClient";
 import { createTestNode } from "@/testing/createTestNode";
 
 const nodes = [
@@ -33,7 +33,13 @@ describe("requestAiAssistReview", () => {
     const signal = new AbortController().signal;
     const review = await requestAiAssistReview(
       plan,
-      { api, nodes, visibleNodeIds: new Set([1, 2]), mapId: "map-a" },
+      {
+        api,
+        nodes,
+        visibleNodeIds: new Set([1, 2]),
+        mapId: "map-a",
+        classifyReorderLayout: classifyReorderSimLayoutFromState({ layoutMode: "manual" }),
+      },
       { signal },
     );
 

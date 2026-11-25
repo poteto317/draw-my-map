@@ -1,7 +1,9 @@
 import {
   validateBranchSummaryOutput,
   validateChildCandidatesOutput,
+  classifyReorderSimLayoutFromState,
   validateClassifyReorderOutput,
+  type ClassifyReorderSimLayout,
   validateDuplicatesOutput,
   validateImportanceOutput,
   validateMissingPerspectivesOutput,
@@ -210,15 +212,18 @@ export async function requestMissingPerspectives(
 export async function requestClassifyReorder(
   branch: AiBranchInput,
   nodes: readonly Node[],
+  layout: ClassifyReorderSimLayout,
   options: AiAssistRequestOptions,
 ): Promise<AiClassifyMove[]> {
   const reply = await postJson("/api/ai-assist/classify-reorder", { branch }, options);
   if (!reply.ok) throw new AiAssistRequestError(kindFromFailure(reply));
   const branchIds = collectSubtreeIds(nodes, branch.rootId);
-  const result = validateClassifyReorderOutput(reply.body, branchIds, nodes);
+  const result = validateClassifyReorderOutput(reply.body, branchIds, nodes, layout);
   if (!result.ok) throw new AiAssistRequestError("invalid-output");
   return result.moves;
 }
+
+export { classifyReorderSimLayoutFromState, type ClassifyReorderSimLayout };
 
 export async function requestDuplicatePairs(
   branch: AiBranchInput,
@@ -256,6 +261,7 @@ export type AiAssistApi = {
   requestClassifyReorder: (
     branch: AiBranchInput,
     nodes: readonly Node[],
+    layout: ClassifyReorderSimLayout,
     options: AiAssistRequestOptions,
   ) => Promise<AiClassifyMove[]>;
   requestDuplicatePairs: (

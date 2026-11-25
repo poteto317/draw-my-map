@@ -33,7 +33,11 @@ import {
   buildMissingPerspectiveProposals,
 } from "@/domain/aiAssist/aiStructureProposal";
 import type { AiAssistReviewInput } from "@/hooks/aiAssistDialogState";
-import type { AiAssistApi, AiAssistRequestOptions } from "@/services/aiAssist/aiAssistClient";
+import type {
+  AiAssistApi,
+  AiAssistRequestOptions,
+  ClassifyReorderSimLayout,
+} from "@/services/aiAssist/aiAssistClient";
 import type { Node } from "@/types/node";
 
 type PlanBase = {
@@ -212,6 +216,7 @@ export type AiAssistSendRequestContext = {
   readonly nodes: readonly Node[];
   readonly visibleNodeIds: ReadonlySet<number>;
   readonly mapId: string;
+  readonly classifyReorderLayout: ClassifyReorderSimLayout;
 };
 
 // 送信プランから API 呼び出しとレビュー入力の組み立てまで。フックは abort と state 更新だけ担う
@@ -220,7 +225,7 @@ export function requestAiAssistReview(
   context: AiAssistSendRequestContext,
   options: AiAssistRequestOptions,
 ): Promise<AiAssistReviewInput> {
-  const { api, nodes, visibleNodeIds, mapId } = context;
+  const { api, nodes, visibleNodeIds, mapId, classifyReorderLayout } = context;
   if (plan.kind === "branch-summary") {
     return api.requestBranchSummary(plan.input, options)
       .then((summary) => buildSummaryReview(plan, summary));
@@ -238,7 +243,7 @@ export function requestAiAssistReview(
       .then((items) => buildMissingPerspectivesReview(plan, items));
   }
   if (plan.kind === "classify-reorder") {
-    return api.requestClassifyReorder(plan.input, plan.nodes, options)
+    return api.requestClassifyReorder(plan.input, plan.nodes, classifyReorderLayout, options)
       .then((moves) => buildClassifyReorderReview(plan, moves));
   }
   return api.requestDuplicatePairs(
