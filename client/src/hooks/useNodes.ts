@@ -109,6 +109,12 @@ import {
 import { replaceNodeLabels } from "@/domain/nodes/nodeLabelUpdate";
 import { replaceNodeNote } from "@/domain/nodes/nodeNote";
 import {
+  applyAiProposals as computeAiProposalsApplication,
+  summaryInputFingerprintOf,
+  type AcceptedAiProposal,
+  type AiProposalsApplyOutcome,
+} from "@/domain/aiAssist/aiProposal";
+import {
   addNodeLink as computeNodeLinkAddition,
   removeNodeLink as computeNodeLinkRemoval,
   type AddNodeLinkOutcome,
@@ -247,6 +253,9 @@ type UseNodesReturn = {
   // 詳細メモの唯一の更新経路。履歴グループ中は履歴に積まず、グループ外では1操作として確定する。
   // 戻り値は更新を受理したか（無変更・対象不在・上限超過は false）。documentRevision は変えない
   previewNodeNote: (id: number, note: string) => boolean;
+  // AI の提案の採用分を適用する（Phase 32）。最新の状態から照合し、成功なら1操作として確定する（1 回の Undo）。
+  // 古い・上限超過・変化なし・拒否（関連線の選択中など）は何も変えず理由を返す。documentRevision は変えない
+  applyAiProposals: (accepted: readonly AcceptedAiProposal[]) => AiProposalsApplyOutcome;
   // URL の追加（右パネルの「リンク」節）。最新の状態から判定し、成功なら1操作として確定する。
   // 失敗は理由を返し、何も変えない。documentRevision は変えない
   addNodeLink: (id: number, input: string) => AddNodeLinkOutcome;
@@ -666,6 +675,20 @@ export function useNodes(): UseNodesReturn {
   const previewNodeNote = useCallback((id: number, note: string) => (
     applyNonStructuralPreview((currentNodes) => replaceNodeNote(currentNodes, id, note))
   ), [applyNonStructuralPreview]);
+
+  // 判定と確定は同じ最新の状態で行う（addNodeLink と同じ。L-453）。
+  // applyNonStructuralChange の戻り値を見て、拒否されたら成功として扱わない（L-001）
+  const applyAiProposals = useCallback((accepted: readonly AcceptedAiProposal[]): AiProposalsApplyOutcome => {
+    const currentNodes = getCurrentState().nodes;
+    const result = computeAiProposalsApplication(
+      currentNodes,
+      accepted,
+      (rootId) => summaryInputFingerprintOf(currentNodes, rootId),
+    );
+    if (!result.ok) return result;
+    if (!applyNonStructuralChange(() => result.nodes)) return { ok: false, reason: "rejected" };
+    return { ok: true, appliedCount: result.appliedCount };
+  }, [getCurrentState, applyNonStructuralChange]);
 
   // 判定と確定は同じ最新の状態（getCurrentState と applyNonStructuralChange は同じ ref を読む）で行う。
   // 同じイベントの中で続けて呼んでも、直前の追加を反映した状態から判定する（L-453）
@@ -1256,6 +1279,7 @@ export function useNodes(): UseNodesReturn {
     attachIllustration,
     removeIllustration,
     previewNodeNote,
+    applyAiProposals,
     addNodeLink,
     removeNodeLink,
     addNodeTag,
