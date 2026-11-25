@@ -1,3 +1,4 @@
+import { NODE_IMPORTANCE_LABELS } from "@/domain/nodes/nodeImportance";
 import type { NodeImportance } from "@/types/nodeImportance";
 
 type NodeImportanceSelectorProps = {
@@ -13,11 +14,10 @@ type NodeImportanceSelectorProps = {
 const importanceOptions: ReadonlyArray<{
   importance: NodeImportance;
   label: string;
-}> = [
-  { importance: "high", label: "高" },
-  { importance: "medium", label: "中" },
-  { importance: "low", label: "低" },
-];
+}> = (["high", "medium", "low"] as const).map((importance) => ({
+  importance,
+  label: NODE_IMPORTANCE_LABELS[importance],
+}));
 
 const baseButtonClassName = "px-3 py-1 text-sm transition-colors";
 const selectedButtonClassName = "bg-blue-600 text-white";

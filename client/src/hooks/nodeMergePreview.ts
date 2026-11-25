@@ -1,18 +1,12 @@
 import type { NodeMergePlan } from "@/domain/nodes/nodeMerge";
+import { NODE_IMPORTANCE_LABELS } from "@/domain/nodes/nodeImportance";
 import { formatNodeMergeFailureNotice } from "@/domain/nodes/nodeMergeMessages";
 import { formatNodeNoteLength } from "@/domain/nodes/nodeNote";
 import { STALE_DIALOG_MESSAGE, formatPreviewLabel } from "@/hooks/dialogPreviewText";
 import type { Node } from "@/types/node";
-import type { NodeImportance } from "@/types/nodeImportance";
 
 // 統合のプレビューに並べる「統合されて消えるノード」の最大行数。超えた分は件数だけ示し、確定の対象には含める
 export const NODE_MERGE_PREVIEW_LIMIT = 200;
-
-const IMPORTANCE_LABELS: Record<NodeImportance, string> = {
-  high: "高",
-  medium: "中",
-  low: "低",
-};
 
 export type NodeMergePreview = {
   // 残すノード（主選択）のラベル（整形前。表示側で formatPreviewLabel を通す）
@@ -97,7 +91,7 @@ export function buildNodeMergePreview(nodes: readonly Node[], plan: NodeMergePla
   return {
     survivorLabel: labelById.get(plan.survivorId) ?? "",
     label: plan.label,
-    importanceLabel: IMPORTANCE_LABELS[plan.importance],
+    importanceLabel: NODE_IMPORTANCE_LABELS[plan.importance],
     illustrationText: describeIllustration(plan, labelById),
     movedChildCount: plan.movedChildCount,
     discardedIllustrationCount: plan.discardedIllustrationCount,
