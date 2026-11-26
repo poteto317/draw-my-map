@@ -111,6 +111,12 @@ async function renderEditor(storageMode: "persistent" | "protected" = "persisten
       onSwitchToMapTarget={() => {}}
       brokenLinksDialogRequest={0}
       onBrokenLinksDialogClosed={() => {}}
+      shareSession={null}
+      shareSessionStatus="ready"
+      shareDialogOpen={false}
+      onShareDialogOpenChange={() => {}}
+      onShareRequest={() => {}}
+      onShareLogin={() => {}}
     />,
   );
 }
@@ -349,6 +355,12 @@ describe("MapEditor の AI 構造支援（Phase 33・078–081）", () => {
         onSwitchToMapTarget={() => {}}
         brokenLinksDialogRequest={0}
         onBrokenLinksDialogClosed={() => {}}
+        shareSession={null}
+        shareSessionStatus="ready"
+        shareDialogOpen={false}
+        onShareDialogOpenChange={() => {}}
+        onShareRequest={() => {}}
+        onShareLogin={() => {}}
       />,
     );
     const relationHandler = mockGraphicsPointerHandlers.at(-1)?.pointerdown;

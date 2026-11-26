@@ -74,6 +74,12 @@ function buildEditorProps({
     onSwitchToMapTarget: () => {},
     brokenLinksDialogRequest: 0,
     onBrokenLinksDialogClosed: () => {},
+    shareSession: null,
+    shareSessionStatus: "ready",
+    shareDialogOpen: false,
+    onShareDialogOpenChange: () => {},
+    onShareRequest: () => {},
+    onShareLogin: () => {},
   } as const;
 }
 

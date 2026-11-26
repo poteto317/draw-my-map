@@ -1,5 +1,6 @@
 "use client";
 
+import { signIn } from "next-auth/react";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { MapLibraryControls } from "@/components/layout/MapLibraryControls";
 import { MapLibraryDialog } from "@/components/layout/MapLibraryDialog";
@@ -11,6 +12,7 @@ import type { MapTrashEntry } from "@/domain/mapLibrary/mapTrash";
 import { useMapLibrary, type MapLibraryDeps } from "@/hooks/useMapLibrary";
 import { useMapLibraryDialogState } from "@/hooks/useMapLibraryDialogState";
 import { usePendingMapNavigation } from "@/hooks/usePendingMapNavigation";
+import { useShareSession } from "@/hooks/useShareSession";
 import { generateMapId } from "@/services/persistence/mapIdGenerator";
 import { getBrowserMapLibraryStorage } from "@/services/persistence/mapLibraryStorage";
 
@@ -62,6 +64,8 @@ export default function Home() {
     publishShellNotice,
   });
   const [brokenLinksDialogRequest, setBrokenLinksDialogRequest] = useState(0);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const { status: shareSessionStatus, session: shareSession } = useShareSession();
 
   const handleOpenBrokenLinks = useCallback(() => {
     closeSilently();
@@ -71,6 +75,23 @@ export default function Home() {
   const handleBrokenLinksDialogClosed = useCallback(() => {
     listButtonRef.current?.focus();
   }, []);
+
+  const handleShareLogin = useCallback(() => {
+    void signIn("google");
+  }, []);
+
+  const handleShareRequest = useCallback(() => {
+    // 未ログインでもダイアログを開く（ログイン導線は ShareDialog 内。open で modal 束→listening 即停止）
+    // 成功扱いにせず createShare は呼ばない（L-001）
+    setShareDialogOpen(true);
+  }, []);
+
+  // マップ切替で共有ダイアログを閉じる（L-166 mapId 変更と整合）
+  /* eslint-disable react-hooks/set-state-in-effect -- mapId 切替時のダイアログ閉鎖（L-166） */
+  useLayoutEffect(() => {
+    setShareDialogOpen(false);
+  }, [currentMapId]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // 再マウントで新しいヘッダーの ref がつながった後に、ダイアログの戻し先へフォーカスする
   useLayoutEffect(() => {
@@ -116,6 +137,12 @@ export default function Home() {
             onSwitchToMapTarget={switchToMapTarget}
             brokenLinksDialogRequest={brokenLinksDialogRequest}
             onBrokenLinksDialogClosed={handleBrokenLinksDialogClosed}
+            shareSession={shareSession}
+            shareSessionStatus={shareSessionStatus}
+            shareDialogOpen={shareDialogOpen}
+            onShareDialogOpenChange={setShareDialogOpen}
+            onShareRequest={handleShareRequest}
+            onShareLogin={handleShareLogin}
             mapControls={(
               <MapLibraryControls
                 mapName={view.currentMap.name}

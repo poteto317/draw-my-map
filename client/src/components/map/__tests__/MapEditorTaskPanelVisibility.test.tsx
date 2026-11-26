@@ -72,6 +72,12 @@ async function renderTaskPanelEditor(initialJson: string) {
       onSwitchToMapTarget={() => {}}
       brokenLinksDialogRequest={0}
       onBrokenLinksDialogClosed={() => {}}
+      shareSession={null}
+      shareSessionStatus="ready"
+      shareDialogOpen={false}
+      onShareDialogOpenChange={() => {}}
+      onShareRequest={() => {}}
+      onShareLogin={() => {}}
     />,
   );
   const stage = document.querySelector<HTMLElement>(".cursor-crosshair")!;

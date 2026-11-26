@@ -153,6 +153,12 @@ async function renderEditor({
       onSwitchToMapTarget={() => {}}
       brokenLinksDialogRequest={0}
       onBrokenLinksDialogClosed={() => {}}
+      shareSession={null}
+      shareSessionStatus="ready"
+      shareDialogOpen={false}
+      onShareDialogOpenChange={() => {}}
+      onShareRequest={() => {}}
+      onShareLogin={() => {}}
     />,
   );
   mockStageBounds(stageContainer());

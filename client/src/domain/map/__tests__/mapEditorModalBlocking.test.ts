@@ -20,6 +20,7 @@ const allClosed: MapEditorModalBlockingInput = {
   crossMapSearchOpen: false,
   brokenLinksDialogOpen: false,
   persistenceConfirmOpen: false,
+  shareDialogOpen: false,
 };
 
 describe("resolveMapEditorModalsBlockEditing", () => {
