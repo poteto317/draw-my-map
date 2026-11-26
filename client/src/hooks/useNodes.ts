@@ -1,3 +1,16 @@
+import {
+  computeNodeCustomAttributeUpdate,
+  computeNodeTaskUpdate,
+  normalizeTaskForEdit,
+  type NodeCustomAttributeUpdateComputation,
+  type NodeTaskUpdateComputation,
+} from "@/domain/nodes/nodeTaskUpdate";
+import {
+  interpretCustomAttributeUpdateOutcome,
+  interpretTaskUpdateOutcome,
+} from "@/domain/nodes/nodeTaskUpdateOutcome";
+import type { EditOutcome } from "@/hooks/useNodeTaskAttributeEditing";
+import type { NodeCustomAttribute } from "@/types/node";
 import { useState, useCallback, useMemo } from "react";
 import {
   createChildNode,
@@ -254,6 +267,13 @@ type UseNodesReturn = {
   toggleLabelBold: (id: number) => boolean;
   toggleLabelUnderline: (id: number) => boolean;
   setNodeIcon: (id: number, icon: string | undefined) => boolean;
+  applyTask: (id: number, expected: Node["task"], next: Node["task"]) => EditOutcome;
+  applyCustomAttribute: (
+    id: number,
+    editKey: string | null,
+    original: NodeCustomAttribute | null,
+    next: NodeCustomAttribute | null,
+  ) => EditOutcome;
   setNodeKind: (id: number, kind: NodeKind | undefined) => boolean;
   updateNodeImportance: (id: number, importance: NodeImportance) => boolean;
   updateNodesImportance: (ids: readonly number[], importance: NodeImportance) => boolean;
@@ -661,6 +681,32 @@ export function useNodes(): UseNodesReturn {
   const setNodeIcon = useCallback((id: number, icon: string | undefined) => (
     applyNonStructuralChange((currentNodes) => updateNodeIcon(currentNodes, id, icon))
   ), [applyNonStructuralChange]);
+
+  const applyTask = useCallback((id: number, expected: Node["task"], next: Node["task"]): EditOutcome => {
+    const normalized = normalizeTaskForEdit(next);
+    if (!normalized.ok) return { ok: false, reason: "期限または担当者を確認してください。" };
+
+    const outcome: { computation: NodeTaskUpdateComputation | null } = { computation: null };
+    const applied = applyNonStructuralChange((currentNodes) => {
+      outcome.computation = computeNodeTaskUpdate(currentNodes, id, expected, normalized.value);
+      return outcome.computation.nodes;
+    });
+    return interpretTaskUpdateOutcome(applied, outcome.computation);
+  }, [applyNonStructuralChange]);
+
+  const applyCustomAttribute = useCallback((
+    id: number,
+    editKey: string | null,
+    original: NodeCustomAttribute | null,
+    next: NodeCustomAttribute | null,
+  ): EditOutcome => {
+    const outcome: { computation: NodeCustomAttributeUpdateComputation | null } = { computation: null };
+    const applied = applyNonStructuralChange((currentNodes) => {
+      outcome.computation = computeNodeCustomAttributeUpdate(currentNodes, id, editKey, original, next);
+      return outcome.computation.nodes;
+    });
+    return interpretCustomAttributeUpdateOutcome(applied, outcome.computation);
+  }, [applyNonStructuralChange]);
 
   const setNodeKind = useCallback((id: number, kind: NodeKind | undefined) => (
     applyNonStructuralChange((currentNodes) => updateNodeKind(currentNodes, id, kind))
@@ -1309,6 +1355,8 @@ export function useNodes(): UseNodesReturn {
     toggleLabelBold,
     toggleLabelUnderline,
     setNodeIcon,
+    applyTask,
+    applyCustomAttribute,
     setNodeKind,
     updateNodeImportance,
     updateNodesImportance,
