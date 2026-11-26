@@ -17,7 +17,6 @@ const allClosed: MapEditorModalBlockingInput = {
   nodeMergeOpen: false,
   aiAssistOpen: false,
   partsDialogOpen: false,
-  relationPartnerOpen: false,
   crossMapSearchOpen: false,
   brokenLinksDialogOpen: false,
   persistenceConfirmOpen: false,
@@ -35,5 +34,9 @@ describe("resolveMapEditorModalsBlockEditing", () => {
     ["persistenceConfirmOpen", "persistenceConfirmOpen"],
   ] as const)("%s だけ真なら true", (_label, key) => {
     expect(resolveMapEditorModalsBlockEditing({ ...allClosed, [key]: true })).toBe(true);
+  });
+
+  it("relationPartnerOpen は modal 束に含めない（専用 reason 用）", () => {
+    expect(Object.keys(allClosed)).not.toContain("relationPartnerOpen");
   });
 });
