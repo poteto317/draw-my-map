@@ -18,6 +18,9 @@ const STATUS_BY_REASON: Readonly<Record<string, number>> = {
 /** 閲覧 API 用。成功・404 とも中間キャッシュに載せない */
 export const SHARE_VIEW_CACHE_CONTROL = "private, no-store";
 
+/** 閲覧 API／ページ用。平文トークンを Referer に載せない */
+export const SHARE_VIEW_REFERRER_POLICY = "no-referrer";
+
 export function shareResultResponse<T>(result: ShareResult<T>): Response {
   if (result.ok) {
     return Response.json(result, { status: 200 });
