@@ -3,6 +3,7 @@ import type { ExportScope } from "@/domain/exportScope/exportScope";
 export type ExportFormat =
   | "png"
   | "svg"
+  | "print"
   | "markdown"
   | "json"
   | "bullets"
@@ -20,6 +21,7 @@ export type ExportFormatControls = Record<ExportFormat, ExportFormatControl>;
 const EXPORT_FORMATS = [
   "png",
   "svg",
+  "print",
   "markdown",
   "json",
   "bullets",
@@ -35,6 +37,7 @@ const ENABLED_FORMATS: Record<ExportScope, ReadonlySet<ExportFormat>> = {
   all: new Set([
     "png",
     "svg",
+    "print",
     "markdown",
     "json",
     "bullets",
@@ -43,6 +46,7 @@ const ENABLED_FORMATS: Record<ExportScope, ReadonlySet<ExportFormat>> = {
   visible: new Set([
     "png",
     "svg",
+    "print",
     "markdown",
     ...EXCHANGE_FORMATS_ALWAYS_ENABLED,
   ]),

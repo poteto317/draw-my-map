@@ -33,6 +33,7 @@ import { createConflictCopyName } from "@/domain/mapLibrary/mapConflict";
 import { createEmptyMapLibraryMeta } from "@/domain/mapLibrary/mapLibraryMeta";
 import type { MapLibraryOperationResult } from "@/hooks/useMapLibrary";
 import { DEFAULT_WHEEL_ZOOM_SENSITIVITY } from "@/domain/uiPrefs/uiPrefs";
+import type { MapPrintOptions, MapPrintResult } from "@/types/mapPrintExport";
 
 // ページのテストと同じく、Pixi・画像化・ダウンロードだけを差し替える
 jest.mock("pixi.js", () => {
@@ -82,6 +83,11 @@ jest.mock("@/services/outlineExport/outlineTextDownload", () => ({
 
 jest.mock("@/services/imageExport/mapPngRasterizer", () => ({
   rasterizeMapSvgToPng: jest.fn(),
+}));
+
+const mockStartMapPrint = jest.fn();
+jest.mock("@/services/printExport/printMapSvg", () => ({
+  startMapPrint: (options: MapPrintOptions) => mockStartMapPrint(options),
 }));
 
 type ExportedMap = { nodes: Array<{ id: number; label: string; parentId: number | null }> };
@@ -201,6 +207,7 @@ beforeEach(() => {
   mockDownloadMapImage.mockReset();
   mockCreateMapSvgExport.mockClear();
   mockDownloadOutlineText.mockReset();
+  mockStartMapPrint.mockReset();
 });
 
 afterEach(() => {
@@ -1734,6 +1741,62 @@ describe("書き出し対象スコープの配線", () => {
     expect(mockDownloadOutlineText.mock.lastCall![0]).not.toContain("別のルート");
   });
 
+  it("表示中のノードと現在のマップ名を印刷へ渡し、印刷の通知を操作通知バーに出す", async () => {
+    let resolve!: (result: MapPrintResult) => void;
+    const done = new Promise<MapPrintResult>((settle) => { resolve = settle; });
+    mockStartMapPrint.mockReturnValue({ done, cancel: jest.fn(), finish: jest.fn() });
+    const user = await renderViewNavigationEditor();
+    await navigateBySearch(user, "集中する枝");
+    await user.click(screen.getByRole("button", { name: "枝に集中" }));
+    await selectExportScope(user, "表示中");
+
+    const printButton = screen.getByRole("button", { name: "PDF・印刷設定" });
+    await user.click(printButton);
+    const dialog = screen.getByRole("dialog", { name: "PDF・印刷設定" });
+    expect(editorRoot()).toHaveAttribute("inert");
+    expect(editorRoot()).not.toContainElement(dialog);
+    await user.click(within(dialog).getByRole("button", { name: "印刷画面を開く" }));
+
+    expect(mockStartMapPrint).toHaveBeenCalledTimes(1);
+    const options: MapPrintOptions = mockStartMapPrint.mock.calls[0][0];
+    expect(options.mapName).toBe("テストのマップ");
+    expect(options.nodes.map((node) => node.label).sort()).toEqual(["内部ノード", "末端ノード", "集中する枝"]);
+    expect(options.nodes.find((node) => node.id === 2)?.parentId).toBe(1);
+    act(() => options.onPrinting());
+    await act(async () => resolve({ status: "dialog-closed" }));
+    await user.keyboard("{Escape}");
+
+    expect(editorRoot()).not.toHaveAttribute("inert");
+    expect(printButton).toHaveFocus();
+    expect(screen.getByTestId("operation-notices")).toHaveTextContent("印刷画面を開きました。PDF保存は印刷画面で選択してください。");
+  });
+
+  it("空の全件スコープでは印刷を始めず、空であることを通知する", async () => {
+    const user = userEvent.setup();
+    await renderEditor();
+
+    await user.click(screen.getByRole("button", { name: "PDF・印刷設定" }));
+
+    expect(mockStartMapPrint).not.toHaveBeenCalled();
+    expect(screen.getByTestId("operation-notices")).toHaveTextContent("書き出すノードがありません。");
+  });
+
+  it("空のマップへの警告後にノードを追加すると、新しい印刷設定に警告が残らない", async () => {
+    const user = userEvent.setup();
+    await renderEditor();
+    const printButton = screen.getByRole("button", { name: "PDF・印刷設定" });
+    await user.click(printButton);
+    expect(screen.getByTestId("operation-notices")).toHaveTextContent("書き出すノードがありません。");
+
+    addNodeAt(300, 200);
+    await user.click(printButton);
+
+    const dialog = within(screen.getByRole("dialog", { name: "PDF・印刷設定" }));
+    expect(dialog.getByRole("status")).toHaveTextContent("1ページ（1列 × 1行）");
+    expect(dialog.queryByText("書き出すノードがありません。")).not.toBeInTheDocument();
+    expect(dialog.getByRole("button", { name: "印刷画面を開く" })).toBeEnabled();
+  });
+
   it("選択0件・複数選択では選択スコープを選べず、map と outline の両方で無効になる", async () => {
     const user = await renderViewNavigationEditor();
     expect(selectionScopeButton()).toBeDisabled();
@@ -1789,6 +1852,7 @@ describe("書き出し対象スコープの配線", () => {
 
     await selectExportScope(user, "選択");
     expect(screen.getByRole("button", { name: /SVG書き出し/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /PDF・印刷設定.*この書き出し対象では使えません/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /箇条書き書き出し/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /PNG書き出し/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Markdown書き出し/ })).toBeEnabled();
@@ -1801,6 +1865,7 @@ describe("書き出し対象スコープの配線", () => {
     expect(screen.getByRole("button", { name: /JSON書き出し/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /箇条書き書き出し/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /SVG書き出し/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "PDF・印刷設定" })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Markdown書き出し/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /OPML書き出し/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /CSV書き出し/ })).toBeEnabled();
@@ -1815,6 +1880,7 @@ describe("書き出し対象スコープの配線", () => {
     const png = screen.getByRole("button", { name: /PNG書き出し/ });
     expect(png).toBeDisabled();
     expect(screen.getByRole("button", { name: /SVG書き出し/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /PDF・印刷設定.*書き出すノードがありません/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Markdown書き出し/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /OPML書き出し/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /CSV書き出し/ })).toBeDisabled();

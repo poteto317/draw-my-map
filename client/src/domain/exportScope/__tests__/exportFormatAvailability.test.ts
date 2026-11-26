@@ -7,6 +7,7 @@ import type { ExportScope } from "@/domain/exportScope/exportScope";
 const formats = [
   "png",
   "svg",
+  "print",
   "markdown",
   "json",
   "bullets",
@@ -19,6 +20,7 @@ const expected: Record<ExportScope, Record<(typeof formats)[number], boolean>> =
   all: {
     png: true,
     svg: true,
+    print: true,
     markdown: true,
     json: true,
     bullets: true,
@@ -29,6 +31,7 @@ const expected: Record<ExportScope, Record<(typeof formats)[number], boolean>> =
   visible: {
     png: true,
     svg: true,
+    print: true,
     markdown: true,
     json: false,
     bullets: false,
@@ -39,6 +42,7 @@ const expected: Record<ExportScope, Record<(typeof formats)[number], boolean>> =
   selection: {
     png: true,
     svg: false,
+    print: false,
     markdown: true,
     json: true,
     bullets: false,
@@ -70,12 +74,17 @@ describe("resolveExportFormatControls", () => {
     const controls = resolveExportFormatControls("all", 0);
     expect(controls.png.enabled).toBe(true);
     expect(controls.json.enabled).toBe(true);
+    expect(controls.print.enabled).toBe(true);
     expect(controls.png.disabledReason).toBeUndefined();
   });
 
   it("visible でノード 0 件なら許可形式も空理由で無効にする", () => {
     const controls = resolveExportFormatControls("visible", 0);
     expect(controls.png).toEqual({
+      enabled: false,
+      disabledReason: "書き出すノードがありません",
+    });
+    expect(controls.print).toEqual({
       enabled: false,
       disabledReason: "書き出すノードがありません",
     });
@@ -89,6 +98,10 @@ describe("resolveExportFormatControls", () => {
     const controls = resolveExportFormatControls("selection", 2);
     expect(controls.png).toEqual({ enabled: true, disabledReason: undefined });
     expect(controls.svg).toEqual({
+      enabled: false,
+      disabledReason: "この書き出し対象では使えません",
+    });
+    expect(controls.print).toEqual({
       enabled: false,
       disabledReason: "この書き出し対象では使えません",
     });
