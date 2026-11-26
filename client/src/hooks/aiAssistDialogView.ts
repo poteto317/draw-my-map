@@ -1,3 +1,4 @@
+import { describeMergeTaskAttributes } from "@/domain/nodes/nodeTaskAttributeMergePreview";
 import type { AiAssistEntryBlockers, AiAssistKind } from "@/domain/aiAssist/aiAssistEntryAvailability";
 import {
   planNoteFromSummary,
@@ -109,6 +110,7 @@ function structureProposalLabel(nodes: readonly Node[], proposal: StructureAiPro
 }
 
 export function buildAiProposalViews(nodes: readonly Node[], review: AiAssistReview): AiProposalView[] {
+  const labelById = new Map(nodes.map(({ id, label }) => [id, label]));
   return review.proposals.map((proposal): AiProposalView => {
     const decision = review.decisions[proposal.key] ?? "undecided";
     const stale = review.staleKeys.includes(proposal.key);
@@ -119,6 +121,13 @@ export function buildAiProposalViews(nodes: readonly Node[], review: AiAssistRev
       || proposal.kind === "reorder-siblings"
       || proposal.kind === "merge-pair"
     ) {
+      let mergeHint = null;
+      if (proposal.kind === "merge-pair") {
+        const details = proposal.expectedPlan.ok ? describeMergeTaskAttributes(proposal.expectedPlan, labelById) : {};
+        mergeHint = [AI_MERGE_ATTRIBUTES_HINT, details.taskText, details.customAttributeText]
+          .filter(Boolean)
+          .join(" ");
+      }
       return {
         kind: "structure",
         key: proposal.key,
@@ -126,7 +135,7 @@ export function buildAiProposalViews(nodes: readonly Node[], review: AiAssistRev
         decision,
         stale,
         summary: describeStructureProposal(nodes, proposal),
-        mergeHint: proposal.kind === "merge-pair" ? AI_MERGE_ATTRIBUTES_HINT : null,
+        mergeHint,
       };
     }
     if (proposal.kind === "importance") {

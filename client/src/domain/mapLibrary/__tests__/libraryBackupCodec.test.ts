@@ -267,3 +267,14 @@ describe("libraryBackupCodec", () => {
     expect(createLibraryBackup([oversized], "source-a", timestamp).ok).toBe(false);
   });
 });
+
+test("タスクと選択肢をライブラリバックアップで往復する", () => {
+  const attributes = {
+    task: { completed: false, dueDate: "2024-02-29", assignee: "担当者" },
+    customAttributes: [{ name: "分類", type: "choice", options: ["B", "A"], value: "A" }],
+  } as const;
+  const source = { ...map, document: { ...map.document, nodes: [createTestNode(attributes)] } };
+  const created = createLibraryBackup([source], "source-a", timestamp);
+  if (!created.ok) throw new Error("バックアップを作成できません");
+  expect(parseLibraryBackupJson(created.value.json)).toMatchObject({ ok: true, value: { maps: [source] } });
+});

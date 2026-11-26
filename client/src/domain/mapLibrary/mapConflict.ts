@@ -1,3 +1,4 @@
+import { areCustomAttributesEqual, areNodeTasksEqual } from "@/domain/nodes/nodeTaskAttributes";
 import { areGroupsEqual, areRelationsEqual } from "@/domain/map/relationGroupModel";
 import { areLayoutSpacingEqual } from "@/domain/persistence/mapDocumentLayoutSpacing";
 import { MAX_MAP_NAME_LENGTH } from "@/domain/mapLibrary/mapName";
@@ -72,6 +73,8 @@ function areNodesEqual(a: Node, b: Node): boolean {
     areNodeTagsEqual(a.tags, b.tags) &&
     areNodeSourcesEqual(a.sources, b.sources) &&
     areNodeMapLinksEqual(a.mapLinks, b.mapLinks) &&
+    areNodeTasksEqual(a.task, b.task) &&
+    areCustomAttributesEqual(a.customAttributes, b.customAttributes) &&
     (a.locked === true) === (b.locked === true) &&
     (a.layoutPinned === true) === (b.layoutPinned === true) &&
     areLabelTextStylesEqual(a, b) &&

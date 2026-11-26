@@ -136,6 +136,18 @@ export function NodeMergeDialog({
                   <dd>{preview.sourceText}</dd>
                 </div>
               )}
+              {preview.taskText && (
+                <div className="flex gap-2">
+                  <dt className="shrink-0 font-medium">タスク</dt>
+                  <dd>{preview.taskText}</dd>
+                </div>
+              )}
+              {preview.customAttributeText && (
+                <div className="flex gap-2">
+                  <dt className="shrink-0 font-medium">カスタム属性</dt>
+                  <dd>{preview.customAttributeText}</dd>
+                </div>
+              )}
               {preview.mapLinkText !== null && (
                 <div className="flex gap-2">
                   <dt className="shrink-0 font-medium">マップ間リンク</dt>

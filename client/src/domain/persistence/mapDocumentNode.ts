@@ -1,3 +1,4 @@
+import { normalizeMapDocumentNodeTaskAttributes } from "@/domain/persistence/mapDocumentNodeTaskAttributes";
 import type { MapDocumentResult, MapDocumentVersion } from "@/types/mapDocument";
 import type { Node } from "@/types/node";
 import { getIllustratedNodeMinHeight } from "@/domain/nodes/nodeIllustration";
@@ -141,6 +142,8 @@ export function normalizeMapDocumentNode(
     return kindResult;
   }
   const kind = kindResult.value;
+  const taskAttributes = normalizeMapDocumentNodeTaskAttributes(node, index, version);
+  if (!taskAttributes.ok) return taskAttributes;
   return {
     ok: true,
     value: projectMapDocumentNode({
@@ -164,6 +167,7 @@ export function normalizeMapDocumentNode(
       ...(labelBold === undefined ? {} : { labelBold }),
       ...(labelUnderline === undefined ? {} : { labelUnderline }),
       ...(icon === undefined ? {} : { icon }),
+      ...taskAttributes.value,
       ...(kind === undefined ? {} : { kind }),
     }),
   };

@@ -1,4 +1,5 @@
 import type { NodeMergePlan } from "@/domain/nodes/nodeMerge";
+import { describeMergeTaskAttributes } from "@/domain/nodes/nodeTaskAttributeMergePreview";
 import { NODE_IMPORTANCE_LABELS } from "@/domain/nodes/nodeImportance";
 import { formatNodeMergeFailureNotice } from "@/domain/nodes/nodeMergeMessages";
 import { formatNodeNoteLength } from "@/domain/nodes/nodeNote";
@@ -10,6 +11,8 @@ export const NODE_MERGE_PREVIEW_LIMIT = 200;
 
 export type NodeMergePreview = {
   // 残すノード（主選択）のラベル（整形前。表示側で formatPreviewLabel を通す）
+  taskText?: string;
+  customAttributeText?: string;
   survivorLabel: string;
   // 統合後のラベル（整形前。表示側で formatPreviewLabel を通す）
   label: string;
@@ -83,12 +86,15 @@ function describeMapLinks(plan: Extract<NodeMergePlan, { ok: true }>): string | 
   return `${plan.mapLinks?.length ?? 0} 件${suffix}`;
 }
 
+export { describeMergeTaskAttributes };
+
 // 統合の計画をプレビューの表示用にまとめる。失敗の計画（見せるものが無い）は null
 export function buildNodeMergePreview(nodes: readonly Node[], plan: NodeMergePlan): NodeMergePreview | null {
   if (!plan.ok) return null;
   const labelById = new Map(nodes.map((node) => [node.id, node.label]));
   const absorbedLabels = plan.absorbedIds.map((id) => labelById.get(id) ?? "");
   return {
+    ...describeMergeTaskAttributes(plan, labelById),
     survivorLabel: labelById.get(plan.survivorId) ?? "",
     label: plan.label,
     importanceLabel: NODE_IMPORTANCE_LABELS[plan.importance],

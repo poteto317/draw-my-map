@@ -1,3 +1,5 @@
+import { buildDuplicatePairProposals } from "@/domain/aiAssist/aiStructureProposal";
+import { buildAiProposalViews } from "@/hooks/aiAssistDialogView";
 import { buildImportanceProposals, buildNoteProposal } from "@/domain/aiAssist/aiProposal";
 import { NODE_NOTE_MAX_LENGTH } from "@/domain/nodes/nodeNote";
 import {
@@ -95,3 +97,24 @@ describe("buildAiAssistDialogView", () => {
   });
 });
 
+
+
+test("統合提案のローカル表示で引き継ぐタスクと破棄される属性を示す", () => {
+  const nodes = [
+    createTestNode({ id: 1, label: "主", task: { completed: true, assignee: "担当" }, customAttributes: [
+      { name: "数", type: "number", value: 0 },
+    ] }),
+    createTestNode({ id: 2, label: "副", task: { completed: false }, customAttributes: [
+      { name: "数", type: "date", value: "2024-02-29" },
+    ] }),
+  ];
+  const proposals = buildDuplicatePairProposals(nodes, [
+    { primaryId: 1, secondaryId: 2, reason: "同じ作業" },
+  ], new Set([1, 2]), "map-a");
+  const [view] = buildAiProposalViews(nodes, {
+    proposals, unchangedCount: 0, missingCount: 0, noteModes: {}, decisions: {},
+    staleKeys: [], noteTooLongKeys: [], applyError: null,
+  });
+  expect(view).toMatchObject({ kind: "structure", mergeHint: expect.stringContaining("担当者 担当") });
+  expect(view).toMatchObject({ mergeHint: expect.stringContaining("同名 1 件を破棄（数）") });
+});

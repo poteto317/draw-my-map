@@ -442,3 +442,11 @@ describe("validateSubtreeClipboardNodes", () => {
     expect(validateSubtreeClipboardNodes(nodes)).toEqual({ ok: false, reason: "too-large" });
   });
 });
+
+test("タスクと選択肢を枝のクリップボードで往復する", () => {
+  const attributes = {
+    task: { completed: false, dueDate: "2024-02-29", assignee: "担当者" },
+    customAttributes: [{ name: "分類", type: "choice", options: ["B", "A"], value: "A" }],
+  } as const;
+  expect(encodeAndDecode([node(1, null, attributes)], 1)).toMatchObject({ ok: true, value: { nodes: [attributes] } });
+});
