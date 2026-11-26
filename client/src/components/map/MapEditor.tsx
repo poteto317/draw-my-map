@@ -84,6 +84,7 @@ import { ExchangeExportControls } from "@/components/layout/ExchangeExportContro
 import { ExchangeImportControl } from "@/components/layout/ExchangeImportControl";
 import { ExchangeImportDialog } from "@/components/layout/ExchangeImportDialog";
 import { MapImageExportControls } from "@/components/layout/MapImageExportControls";
+import { MapPrintControls } from "@/components/layout/MapPrintControls";
 import { OutlineExportControls } from "@/components/layout/OutlineExportControls";
 import { MapHistoryControls } from "@/components/layout/MapHistoryControls";
 import { NodeCollapseControl } from "@/components/layout/NodeCollapseControl";
@@ -131,6 +132,7 @@ import { useMapHeaderLayoutControls } from "@/hooks/useMapHeaderLayoutControls";
 import { useUiPrefs } from "@/hooks/useUiPrefs";
 import { useMapHistoryShortcuts } from "@/components/map/useMapHistoryShortcuts";
 import { useMapImageExport } from "@/hooks/useMapImageExport";
+import { useMapPrintExport } from "@/hooks/useMapPrintExport";
 import { useMapJsonExport } from "@/hooks/useMapJsonExport";
 import { useExchangeExport } from "@/hooks/useExchangeExport";
 import { useOutlineExport } from "@/hooks/useOutlineExport";
@@ -536,6 +538,16 @@ export function MapEditor({
     nodes: exportNodes,
     mapName,
   });
+  const exportFormatControls = useMemo(
+    () => resolveExportFormatControls(exportScope, exportNodes.length),
+    [exportScope, exportNodes.length],
+  );
+  const print = useMapPrintExport({
+    nodes: exportNodes,
+    mapName,
+    ...exportFormatControls.print,
+  });
+  const [printSettingsOpen, setPrintSettingsOpen] = useState(false);
   const scopedJsonSnapshot = useMemo(() => {
     const exportIdMap = new Map(exportDocumentNodes.map((node) => [node.id, node.id]));
     const closed = remapClosedForNodeIdMap(relations, groups, exportIdMap);
@@ -932,6 +944,7 @@ export function MapEditor({
   // 相手ピッカー表示中も inert／shortcuts 停止（設計 §10）
   const editorShortcutsEnabled = shortcutsEnabled
     && commandPalette.screen === "closed"
+    && !printSettingsOpen
     && outlineImport.screen === "closed"
     && exchangeImport.screen === "closed"
     && tourEditor.screen === "closed"
@@ -971,10 +984,6 @@ export function MapEditor({
     mapName,
   });
   const outlineExport = useOutlineExport({ model: exportOutlineModel, mapName });
-  const exportFormatControls = useMemo(
-    () => resolveExportFormatControls(exportScope, exportNodes.length),
-    [exportScope, exportNodes.length],
-  );
   const outlineActions = useOutlineEditorActions({
     nodes, selectedNodeId, documentRevision,
     enabled: editorShortcutsEnabled && viewMode === "outline",
@@ -1268,6 +1277,7 @@ export function MapEditor({
     persistence.notice,
     scopedJsonNotice,
     imageExport.notice,
+    print.notice,
     outlineExport.notice,
     exchangeExport.notice,
     duplication.notice,
@@ -1582,6 +1592,18 @@ export function MapEditor({
                 svgEnabled={exportFormatControls.svg.enabled}
                 pngDisabledReason={exportFormatControls.png.disabledReason}
                 svgDisabledReason={exportFormatControls.svg.disabledReason}
+              />
+              <MapPrintControls
+                nodes={exportNodes}
+                {...exportFormatControls.print}
+                canOpen={editorShortcutsEnabled}
+                open={printSettingsOpen}
+                onOpen={() => setPrintSettingsOpen(true)}
+                onClose={() => setPrintSettingsOpen(false)}
+                print={print}
+                onMouseClick={() => {
+                  dialogMouseClickedAtRef.current = Date.now();
+                }}
               />
               <OutlineExportControls
                 onExportMarkdown={outlineExport.exportMarkdown}
