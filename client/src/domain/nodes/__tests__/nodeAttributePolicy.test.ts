@@ -41,6 +41,8 @@ const SAMPLE: Required<Omit<Node, "locked" | "layoutPinned">> & {
   labelUnderline: true,
   icon: "😀",
   kind: "question",
+  task: { completed: false, dueDate: "2026-11-26", assignee: "担当" },
+  customAttributes: [{ name: "状態", type: "choice", options: ["未着手", "開始"], value: "開始" }],
 };
 
 // 各属性を見本と別の値にしたもの（比較の付け忘れを検査する）。Node に属性を足すと、ここでも型エラーになる
@@ -63,6 +65,8 @@ const DIFFERENT = {
   labelFontSize: 12,
   icon: "🎯",
   kind: "idea",
+  task: { completed: true },
+  customAttributes: [{ name: "件数", type: "number", value: 0 }],
 } as unknown as Required<Node>;
 
 const OPTIONAL_KEYS = Object.keys(NODE_ATTRIBUTE_POLICY) as OptionalNodeKey[];
@@ -100,8 +104,9 @@ function expectedMergedValue(key: OptionalNodeKey): unknown {
 }
 
 describe("NODE_ATTRIBUTE_POLICY", () => {
-  it("任意の属性（illustration・note・links・tags・sources・mapLinks・locked・layoutPinned・labelFontSize・labelBold・labelUnderline・icon・kind）だけを持つ", () => {
+  it("対応する任意属性だけを持つ", () => {
     expect([...OPTIONAL_KEYS].sort()).toEqual([
+      "customAttributes",
       "icon",
       "illustration",
       "kind",
@@ -115,6 +120,7 @@ describe("NODE_ATTRIBUTE_POLICY", () => {
       "note",
       "sources",
       "tags",
+      "task",
     ]);
   });
 });
@@ -192,7 +198,9 @@ describe("全属性の往復と比較の検査（書き出し・読み込み・�
   it("同じ内容（別の配列）なら、競合判定も履歴の同値判定も同じとみなす", () => {
     const copy: Node = {
       ...SAMPLE,
-      links: [...SAMPLE.links],
+      task: { ...SAMPLE.task },
+    customAttributes: JSON.parse(JSON.stringify(SAMPLE.customAttributes)),
+    links: [...SAMPLE.links],
       tags: [...SAMPLE.tags],
       sources: SAMPLE.sources.map((source) => ({ ...source })),
       mapLinks: SAMPLE.mapLinks.map((link) => ({ ...link })),
