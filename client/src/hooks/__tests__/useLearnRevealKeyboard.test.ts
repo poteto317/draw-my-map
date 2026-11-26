@@ -28,4 +28,16 @@ describe("useLearnRevealKeyboard", () => {
     expect(onReveal).not.toHaveBeenCalled();
     input.remove();
   });
+
+  it("ボタンフォーカス中は Enter を奪わない", () => {
+    const onReveal = jest.fn();
+    renderHook(() => useLearnRevealKeyboard({ enabled: true, onReveal }));
+    const button = document.createElement("button");
+    button.type = "button";
+    document.body.append(button);
+    button.focus();
+    fireEvent.keyDown(button, { key: "Enter" });
+    expect(onReveal).not.toHaveBeenCalled();
+    button.remove();
+  });
 });
