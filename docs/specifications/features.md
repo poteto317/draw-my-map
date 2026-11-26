@@ -45,6 +45,7 @@
 36. [プレゼンテーションと案内（Phase 31）](#36-プレゼンテーションと案内phase-31)
 37. [学習と復習（Phase 35）](#37-学習と復習phase-35)
 38. [音声・タブレット・モバイル（Phase 36）](#38-音声タブレットモバイルphase-36)
+39. [共有の基盤と閲覧公開（Phase 37）](#39-共有の基盤と閲覧公開phase-37)
 
 ---
 
@@ -90,6 +91,7 @@ Pixi.js による高速な 2D キャンバス描画と、React 19 による宣�
 | **Phase 31** | プレゼンテーションと案内（完了。072・073） | 文書級 `tour`（`MapViewSnapshot` ステップ列＋任意キャプション）の編集と再生（36 章）。ヘッダー「ツアー」「プレゼン開始」。再生中は編集・取込を抑止しパン・ズームは可。コマンドパレットへの新操作掲載は非目標 |
 | **Phase 35** | 学習と復習（完了。088・089） | 文書級 `learn`（開示済みノード ID・復習カード）とメモリ上の学習モード（37 章）。ヘッダー「学習」トグル・復習カードパネル。学習中は構造編集を抑止しプレゼンと相互排他。幅は実ラベルで維持 |
 | **Phase 36** | 音声・タブレット・モバイル（完了。090・091・092） | Web Speech API の音声入力（メモリ上 `listening`・確定で `insertForest`）、タッチのヒット拡大・長押しコンテキスト、狭幅（767px 以下）でアウトライン既定（38 章）。V3 に新フィールドなし |
+| **Phase 37** | 共有の基盤と閲覧公開（完了。094・095） | Google OAuth で所有者識別、D1／R2 上の公開スナップショット、閲覧専用トークンリンク（39 章）。MapDocument V3 に共有権限フィールドは足さない。ローカルメタは `draw-my-map.share-local-meta.v1` |
 
 ### 1.2 アプリケーション画面レイアウト
 
@@ -3490,3 +3492,52 @@ Phase 36 の候補090（音声入力）・091（タブレット向け操作）�
 ### 38.4 検証範囲
 
 Jest（jsdom）で `mapVoiceGuards`・`useVoiceInput`／`useMapEditorVoice`・タッチヒット／長押し・`useNarrowViewport`・`MapEditor` 統合を検査し、`npm run verify` を通します。実ブラウザ確認は未実施（[browser-test-cases.md の AO 節](../testing/browser-test-cases.md)）。
+
+## 39. 共有の基盤と閲覧公開（Phase 37）
+
+Phase 37 の候補094（共有権限・公開範囲）・095（閲覧専用リンク）の仕様です。編集の正本は従来どおりブラウザの `localStorage`（MapLibrary）。公開の正本はサーバー上のスナップショット（R2）とメタ（D1）です。MapDocument V3 に共有権限フィールドは足しません。見送り（かんばん #64–#69）の Magic Link／パスワード、他クラウド、クラウド正本化、招待限定・パスワード付きリンク、自動更新・ポーリング、comment 権限は未実装です。
+
+### 39.1 所有者認証と権限（094）
+
+| 項目 | 内容 |
+|------|------|
+| 認証 | Auth.js（`next-auth` v5）＋ Google OAuth。セッションは JWT・HTTP-only cookie |
+| 未ログイン | ローカル編集は従来どおり可。共有操作だけログイン必須 |
+| 所有者 | 当該共有マップの edit（初回共有・更新・リンク発行／失効／再発行・共有解除） |
+| 閲覧リンク | view のみ（パン／ズーム／折りたたみ表示可。構造編集・保存・共有操作・書き出しは不可） |
+| その他 | HTTP **404**（存在を漏らさない。403 は使わない） |
+| 公開範囲 UI | Phase 37 は「リンクを知っている人＝view」の 1 モード。`permission` は API で `view` 以外を拒否 |
+
+### 39.2 閲覧専用リンク（095）
+
+| 項目 | 内容 |
+|------|------|
+| 入口（所有者） | ヘッダー「共有」（`ShareControl`）→「マップを共有」ダイアログ（`ShareDialog`） |
+| 初回 | 「共有を開始」でアップロード＋公開＋view リンク 1 本を同じ応答で返す（`shareUrl`／一度きりの `token`） |
+| 更新 | 「共有を更新」で明示的に公開スナップショットを差し替え（保存のたびの自動公開はしない） |
+| URL | `/share/[token]`。平文トークンは発行・再発行応答でのみ 1 回表示（再表示 API なし）。DB はハッシュのみ |
+| 失効 | 「リンクを失効」後は閲覧 API／ページが 404 |
+| 再発行 | 新リンク確定後に旧リンクを失効。成功時だけ新 `token` を 1 回返す。旧 URL は無効 |
+| 期限 | `expires_at` 列はあるが Phase 37 UI／API は常に無期限（null） |
+| 閲覧シェル | `ShareViewer`（読み取り専用 Pixi＋折りたたみ可能なアウトライン）。`MapEditor` は使わない |
+| ローカルメタ | 独立キー `draw-my-map.share-local-meta.v1`（`sharedMapId`／`lastPublishedAt`／`linkActive`）。読取失敗を未共有に倒さない |
+
+### 39.3 API・保存先（要約）
+
+| メソッド | パス | 認証 | 結果 |
+|----------|------|------|------|
+| GET/POST | `/api/auth/*` | Auth.js | セッション |
+| GET | `/api/share/maps` | 所有者 | 自分の共有一覧（正本） |
+| POST | `/api/share/maps` | 所有者 | 初回共有＋publish＋view リンク |
+| POST | `/api/share/maps/:id/publish` | 所有者 | 新 revision |
+| POST | `/api/share/maps/:id/links` | 所有者 | 追加 view リンク（token は 1 回） |
+| POST | `/api/share/links/:id/revoke` | 所有者 | 失効 |
+| POST | `/api/share/links/:id/reissue` | 所有者 | 再発行 |
+| DELETE | `/api/share/maps/:id` | 所有者 | 共有解除 |
+| GET | `/api/share/view/:token` | なし | 現行 revision の文書。失効・不明は 404 |
+
+共有用 Cloudflare 資格情報はイラスト用 `CLOUDFLARE_*` と別名（`CF_SHARE_*`）。手順は [share-setup.md](../setup/share-setup.md)。
+
+### 39.4 検証範囲
+
+Jest（jsdom）でトークンハッシュ・権限・共有 API（モックストレージ）・`ShareDialog`／`ShareViewer`・`MapEditor` 共有配線を検査し、`npm run verify` を通します。実ブラウザ確認は未実施（[browser-test-cases.md の AP 節](../testing/browser-test-cases.md)）。
