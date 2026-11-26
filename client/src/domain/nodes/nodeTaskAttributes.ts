@@ -3,7 +3,14 @@ import type { Node, NodeCustomAttribute, NodeTask } from "@/types/node";
 
 export const MAX_CUSTOM_ATTRIBUTES = 10;
 export const MAX_CUSTOM_OPTIONS = 10;
-export type AttributeFailure = "invalid" | "too-long" | "empty" | "duplicate" | "too-many" | "not-an-option";
+export type AttributeFailure =
+  | "invalid"
+  | "too-long"
+  | "empty"
+  | "duplicate"
+  | "too-many"
+  | "too-many-options"
+  | "not-an-option";
 export type AttributeResult<T> = { ok: true; value: T } | { ok: false; reason: AttributeFailure };
 
 function failure(reason: AttributeFailure = "invalid"): AttributeResult<never> {
@@ -69,7 +76,7 @@ function normalizeAttribute(raw: unknown): AttributeResult<NodeCustomAttribute> 
     return success({ name: name.value, type, value });
   }
   if (type !== "choice" || !hasOnly(raw, ["name", "type", "value", "options"]) || !Array.isArray(raw.options) || raw.options.length === 0) return failure();
-  if (raw.options.length > MAX_CUSTOM_OPTIONS) return failure("too-many");
+  if (raw.options.length > MAX_CUSTOM_OPTIONS) return failure("too-many-options");
   const options: string[] = [];
   const keys = new Set<string>();
   for (const item of raw.options) {

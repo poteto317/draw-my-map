@@ -1,4 +1,9 @@
-import { normalizeNodeTask, normalizeCustomAttributes, parseCustomNumber } from "../nodeTaskAttributes";
+import {
+  MAX_CUSTOM_OPTIONS,
+  normalizeNodeTask,
+  normalizeCustomAttributes,
+  parseCustomNumber,
+} from "../nodeTaskAttributes";
 
 test("validates Gregorian dates and task shape", () => {
   expect(normalizeNodeTask({ completed: false, dueDate: "2000-02-29" }).ok).toBe(true);
@@ -31,4 +36,11 @@ test("非有限な保存値と11件の属性を拒否する", () => {
   expect(normalizeCustomAttributes(Array.from({ length: 11 }, (_, index) => ({
     name: `件数${index}`, type: "number", value: index,
   })))).toEqual({ ok: false, reason: "too-many" });
+});
+
+test("選択肢型で11件の候補を拒否する", () => {
+  const options = Array.from({ length: MAX_CUSTOM_OPTIONS + 1 }, (_, index) => `候補${index}`);
+  expect(normalizeCustomAttributes([
+    { name: "区分", type: "choice", options, value: "候補0" },
+  ])).toEqual({ ok: false, reason: "too-many-options" });
 });
