@@ -48,6 +48,16 @@ export type CommandAvailabilityContextInput = {
   readonly outlineDuplicateIds: boolean;
   readonly outlineInvalidStructure: boolean;
   readonly outlineSelectedVisible: boolean;
+  readonly learningActive: boolean;
+  readonly playingPresentation: boolean;
+  readonly canLearnStart: boolean;
+  readonly canLearnEnd: boolean;
+  readonly canLearnReset: boolean;
+  readonly canLearnGenerateCards: boolean;
+  readonly canLearnOpenCards: boolean;
+  readonly learnStartDisabledReason: string | null;
+  readonly learnResetDisabledReason: string | null;
+  readonly learnGenerateDisabledReason: string | null;
 };
 
 export function buildCommandAvailabilityContext(
@@ -104,5 +114,15 @@ export function buildCommandAvailabilityContext(
       input.viewMode === "outline" && outlineStructural && input.outlineSelectedVisible,
     outlineCanEdit:
       input.viewMode === "outline" && !input.outlineDuplicateIds && input.outlineSelectedVisible,
+    learningActive: input.learningActive,
+    playingPresentation: input.playingPresentation,
+    canLearnStart: input.canLearnStart,
+    canLearnEnd: input.canLearnEnd,
+    canLearnReset: input.canLearnReset,
+    canLearnGenerateCards: input.canLearnGenerateCards,
+    canLearnOpenCards: input.canLearnOpenCards,
+    learnStartDisabledReason: input.learnStartDisabledReason,
+    learnResetDisabledReason: input.learnResetDisabledReason,
+    learnGenerateDisabledReason: input.learnGenerateDisabledReason,
   };
 }

@@ -49,6 +49,16 @@ function base(overrides: Partial<CommandAvailabilityContextInput> = {}): Command
     outlineDuplicateIds: false,
     outlineInvalidStructure: false,
     outlineSelectedVisible: true,
+    learningActive: false,
+    playingPresentation: false,
+    canLearnStart: true,
+    canLearnEnd: false,
+    canLearnReset: false,
+    canLearnGenerateCards: false,
+    canLearnOpenCards: false,
+    learnStartDisabledReason: null,
+    learnResetDisabledReason: null,
+    learnGenerateDisabledReason: null,
     ...overrides,
   };
 }

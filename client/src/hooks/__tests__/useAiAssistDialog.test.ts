@@ -26,7 +26,8 @@ function deferred<T>() {
 }
 
 const AVAILABLE: AiAssistStatus = { available: true, provider: "anthropic", providerLabel: "Anthropic（Claude API）", model: "claude-opus-5-5" };
-const NONE = { isProtectedMode: false, hasConflict: false, isExternallyDeleted: false, playingPresentation: false };
+const NONE = { isProtectedMode: false, hasConflict: false, isExternallyDeleted: false, playingPresentation: false,
+    learningActive: false };
 
 // 1: 根（メモあり・high）、2: 子A（low）、3: 子B（medium・ロック中）
 function baseNodes(): Node[] {

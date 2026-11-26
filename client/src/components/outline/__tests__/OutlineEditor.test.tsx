@@ -1,3 +1,5 @@
+const inactiveLearnDisplay = { learningActive: false, revealedNodeIds: new Set<number>() };
+import { LEARN_LABEL_PLACEHOLDER } from "@/domain/map/mapLearnMode";
 import { useState } from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -16,7 +18,17 @@ function actionsStub(): OutlineEditorUiActions {
     select: jest.fn(), beginEdit: jest.fn(), setDraftText: jest.fn(), finishEdit: jest.fn(), cancelEdit: jest.fn(), invalidateDraft: jest.fn(), addRoot: jest.fn(), addChild: jest.fn(), addSibling: jest.fn(), move: jest.fn(), changeIndent: jest.fn(), deleteSelected: jest.fn() };
 }
 function props(overrides: Partial<OutlineEditorProps> = {}): OutlineEditorProps {
-  return { nodes: initial, model: buildOutlineRows(initial), selectedNodeId: 2, documentRevision: 0, enabled: true, actions: actionsStub(), taskProgress: new Map(), ...overrides };
+  return {
+    learnDisplay: inactiveLearnDisplay,
+    nodes: initial,
+    model: buildOutlineRows(initial),
+    selectedNodeId: 2,
+    documentRevision: 0,
+    enabled: true,
+    actions: actionsStub(),
+    taskProgress: new Map(),
+    ...overrides,
+  };
 }
 const row = (name: string) => screen.getByRole("button", { name });
 
@@ -81,8 +93,7 @@ it("taskProgress を行末文言と aria-label に含め、折り返し用 block
   ];
   const taskProgress = new Map([[1, { percent: 33, remaining: 2 }]]);
   render(
-    <OutlineEditor
-      {...props({ nodes, model: buildOutlineRows(nodes), selectedNodeId: 1, taskProgress })}
+    <OutlineEditor       {...props({ nodes, model: buildOutlineRows(nodes), selectedNodeId: 1, taskProgress })}
     />,
   );
 
@@ -117,7 +128,7 @@ function Harness({ nodes: supplied = initial, enabled = true, revision = 0, upda
   const model = buildOutlineRows(nodes);
   const actions = useOutlineEditorActions({ nodes, selectedNodeId: selected, model, enabled, documentRevision: revision, expandNodes: () => {}, publishNotice: () => {},
     api: { selectNode, updateNodeLabel(id, label) { update(id, label); setNodes(current => current.map(node => node.id === id ? { ...node, label } : node)); }, insertForest: () => ({ ok: false, reason: "placement-failed" }), addChildNode: () => null, addSiblingNode: () => null, reorderSibling: () => ({ ok: false, reason: "placement-failed" }), changeNodeIndent: () => ({ ok: false, reason: "placement-failed" }), deleteNodeOnly(id) { setNodes(current => current.filter(node => node.id !== id).map(node => node.parentId === id ? { ...node, parentId: null } : node)); return { ok: true, deletedId: id }; } } });
-  return <OutlineEditor taskProgress={new Map()} nodes={nodes} model={model} selectedNodeId={selected} documentRevision={revision} enabled={enabled} actions={actions} />;
+  return <OutlineEditor learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} nodes={nodes} model={model} selectedNodeId={selected} documentRevision={revision} enabled={enabled} actions={actions} />;
 }
 
 it("行の矢印とHome/Endはfocusと共通選択を変える", () => {
@@ -296,4 +307,30 @@ it("行フォーカスから Shift+Tab でアウトライン操作ツールバ�
   expect(document.activeElement?.closest('[aria-label="アウトライン操作"]')).not.toBeNull();
   expect(within(screen.getByRole("group", { name: "アウトライン操作" })).getAllByRole("button"))
     .toContain(document.activeElement);
+});
+
+it("学習中の未開示ラベルだけプレースホルダを出す", () => {
+  const learnDisplay = { learningActive: true, revealedNodeIds: new Set([2]) };
+  render(<OutlineEditor {...props({ learnDisplay, selectedNodeId: 2 })} />);
+  expect(screen.getAllByRole("button", { name: `階層1・${LEARN_LABEL_PLACEHOLDER}` }).length).toBeGreaterThan(0);
+  expect(row("階層2・子")).toBeInTheDocument();
+});
+
+it("学習中に選択中の行で Enter は開示、ラベル編集を開始しない", () => {
+  const onLearnRevealNode = jest.fn();
+  const learnDisplay = { learningActive: true, revealedNodeIds: new Set<number>() };
+  const actions = actionsStub();
+  render(
+    <OutlineEditor
+      {...props({
+        learnDisplay,
+        selectedNodeId: 2,
+        onLearnRevealNode,
+        actions,
+      })}
+    />,
+  );
+  fireEvent.keyDown(row(`階層2・${LEARN_LABEL_PLACEHOLDER}`), { key: "Enter" });
+  expect(onLearnRevealNode).toHaveBeenCalledWith(2);
+  expect(actions.beginEdit).not.toHaveBeenCalled();
 });

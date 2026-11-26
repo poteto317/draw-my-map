@@ -32,6 +32,11 @@ const REQUIRED_V1_IDS: readonly CommandId[] = [
   "edit.register-part",
   "edit.insert-part",
   "edit.delete-part",
+  "learn.start",
+  "learn.end",
+  "learn.reset-progress",
+  "learn.generate-cards",
+  "learn.open-cards",
   "search.focus-in-map",
   "search.open-cross-map",
   "outline.add-root",
@@ -55,6 +60,8 @@ const OPENS_DIALOG_IDS = new Set<CommandId>([
   "edit.insert-part",
   "edit.delete-part",
   "search.open-cross-map",
+  "learn.reset-progress",
+  "learn.open-cards",
 ]);
 
 const CATEGORY_ORDER = ["view", "edit", "search", "outline"] as const;

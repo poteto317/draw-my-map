@@ -1,3 +1,4 @@
+import { isAiAssistBlockedByLearn } from "@/domain/map/mapLearnGuards";
 import { collectSubtreeIds } from "@/domain/nodes/nodeTree";
 import type { Node } from "@/types/node";
 
@@ -14,6 +15,7 @@ export type AiAssistEntryBlockers = {
   readonly hasConflict: boolean;
   readonly isExternallyDeleted: boolean;
   readonly playingPresentation: boolean;
+  readonly learningActive: boolean;
 };
 
 export type AiAssistEntryAvailability = { enabled: true; rootId: number } | { enabled: false; reason: string };
@@ -24,6 +26,7 @@ export const AI_ASSIST_ENTRY_MESSAGES = {
   conflict: "競合中のため実行できません",
   protected: "保護モードのため実行できません",
   presentation: "プレゼン再生中は使えません",
+  learning: "学習モード中は使えません",
   selectOne: "1 件のノードを選んでください",
   locked: "ロック中のノードには入れられません",
   noDescendants: "子孫が無いため要約できません",
@@ -47,6 +50,7 @@ export function resolveAiAssistEntryAvailability(
   if (blockers.hasConflict) return disabled(AI_ASSIST_ENTRY_MESSAGES.conflict);
   if (blockers.isProtectedMode) return disabled(AI_ASSIST_ENTRY_MESSAGES.protected);
   if (blockers.playingPresentation) return disabled(AI_ASSIST_ENTRY_MESSAGES.presentation);
+  if (isAiAssistBlockedByLearn(blockers.learningActive)) return disabled(AI_ASSIST_ENTRY_MESSAGES.learning);
   if (selectedNodeIds.length !== 1) return disabled(AI_ASSIST_ENTRY_MESSAGES.selectOne);
   const rootId = selectedNodeIds[0];
   const root = nodes.find((node) => node.id === rootId);

@@ -93,6 +93,11 @@ import {
   type TourStepOutcome,
   useMapTourActions,
 } from "@/hooks/useMapTourActions";
+import {
+  type LearnMutationOutcome,
+  useMapLearnActions,
+} from "@/hooks/useMapLearnActions";
+import type { LearnMutationGuardInput, LearnSelectionGuardInput } from "@/domain/map/mapLearnGuards";
 import { applyStateChangeWithOutcome } from "@/hooks/stateChangeOutcome";
 import { applyTreeChangeWithOutcome } from "@/hooks/treeChangeOutcome";
 import { insertParentNode as computeParentInsertion, type InsertParentNodeResult } from "@/domain/nodes/nodeParentInsertion";
@@ -210,6 +215,7 @@ export type {
   CreateTourOutcome,
   TourMutationOutcome,
   TourStepOutcome,
+  LearnMutationOutcome,
 };
 
 type UseNodesReturn = {
@@ -226,6 +232,14 @@ type UseNodesReturn = {
   relations: NodeMapState["relations"];
   groups: NodeMapState["groups"];
   tour: NodeMapState["tour"];
+  learn: NodeMapState["learn"];
+  revealLearnNode: (
+    nodeId: number,
+    guard: LearnSelectionGuardInput & { revealedNodeIds: ReadonlySet<number> },
+  ) => LearnMutationOutcome;
+  resetLearnProgress: (guard: LearnMutationGuardInput) => LearnMutationOutcome;
+  replaceLearnCards: (cards: readonly import("@/types/mapLearn").MapReviewCard[]) => LearnMutationOutcome;
+  generateLearnReviewCards: (guard: LearnMutationGuardInput) => LearnMutationOutcome;
   addNode: (x: number, y: number) => number;
   addChildNode: (parentId: number) => number | null;
   addSiblingNode: (nodeId: number) => number | null;
@@ -420,6 +434,7 @@ export function useNodes(): UseNodesReturn {
     relations,
     groups,
     tour,
+    learn,
     getCurrentState,
     applyNonStructuralChange: applyNonStructuralChangeRaw,
     applyNonStructuralPreview: applyNonStructuralPreviewRaw,
@@ -492,6 +507,19 @@ export function useNodes(): UseNodesReturn {
   const reorderTourStep = reorderTourStepRaw;
   const overwriteTourStepSnapshot = overwriteTourStepSnapshotRaw;
   const setTourStepCaption = setTourStepCaptionRaw;
+
+  const {
+    revealLearnNode,
+    resetLearnProgress,
+    replaceLearnCards,
+    generateLearnReviewCards: generateLearnReviewCardsRaw,
+  } = useMapLearnActions({ applyStateChangeRaw });
+
+  const generateLearnReviewCards = useCallback(
+    (guard: LearnMutationGuardInput) =>
+      generateLearnReviewCardsRaw(getCurrentState().nodes, guard),
+    [generateLearnReviewCardsRaw, getCurrentState],
+  );
 
   // 復元したマップでは以前の選択と編集対象が無効になるため、選択を外して版を進める
   const markDocumentRestored = useCallback(() => {
@@ -1322,6 +1350,11 @@ export function useNodes(): UseNodesReturn {
     relations,
     groups,
     tour,
+    learn,
+    revealLearnNode,
+    resetLearnProgress,
+    replaceLearnCards,
+    generateLearnReviewCards,
     addNode,
     addChildNode,
     addSiblingNode,

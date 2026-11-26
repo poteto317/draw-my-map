@@ -7,7 +7,13 @@ import {
 } from "@/domain/aiAssist/aiAssistEntryAvailability";
 import { createTestNode } from "@/testing/createTestNode";
 
-const NONE: AiAssistEntryBlockers = { isProtectedMode: false, hasConflict: false, isExternallyDeleted: false, playingPresentation: false };
+const NONE: AiAssistEntryBlockers = {
+  isProtectedMode: false,
+  hasConflict: false,
+  isExternallyDeleted: false,
+  playingPresentation: false,
+  learningActive: false,
+};
 const nodes = [
   createTestNode({ id: 1, label: "根" }),
   createTestNode({ id: 2, parentId: 1, label: "子" }),

@@ -87,6 +87,12 @@ export const COMMAND_CATALOG: readonly CommandDefinition[] = Object.freeze([
     opensDialog: true,
   }),
 
+  define("learn.start", "edit", "学習", "学習を開始"),
+  define("learn.end", "edit", "学習", "学習を終了"),
+  define("learn.reset-progress", "edit", "学習", "学習の進捗をリセット…", { opensDialog: true }),
+  define("learn.generate-cards", "edit", "学習", "復習カードを生成"),
+  define("learn.open-cards", "edit", "学習", "復習カードを開く", { opensDialog: true }),
+
   define("search.focus-in-map", "search", "検索", "マップ内検索へフォーカス"),
   define("search.open-cross-map", "search", "検索", "全マップ検索…", { opensDialog: true }),
 

@@ -41,7 +41,8 @@ describe("aiAssistApplySuccessMessage", () => {
 });
 
 describe("aiApplyBlockedMessage", () => {
-  const none = { isProtectedMode: false, hasConflict: false, isExternallyDeleted: false, playingPresentation: false };
+  const none = { isProtectedMode: false, hasConflict: false, isExternallyDeleted: false, playingPresentation: false,
+    learningActive: false };
 
   it.each<[string, Partial<typeof none>, string | null]>([
     ["止める理由が無ければ null", {}, null],

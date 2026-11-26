@@ -27,6 +27,8 @@ export type UseOutlineEditorActionsOptions = {
     selectedNodeId: number | null;
     documentRevision: number;
     enabled: boolean;
+    /** 学習モード中は選択のみ可（ラベル編集・構造変更は不可） */
+    learningActive?: boolean;
     model: OutlineRows;
     api: Pick<NodesApi, "selectNode" | "updateNodeLabel" | "insertForest" | "addChildNode" | "addSiblingNode" | "reorderSibling" | "changeNodeIndent" | "deleteNodeOnly">;
     expandNodes: (ids: readonly number[]) => void;
@@ -75,7 +77,17 @@ export type OutlineEditorCoreActions = {
 };
 export type OutlineEditorActions = OutlineEditorUiActions & OutlineEditorCoreActions;
 export function useOutlineEditorActions(options: UseOutlineEditorActionsOptions): OutlineEditorActions {
-    const { nodes, selectedNodeId, documentRevision, enabled, model, api, expandNodes, publishNotice } = options;
+    const {
+        nodes,
+        selectedNodeId,
+        documentRevision,
+        enabled,
+        learningActive = false,
+        model,
+        api,
+        expandNodes,
+        publishNotice,
+    } = options;
     const label = useOutlineLabelDraft({ nodes, documentRevision, enabled, duplicateIds: model.duplicateIds, updateNodeLabel: api.updateNodeLabel, publishNotice });
     const reorder = useSiblingReorderAction({ nodes, selectedNodeId, visibleNodeIds: model.allNodeIds, reorderSibling: api.reorderSibling, publishNotice });
     const indent = useNodeIndentAction({ nodes, selectedNodeId, visibleNodeIds: model.allNodeIds, changeNodeIndent: api.changeNodeIndent, expandNodes, publishNotice });
@@ -83,7 +95,7 @@ export function useOutlineEditorActions(options: UseOutlineEditorActionsOptions)
     const sequence = useRef(0);
     const latest = useRef({ options, label, reorder, indent });
     useLayoutEffect(() => { latest.current = { options, label, reorder, indent }; });
-    const editable = enabled && !model.duplicateIds;
+    const editable = enabled && !learningActive && !model.duplicateIds;
     const structural = editable && !model.invalidStructure;
     // パレット open 中は enabled=false なので、可否は構造条件だけを別公開する
     const structureOk = !model.duplicateIds && !model.invalidStructure;
@@ -179,8 +191,11 @@ export function useOutlineEditorActions(options: UseOutlineEditorActionsOptions)
         canAddRoot: structural, canAddRelated: structural && selected, canEdit: editable && selected,
         canMoveUp: structural && reorder.canMoveUp, canMoveDown: structural && reorder.canMoveDown,
         canIndent: structural && indent.canIndent, canOutdent: structural && indent.canOutdent, canDelete,
-        select(id) { if (mayEdit(id))
-            latest.current.options.api.selectNode(id); },
+        select(id) {
+            const current = latest.current.options;
+            if (current.enabled && !current.model.duplicateIds && current.model.allNodeIds.has(id))
+                current.api.selectNode(id);
+        },
         beginEdit(id) { runBeginEdit(id, false); },
         setDraftText: label.setText,
         finishEdit(restoreFocus) { const id = latest.current.label.commit(); if (restoreFocus && id !== null)

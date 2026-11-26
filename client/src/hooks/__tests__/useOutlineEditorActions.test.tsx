@@ -22,6 +22,14 @@ it.each(["addRoot", "addChild", "addSibling"] as const)("%s成功の新IDを編�
 it("追加失敗はdraftとfocusを変更しない", () => { const h = setup(); jest.mocked(h.props.api.addChildNode).mockReturnValue(null); act(() => h.result.current.addChild()); expect(h.result.current.draft).toBeNull(); expect(h.result.current.focusRequest).toBeNull(); expect(h.props.publishNotice).toHaveBeenCalledTimes(1); });
 it("削除成功は全件集合を渡し、選択せず残った先頭へfocus", () => { const h = setup(); act(() => h.result.current.deleteSelected()); expect(h.props.api.deleteNodeOnly).toHaveBeenCalledWith(2, h.props.model.allNodeIds); expect(h.props.api.selectNode).not.toHaveBeenCalled(); expect(h.result.current.focusRequest?.target).toEqual({ kind: "row", nodeId: 1 }); });
 it("disabled後は古いcallbackでも操作しない", () => { const h = setup(); const add = h.result.current.addRoot; h.rerender({ ...h.props, enabled: false }); act(() => add()); expect(h.props.api.insertForest).not.toHaveBeenCalled(); });
+it("learningActive 中は構造操作不可だが選択は可能", () => {
+    const h = setup({ learningActive: true });
+    expect(h.result.current.canAddRoot).toBe(false);
+    expect(h.result.current.canEdit).toBe(false);
+    act(() => h.result.current.select(1));
+    expect(h.props.api.selectNode).toHaveBeenCalledWith(1);
+});
+
 it("structureCan* は enabled=false でも allNodeIds 基準の可否を返す", () => {
     const h = setup();
     expect(h.result.current.structureCanMoveUp).toBe(true);
