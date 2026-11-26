@@ -992,7 +992,6 @@ export function MapEditor({
     nodeMergeOpen: nodeMerge.screen !== "closed",
     aiAssistOpen: aiAssist.screen !== "closed",
     partsDialogOpen: partsDialogMode !== null,
-    relationPartnerOpen: relationPartnerFromId !== null,
     crossMapSearchOpen: crossMapDialogs.crossMapSearchOpen,
     brokenLinksDialogOpen: crossMapDialogs.brokenLinksDialogOpen,
     persistenceConfirmOpen: persistence.isConfirmOpen,
@@ -1096,9 +1095,10 @@ export function MapEditor({
     || crossFeatureLocks.presentationStartBlockedByLearn
     || crossFeatureLocks.presentationStartBlockedByVoice;
   // 入口をすべて同じ値で止める（L-061）。commandPalette.screen === "closed" を積に含める
-  // 相手ピッカー表示中も inert／shortcuts 停止（設計 §10）
+  // 相手ピッカーは modal 束外（音声は専用 reason）だが inert／shortcuts は停止（設計 §10）
   const editorShortcutsEnabled = shortcutsEnabled
     && !editorModalsBlockEditing
+    && relationPartnerFromId === null
     && !learningActive
     && !listening;
   useMapHistoryShortcuts({ undo, redo, enabled: editorShortcutsEnabled || listening });

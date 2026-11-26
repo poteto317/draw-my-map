@@ -13,7 +13,6 @@ export type MapEditorModalBlockingInput = {
   readonly nodeMergeOpen: boolean;
   readonly aiAssistOpen: boolean;
   readonly partsDialogOpen: boolean;
-  readonly relationPartnerOpen: boolean;
   readonly crossMapSearchOpen: boolean;
   readonly brokenLinksDialogOpen: boolean;
   readonly persistenceConfirmOpen: boolean;
@@ -34,7 +33,6 @@ export function resolveMapEditorModalsBlockEditing(input: MapEditorModalBlocking
     || input.nodeMergeOpen
     || input.aiAssistOpen
     || input.partsDialogOpen
-    || input.relationPartnerOpen
     || input.crossMapSearchOpen
     || input.brokenLinksDialogOpen
     || input.persistenceConfirmOpen;
