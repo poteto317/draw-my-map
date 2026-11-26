@@ -21,6 +21,7 @@ export function useLearnReviewCardsKeyboard({
       if (event.defaultPrevented || event.repeat) return;
       const target = event.target;
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
+      if (target instanceof HTMLElement && target.closest("button")) return;
       if (event.key === " " || event.code === "Space") {
         event.preventDefault();
         onFlip();
