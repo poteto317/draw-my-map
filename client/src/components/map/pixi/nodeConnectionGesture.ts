@@ -29,6 +29,7 @@ export function createNodeConnectionGesture({
         ? nodesRef.current
         : nodesRef.current.filter((node) => visibleNodeIdsRef.current.has(node.id)),
       sample.world,
+      sample.pointerType,
     );
 
     return target && canConnectNodes(nodesRef.current, sourceNodeId, target.id)

@@ -1,7 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Viewport } from "@/components/map/mapViewport";
 import type { MarqueeRect, MarqueeSelectionMode } from "@/components/map/pixi/marqueeSelectGesture";
-import { createStageInteractions } from "@/components/map/pixi/stageInteractions";
+import {
+  createStageInteractions,
+  type TouchLongPressContextRequest,
+} from "@/components/map/pixi/stageInteractions";
 import type { LatestValue } from "@/components/map/pixi/pointerGesture";
 import type { PixiRuntime } from "@/components/map/pixi/pixiTypes";
 import type { SiblingReorderPreview } from "@/components/map/siblingReorderDropSlot";
@@ -38,7 +41,10 @@ type UseMapStageInteractionsOptions = {
   shouldIgnorePointerDown?: () => boolean;
   /** false のときノード移動・並べ替え・接続ドラッグを始めない（パンは別経路で有効） */
   structureEditEnabled?: boolean;
+  onLongPressContextMenu?: (request: TouchLongPressContextRequest) => void;
 };
+
+export type { TouchLongPressContextRequest };
 
 function bindPixiStage(
   runtime: PixiRuntime,
@@ -72,8 +78,10 @@ export function useMapStageInteractions({
   layoutSnapPrefs,
   shouldIgnorePointerDown = () => false,
   structureEditEnabled = true,
+  onLongPressContextMenu,
 }: UseMapStageInteractionsOptions) {
   const shouldIgnorePointerDownRef = useLatestRef(shouldIgnorePointerDown);
+  const onLongPressContextMenuLiveRef = useLatestRef(onLongPressContextMenu);
   const structureEditEnabledRef = useLatestRef(structureEditEnabled);
   const onToggleNodeSelectionRef = useLatestRef(onToggleNodeSelection);
   const onSelectNodeRangeRef = useLatestRef(onSelectNodeRange);
@@ -140,6 +148,15 @@ export function useMapStageInteractions({
       onSiblingReorderPreviewChangeRef,
       shouldIgnorePointerDownRef,
       structureEditEnabledRef,
+      ...(onLongPressContextMenu !== undefined
+        ? {
+          onLongPressContextMenuRef: {
+            get current() {
+              return onLongPressContextMenuLiveRef.current!;
+            },
+          } satisfies LatestValue<(request: TouchLongPressContextRequest) => void>,
+        }
+        : {}),
     }),
   );
 

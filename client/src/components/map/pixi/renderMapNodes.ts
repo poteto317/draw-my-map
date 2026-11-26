@@ -29,6 +29,7 @@ import {
   NODE_KIND_BAR_WIDTH_PX,
   type NodeKind,
 } from "@/types/nodeKind";
+import { createNodeHitArea } from "@/components/map/pixi/nodeHitArea";
 import type { Container, FederatedPointerEvent, Graphics, Sprite, Text, Texture } from "pixi.js";
 
 const NODE_LABEL_FILL = 0x27272a;
@@ -260,6 +261,7 @@ export function renderMapNodes(
     container.visible = isVisible;
     container.eventMode = isVisible ? "static" : "none";
     container.cursor = isVisible ? "pointer" : "default";
+    container.hitArea = createNodeHitArea(node);
     container.on("pointerdown", (event: FederatedPointerEvent) => {
       options.onNodePointerDown(node.id, event);
     });

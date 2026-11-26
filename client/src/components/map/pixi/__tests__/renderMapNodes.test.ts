@@ -292,6 +292,13 @@ describe("renderMapNodes", () => {
     expect(onNodePointerDown).toHaveBeenCalledWith(1, event);
   });
 
+  it("ノード Container に pointerType 対応の hitArea を設定する", () => {
+    const { stage } = render();
+    const container = stage.addChild.mock.calls[0][0] as { hitArea: { contains: (x: number, y: number) => boolean } };
+    expect(container.hitArea.contains(50, 30)).toBe(true);
+    expect(container.hitArea.contains(49, 30)).toBe(false);
+  });
+
   it("非表示ノードは即時に非描画・非インタラクティブにする", () => {
     const { stage } = render({ visibleKeys: new Set() });
     const container = stage.addChild.mock.calls[0][0] as {

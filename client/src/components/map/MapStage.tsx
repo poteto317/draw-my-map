@@ -19,7 +19,10 @@ import { usePixiApplication } from "@/components/map/pixi/usePixiApplication";
 import { useHiddenNodeInteractionReset } from "@/components/map/useHiddenNodeInteractionReset";
 import { useDocumentRestoreInteractionReset } from "@/components/map/useDocumentRestoreInteractionReset";
 import { useMapClipboardEvents } from "@/components/map/useMapClipboardEvents";
-import { useMapStageInteractions } from "@/components/map/useMapStageInteractions";
+import {
+  useMapStageInteractions,
+  type TouchLongPressContextRequest,
+} from "@/components/map/useMapStageInteractions";
 import { useMapVisibilityTransition } from "@/components/map/useMapVisibilityTransition";
 import { useMapStageReset } from "@/components/map/useMapStageReset";
 import { useMapViewport } from "@/components/map/useMapViewport";
@@ -282,6 +285,8 @@ export function MapStage({
     shortcutsEnabled,
   });
   const resolvedOnClearSelection = onClearSelection ?? (() => onSelectNode(null));
+  const touchLongPressContextMenuRef = useRef<(request: TouchLongPressContextRequest) => void>(() => {});
+
   const {
     connectionTargetNodeId,
     marqueeRect,
@@ -314,6 +319,7 @@ export function MapStage({
     },
     shouldIgnorePointerDown: isOverlayFollowUpClick,
     structureEditEnabled: shortcutsEnabled,
+    onLongPressContextMenu: (request) => touchLongPressContextMenuRef.current(request),
   });
 
   const supersededFocusSequence = useRef<number | null>(null);
@@ -622,6 +628,48 @@ export function MapStage({
     || onBeginRelationAdd !== undefined
     || onConnectRelation !== undefined
     || onCreateGroup !== undefined;
+
+  const touchLongPressContextMenuHandler = useCallback((request: TouchLongPressContextRequest) => {
+    if (isOverlayFollowUpClick()) return;
+    const container = containerRef.current;
+    if (container === null) return;
+
+    const action: MapContextMenuAction = resolveMapContextMenuAction({
+      isEditing: editing.editingNodeId !== null,
+      isTextEntryTarget: false,
+      isInsideMenu: false,
+      hasActiveGesture: hasActiveGesture(),
+      canOpenMenu: canOpenContextMenu && shortcutsEnabled,
+      client: request.client,
+      bounds: container.getBoundingClientRect(),
+      viewport: viewportRef.current,
+      visibleNodes,
+      pointerType: "touch",
+    });
+
+    if (action.type === "dismiss") contextMenu.close();
+    else if (action.type === "select") onSelectNode(action.nodeId);
+    else if (action.type === "open") {
+      if (!resolvedSelectedNodeIds.includes(action.nodeId)) {
+        onSelectNode(action.nodeId);
+      }
+      contextMenu.open({ nodeId: action.nodeId, position: action.position });
+    }
+  }, [
+    canOpenContextMenu,
+    contextMenu,
+    editing.editingNodeId,
+    hasActiveGesture,
+    onSelectNode,
+    resolvedSelectedNodeIds,
+    shortcutsEnabled,
+    visibleNodes,
+    viewportRef,
+  ]);
+
+  useLayoutEffect(() => {
+    touchLongPressContextMenuRef.current = touchLongPressContextMenuHandler;
+  }, [touchLongPressContextMenuHandler]);
 
   const handleContextMenu = (event: MouseEvent<HTMLDivElement>) => {
     // macOS Ctrl+click is a secondary click; the primary-button gesture it started is not a drag.
