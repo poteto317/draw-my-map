@@ -34,6 +34,7 @@ export function useRenderedMapScene({
   screenSize,
 }: UseRenderedMapSceneOptions): RenderedMapScene | null {
   const {
+    taskProgress,
     nodes,
     selectedNodeIds,
     editingNodeId,
@@ -97,6 +98,7 @@ export function useRenderedMapScene({
     const renderedViewport = viewportRef.current;
     const renderedScene = renderMapScene(runtime.app, runtime.constructors, {
       nodes: renderNodes,
+      taskProgress,
       selectedNodeIds,
       editingNodeId,
       connectionTargetNodeId,
@@ -133,6 +135,7 @@ export function useRenderedMapScene({
   }, [
     runtime,
     renderNodes,
+    taskProgress,
     selectedNodeIds,
     editingNodeId,
     connectionTargetNodeId,

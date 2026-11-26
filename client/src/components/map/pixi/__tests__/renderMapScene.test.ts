@@ -5,6 +5,8 @@ import { createPixiTestHarness } from "../testing/pixiTestHarness";
 import type { Node } from "@/types/node";
 import { createTestNode } from "@/testing/createTestNode";
 
+const emptyTaskProgress = new Map<number, { percent: number; remaining: number }>();
+
 const nodes: Node[] = [
   createTestNode({
     id: 1, parentId: null, x: 50, y: 30,
@@ -24,6 +26,7 @@ describe("renderMapScene", () => {
 
     const scene = renderMapScene(harness.app as never, harness.constructors as never, {
       nodes,
+      taskProgress: emptyTaskProgress,
       selectedNodeIds: [],
       editingNodeId: null,
       connectionTargetNodeId: null,
@@ -53,6 +56,7 @@ describe("renderMapScene", () => {
 
     renderMapScene(harness.app as never, harness.constructors as never, {
       nodes,
+      taskProgress: emptyTaskProgress,
       selectedNodeIds: [],
       editingNodeId: null,
       connectionTargetNodeId: null,
@@ -75,6 +79,7 @@ describe("renderMapScene", () => {
 
     renderMapScene(harness.app as never, harness.constructors as never, {
       nodes: [],
+      taskProgress: emptyTaskProgress,
       selectedNodeIds: [],
       editingNodeId: null,
       connectionTargetNodeId: null,
@@ -94,7 +99,7 @@ describe("renderMapScene", () => {
   it("visibleNodeIdsをノードとエッジの描画へ反映する", () => {
     const harness = createPixiTestHarness();
     renderMapScene(harness.app as never, harness.constructors as never, {
-      nodes, selectedNodeIds: [], editingNodeId: null, connectionTargetNodeId: null,
+      nodes, taskProgress: emptyTaskProgress, selectedNodeIds: [], editingNodeId: null, connectionTargetNodeId: null,
       siblingReorderSourceNodeId: null, siblingReorderIndicator: null, onNodePointerDown: jest.fn(), viewport: INITIAL_VIEWPORT, visibleNodeIds: new Set([2]),
       highlightNodeIds: new Set<number>(),
   pinnedNodeIds: new Set<number>(),
@@ -112,6 +117,7 @@ describe("renderMapScene", () => {
 
     const scene = renderMapScene(harness.app as never, harness.constructors as never, {
       nodes: sceneNodes,
+      taskProgress: emptyTaskProgress,
       selectedNodeIds: [],
       editingNodeId: null,
       connectionTargetNodeId: null,
@@ -148,6 +154,7 @@ describe("renderMapScene", () => {
 
     const scene = renderMapScene(harness.app as never, harness.constructors as never, {
       nodes,
+      taskProgress: emptyTaskProgress,
       selectedNodeIds: [],
       editingNodeId: null,
       connectionTargetNodeId: null,
@@ -176,6 +183,7 @@ describe("renderMapScene", () => {
 
     renderMapScene(harness.app as never, harness.constructors as never, {
       nodes,
+      taskProgress: emptyTaskProgress,
       selectedNodeIds: [],
       editingNodeId: null,
       connectionTargetNodeId: null,
@@ -197,6 +205,7 @@ describe("renderMapScene", () => {
 
     renderMapScene(harness.app as never, harness.constructors as never, {
       nodes,
+      taskProgress: emptyTaskProgress,
       selectedNodeIds: [],
       editingNodeId: null,
       connectionTargetNodeId: null,

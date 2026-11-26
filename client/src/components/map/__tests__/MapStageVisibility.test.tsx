@@ -89,7 +89,7 @@ describe("MapStage visibility boundary", () => {
     });
     jest.spyOn(performance, "now").mockImplementation(() => now);
     const connectedNodes = [sampleNodes[0], { ...sampleNodes[1], parentId: 1 }];
-    await renderReady(<MapStage {...defaultProps} nodes={connectedNodes} visibleNodeIds={new Set([1, 2])} />);
+    await renderReady(<MapStage taskProgress={new Map()} {...defaultProps} nodes={connectedNodes} visibleNodeIds={new Set([1, 2])} />);
     const pixi = jest.requireMock("pixi.js") as { Graphics: jest.Mock };
     const edge = pixi.Graphics.mock.results[0].value as { alpha: number };
 
@@ -128,14 +128,14 @@ describe("MapStage visibility boundary", () => {
     jest.spyOn(performance, "now").mockImplementation(() => now);
     const connectedNodes = [sampleNodes[0], { ...sampleNodes[1], parentId: 1 }];
     const rendered = await renderReady(
-      <MapStage {...defaultProps} nodes={connectedNodes} visibleNodeIds={new Set([1, 2])} />,
+      <MapStage taskProgress={new Map()} {...defaultProps} nodes={connectedNodes} visibleNodeIds={new Set([1, 2])} />,
     );
     now = 80;
     act(() => callbacks.get(1)?.(80));
     expect(mockContainers[1].alpha).toBe(0.875);
 
     rendered.rerender(
-      <MapStage {...defaultProps} nodes={connectedNodes} visibleNodeIds={new Set()} />,
+      <MapStage taskProgress={new Map()} {...defaultProps} nodes={connectedNodes} visibleNodeIds={new Set()} />,
     );
 
     expect(mockContainers.at(-2)?.alpha).toBe(0.875);
@@ -168,13 +168,13 @@ describe("MapStage visibility boundary", () => {
     jest.spyOn(performance, "now").mockImplementation(() => now);
     const connectedNodes = [sampleNodes[0], { ...sampleNodes[1], parentId: 1 }];
     const rendered = await renderReady(
-      <MapStage {...defaultProps} nodes={connectedNodes} visibleNodeIds={new Set([1, 2])} />,
+      <MapStage taskProgress={new Map()} {...defaultProps} nodes={connectedNodes} visibleNodeIds={new Set([1, 2])} />,
     );
     now = 80;
     act(() => callbacks.get(1)?.(80));
 
     rendered.rerender(
-      <MapStage {...defaultProps} nodes={[...connectedNodes]} visibleNodeIds={new Set([1, 2])} />,
+      <MapStage taskProgress={new Map()} {...defaultProps} nodes={[...connectedNodes]} visibleNodeIds={new Set([1, 2])} />,
     );
 
     expect(mockContainers.at(-2)?.alpha).toBe(0.875);
@@ -189,7 +189,7 @@ describe("MapStage visibility boundary", () => {
       value: jest.fn(() => ({ matches: true, addEventListener: jest.fn(), removeEventListener: jest.fn() })),
     });
     Object.defineProperty(window, "requestAnimationFrame", { configurable: true, value: jest.fn() });
-    await renderReady(<MapStage {...defaultProps} nodes={sampleNodes} visibleNodeIds={new Set([1, 2])} />);
+    await renderReady(<MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} visibleNodeIds={new Set([1, 2])} />);
 
     expect(mockContainers[1].alpha).toBe(1);
     expect(window.requestAnimationFrame).not.toHaveBeenCalled();
@@ -216,12 +216,12 @@ describe("MapStage visibility boundary", () => {
       value: jest.fn((id: number) => callbacks.delete(id)),
     });
     const rendered = await renderReady(
-      <MapStage {...defaultProps} nodes={sampleNodes} selectedNodeId={1}
+      <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1}
         visibleNodeIds={new Set([1, 2])} onSelectNode={onSelectNode} />,
     );
 
     rendered.rerender(
-      <MapStage {...defaultProps} nodes={sampleNodes} selectedNodeId={1}
+      <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1}
         visibleNodeIds={new Set([2])} onSelectNode={onSelectNode} />,
     );
 
@@ -233,7 +233,7 @@ describe("MapStage visibility boundary", () => {
   it("編集中ノードがhiddenになるとeditorを破棄する", async () => {
     const onSelectNode = jest.fn();
     const rendered = await renderReady(
-      <MapStage {...defaultProps} nodes={sampleNodes} selectedNodeId={1}
+      <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1}
         visibleNodeIds={new Set([1, 2])} onSelectNode={onSelectNode} />,
     );
     const container = document.querySelector(".cursor-crosshair") as HTMLElement;
@@ -242,7 +242,7 @@ describe("MapStage visibility boundary", () => {
     expect(rendered.getByTestId("node-label-input")).toBeInTheDocument();
 
     rendered.rerender(
-      <MapStage {...defaultProps} nodes={sampleNodes} selectedNodeId={1}
+      <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1}
         visibleNodeIds={new Set([2])} onSelectNode={onSelectNode} />,
     );
 
@@ -253,7 +253,7 @@ describe("MapStage visibility boundary", () => {
   it("進行中gestureの対象ノードがhiddenになると以後の移動を止める", async () => {
     const onMoveNode = jest.fn();
     const rendered = await renderReady(
-      <MapStage {...defaultProps} nodes={sampleNodes} visibleNodeIds={new Set([1, 2])}
+      <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} visibleNodeIds={new Set([1, 2])}
         onMoveNode={onMoveNode} />,
     );
     act(() => {
@@ -263,7 +263,7 @@ describe("MapStage visibility boundary", () => {
     expect(onMoveNode).toHaveBeenCalledTimes(1);
 
     rendered.rerender(
-      <MapStage {...defaultProps} nodes={sampleNodes} visibleNodeIds={new Set([2])}
+      <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} visibleNodeIds={new Set([2])}
         onMoveNode={onMoveNode} />,
     );
     act(() => mockStageHandlers.pointermove?.(pointer(140, 100)));
@@ -274,7 +274,7 @@ describe("MapStage visibility boundary", () => {
   it("非表示ノードの位置は編集せず背景への追加として扱う", async () => {
     const onDoubleClick = jest.fn();
     const { queryByTestId } = await renderReady(
-      <MapStage {...defaultProps} nodes={sampleNodes} visibleNodeIds={new Set([2])}
+      <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} visibleNodeIds={new Set([2])}
         onDoubleClick={onDoubleClick} />,
     );
     const container = document.querySelector(".cursor-crosshair") as HTMLElement;
@@ -291,12 +291,12 @@ describe("MapStage visibility boundary", () => {
     const firstCallback = jest.fn();
     const secondCallback = jest.fn();
     const rendered = await renderReady(
-      <MapStage {...defaultProps} onViewportScaleChange={firstCallback} />,
+      <MapStage taskProgress={new Map()} {...defaultProps} onViewportScaleChange={firstCallback} />,
     );
     expect(firstCallback).toHaveBeenCalledWith(1);
     expect(firstCallback).toHaveBeenCalledTimes(1);
 
-    rendered.rerender(<MapStage {...defaultProps} onViewportScaleChange={secondCallback} />);
+    rendered.rerender(<MapStage taskProgress={new Map()} {...defaultProps} onViewportScaleChange={secondCallback} />);
 
     expect(firstCallback).toHaveBeenCalledTimes(1);
     expect(secondCallback).not.toHaveBeenCalled();
