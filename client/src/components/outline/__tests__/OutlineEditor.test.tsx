@@ -334,3 +334,20 @@ it("学習中に選択中の行で Enter は開示、ラベル編集を開始し
   expect(onLearnRevealNode).toHaveBeenCalledWith(2);
   expect(actions.beginEdit).not.toHaveBeenCalled();
 });
+
+it("学習中のダブルクリックでラベル編集を開始しない", () => {
+  const learnDisplay = { learningActive: true, revealedNodeIds: new Set<number>() };
+  const actions = actionsStub();
+  render(
+    <OutlineEditor
+      {...props({
+        learnDisplay,
+        selectedNodeId: 2,
+        actions,
+      })}
+    />,
+  );
+  fireEvent.doubleClick(row(`階層2・${LEARN_LABEL_PLACEHOLDER}`));
+  expect(actions.beginEdit).not.toHaveBeenCalled();
+  expect(screen.queryByRole("textbox", { name: "ラベル編集" })).not.toBeInTheDocument();
+});

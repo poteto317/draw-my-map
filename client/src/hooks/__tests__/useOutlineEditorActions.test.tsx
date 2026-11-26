@@ -30,6 +30,15 @@ it("learningActive 中は構造操作不可だが選択は可能", () => {
     expect(h.props.api.selectNode).toHaveBeenCalledWith(1);
 });
 
+it("learningActive 中は beginEdit と beginEditCore で draft を開始しない", () => {
+    const h = setup({ learningActive: true });
+    act(() => h.result.current.beginEdit(2));
+    expect(h.props.api.selectNode).not.toHaveBeenCalled();
+    expect(h.result.current.draft).toBeNull();
+    act(() => h.result.current.beginEditCore(2));
+    expect(h.result.current.draft).toBeNull();
+});
+
 it("structureCan* は enabled=false でも allNodeIds 基準の可否を返す", () => {
     const h = setup();
     expect(h.result.current.structureCanMoveUp).toBe(true);

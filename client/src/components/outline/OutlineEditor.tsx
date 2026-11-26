@@ -169,7 +169,7 @@ export function OutlineEditor({
               ref={element => { if (element) rowButtons.current.set(row.nodeId, element); else rowButtons.current.delete(row.nodeId); }}
               className="flex w-full min-w-0 items-stretch gap-2 whitespace-pre-wrap break-words rounded border border-slate-200 px-3 py-2 text-left aria-pressed:bg-blue-50"
               onClick={() => { if (interactive) actions.select(row.nodeId); }}
-              onDoubleClick={() => { if (interactive) actions.beginEdit(row.nodeId); }}
+              onDoubleClick={() => { if (interactive && !learnDisplay.learningActive) actions.beginEdit(row.nodeId); }}
               onKeyDown={event => handleRowKey(event, index)}>
               <OutlineRowAppearance node={node} />
               <span className="mr-2 shrink-0 self-center text-xs text-slate-500">階層{row.depth}</span>
