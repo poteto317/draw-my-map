@@ -23,11 +23,16 @@ const tour: MapTour = {
 
 const noopTourMutation = () => ({ ok: true } as const);
 
-function mountHook(conflictState: "none" | "conflict", storageMode: "persistent" | "protected") {
+function mountHook(
+  conflictState: "none" | "conflict",
+  storageMode: "persistent" | "protected",
+  voiceListening = false,
+) {
   return renderHook(() => useMapEditorTourAndPresentation({
     tour,
     storageMode,
     conflictState,
+    voiceListening,
     captureView: () => view(0),
     applyView: () => true,
     createTour: noopTourMutation,
@@ -57,6 +62,7 @@ describe("useMapEditorTourAndPresentation", () => {
       tour,
       storageMode: "persistent",
       conflictState: "externallyDeleted",
+      voiceListening: false,
       captureView: () => view(0),
       applyView: () => true,
       createTour: noopTourMutation,
@@ -72,12 +78,19 @@ describe("useMapEditorTourAndPresentation", () => {
     expect(result.current.presentationStartDisabled).toBe(true);
   });
 
+  it("listening 中は tourHeaderDisabled が true（inventory P31-N1）", () => {
+    const { result } = mountHook("none", "persistent", true);
+    expect(result.current.tourHeaderDisabled).toBe(true);
+    expect(result.current.tourEditDisabled).toBe(false);
+  });
+
   it("previewTourStep は該当ステップのビューを applyView する", () => {
     const applyView = jest.fn(() => true);
     const { result } = renderHook(() => useMapEditorTourAndPresentation({
       tour,
       storageMode: "persistent",
       conflictState: "none",
+      voiceListening: false,
       captureView: () => view(0),
       applyView,
       createTour: noopTourMutation,
@@ -99,6 +112,7 @@ describe("useMapEditorTourAndPresentation", () => {
       tour,
       storageMode: "persistent",
       conflictState: "none",
+      voiceListening: false,
       captureView: () => view(0),
       applyView,
       createTour: noopTourMutation,

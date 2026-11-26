@@ -712,6 +712,11 @@ export function MapEditor({
     insertForest,
     expandNodes: branchCollapse.expandNodes,
   });
+  const isProtectedMode = storageMode === "protected";
+  const hasMapConflict = persistence.conflictState === "conflict";
+  const isMapExternallyDeleted = persistence.conflictState === "externallyDeleted";
+  // useMapEditorLearn / Tour が useMapEditorVoice より先に走るため、排他は listening のミラー state で渡す
+  const [voiceListening, setVoiceListening] = useState(false);
   const {
     tourEditor,
     presentationPlayback,
@@ -725,6 +730,7 @@ export function MapEditor({
     tour,
     storageMode,
     conflictState: persistence.conflictState,
+    voiceListening,
     captureView: viewNavigation.captureView,
     applyView: viewNavigation.applyView,
     createTour,
@@ -736,11 +742,6 @@ export function MapEditor({
     overwriteTourStepSnapshot,
     setTourStepCaption,
   });
-  const isProtectedMode = storageMode === "protected";
-  const hasMapConflict = persistence.conflictState === "conflict";
-  const isMapExternallyDeleted = persistence.conflictState === "externallyDeleted";
-  // useMapEditorLearn が useMapEditorVoice より先に走るため、学習×音声の排他は listening のミラー state で渡す
-  const [voiceListening, setVoiceListening] = useState(false);
   const {
     learnMode,
     learningActive,
@@ -1170,6 +1171,7 @@ export function MapEditor({
     pendingViewModeFocusRef.current = nextMode;
     setViewMode(nextMode);
   }, [viewModeRef, viewNavigation, resolutionFilter, returnToCanvas, clearNonNodeSelection]);
+  const [awaitingPresentationMap, setAwaitingPresentationMap] = useState(false);
   const {
     isNarrowViewport,
     userChoseMapOnNarrow,
@@ -1179,6 +1181,7 @@ export function MapEditor({
     storageMode,
     viewMode,
     applyViewMode: applyViewModeCore,
+    suppressOutlineOverride: playingPresentation || awaitingPresentationMap,
   });
   const applyViewMode = useCallback((nextMode: EditorViewMode) => {
     recordManualViewModeChange(nextMode);
@@ -1528,12 +1531,14 @@ export function MapEditor({
     }
     if (viewMode !== "map") {
       pendingPresentationStartRef.current = true;
-      applyViewMode("map");
+      // 自動切替は手動フラグを立てず、狭幅 outline 強制だけ一時抑制する（§5.2）
+      setAwaitingPresentationMap(true);
+      applyViewModeCore("map");
       return;
     }
     presentationPlayback.start();
   }, [
-    applyViewMode,
+    applyViewModeCore,
     crossFeatureLocks.presentationStartBlockedByLearn,
     crossFeatureLocks.presentationStartBlockedByVoice,
     presentationPlayback,
@@ -1546,7 +1551,12 @@ export function MapEditor({
     if (viewportHandleRef.current?.getScreenSize() === null) return;
     presentationPlayback.start();
     pendingPresentationStartRef.current = false;
+    setAwaitingPresentationMap(false);
   }, [viewMode, viewportFrame, presentationPlayback]);
+  useEffect(() => {
+    if (playingPresentation || pendingPresentationStartRef.current) return;
+    setAwaitingPresentationMap(false);
+  }, [playingPresentation]);
 
   const voiceInputControl = (
     <VoiceInputControl
