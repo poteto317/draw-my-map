@@ -176,4 +176,20 @@ describe("MapEditor learn mode", () => {
     await user.keyboard("{Enter}");
     expect(learnButton()).toBeInTheDocument();
   });
+
+  it("復習カードパネル表示中はグローバル Enter で開示しない", async () => {
+    const user = userEvent.setup();
+    await renderEditor();
+    await user.click(screen.getByRole("button", { name: "アウトライン" }));
+    await user.click(learnButton());
+    await user.click(screen.getByRole("button", { name: "復習カードを生成" }));
+    await user.click(screen.getByRole("button", { name: "復習カード" }));
+    const dialog = screen.getByRole("dialog", { name: "復習カード" });
+    const childRow = screen.getByRole("button", { name: `階層2・${LEARN_LABEL_PLACEHOLDER}` });
+    await user.click(childRow);
+    const prompt = within(dialog).getByText(/の下にある項目は？/);
+    await user.click(prompt);
+    fireEvent.keyDown(window, { key: "Enter" });
+    expect(screen.getByRole("button", { name: `階層2・${LEARN_LABEL_PLACEHOLDER}` })).toBeInTheDocument();
+  });
 });

@@ -1136,7 +1136,10 @@ export function MapEditor({
     onOpen: openCommandPalette,
   });
   useLearnRevealKeyboard({
-    enabled: learningActive && commandPalette.screen === "closed",
+    enabled: learningActive
+      && commandPalette.screen === "closed"
+      && !learnMode.reviewCardsPanelOpen
+      && !learnMode.resetDialogOpen,
     onReveal: () => {
       if (selectedNodeId !== null) attemptRevealLearnNode(selectedNodeId);
     },
