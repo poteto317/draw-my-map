@@ -14,7 +14,8 @@ import { buildAiAssistDialogView } from "@/hooks/aiAssistDialogView";
 import { STALE_DIALOG_MESSAGE } from "@/hooks/dialogPreviewText";
 import { createTestNode } from "@/testing/createTestNode";
 
-const NONE = { isProtectedMode: false, hasConflict: false, isExternallyDeleted: false, playingPresentation: false };
+const NONE = { isProtectedMode: false, hasConflict: false, isExternallyDeleted: false, playingPresentation: false,
+    learningActive: false };
 const STATUS = { available: true, provider: "openai", providerLabel: "OpenAI（GPT API）", model: "gpt-5" } as const;
 
 function target(kind: "branch-summary" | "importance"): AiAssistDialogTarget {

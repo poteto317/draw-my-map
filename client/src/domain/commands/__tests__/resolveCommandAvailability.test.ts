@@ -49,6 +49,16 @@ function baseContext(overrides: Partial<CommandAvailabilityContext> = {}): Comma
     outlineCanAddRoot: true,
     outlineCanAddRelated: true,
     outlineCanEdit: true,
+    learningActive: false,
+    playingPresentation: false,
+    canLearnStart: true,
+    canLearnEnd: false,
+    canLearnReset: false,
+    canLearnGenerateCards: false,
+    canLearnOpenCards: false,
+    learnStartDisabledReason: null,
+    learnResetDisabledReason: null,
+    learnGenerateDisabledReason: null,
     ...overrides,
   };
 }
@@ -255,5 +265,36 @@ describe("resolveCommandAvailability", () => {
     expect(resolveCommandAvailability("edit.open-ai-importance", baseContext({
       canOpenAiImportance: false, aiImportanceDisabledReason: "1 件のノードを選んでください",
     })).disabledReason).toBe("1 件のノードを選んでください");
+  });
+
+  it("学習中は構造編集系コマンドを無効にする", () => {
+    const ctx = baseContext({ learningActive: true });
+    expect(resolveCommandAvailability("edit.indent", ctx).disabledReason).toBe("学習モード中は使えません");
+    expect(resolveCommandAvailability("outline.begin-edit", { ...ctx, viewMode: "outline" }).disabledReason).toBe(
+      "学習モード中は使えません",
+    );
+    expect(resolveCommandAvailability("learn.start", { ...ctx, canLearnStart: false }).disabledReason).toBe(
+      "学習を開始できません",
+    );
+    expect(resolveCommandAvailability("learn.end", baseContext({ learningActive: true, canLearnEnd: true })).enabled).toBe(true);
+  });
+
+  it("復習カードコマンドは学習中のみ有効", () => {
+    expect(resolveCommandAvailability("learn.open-cards", baseContext()).disabledReason).toBe(
+      "学習モード中のみ実行できます",
+    );
+    expect(resolveCommandAvailability("learn.open-cards", baseContext({
+      learningActive: true,
+      canLearnOpenCards: true,
+    })).enabled).toBe(true);
+    expect(resolveCommandAvailability("learn.generate-cards", baseContext({
+      learningActive: true,
+      canLearnGenerateCards: true,
+    })).enabled).toBe(true);
+    expect(resolveCommandAvailability("learn.generate-cards", baseContext({
+      learningActive: true,
+      canLearnGenerateCards: false,
+      learnGenerateDisabledReason: "保護モードのため実行できません",
+    })).disabledReason).toBe("保護モードのため実行できません");
   });
 });

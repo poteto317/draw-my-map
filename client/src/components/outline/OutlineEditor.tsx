@@ -3,7 +3,10 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { Node } from "@/types/node";
 import type { OutlineRows } from "@/domain/outline/outlineRows";
 import { resolveLabelTextPresentation } from "@/domain/nodes/labelTextStyle";
-import { getNodeDisplayLabel } from "@/domain/nodes/nodeDisplayLabel";
+import {
+  resolveLearnLabelDisplay,
+  type LearnLabelDisplayContext,
+} from "@/domain/map/mapLearnMode";
 import type { OutlineEditorUiActions } from "@/hooks/useOutlineEditorActions";
 import { OutlineRowAppearance } from "./OutlineRowAppearance";
 import { OutlineToolbar } from "./OutlineToolbar";
@@ -22,6 +25,7 @@ function getOutlineLabelTextStyle(node: Node): {
 }
 
 export type OutlineEditorProps = {
+  learnDisplay: LearnLabelDisplayContext;
   taskProgress: ReadonlyMap<number, TaskProgress>;
   nodes: readonly Node[];
   model: OutlineRows;
@@ -29,22 +33,37 @@ export type OutlineEditorProps = {
   documentRevision: number;
   enabled: boolean;
   actions: OutlineEditorUiActions;
+  onLearnRevealNode?: (nodeId: number) => void;
 };
 
 function isComposing(event: KeyboardEvent) {
   return event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229;
 }
 
-function formatSelectionStatus(model: OutlineRows, nodeId: number): string | null {
+function formatSelectionStatus(
+  model: OutlineRows,
+  nodeId: number,
+  learnDisplay: LearnLabelDisplayContext,
+): string | null {
   const index = model.rows.findIndex(row => row.nodeId === nodeId);
   if (index < 0) return null;
   const row = model.rows[index];
   const node = model.nodesById.get(nodeId);
   if (!node) return null;
-  return `全${model.rows.length}件中${index + 1}件目、階層${row.depth}、${getNodeDisplayLabel(node.label)}`;
+  const { text } = resolveLearnLabelDisplay(node, learnDisplay);
+  return `全${model.rows.length}件中${index + 1}件目、階層${row.depth}、${text}`;
 }
 
-export function OutlineEditor({ model, taskProgress, selectedNodeId, documentRevision, enabled, actions }: OutlineEditorProps) {
+export function OutlineEditor({
+  model,
+  learnDisplay,
+  taskProgress,
+  selectedNodeId,
+  documentRevision,
+  enabled,
+  actions,
+  onLearnRevealNode,
+}: OutlineEditorProps) {
   const rowButtons = useRef(new Map<number, HTMLButtonElement>());
   const rootAddButtonRef = useRef<HTMLButtonElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -62,7 +81,7 @@ export function OutlineEditor({ model, taskProgress, selectedNodeId, documentRev
 
   // 選択 ID 変化のみ live 文言を更新（同一 ID 再選択・空マップは据え置き）
   if (selectedNodeId !== null && selectedNodeId !== selectionStatus.id) {
-    const next = formatSelectionStatus(model, selectedNodeId);
+    const next = formatSelectionStatus(model, selectedNodeId, learnDisplay);
     if (next !== null) {
       setSelectionStatus({ id: selectedNodeId, text: next });
     }
@@ -90,9 +109,24 @@ export function OutlineEditor({ model, taskProgress, selectedNodeId, documentRev
 
   function handleRowKey(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     if (!interactive || isComposing(event) || event.ctrlKey || event.metaKey || event.altKey) return;
-    if (event.key === "Enter" || event.key === "F2") {
+    const nodeId = model.rows[index].nodeId;
+    if (event.key === "Enter") {
       event.preventDefault();
-      if (!event.repeat) actions.beginEdit(model.rows[index].nodeId);
+      if (event.repeat) return;
+      if (
+        learnDisplay.learningActive
+        && selectedNodeId === nodeId
+        && onLearnRevealNode
+      ) {
+        onLearnRevealNode(nodeId);
+        return;
+      }
+      if (!learnDisplay.learningActive) actions.beginEdit(nodeId);
+      return;
+    }
+    if (event.key === "F2") {
+      event.preventDefault();
+      if (!event.repeat && !learnDisplay.learningActive) actions.beginEdit(nodeId);
       return;
     }
     if (event.repeat && event.key === " ") { event.preventDefault(); return; }
@@ -126,11 +160,11 @@ export function OutlineEditor({ model, taskProgress, selectedNodeId, documentRev
       {model.rows.length === 0 ? <p>ノードがありません</p> : <ol className="min-w-0 space-y-1">
         {model.rows.map((row, index) => {
           const node = model.nodesById.get(row.nodeId)!;
-          const label = getNodeDisplayLabel(node.label);
+          const { text: displayLabel, realLabelForWidth } = resolveLearnLabelDisplay(node, learnDisplay);
           const progress = taskProgress.get(row.nodeId);
           const progressLabel = progress ? `・完了率${progress.percent}%、残り${progress.remaining}件` : "";
           return <li key={row.nodeId} className="min-w-0" style={{ paddingInlineStart: `${(Math.min(row.depth, 12) - 1) * 1.25}rem` }}>
-            <button type="button" aria-label={`階層${row.depth}・${label}${progressLabel}`} aria-pressed={selectedNodeId === row.nodeId}
+            <button type="button" aria-label={`階層${row.depth}・${displayLabel}${progressLabel}`} aria-pressed={selectedNodeId === row.nodeId}
               tabIndex={interactive && entryId === row.nodeId ? 0 : -1} disabled={!interactive}
               ref={element => { if (element) rowButtons.current.set(row.nodeId, element); else rowButtons.current.delete(row.nodeId); }}
               className="flex w-full min-w-0 items-stretch gap-2 whitespace-pre-wrap break-words rounded border border-slate-200 px-3 py-2 text-left aria-pressed:bg-blue-50"
@@ -139,7 +173,18 @@ export function OutlineEditor({ model, taskProgress, selectedNodeId, documentRev
               onKeyDown={event => handleRowKey(event, index)}>
               <OutlineRowAppearance node={node} />
               <span className="mr-2 shrink-0 self-center text-xs text-slate-500">階層{row.depth}</span>
-              <span className="min-w-0 self-center" style={getOutlineLabelTextStyle(node)}>{label}{progress && <span className="block text-xs text-slate-600">{progress.percent}%・残り{progress.remaining}件</span>}</span>
+              <span
+                className="min-w-0 self-center"
+                style={{
+                  ...getOutlineLabelTextStyle(node),
+                  ...(displayLabel !== realLabelForWidth
+                    ? { display: "inline-block", minWidth: `${Array.from(realLabelForWidth).length}ch` }
+                    : {}),
+                }}
+              >
+                {displayLabel}
+                {progress && <span className="block text-xs text-slate-600">{progress.percent}%・残り{progress.remaining}件</span>}
+              </span>
             </button>
             {draft?.nodeId === row.nodeId && <textarea aria-label="ラベル編集" ref={textareaRef} value={draft.text}
               className="mt-1 block min-h-24 w-full min-w-0 rounded border border-blue-500 p-2"

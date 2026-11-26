@@ -94,6 +94,9 @@ function resolveGlobalBlockers(
   if (context.isProtectedMode) {
     return disabled("保護モードのため実行できません");
   }
+  if (context.learningActive) {
+    return disabled("学習モード中は使えません");
+  }
   return null;
 }
 
@@ -206,6 +209,28 @@ function resolveOperationAvailability(
       return fromFlag(context.outlineCanAddRelated, "兄弟を追加できません");
     case "outline.begin-edit":
       return fromFlag(context.outlineCanEdit, "ラベルを編集できません");
+    case "learn.start":
+      return fromFlag(
+        context.canLearnStart,
+        context.learnStartDisabledReason ?? "学習を開始できません",
+      );
+    case "learn.end":
+      return fromFlag(context.canLearnEnd, "学習を終了できません");
+    case "learn.reset-progress":
+      return fromFlag(
+        context.canLearnReset,
+        context.learnResetDisabledReason ?? "進捗をリセットできません",
+      );
+    case "learn.generate-cards":
+      return fromFlag(
+        context.canLearnGenerateCards,
+        context.learnGenerateDisabledReason ?? "復習カードを生成できません",
+      );
+    case "learn.open-cards":
+      return fromFlag(
+        context.canLearnOpenCards,
+        "学習モード中のみ実行できます",
+      );
     default:
       return disabled("未知のコマンドです");
   }

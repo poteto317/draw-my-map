@@ -34,6 +34,7 @@ type UseNodeLayoutStateReturn = {
   relations: NodeMapState["relations"];
   groups: NodeMapState["groups"];
   tour: NodeMapState["tour"];
+  learn: NodeMapState["learn"];
   canUndo: boolean;
   canRedo: boolean;
   // 同じイベント内の直前の変更も含めた最新の状態を読み取る。状態と履歴は変えない
@@ -264,6 +265,7 @@ export function useNodeLayoutState(): UseNodeLayoutStateReturn {
     relations: present.relations,
     groups: present.groups,
     tour: present.tour,
+    learn: present.learn,
     canUndo,
     canRedo,
     getCurrentState: getPresent,

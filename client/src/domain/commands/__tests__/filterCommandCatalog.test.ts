@@ -50,6 +50,16 @@ function baseContext(overrides: Partial<CommandAvailabilityContext> = {}): Comma
     outlineCanAddRoot: true,
     outlineCanAddRelated: true,
     outlineCanEdit: true,
+    learningActive: false,
+    playingPresentation: false,
+    canLearnStart: true,
+    canLearnEnd: false,
+    canLearnReset: false,
+    canLearnGenerateCards: false,
+    canLearnOpenCards: false,
+    learnStartDisabledReason: null,
+    learnResetDisabledReason: null,
+    learnGenerateDisabledReason: null,
     ...overrides,
   };
 }

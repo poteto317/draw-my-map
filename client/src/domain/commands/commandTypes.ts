@@ -71,6 +71,16 @@ export type CommandAvailabilityContext = {
   readonly outlineCanAddRoot: boolean;
   readonly outlineCanAddRelated: boolean;
   readonly outlineCanEdit: boolean;
+  readonly learningActive: boolean;
+  readonly playingPresentation: boolean;
+  readonly canLearnStart: boolean;
+  readonly canLearnEnd: boolean;
+  readonly canLearnReset: boolean;
+  readonly canLearnGenerateCards: boolean;
+  readonly canLearnOpenCards: boolean;
+  readonly learnStartDisabledReason: string | null;
+  readonly learnResetDisabledReason: string | null;
+  readonly learnGenerateDisabledReason: string | null;
 };
 
 export type FilteredCommand = {
