@@ -16,6 +16,7 @@ export function useLearnRevealKeyboard({ enabled, onReveal }: UseLearnRevealKeyb
       const target = event.target;
       if (target instanceof HTMLElement && target.closest("[data-outline-root] textarea")) return;
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
+      if (target instanceof HTMLElement && target.closest("button")) return;
       event.preventDefault();
       onReveal();
     };
