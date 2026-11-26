@@ -16,6 +16,7 @@ import {
   type LearnMutationGuardInput,
   type LearnSelectionGuardInput,
 } from "@/domain/map/mapLearnGuards";
+import { isLearnStartBlockedByVoice, MAP_VOICE_MESSAGES } from "@/domain/map/mapVoiceGuards";
 import type { ConflictState } from "@/domain/mapLibrary/mapConflict";
 import type { LearnMutationOutcome } from "@/hooks/useMapLearnActions";
 import { useMapLearnMode } from "@/hooks/useMapLearnMode";
@@ -38,6 +39,7 @@ export type UseMapEditorLearnOptions = {
   resetLearnProgress: (guard: LearnMutationGuardInput) => LearnMutationOutcome;
   generateLearnReviewCards: (guard: LearnMutationGuardInput) => LearnMutationOutcome;
   selectNode: (id: number | null) => void;
+  voiceListening?: boolean;
 };
 
 export type UseMapEditorLearnReturn = {
@@ -74,6 +76,7 @@ export function useMapEditorLearn({
   resetLearnProgress,
   generateLearnReviewCards,
   selectNode,
+  voiceListening = false,
 }: UseMapEditorLearnOptions): UseMapEditorLearnReturn {
   const isProtectedMode = storageMode === "protected";
   const hasMapConflict = conflictState === "conflict";
@@ -112,6 +115,13 @@ export function useMapEditorLearn({
     selectedNodeIds,
   ]);
   const startWithNotice = useCallback((): boolean => {
+    if (isLearnStartBlockedByVoice(voiceListening)) {
+      publishLearnNotice({
+        kind: "status",
+        message: MAP_VOICE_MESSAGES.listeningBlock,
+      });
+      return false;
+    }
     const outcome = learnMode.start();
     if (!outcome.ok) {
       publishLearnNotice({
@@ -122,7 +132,7 @@ export function useMapEditorLearn({
     }
     clearLearnNotice();
     return true;
-  }, [clearLearnNotice, learnMode, publishLearnNotice]);
+  }, [clearLearnNotice, learnMode, publishLearnNotice, voiceListening]);
   const endWithNotice = useCallback((): boolean => {
     if (!learnMode.end()) return false;
     clearLearnNotice();
@@ -175,6 +185,9 @@ export function useMapEditorLearn({
     selectNode(id);
   }, [attemptRevealLearnNode, learningActive, selectNode, selectedNodeId, selectedNodeIds.length]);
   const learnStartBlockedReason = useMemo(() => {
+    if (isLearnStartBlockedByVoice(voiceListening)) {
+      return MAP_VOICE_MESSAGES.listeningBlock;
+    }
     const blocked = resolveLearnStartBlocked({
       learningActive,
       playingPresentation,
@@ -183,7 +196,7 @@ export function useMapEditorLearn({
       isExternallyDeleted: isMapExternallyDeleted,
     });
     return blocked === null ? null : learnStartBlockedMessage(blocked);
-  }, [hasMapConflict, isMapExternallyDeleted, isProtectedMode, learningActive, playingPresentation]);
+  }, [hasMapConflict, isMapExternallyDeleted, isProtectedMode, learningActive, playingPresentation, voiceListening]);
   const learnResetBlockedReason = useMemo(() => {
     const blocked = resolveLearnResetBlocked(learnSessionGuard);
     return blocked === null ? null : learnResetBlockedMessage(blocked);

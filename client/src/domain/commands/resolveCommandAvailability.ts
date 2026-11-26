@@ -1,4 +1,5 @@
 import { getCommandDefinition } from "@/domain/commands/commandCatalog";
+import { MAP_VOICE_MESSAGES } from "@/domain/map/mapVoiceGuards";
 import type {
   CommandAvailability,
   CommandAvailabilityContext,
@@ -96,6 +97,28 @@ function resolveGlobalBlockers(
   }
   if (context.learningActive) {
     return disabled("学習モード中は使えません");
+  }
+  if (context.voiceListening) {
+    return disabled(MAP_VOICE_MESSAGES.listeningBlock);
+  }
+  return null;
+}
+
+function resolveVoiceListeningBlockers(
+  id: CommandId,
+  context: CommandAvailabilityContext,
+): CommandAvailability | null {
+  if (!context.voiceListening) return null;
+  if (id === "voice-input.stop" || id === "edit.undo" || id === "edit.redo") return null;
+  if (id === "view.map" || id === "view.outline") {
+    return disabled(MAP_VOICE_MESSAGES.listeningBlock);
+  }
+  if (
+    id === "learn.start"
+    || id === "learn.reset-progress"
+    || id === "learn.generate-cards"
+  ) {
+    return disabled(MAP_VOICE_MESSAGES.listeningBlock);
   }
   return null;
 }
@@ -209,6 +232,13 @@ function resolveOperationAvailability(
       return fromFlag(context.outlineCanAddRelated, "兄弟を追加できません");
     case "outline.begin-edit":
       return fromFlag(context.outlineCanEdit, "ラベルを編集できません");
+    case "voice-input.start":
+      return fromFlag(
+        context.canVoiceInputStart,
+        context.voiceStartDisabledReason ?? MAP_VOICE_MESSAGES.unsupported,
+      );
+    case "voice-input.stop":
+      return fromFlag(context.canVoiceInputStop, "音声入力は開始されていません");
     case "learn.start":
       return fromFlag(
         context.canLearnStart,
@@ -249,6 +279,9 @@ export function resolveCommandAvailability(
 
   const globalBlock = resolveGlobalBlockers(id, context);
   if (globalBlock !== null) return globalBlock;
+
+  const voiceBlock = resolveVoiceListeningBlockers(id, context);
+  if (voiceBlock !== null) return voiceBlock;
 
   return resolveOperationAvailability(id, context);
 }

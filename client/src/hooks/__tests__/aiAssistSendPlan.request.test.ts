@@ -16,6 +16,7 @@ describe("requestAiAssistReview", () => {
       isExternallyDeleted: false,
       playingPresentation: false,
     learningActive: false,
+      voiceListening: false,
     });
     expect(plan.ok).toBe(true);
     if (!plan.ok || plan.kind !== "child-candidates") throw new Error("plan");

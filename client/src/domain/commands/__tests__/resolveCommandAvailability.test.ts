@@ -59,6 +59,10 @@ function baseContext(overrides: Partial<CommandAvailabilityContext> = {}): Comma
     learnStartDisabledReason: null,
     learnResetDisabledReason: null,
     learnGenerateDisabledReason: null,
+    voiceListening: false,
+    canVoiceInputStart: true,
+    canVoiceInputStop: false,
+    voiceStartDisabledReason: null,
     ...overrides,
   };
 }

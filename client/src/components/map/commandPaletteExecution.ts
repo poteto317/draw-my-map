@@ -26,6 +26,8 @@ const SELF_NOTIFYING_IDS = new Set<CommandId>([
   "outline.add-child",
   "outline.add-sibling",
   "outline.begin-edit",
+  "voice-input.start",
+  "voice-input.stop",
 ]);
 
 /** documentRevision を進める操作。revision 連動 notice は残らないためパレット成功文言も出さない */

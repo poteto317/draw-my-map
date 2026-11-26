@@ -87,6 +87,9 @@ export const COMMAND_CATALOG: readonly CommandDefinition[] = Object.freeze([
     opensDialog: true,
   }),
 
+  define("voice-input.start", "edit", "音声", "音声入力を開始"),
+  define("voice-input.stop", "edit", "音声", "音声入力を停止"),
+
   define("learn.start", "edit", "学習", "学習を開始"),
   define("learn.end", "edit", "学習", "学習を終了"),
   define("learn.reset-progress", "edit", "学習", "学習の進捗をリセット…", { opensDialog: true }),

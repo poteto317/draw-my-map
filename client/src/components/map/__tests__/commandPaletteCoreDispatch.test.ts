@@ -31,6 +31,8 @@ function immediateHandlers(
     startLearn: jest.fn(() => true),
     endLearn: jest.fn(() => true),
     generateLearnCards: jest.fn(() => true),
+    startVoiceInput: jest.fn(() => true),
+    stopVoiceInput: jest.fn(() => true),
     ...overrides,
   };
 }
