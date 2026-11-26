@@ -92,6 +92,12 @@ async function renderEditor({
       onSwitchToMapTarget={() => {}}
       brokenLinksDialogRequest={0}
       onBrokenLinksDialogClosed={() => {}}
+      shareSession={null}
+      shareSessionStatus="ready"
+      shareDialogOpen={false}
+      onShareDialogOpenChange={() => {}}
+      onShareRequest={() => {}}
+      onShareLogin={() => {}}
     />,
   );
   mockStageBounds(stageContainer());
@@ -213,6 +219,12 @@ describe("MapEditor コマンドパレット配線", () => {
         onSwitchToMapTarget={() => {}}
         brokenLinksDialogRequest={0}
         onBrokenLinksDialogClosed={() => {}}
+        shareSession={null}
+        shareSessionStatus="ready"
+        shareDialogOpen={false}
+        onShareDialogOpenChange={() => {}}
+        onShareRequest={() => {}}
+        onShareLogin={() => {}}
       />,
     );
 
@@ -421,6 +433,12 @@ describe("MapEditor コマンドパレット配線", () => {
         onSwitchToMapTarget={() => {}}
         brokenLinksDialogRequest={0}
         onBrokenLinksDialogClosed={() => {}}
+        shareSession={null}
+        shareSessionStatus="ready"
+        shareDialogOpen={false}
+        onShareDialogOpenChange={() => {}}
+        onShareRequest={() => {}}
+        onShareLogin={() => {}}
       />,
     );
 

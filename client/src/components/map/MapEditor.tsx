@@ -104,6 +104,8 @@ import { MapConflictNotice } from "@/components/layout/MapConflictNotice";
 import { MapConflictConfirmDialog } from "@/components/layout/MapConflictConfirmDialog";
 import { OutlineImportControl } from "@/components/layout/OutlineImportControl";
 import { OutlineImportDialog } from "@/components/layout/OutlineImportDialog";
+import { ShareControl } from "@/components/layout/ShareControl";
+import { ShareDialog } from "@/components/layout/ShareDialog";
 import { TourEditorControl } from "@/components/layout/TourEditorControl";
 import { TourEditorDialog } from "@/components/layout/TourEditorDialog";
 import { PresentationStartControl } from "@/components/layout/PresentationStartControl";
@@ -114,7 +116,13 @@ import { LearnResetProgressDialog } from "@/components/layout/LearnResetProgress
 import { LearnReviewCardsPanel } from "@/components/layout/LearnReviewCardsPanel";
 import { resolveMapEditorCrossFeatureLocks } from "@/domain/map/mapEditorCrossFeatureLocks";
 import { resolveMapEditorModalsBlockEditing } from "@/domain/map/mapEditorModalBlocking";
+import {
+  resolveShareOpenBlocked,
+  shareOpenBlockedMessage,
+} from "@/domain/share/shareOpenGuards";
+import type { ShareSession } from "@/domain/share/shareSession";
 import { useMapEditorLearn } from "@/hooks/useMapEditorLearn";
+import { useMapEditorShare } from "@/hooks/useMapEditorShare";
 import { useMapEditorVoice } from "@/hooks/useMapEditorVoice";
 import { useNarrowViewport } from "@/hooks/useNarrowViewport";
 import {
@@ -210,6 +218,18 @@ type MapEditorProps = {
   onSwitchToMapTarget: (targetMapId: string, targetNodeId?: number) => void;
   brokenLinksDialogRequest: number;
   onBrokenLinksDialogClosed: () => void;
+  /** L-060: 共有セッション（null＝未ログイン。loading 中も null になりうる） */
+  shareSession: ShareSession;
+  /** loading と未ログインを混同しない（useShareSession.status） */
+  shareSessionStatus: "loading" | "ready";
+  shareDialogOpen: boolean;
+  onShareDialogOpenChange: (open: boolean) => void;
+  /**
+   * 共有入口。未ログインでもダイアログを開く（ログイン導線は ShareDialog 内）。
+   * 成功扱いにせず createShare は呼ばない（設計 §10.1 / L-001）
+   */
+  onShareRequest: () => void;
+  onShareLogin: () => void;
 };
 
 // 1つのマップの編集画面。マップを切り替えるときは親が key を変えて再マウントし、履歴と表示状態を破棄する。
@@ -235,6 +255,12 @@ export function MapEditor({
   onSwitchToMapTarget,
   brokenLinksDialogRequest,
   onBrokenLinksDialogClosed,
+  shareSession,
+  shareSessionStatus,
+  shareDialogOpen,
+  onShareDialogOpenChange,
+  onShareRequest,
+  onShareLogin,
 }: MapEditorProps) {
   const {
     nodes,
@@ -995,6 +1021,7 @@ export function MapEditor({
     crossMapSearchOpen: crossMapDialogs.crossMapSearchOpen,
     brokenLinksDialogOpen: crossMapDialogs.brokenLinksDialogOpen,
     persistenceConfirmOpen: persistence.isConfirmOpen,
+    shareDialogOpen,
   });
   const voiceExclusiveStopRequested = resolveVoiceExclusiveStopRequested({
     modalBlockingVoiceStart: editorModalsBlockEditing,
@@ -1021,6 +1048,7 @@ export function MapEditor({
     relationPartnerFromId,
   ]);
   const voiceInputButtonRef = useRef<HTMLButtonElement>(null);
+  const shareButtonRef = useRef<HTMLButtonElement>(null);
   const {
     listening,
     interimTranscript,
@@ -1045,6 +1073,41 @@ export function MapEditor({
       if (viewModeRef.current === "map") canvasFocus.issueRequest(rootId);
     },
   });
+  const getShareDocumentJson = useCallback(
+    () => persistence.currentSnapshot,
+    [persistence.currentSnapshot],
+  );
+  const share = useMapEditorShare({
+    mapId,
+    mapTitle: mapName,
+    shareSession,
+    documentRevision,
+    shareDialogOpen,
+    getDocumentJson: getShareDocumentJson,
+  });
+  const shareOpenBlockedReasonCode = resolveShareOpenBlocked({
+    hasMapConflict,
+    isMapExternallyDeleted,
+    learningActive,
+    playingPresentation,
+  });
+  const shareOpenBlockedReason =
+    shareOpenBlockedReasonCode === null
+      ? null
+      : shareOpenBlockedMessage(shareOpenBlockedReasonCode);
+  const handleShareControlOpen = useCallback(() => {
+    if (shareOpenBlockedReason !== null) return;
+    // 未ログインでもダイアログを開く。open→modal 束で listening を即停止（inventory §0）
+    onShareRequest();
+  }, [onShareRequest, shareOpenBlockedReason]);
+  const shareWasOpenRef = useRef(false);
+  useLayoutEffect(() => {
+    if (shareWasOpenRef.current && !shareDialogOpen) {
+      const button = shareButtonRef.current;
+      (button?.disabled ? exportButtonRef.current : button)?.focus();
+    }
+    shareWasOpenRef.current = shareDialogOpen;
+  }, [exportButtonRef, shareDialogOpen]);
   const crossFeatureLocks = useMemo(
     () => resolveMapEditorCrossFeatureLocks({
       learningActive,
@@ -1875,6 +1938,13 @@ export function MapEditor({
                 jsonExportDisabledReason={exportFormatControls.json.disabledReason}
                 jsonImportEnabled={editorShortcutsEnabled}
               />
+              <ShareControl
+                expanded={shareDialogOpen}
+                disabled={shareOpenBlockedReason !== null}
+                disabledReason={shareOpenBlockedReason ?? undefined}
+                onOpen={handleShareControlOpen}
+                buttonRef={shareButtonRef}
+              />
               <MapImageExportControls
                 onExportPng={imageExport.exportPng}
                 onExportSvg={imageExport.exportSvg}
@@ -2451,6 +2521,30 @@ export function MapEditor({
           onMouseClick={() => {
             dialogMouseClickedAtRef.current = Date.now();
           }}
+        />
+      )}
+      {shareDialogOpen && (
+        <ShareDialog
+          mapId={mapId}
+          mapTitle={mapName}
+          shareSession={shareSession}
+          shareSessionStatus={shareSessionStatus}
+          localMeta={share.localMeta}
+          listState={share.listState}
+          shareList={share.shareList}
+          lastIssuedLink={share.lastIssuedLink}
+          notice={share.notice}
+          noticeSequence={share.noticeSequence}
+          busy={share.busy}
+          onCreateShare={share.onCreateShare}
+          onPublish={share.onPublish}
+          onCreateLink={share.onCreateLink}
+          onRevokeLink={share.onRevokeLink}
+          onReissueLink={share.onReissueLink}
+          onDeleteShare={share.onDeleteShare}
+          onLogin={onShareLogin}
+          onClose={() => onShareDialogOpenChange(false)}
+          dialogMouseClickedAtRef={dialogMouseClickedAtRef}
         />
       )}
     </>

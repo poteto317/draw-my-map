@@ -94,6 +94,12 @@ async function renderEditor({
       onSwitchToMapTarget={() => {}}
       brokenLinksDialogRequest={0}
       onBrokenLinksDialogClosed={() => {}}
+      shareSession={null}
+      shareSessionStatus="ready"
+      shareDialogOpen={false}
+      onShareDialogOpenChange={() => {}}
+      onShareRequest={() => {}}
+      onShareLogin={() => {}}
     />,
   );
   mockStageBounds(stageContainer());
@@ -256,7 +262,13 @@ it("dialogとdisabledはoutline操作を止め、共通選択をイラストパ�
     mapControls={null} exportButtonRef={{ current: null }} mapMoveTargets={[]} libraryMeta={createEmptyMapLibraryMeta()} onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "なし" } })} onExtractBranchToNewMap={() => ({ ok: false, notice: { kind: "error", message: "なし" } })}
     shortcutsEnabled={false} dialogMouseClickedAtRef={{ current: null }}
     pendingNavigation={null} onConsumePendingNavigation={() => {}} onSwitchToMapTarget={() => {}}
-    brokenLinksDialogRequest={0} onBrokenLinksDialogClosed={() => {}} />);
+    brokenLinksDialogRequest={0} onBrokenLinksDialogClosed={() => {}}
+    shareSession={null}
+    shareSessionStatus="ready"
+    shareDialogOpen={false}
+    onShareDialogOpenChange={() => {}}
+    onShareRequest={() => {}}
+    onShareLogin={() => {}} />);
   expect(screen.getByRole("button", { name: "階層2・子B" })).toBeDisabled();
 });
 
@@ -284,7 +296,13 @@ it("同じ表示ボタンは要求を再発行せず、map key変更では初期
     mapControls={null} exportButtonRef={{ current: null }} mapMoveTargets={[]} libraryMeta={createEmptyMapLibraryMeta()} onMoveBranchToMap={() => ({ ok: false, notice: { kind: "error", message: "なし" } })} onExtractBranchToNewMap={() => ({ ok: false, notice: { kind: "error", message: "なし" } })}
     shortcutsEnabled={true} dialogMouseClickedAtRef={{ current: null }}
     pendingNavigation={null} onConsumePendingNavigation={() => {}} onSwitchToMapTarget={() => {}}
-    brokenLinksDialogRequest={0} onBrokenLinksDialogClosed={() => {}} />);
+    brokenLinksDialogRequest={0} onBrokenLinksDialogClosed={() => {}}
+    shareSession={null}
+    shareSessionStatus="ready"
+    shareDialogOpen={false}
+    onShareDialogOpenChange={() => {}}
+    onShareRequest={() => {}}
+    onShareLogin={() => {}} />);
   await waitFor(() => expect(document.querySelector("canvas")).toBeInTheDocument());
   expect(screen.getByRole("button", { name: "マップ" })).toHaveAttribute("aria-pressed", "true");
   expect(mockFocusRequests.mock.lastCall?.[0]).toBeNull();

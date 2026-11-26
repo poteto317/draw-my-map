@@ -45,6 +45,8 @@ export interface UseMapPersistenceOptions {
 export interface UseMapPersistenceResult {
   exportJson: () => void;
   importJsonFile: (file: File) => Promise<void>;
+  /** 共有 publish 用の現行スナップショット JSON */
+  currentSnapshot: string;
   notice: OperationNotice | null;
   saveStatus: MapSaveStatus;
   hydrated: boolean;
@@ -201,6 +203,7 @@ export function useMapPersistence({
   return {
     exportJson,
     importJsonFile,
+    currentSnapshot,
     notice,
     saveStatus,
     hydrated,
