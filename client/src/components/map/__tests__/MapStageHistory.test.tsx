@@ -48,7 +48,7 @@ function HistoryHarness({ apiRef, setup, visibleNodeIds }: HistoryHarnessProps) 
   }, [api, setup]);
 
   return (
-    <MapStage
+    <MapStage taskProgress={new Map()}
       nodes={api.nodes}
       highlightNodeIds={new Set<number>()}
       pinnedNodeIds={new Set<number>()}

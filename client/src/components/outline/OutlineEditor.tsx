@@ -1,3 +1,4 @@
+import type { TaskProgress } from "@/domain/nodes/nodeTaskProgress";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { Node } from "@/types/node";
 import type { OutlineRows } from "@/domain/outline/outlineRows";
@@ -21,6 +22,7 @@ function getOutlineLabelTextStyle(node: Node): {
 }
 
 export type OutlineEditorProps = {
+  taskProgress: ReadonlyMap<number, TaskProgress>;
   nodes: readonly Node[];
   model: OutlineRows;
   selectedNodeId: number | null;
@@ -42,7 +44,7 @@ function formatSelectionStatus(model: OutlineRows, nodeId: number): string | nul
   return `全${model.rows.length}件中${index + 1}件目、階層${row.depth}、${getNodeDisplayLabel(node.label)}`;
 }
 
-export function OutlineEditor({ model, selectedNodeId, documentRevision, enabled, actions }: OutlineEditorProps) {
+export function OutlineEditor({ model, taskProgress, selectedNodeId, documentRevision, enabled, actions }: OutlineEditorProps) {
   const rowButtons = useRef(new Map<number, HTMLButtonElement>());
   const rootAddButtonRef = useRef<HTMLButtonElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -125,8 +127,10 @@ export function OutlineEditor({ model, selectedNodeId, documentRevision, enabled
         {model.rows.map((row, index) => {
           const node = model.nodesById.get(row.nodeId)!;
           const label = getNodeDisplayLabel(node.label);
+          const progress = taskProgress.get(row.nodeId);
+          const progressLabel = progress ? `・完了率${progress.percent}%、残り${progress.remaining}件` : "";
           return <li key={row.nodeId} className="min-w-0" style={{ paddingInlineStart: `${(Math.min(row.depth, 12) - 1) * 1.25}rem` }}>
-            <button type="button" aria-label={`階層${row.depth}・${label}`} aria-pressed={selectedNodeId === row.nodeId}
+            <button type="button" aria-label={`階層${row.depth}・${label}${progressLabel}`} aria-pressed={selectedNodeId === row.nodeId}
               tabIndex={interactive && entryId === row.nodeId ? 0 : -1} disabled={!interactive}
               ref={element => { if (element) rowButtons.current.set(row.nodeId, element); else rowButtons.current.delete(row.nodeId); }}
               className="flex w-full min-w-0 items-stretch gap-2 whitespace-pre-wrap break-words rounded border border-slate-200 px-3 py-2 text-left aria-pressed:bg-blue-50"
@@ -135,7 +139,7 @@ export function OutlineEditor({ model, selectedNodeId, documentRevision, enabled
               onKeyDown={event => handleRowKey(event, index)}>
               <OutlineRowAppearance node={node} />
               <span className="mr-2 shrink-0 self-center text-xs text-slate-500">階層{row.depth}</span>
-              <span className="min-w-0 self-center" style={getOutlineLabelTextStyle(node)}>{label}</span>
+              <span className="min-w-0 self-center" style={getOutlineLabelTextStyle(node)}>{label}{progress && <span className="block text-xs text-slate-600">{progress.percent}%・残り{progress.remaining}件</span>}</span>
             </button>
             {draft?.nodeId === row.nodeId && <textarea aria-label="ラベル編集" ref={textareaRef} value={draft.text}
               className="mt-1 block min-h-24 w-full min-w-0 rounded border border-blue-500 p-2"

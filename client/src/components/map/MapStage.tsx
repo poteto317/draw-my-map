@@ -1,5 +1,6 @@
 "use client";
 
+import type { TaskProgress } from "@/domain/nodes/nodeTaskProgress";
 import { useCallback, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type RefObject } from "react";
 import { fitViewportToNodes, isValidScreenSize, type ScreenSize, type Viewport } from "@/components/map/mapViewport";
 import { NodeContextMenu } from "@/components/map/NodeContextMenu";
@@ -81,6 +82,7 @@ export type MapStageViewportHandle = {
 };
 
 type MapStageProps = {
+  taskProgress: ReadonlyMap<number, TaskProgress>;
   nodes: readonly Node[];
   focusRequest: NodeFocusRequest | null;
   canvasContainerRef?: RefObject<HTMLDivElement | null>;
@@ -167,6 +169,7 @@ type MapStageProps = {
 };
 
 export function MapStage({
+  taskProgress,
   nodes,
   focusRequest,
   canvasContainerRef,
@@ -361,6 +364,7 @@ export function MapStage({
   const scene = useRenderedMapScene({
     runtime,
     options: {
+      taskProgress,
       nodes,
       selectedNodeIds: resolvedSelectedNodeIds,
       editingNodeId: editing.editingNodeId,

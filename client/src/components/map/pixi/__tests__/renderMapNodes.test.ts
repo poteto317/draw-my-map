@@ -2,8 +2,10 @@ import { renderMapNodes } from "@/components/map/pixi/renderMapNodes";
 import { createPixiTestHarness } from "../testing/pixiTestHarness";
 import type { Node } from "@/types/node";
 import { createTestNode } from "@/testing/createTestNode";
-import { ILLUSTRATED_NODE_HEIGHT } from "@/config/shapes";
+import { ILLUSTRATION_AREA_HEIGHT, ILLUSTRATED_NODE_HEIGHT } from "@/config/shapes";
 import type { Texture } from "pixi.js";
+
+const emptyTaskProgress = new Map<number, { percent: number; remaining: number }>();
 
 const node: Node = createTestNode({
   id: 1, parentId: null, x: 50, y: 30,
@@ -23,6 +25,7 @@ function render(overrides: Partial<{
   const onNodePointerDown = overrides.onNodePointerDown ?? jest.fn();
   renderMapNodes(harness.app.stage as never, harness.constructors as never, {
     nodes: [node],
+    taskProgress: emptyTaskProgress,
     selectedNodeIds: overrides.selectedNodeIds ?? [],
     editingNodeId: overrides.editingNodeId ?? null,
     connectionTargetNodeId: overrides.connectionTargetNodeId ?? null,
@@ -36,6 +39,24 @@ function render(overrides: Partial<{
 }
 
 describe("renderMapNodes", () => {
+  it("編集中は対象親の進捗だけを隠し、終了時に戻す", () => {
+    const draw = (editingNodeId: number | null) => {
+      const harness = createPixiTestHarness();
+      renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+        nodes: [node, createTestNode({ id: 2, x: 200 })],
+        taskProgress: new Map([[1, { percent: 33, remaining: 2 }], [2, { percent: 100, remaining: 0 }]]),
+        selectedNodeIds: [], editingNodeId, connectionTargetNodeId: null,
+        siblingReorderSourceNodeId: null, onNodePointerDown: jest.fn(),
+        highlightNodeIds: new Set(), pinnedNodeIds: new Set(),
+      });
+      return harness.Text.mock.calls.map(([options]) => options.text);
+    };
+    expect(draw(null)).toContain("33% 残2");
+    expect(draw(1)).not.toContain("33% 残2");
+    expect(draw(1)).toContain("100% 残0");
+    expect(draw(null)).toContain("33% 残2");
+  });
+
   it("draws a node rectangle and centered default label", () => {
     const { stage, Graphics, Text } = render();
     const container = stage.addChild.mock.calls[0][0] as { addChild: jest.Mock };
@@ -78,6 +99,7 @@ describe("renderMapNodes", () => {
     const harness = createPixiTestHarness();
     renderMapNodes(harness.app.stage as never, harness.constructors as never, {
       nodes: [styled],
+      taskProgress: emptyTaskProgress,
       selectedNodeIds: [],
       editingNodeId: null,
       connectionTargetNodeId: null,
@@ -137,6 +159,7 @@ describe("renderMapNodes", () => {
     const harness = createPixiTestHarness();
     renderMapNodes(harness.app.stage as never, harness.constructors as never, {
       nodes: [emptyStyled],
+      taskProgress: emptyTaskProgress,
       selectedNodeIds: [],
       editingNodeId: null,
       connectionTargetNodeId: null,
@@ -168,6 +191,7 @@ describe("renderMapNodes", () => {
     const harness = createPixiTestHarness();
     renderMapNodes(harness.app.stage as never, harness.constructors as never, {
       nodes: [node, second, third],
+      taskProgress: emptyTaskProgress,
       selectedNodeIds: [1, 3],
       editingNodeId: null,
       connectionTargetNodeId: null,
@@ -251,6 +275,7 @@ describe("renderMapNodes", () => {
     const harness = createPixiTestHarness();
     renderMapNodes(harness.app.stage as never, harness.constructors as never, {
       nodes: [node, second],
+      taskProgress: emptyTaskProgress,
       selectedNodeIds: [],
       editingNodeId: null,
       connectionTargetNodeId: null,
@@ -275,7 +300,7 @@ describe("renderMapNodes", () => {
   it("node keyのvisibility targetでPixi表示とinteractionを制御する", () => {
     const harness = createPixiTestHarness();
     const targets = renderMapNodes(harness.app.stage as never, harness.constructors as never, {
-      nodes: [node], selectedNodeIds: [], editingNodeId: null, connectionTargetNodeId: null,
+      nodes: [node], taskProgress: emptyTaskProgress, selectedNodeIds: [], editingNodeId: null, connectionTargetNodeId: null,
       siblingReorderSourceNodeId: null, onNodePointerDown: jest.fn(), visibleKeys: new Set(["node:1"]),
       highlightNodeIds: new Set<number>(),
       pinnedNodeIds: new Set<number>(),
@@ -309,7 +334,7 @@ describe("renderMapNodes", () => {
     function renderIllustrated(illustrationTextures?: ReadonlyMap<string, Texture>) {
       const harness = createPixiTestHarness();
       renderMapNodes(harness.app.stage as never, harness.constructors as never, {
-        nodes: [illustratedNode], selectedNodeIds: [], editingNodeId: null, connectionTargetNodeId: null,
+        nodes: [illustratedNode], taskProgress: emptyTaskProgress, selectedNodeIds: [], editingNodeId: null, connectionTargetNodeId: null,
         siblingReorderSourceNodeId: null, onNodePointerDown: jest.fn(), illustrationTextures,
         highlightNodeIds: new Set<number>(),
         pinnedNodeIds: new Set<number>(),
@@ -350,7 +375,7 @@ describe("renderMapNodes", () => {
     function renderReorder(siblingReorderSourceNodeId: number | null) {
       const harness = createPixiTestHarness();
       renderMapNodes(harness.app.stage as never, harness.constructors as never, {
-        nodes: [firstNode, draggedNode], selectedNodeIds: [2], editingNodeId: null,
+        nodes: [firstNode, draggedNode], taskProgress: emptyTaskProgress, selectedNodeIds: [2], editingNodeId: null,
         connectionTargetNodeId: null, siblingReorderSourceNodeId, onNodePointerDown: jest.fn(),
         highlightNodeIds: new Set<number>(),
         pinnedNodeIds: new Set<number>(),
@@ -399,7 +424,7 @@ describe("renderMapNodes", () => {
     function renderWithLinks(siblingReorderSourceNodeId: number | null = null) {
       const harness = createPixiTestHarness();
       renderMapNodes(harness.app.stage as never, harness.constructors as never, {
-        nodes: [node, linkedNode], selectedNodeIds: [], editingNodeId: null, connectionTargetNodeId: null,
+        nodes: [node, linkedNode], taskProgress: emptyTaskProgress, selectedNodeIds: [], editingNodeId: null, connectionTargetNodeId: null,
         siblingReorderSourceNodeId, onNodePointerDown: jest.fn(),
         visibleKeys: new Set(["node:1", "node:2"]),
         highlightNodeIds: new Set<number>(),
@@ -436,7 +461,7 @@ describe("renderMapNodes", () => {
     it("ラベルの編集中も印は描く（クリックはノードの Container が受ける）", () => {
       const harness = createPixiTestHarness();
       renderMapNodes(harness.app.stage as never, harness.constructors as never, {
-        nodes: [linkedNode], selectedNodeIds: [2], editingNodeId: 2, connectionTargetNodeId: null,
+        nodes: [linkedNode], taskProgress: emptyTaskProgress, selectedNodeIds: [2], editingNodeId: 2, connectionTargetNodeId: null,
         siblingReorderSourceNodeId: null, onNodePointerDown: jest.fn(), visibleKeys: new Set(["node:2"]),
         highlightNodeIds: new Set<number>(),
         pinnedNodeIds: new Set<number>(),
@@ -462,6 +487,7 @@ describe("renderMapNodes", () => {
       const harness = createPixiTestHarness();
       renderMapNodes(harness.app.stage as never, harness.constructors as never, {
         nodes: [node, locked],
+        taskProgress: emptyTaskProgress,
         selectedNodeIds: [],
         editingNodeId: null,
         connectionTargetNodeId: null,
@@ -495,6 +521,7 @@ describe("renderMapNodes", () => {
       const harness = createPixiTestHarness();
       renderMapNodes(harness.app.stage as never, harness.constructors as never, {
         nodes: [node, pinned],
+        taskProgress: emptyTaskProgress,
         selectedNodeIds: [],
         editingNodeId: null,
         connectionTargetNodeId: null,
@@ -522,6 +549,7 @@ describe("renderMapNodes", () => {
       const harness = createPixiTestHarness();
       renderMapNodes(harness.app.stage as never, harness.constructors as never, {
         nodes: [withKind],
+        taskProgress: emptyTaskProgress,
         selectedNodeIds: [],
         editingNodeId: null,
         connectionTargetNodeId: null,
@@ -546,6 +574,7 @@ describe("renderMapNodes", () => {
       const harness = createPixiTestHarness();
       renderMapNodes(harness.app.stage as never, harness.constructors as never, {
         nodes: [withIcon],
+        taskProgress: emptyTaskProgress,
         selectedNodeIds: [],
         editingNodeId: null,
         connectionTargetNodeId: null,
@@ -578,5 +607,54 @@ describe("renderMapNodes", () => {
       expect(Graphics).toHaveBeenCalledTimes(1);
       expect(Text).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it("イラスト・アイコン・下線・3種の角印と進捗下段が重ならないよう上段を縮小して配置する", () => {
+    const IMAGE = "data:image/jpeg;base64,AAAA";
+    const decorated = createTestNode({
+      id: 1,
+      parentId: null,
+      x: 20,
+      y: 30,
+      width: 120,
+      height: ILLUSTRATED_NODE_HEIGHT,
+      label: "装飾親",
+      illustration: IMAGE,
+      icon: "🎯",
+      labelUnderline: true,
+      links: ["https://example.com/"],
+      locked: true,
+    });
+    const harness = createPixiTestHarness();
+    renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+      nodes: [decorated],
+      taskProgress: new Map([[1, { percent: 33, remaining: 2 }]]),
+      selectedNodeIds: [],
+      editingNodeId: null,
+      connectionTargetNodeId: null,
+      siblingReorderSourceNodeId: null,
+      onNodePointerDown: jest.fn(),
+      visibleKeys: new Set(["node:1"]),
+      highlightNodeIds: new Set<number>(),
+      pinnedNodeIds: new Set([1]),
+      illustrationTextures: new Map([[IMAGE, {} as Texture]]),
+    });
+
+    const progressCall = harness.Text.mock.calls.find(([options]) => options.text === "33% 残2");
+    expect(progressCall).toBeDefined();
+    const badge = harness.Text.mock.results[harness.Text.mock.calls.indexOf(progressCall!)].value as { y: number };
+    const bandTop = decorated.y + decorated.height - Math.min(16, (decorated.height - ILLUSTRATION_AREA_HEIGHT) / 3);
+    expect(badge.y).toBeGreaterThanOrEqual(bandTop - 2);
+
+    const upper = harness.containers.find((container) => container.scale.set.mock.calls.length > 0);
+    expect(upper).toBeDefined();
+    const ratio = upper!.scale.set.mock.calls[0][0] as number;
+    expect(ratio).toBeLessThanOrEqual(1);
+
+    const labelIndex = harness.Text.mock.calls.findIndex(([options]) => options.text === "装飾親");
+    const label = harness.Text.mock.results[labelIndex].value as { y: number; height: number };
+    const upperCenterY = upper!.position.set.mock.calls[0][1] as number;
+    const scaledBottom = upperCenterY + ratio * (label.y + label.height / 2);
+    expect(scaledBottom).toBeLessThan(badge.y);
   });
 });

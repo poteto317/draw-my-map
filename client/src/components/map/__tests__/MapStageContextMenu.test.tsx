@@ -66,7 +66,7 @@ describe("MapStage context menu boundary", () => {
   it("ノードを右クリックすると選択してメニューを表示する", async () => {
     const onSelectNode = jest.fn();
     const { getByRole } = await renderReady(
-      <MapStage
+      <MapStage taskProgress={new Map()}
         {...defaultProps}
         nodes={sampleNodes}
         onSelectNode={onSelectNode}
@@ -87,7 +87,7 @@ describe("MapStage context menu boundary", () => {
       createTestNode({ id: 1, x: 50, y: 30, label: "ノード1", illustration: "data:image/jpeg;base64,AAAA", height: 116 }),
     ];
     const { getByRole, queryByRole } = await renderReady(
-      <MapStage {...defaultProps} nodes={nodes} onGenerateIllustration={jest.fn()} />,
+      <MapStage taskProgress={new Map()} {...defaultProps} nodes={nodes} onGenerateIllustration={jest.fn()} />,
     );
     const container = document.querySelector(".cursor-crosshair") as HTMLElement;
     mockStageBounds(container);
@@ -104,7 +104,7 @@ describe("MapStage context menu boundary", () => {
       createTestNode({ id: 2, x: 200, y: 100, label: "ノード2", illustration: "data:image/jpeg;base64,AAAA", height: 116 }),
     ];
     const { getByRole, queryByRole } = await renderReady(
-      <MapStage {...defaultProps} nodes={nodes} onGenerateIllustration={jest.fn()} />,
+      <MapStage taskProgress={new Map()} {...defaultProps} nodes={nodes} onGenerateIllustration={jest.fn()} />,
     );
     const container = document.querySelector(".cursor-crosshair") as HTMLElement;
     mockStageBounds(container);
@@ -120,7 +120,7 @@ describe("MapStage context menu boundary", () => {
 
   it("illustrationを持たないノードを右クリックすると、項目は「イラストを生成」のまま", async () => {
     const { getByRole } = await renderReady(
-      <MapStage {...defaultProps} nodes={sampleNodes} onGenerateIllustration={jest.fn()} />,
+      <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} onGenerateIllustration={jest.fn()} />,
     );
     const container = document.querySelector(".cursor-crosshair") as HTMLElement;
     mockStageBounds(container);
@@ -133,7 +133,7 @@ describe("MapStage context menu boundary", () => {
   it("メニュー項目の選択で対象ノードIDを通知してメニューを閉じる", async () => {
     const onGenerateIllustration = jest.fn();
     const { getByRole, queryByRole } = await renderReady(
-      <MapStage
+      <MapStage taskProgress={new Map()}
         {...defaultProps}
         nodes={sampleNodes}
         onGenerateIllustration={onGenerateIllustration}
@@ -151,7 +151,7 @@ describe("MapStage context menu boundary", () => {
 
   it("空白の右クリックは標準メニューを抑止し、開いているメニューを閉じる", async () => {
     const { queryByRole } = await renderReady(
-      <MapStage {...defaultProps} nodes={sampleNodes} onGenerateIllustration={jest.fn()} />,
+      <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} onGenerateIllustration={jest.fn()} />,
     );
     const container = document.querySelector(".cursor-crosshair") as HTMLElement;
     mockStageBounds(container);
@@ -166,7 +166,7 @@ describe("MapStage context menu boundary", () => {
   it("非表示ノードの右クリックではメニューを開かない", async () => {
     const onSelectNode = jest.fn();
     const { queryByRole } = await renderReady(
-      <MapStage
+      <MapStage taskProgress={new Map()}
         {...defaultProps}
         nodes={sampleNodes}
         visibleNodeIds={new Set([2])}
@@ -185,7 +185,7 @@ describe("MapStage context menu boundary", () => {
 
   it("画面端の右クリックではメニューをコンテナ内へ寄せる", async () => {
     const { getByRole } = await renderReady(
-      <MapStage
+      <MapStage taskProgress={new Map()}
         {...defaultProps}
         nodes={[{ ...sampleNodes[0], x: 760, y: 560 }]}
         onGenerateIllustration={jest.fn()}
@@ -205,7 +205,7 @@ describe("MapStage context menu boundary", () => {
   it("開いているメニュー上の右クリックではメニューを維持し再選択しない", async () => {
     const onSelectNode = jest.fn();
     const { getByRole } = await renderReady(
-      <MapStage
+      <MapStage taskProgress={new Map()}
         {...defaultProps}
         nodes={sampleNodes}
         onSelectNode={onSelectNode}
@@ -226,7 +226,7 @@ describe("MapStage context menu boundary", () => {
   it("ラベル編集中の入力欄の右クリックでは標準メニューを抑止せず独自メニューも開かない", async () => {
     const onSelectNode = jest.fn();
     const { getByTestId, queryByRole } = await renderReady(
-      <MapStage
+      <MapStage taskProgress={new Map()}
         {...defaultProps}
         nodes={sampleNodes}
         onSelectNode={onSelectNode}
@@ -250,7 +250,7 @@ describe("MapStage context menu boundary", () => {
 
   it("gesture中のノード右クリックではメニューを開かない", async () => {
     const { queryByRole } = await renderReady(
-      <MapStage {...defaultProps} nodes={sampleNodes} onGenerateIllustration={jest.fn()} />,
+      <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} onGenerateIllustration={jest.fn()} />,
     );
     const container = document.querySelector(".cursor-crosshair") as HTMLElement;
     mockStageBounds(container);
@@ -266,7 +266,7 @@ describe("MapStage context menu boundary", () => {
 
   it("macOSのCtrl+クリック（gesture中のcontextmenu）ではメニューを開く", async () => {
     const { getByRole } = await renderReady(
-      <MapStage {...defaultProps} nodes={sampleNodes} onGenerateIllustration={jest.fn()} />,
+      <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} onGenerateIllustration={jest.fn()} />,
     );
     const container = document.querySelector(".cursor-crosshair") as HTMLElement;
     mockStageBounds(container);
@@ -287,7 +287,7 @@ describe("MapStage context menu boundary", () => {
   it("Ctrl+クリックでメニューを開いた後のpointermoveではノードを移動しない", async () => {
     const onMoveNode = jest.fn();
     const { getByRole } = await renderReady(
-      <MapStage
+      <MapStage taskProgress={new Map()}
         {...defaultProps}
         nodes={sampleNodes}
         onMoveNode={onMoveNode}
@@ -311,7 +311,7 @@ describe("MapStage context menu boundary", () => {
 
   it("フォーカスがメニュー外へ移るとメニューを閉じる", async () => {
     const { getByRole, queryByRole } = await renderReady(
-      <MapStage {...defaultProps} nodes={sampleNodes} onGenerateIllustration={jest.fn()} />,
+      <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} onGenerateIllustration={jest.fn()} />,
     );
     const container = document.querySelector(".cursor-crosshair") as HTMLElement;
     mockStageBounds(container);
@@ -325,7 +325,7 @@ describe("MapStage context menu boundary", () => {
   it("relatedTargetがnullのfocusoutではメニューを維持し、続くクリックで生成を通知する（Safari）", async () => {
     const onGenerateIllustration = jest.fn();
     const { getByRole, queryByRole } = await renderReady(
-      <MapStage
+      <MapStage taskProgress={new Map()}
         {...defaultProps}
         nodes={sampleNodes}
         onGenerateIllustration={onGenerateIllustration}
@@ -345,7 +345,7 @@ describe("MapStage context menu boundary", () => {
 
   it("ステージgesture中の空白Ctrl+右クリックは標準メニューを抑止し、開いているメニューを閉じる", async () => {
     const { queryByRole } = await renderReady(
-      <MapStage {...defaultProps} nodes={sampleNodes} onGenerateIllustration={jest.fn()} />,
+      <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} onGenerateIllustration={jest.fn()} />,
     );
     const container = document.querySelector(".cursor-crosshair") as HTMLElement;
     mockStageBounds(container);
@@ -367,7 +367,7 @@ describe("MapStage context menu boundary", () => {
   it("onGenerateIllustration未指定でもノード右クリックは選択し、標準メニューを抑止する", async () => {
     const onSelectNode = jest.fn();
     const { queryByRole } = await renderReady(
-      <MapStage {...defaultProps} nodes={sampleNodes} onSelectNode={onSelectNode} />,
+      <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} onSelectNode={onSelectNode} />,
     );
     const container = document.querySelector(".cursor-crosshair") as HTMLElement;
     mockStageBounds(container);
@@ -382,7 +382,7 @@ describe("MapStage context menu boundary", () => {
   it("イラスト未配線でも onCreateGroup があればメニューを開きグループ化を出す", async () => {
     const onCreateGroup = jest.fn();
     const { getByRole, queryByRole } = await renderReady(
-      <MapStage
+      <MapStage taskProgress={new Map()}
         {...defaultProps}
         nodes={sampleNodes}
         selectedNodeId={1}
@@ -405,7 +405,7 @@ describe("MapStage context menu shortcutsEnabled", () => {
   it("shortcutsEnabledがfalseのとき右クリックではメニューを開かない", async () => {
     const onSelectNode = jest.fn();
     const { queryByRole } = await renderReady(
-      <MapStage
+      <MapStage taskProgress={new Map()}
         {...defaultProps}
         nodes={sampleNodes}
         shortcutsEnabled={false}
@@ -422,17 +422,17 @@ describe("MapStage context menu shortcutsEnabled", () => {
 
   it("shortcutsEnabledがfalseの間は開いているメニューがEscapeで閉じず、trueへ戻すと閉じる", async () => {
     const props = { ...defaultProps, nodes: sampleNodes, onGenerateIllustration: jest.fn() };
-    const { getByRole, queryByRole, rerender } = await renderReady(<MapStage {...props} />);
+    const { getByRole, queryByRole, rerender } = await renderReady(<MapStage taskProgress={new Map()} {...props} />);
     const container = document.querySelector(".cursor-crosshair") as HTMLElement;
     mockStageBounds(container);
     fireEvent.contextMenu(container, { clientX: 100, clientY: 60 });
     expect(getByRole("menu")).toBeInTheDocument();
 
-    rerender(<MapStage {...props} shortcutsEnabled={false} />);
+    rerender(<MapStage taskProgress={new Map()} {...props} shortcutsEnabled={false} />);
     fireEvent.keyDown(window, { key: "Escape" });
     expect(getByRole("menu")).toBeInTheDocument();
 
-    rerender(<MapStage {...props} shortcutsEnabled />);
+    rerender(<MapStage taskProgress={new Map()} {...props} shortcutsEnabled />);
     fireEvent.keyDown(window, { key: "Escape" });
     expect(queryByRole("menu")).not.toBeInTheDocument();
   });
@@ -441,7 +441,7 @@ describe("MapStage context menu shortcutsEnabled", () => {
 describe("MapStage context menu double-click activation", () => {
   async function openAndActivate(onGenerateIllustration: jest.Mock, onDoubleClick: jest.Mock) {
     const rendered = await renderReady(
-      <MapStage
+      <MapStage taskProgress={new Map()}
         {...defaultProps}
         nodes={sampleNodes}
         onDoubleClick={onDoubleClick}
@@ -496,7 +496,7 @@ describe("MapStage context menu follow-up press", () => {
   async function activateMenuAt(base: number, onClearSelection: jest.Mock) {
     const nowSpy = jest.spyOn(Date, "now").mockReturnValue(base);
     const rendered = await renderReady(
-      <MapStage
+      <MapStage taskProgress={new Map()}
         {...defaultProps}
         nodes={sampleNodes}
         onSelectNode={jest.fn()}

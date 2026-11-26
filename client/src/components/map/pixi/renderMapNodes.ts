@@ -1,3 +1,10 @@
+import type { TaskProgress } from "@/domain/nodes/nodeTaskProgress";
+import {
+  computeTaskProgressMapLabelLayout,
+  formatTaskProgressMapBadgeText,
+  resolveTaskProgressMapBody,
+  shouldShowTaskProgressMapBadge,
+} from "@/domain/nodes/nodeTaskProgressMapLayout";
 import type { PixiConstructors } from "@/components/map/pixi/pixiTypes";
 import type { MapVisibilityTarget } from "@/components/map/pixi/mapVisibilityAnimator";
 import { nodeVisibilityKey } from "@/components/map/pixi/mapVisibilityKeys";
@@ -31,6 +38,7 @@ function nodeKindBarPixiColor(kind: NodeKind): number {
 
 export type RenderMapNodesOptions = {
   nodes: readonly Node[];
+  taskProgress: ReadonlyMap<number, TaskProgress>;
   selectedNodeIds: readonly number[];
   editingNodeId: number | null;
   connectionTargetNodeId: number | null;
@@ -263,16 +271,52 @@ export function renderMapNodes(
     if (!isEditing) {
       const text = createNodeLabelText(constructors, node);
       text.alpha = contentAlpha;
-      container.addChild(text);
       const icon = createNodeIconText(constructors, node, text);
       if (icon !== null) {
         icon.alpha = contentAlpha;
-        container.addChild(icon);
+
       }
       const underline = createNodeLabelUnderline(constructors, node, text);
       if (underline !== null) {
         underline.alpha = contentAlpha;
-        container.addChild(underline);
+
+      }
+      const progress = isVisible ? options.taskProgress.get(node.id) : undefined;
+      const body = resolveTaskProgressMapBody(node);
+      if (shouldShowTaskProgressMapBadge(progress, body) && progress) {
+        const layout = computeTaskProgressMapLabelLayout(node, {
+          textWidth: text.width,
+          textHeight: text.height,
+          textY: text.y,
+          iconWidth: icon?.width,
+          iconX: icon?.x,
+          iconHeight: icon?.height,
+          hasUnderline: underline !== null,
+        }, body);
+        const upper = new constructors.Container();
+        upper.scale.set(layout.upper.scale);
+        upper.position.set(layout.upper.x, layout.upper.y);
+        upper.addChild(text);
+        if (icon) upper.addChild(icon);
+        if (underline) upper.addChild(underline);
+        container.addChild(upper);
+
+        const badge = new constructors.Text({
+          text: formatTaskProgressMapBadgeText(progress),
+          style: { fontSize: 10, fill: NODE_LABEL_FILL },
+        });
+        badge.alpha = contentAlpha;
+        badge.anchor.set(0.5);
+        badge.x = layout.badge.x;
+        badge.y = layout.badge.y;
+        if (badge.scale) {
+          badge.scale.set(Math.min(1, body.innerWidth / Math.max(1, badge.width)));
+        }
+        container.addChild(badge);
+      } else {
+        container.addChild(text);
+        if (icon) container.addChild(icon);
+        if (underline) container.addChild(underline);
       }
     }
 

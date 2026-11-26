@@ -42,6 +42,7 @@ function createOptions(
     visibleNodeIds: new Set(nodes.map((n) => n.id)),
     highlightNodeIds: new Set<number>(),
     pinnedNodeIds: new Set<number>(),
+    taskProgress: new Map<number, { percent: number; remaining: number }>(),
   };
 }
 
@@ -87,6 +88,7 @@ describe("useRenderedMapScene", () => {
         visibleNodeIds: options.visibleNodeIds,
         highlightNodeIds: options.highlightNodeIds,
         pinnedNodeIds: options.pinnedNodeIds ?? new Set<number>(),
+        taskProgress: options.taskProgress,
         illustrationTextures: undefined,
         relations: undefined,
         selectedRelationId: null,
@@ -289,6 +291,33 @@ describe("useRenderedMapScene", () => {
     rerender({ siblingReorderIndicator: indicator });
 
     expect(mockedRenderMapScene).toHaveBeenCalledTimes(2);
+  });
+
+  it("taskProgress が変わると scene を再生成する", () => {
+    const viewportRef = { current: INITIAL_VIEWPORT };
+    const options = createOptions();
+    const empty = new Map<number, { percent: number; remaining: number }>();
+    const withProgress = new Map([[1, { percent: 33, remaining: 2 }]]);
+    const { rerender } = renderHook(
+      ({ taskProgress }: { taskProgress: ReadonlyMap<number, { percent: number; remaining: number }> }) =>
+        useRenderedMapScene({
+          runtime,
+          options: { ...options, taskProgress },
+          viewport: INITIAL_VIEWPORT,
+          viewportRef,
+          screenSize,
+        }),
+      { initialProps: { taskProgress: empty } },
+    );
+
+    rerender({ taskProgress: withProgress });
+
+    expect(mockedRenderMapScene).toHaveBeenCalledTimes(2);
+    expect(mockedRenderMapScene).toHaveBeenLastCalledWith(
+      runtime.app,
+      runtime.constructors,
+      expect.objectContaining({ taskProgress: withProgress }),
+    );
   });
 
   it("ドラッグ中のノードが変わるとsceneを再生成する", () => {

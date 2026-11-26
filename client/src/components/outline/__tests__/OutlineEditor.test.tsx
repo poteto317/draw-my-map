@@ -16,7 +16,7 @@ function actionsStub(): OutlineEditorUiActions {
     select: jest.fn(), beginEdit: jest.fn(), setDraftText: jest.fn(), finishEdit: jest.fn(), cancelEdit: jest.fn(), invalidateDraft: jest.fn(), addRoot: jest.fn(), addChild: jest.fn(), addSibling: jest.fn(), move: jest.fn(), changeIndent: jest.fn(), deleteSelected: jest.fn() };
 }
 function props(overrides: Partial<OutlineEditorProps> = {}): OutlineEditorProps {
-  return { nodes: initial, model: buildOutlineRows(initial), selectedNodeId: 2, documentRevision: 0, enabled: true, actions: actionsStub(), ...overrides };
+  return { nodes: initial, model: buildOutlineRows(initial), selectedNodeId: 2, documentRevision: 0, enabled: true, actions: actionsStub(), taskProgress: new Map(), ...overrides };
 }
 const row = (name: string) => screen.getByRole("button", { name });
 
@@ -74,6 +74,23 @@ it("ラベル行に fontSize / weight / underline を反映し、空ラベルの
   });
 });
 
+it("taskProgress を行末文言と aria-label に含め、折り返し用 block 文言も出す", () => {
+  const nodes = [
+    createTestNode({ id: 1, label: "親", task: { completed: false } }),
+    createTestNode({ id: 2, parentId: 1, label: "子" }),
+  ];
+  const taskProgress = new Map([[1, { percent: 33, remaining: 2 }]]);
+  render(
+    <OutlineEditor
+      {...props({ nodes, model: buildOutlineRows(nodes), selectedNodeId: 1, taskProgress })}
+    />,
+  );
+
+  const parent = screen.getByRole("button", { name: /階層1・親.*完了率33%.*残り2件/ });
+  expect(within(parent).getByText("33%・残り2件")).toBeInTheDocument();
+  expect(within(parent).getByText("33%・残り2件")).toHaveClass("block");
+});
+
 it("行に icon と kind 色バーを表示する", () => {
   const nodes = [
     createTestNode({
@@ -100,7 +117,7 @@ function Harness({ nodes: supplied = initial, enabled = true, revision = 0, upda
   const model = buildOutlineRows(nodes);
   const actions = useOutlineEditorActions({ nodes, selectedNodeId: selected, model, enabled, documentRevision: revision, expandNodes: () => {}, publishNotice: () => {},
     api: { selectNode, updateNodeLabel(id, label) { update(id, label); setNodes(current => current.map(node => node.id === id ? { ...node, label } : node)); }, insertForest: () => ({ ok: false, reason: "placement-failed" }), addChildNode: () => null, addSiblingNode: () => null, reorderSibling: () => ({ ok: false, reason: "placement-failed" }), changeNodeIndent: () => ({ ok: false, reason: "placement-failed" }), deleteNodeOnly(id) { setNodes(current => current.filter(node => node.id !== id).map(node => node.parentId === id ? { ...node, parentId: null } : node)); return { ok: true, deletedId: id }; } } });
-  return <OutlineEditor nodes={nodes} model={model} selectedNodeId={selected} documentRevision={revision} enabled={enabled} actions={actions} />;
+  return <OutlineEditor taskProgress={new Map()} nodes={nodes} model={model} selectedNodeId={selected} documentRevision={revision} enabled={enabled} actions={actions} />;
 }
 
 it("行の矢印とHome/Endはfocusと共通選択を変える", () => {
