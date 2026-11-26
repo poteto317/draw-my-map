@@ -6,6 +6,7 @@ import {
   formatCustomAttributeFailure,
   parseChoiceOptions,
 } from "@/domain/nodes/nodeCustomAttributeUpdate";
+import { MAX_CUSTOM_OPTIONS } from "@/domain/nodes/nodeTaskAttributes";
 import type { NodeCustomAttribute } from "@/types/node";
 
 const numberAttr: NodeCustomAttribute = { name: "件数", type: "number", value: 3 };
@@ -28,6 +29,11 @@ describe("parseChoiceOptions", () => {
   it("中間の空行と複数末尾改行を拒否する", () => {
     expect(parseChoiceOptions("高\n\n低").ok).toBe(false);
     expect(parseChoiceOptions("高\n低\n\n").ok).toBe(false);
+  });
+
+  it(`${MAX_CUSTOM_OPTIONS + 1} 行以上の候補を拒否する`, () => {
+    const input = Array.from({ length: MAX_CUSTOM_OPTIONS + 1 }, (_, index) => `候補${index}`).join("\n");
+    expect(parseChoiceOptions(input)).toEqual({ ok: false, reason: "too-many-options" });
   });
 });
 
@@ -128,11 +134,31 @@ describe("buildCustomAttributeFromDraft", () => {
       choiceValue: "",
     })).toEqual({ ok: true, value: { name: "件数", type: "number", value: 12 } });
   });
+
+  it("11件超の選択肢候補で選択肢上限の文言を返す", () => {
+    const choiceOptions = Array.from({ length: MAX_CUSTOM_OPTIONS + 1 }, (_, index) => `候補${index}`).join("\n");
+    const result = buildCustomAttributeFromDraft({
+      type: "choice",
+      name: "区分",
+      numberValue: "",
+      dateValue: "",
+      choiceOptions,
+      choiceValue: "候補0",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toContain("選択肢");
+      expect(result.reason).not.toContain("カスタム属性は 1 つのノードに");
+    }
+  });
 });
 
 describe("formatCustomAttributeFailure", () => {
   it("失敗理由を日本語にする", () => {
     expect(formatCustomAttributeFailure("duplicate")).toContain("同じ名前");
     expect(formatCustomAttributeFailure("not-an-option")).toContain("候補");
+    expect(formatCustomAttributeFailure("too-many")).toContain("カスタム属性");
+    expect(formatCustomAttributeFailure("too-many-options")).toContain("選択肢");
+    expect(formatCustomAttributeFailure("too-many-options")).not.toContain("カスタム属性は 1 つのノードに");
   });
 });

@@ -1,6 +1,7 @@
 import {
   areCustomAttributeValuesEqual,
   MAX_CUSTOM_ATTRIBUTES,
+  MAX_CUSTOM_OPTIONS,
   normalizeCustomAttributes,
   parseCustomNumber,
   type AttributeFailure,
@@ -23,6 +24,8 @@ export function formatCustomAttributeFailure(reason: AttributeFailure): string {
       return "同じ名前のカスタム属性がすでにあります。";
     case "too-many":
       return `カスタム属性は 1 つのノードに ${MAX_CUSTOM_ATTRIBUTES} 件までです。`;
+    case "too-many-options":
+      return `選択肢は 1 件から ${MAX_CUSTOM_OPTIONS} 件までです。`;
     case "not-an-option":
       return "選択値が候補と一致しません。候補を確認して選び直してください。";
     default:
@@ -48,6 +51,7 @@ export function parseChoiceOptions(input: string): AttributeResult<readonly stri
     options.push(normalized.name);
   }
   if (options.length === 0) return failure("empty");
+  if (options.length > MAX_CUSTOM_OPTIONS) return failure("too-many-options");
   return { ok: true, value: options };
 }
 
