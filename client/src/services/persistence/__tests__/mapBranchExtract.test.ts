@@ -45,6 +45,28 @@ describe("extractStoredBranch", () => {
     expect(storage.getItem(BRANCH_MOVE_JOURNAL_KEY)).toBeNull();
   });
 
+  it("元マップに learn があっても切り出し先 JSON には含めない", () => {
+    const withLearn = serializeMapDocument(createMapDocument([
+      createTestNode({ id: 1, parentId: null, label: "旅行の計画", x: 0, y: 0 }),
+      createTestNode({ id: 2, parentId: 1, label: "枝", x: 120, y: 40 }),
+    ], "manual", {
+      learn: {
+        version: 1,
+        revealedNodeIds: [1],
+        cards: [{ id: "c1", prompt: "p", answer: "a", sourceNodeIds: [1] }],
+      },
+    }));
+    const recording = createRecordingStorage();
+    const index = seedMapLibrary(recording.storage, [{ id: "a", json: withLearn, name: "旅行の計画" }]);
+
+    const result = extractStoredBranch(recording.storage, index, "a", "new-map", 2, now);
+    expect(result.ok).toBe(true);
+    const sourceDoc = parseMapDocumentJson(recording.storage.getItem(mapBodyKey("a"))!);
+    const targetDoc = parseMapDocumentJson(recording.storage.getItem(mapBodyKey("new-map"))!);
+    expect(sourceDoc.ok && sourceDoc.value.learn?.revealedNodeIds).toEqual([1]);
+    expect(targetDoc.ok && "learn" in targetDoc.value).toBe(false);
+  });
+
   it("元マップに tour があっても切り出し先 JSON には含めない", () => {
     const snap = {
       viewport: { offsetX: 0, offsetY: 0, scale: 1 },

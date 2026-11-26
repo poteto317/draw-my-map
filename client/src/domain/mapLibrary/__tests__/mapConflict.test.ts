@@ -642,6 +642,41 @@ describe("mapConflict", () => {
     });
   });
 
+  describe("isDocumentContentEqual（learn）", () => {
+    const baseDoc: MapDocumentV3 = {
+      version: 3,
+      layoutMode: "manual",
+      nodes: [
+        {
+          id: 1,
+          parentId: null,
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 40,
+          label: "ルート",
+          importance: "medium",
+        },
+      ],
+    };
+
+    it("learn だけ違うと false", () => {
+      expect(
+        isDocumentContentEqual(baseDoc, {
+          ...baseDoc,
+          learn: { version: 1, revealedNodeIds: [1] },
+        }),
+      ).toBe(false);
+    });
+
+    it("revealed の順序違いは等価", () => {
+      const learnA = { version: 1 as const, revealedNodeIds: [2, 1] };
+      const left = { ...baseDoc, learn: learnA };
+      const right = { ...baseDoc, learn: { ...learnA, revealedNodeIds: [1, 2] } };
+      expect(isDocumentContentEqual(left, right)).toBe(true);
+    });
+  });
+
   describe("mapConflictMessages", () => {
     it("定数値が設計書と整合していること", () => {
       expect(CONFLICT_NOTICE_MESSAGE).toBe(

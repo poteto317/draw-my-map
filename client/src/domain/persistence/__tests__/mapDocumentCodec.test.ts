@@ -144,4 +144,33 @@ describe("MapDocument Codec", () => {
       value: { version: 3, layoutMode: "manual", nodes: emptySteps.nodes },
     });
   });
+
+  it("V3 の learn を往復し、空進捗は learn キー省略", () => {
+    const withLearn = createMapDocument([node(1, null, "high")], "manual", {
+      learn: {
+        version: 1,
+        revealedNodeIds: [1],
+        cards: [{
+          id: "c1",
+          prompt: "問題",
+          answer: "答え",
+          sourceNodeIds: [1],
+        }],
+      },
+    });
+    expect(parseMapDocumentJson(serializeMapDocument(withLearn))).toEqual({
+      ok: true,
+      value: withLearn,
+    });
+
+    const emptyLearn = createMapDocument([node(1, null, "high")], "manual", {
+      learn: { version: 1, revealedNodeIds: [] },
+    });
+    const emptyText = serializeMapDocument(emptyLearn);
+    expect(emptyText).not.toContain("learn");
+    expect(parseMapDocumentJson(emptyText)).toEqual({
+      ok: true,
+      value: { version: 3, layoutMode: "manual", nodes: emptyLearn.nodes },
+    });
+  });
 });

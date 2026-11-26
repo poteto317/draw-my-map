@@ -9,6 +9,7 @@ import { areNodeSourcesEqual } from "@/domain/nodes/nodeSource";
 import { areNodeTagsEqual } from "@/domain/nodes/nodeTag";
 import { areBranchLayoutsEqual } from "@/types/branchLayout";
 import { areLayoutStylesEqual } from "@/types/layoutStyle";
+import { areMapLearnsEqual } from "@/types/mapLearn";
 import { areMapToursEqual } from "@/types/mapTour";
 import type { MapDocumentV3 } from "@/types/mapDocument";
 import type { Node } from "@/types/node";
@@ -127,6 +128,9 @@ export function isDocumentContentEqual(
     return false;
   }
   if (!areMapToursEqual(docA.tour, docB.tour)) {
+    return false;
+  }
+  if (!areMapLearnsEqual(docA.learn, docB.learn)) {
     return false;
   }
 
