@@ -5,6 +5,7 @@ import { createPixiTestHarness } from "../testing/pixiTestHarness";
 import type { Node } from "@/types/node";
 import { createTestNode } from "@/testing/createTestNode";
 
+const inactiveLearnDisplay = { learningActive: false, revealedNodeIds: new Set<number>() };
 const emptyTaskProgress = new Map<number, { percent: number; remaining: number }>();
 
 const nodes: Node[] = [
@@ -25,6 +26,7 @@ describe("renderMapScene", () => {
     harness.children.push(previousChild);
 
     const scene = renderMapScene(harness.app as never, harness.constructors as never, {
+      learnDisplay: inactiveLearnDisplay,
       nodes,
       taskProgress: emptyTaskProgress,
       selectedNodeIds: [],
@@ -55,6 +57,7 @@ describe("renderMapScene", () => {
     const viewport = { offsetX: 30, offsetY: -10, scale: 2 };
 
     renderMapScene(harness.app as never, harness.constructors as never, {
+      learnDisplay: inactiveLearnDisplay,
       nodes,
       taskProgress: emptyTaskProgress,
       selectedNodeIds: [],
@@ -78,6 +81,7 @@ describe("renderMapScene", () => {
     const harness = createPixiTestHarness();
 
     renderMapScene(harness.app as never, harness.constructors as never, {
+      learnDisplay: inactiveLearnDisplay,
       nodes: [],
       taskProgress: emptyTaskProgress,
       selectedNodeIds: [],
@@ -99,6 +103,7 @@ describe("renderMapScene", () => {
   it("visibleNodeIdsをノードとエッジの描画へ反映する", () => {
     const harness = createPixiTestHarness();
     renderMapScene(harness.app as never, harness.constructors as never, {
+      learnDisplay: inactiveLearnDisplay,
       nodes, taskProgress: emptyTaskProgress, selectedNodeIds: [], editingNodeId: null, connectionTargetNodeId: null,
       siblingReorderSourceNodeId: null, siblingReorderIndicator: null, onNodePointerDown: jest.fn(), viewport: INITIAL_VIEWPORT, visibleNodeIds: new Set([2]),
       highlightNodeIds: new Set<number>(),
@@ -116,6 +121,7 @@ describe("renderMapScene", () => {
     const visibleNodeIds = new Set([1, 2]);
 
     const scene = renderMapScene(harness.app as never, harness.constructors as never, {
+      learnDisplay: inactiveLearnDisplay,
       nodes: sceneNodes,
       taskProgress: emptyTaskProgress,
       selectedNodeIds: [],
@@ -153,6 +159,7 @@ describe("renderMapScene", () => {
     const harness = createPixiTestHarness();
 
     const scene = renderMapScene(harness.app as never, harness.constructors as never, {
+      learnDisplay: inactiveLearnDisplay,
       nodes,
       taskProgress: emptyTaskProgress,
       selectedNodeIds: [],
@@ -182,6 +189,7 @@ describe("renderMapScene", () => {
     const harness = createPixiTestHarness();
 
     renderMapScene(harness.app as never, harness.constructors as never, {
+      learnDisplay: inactiveLearnDisplay,
       nodes,
       taskProgress: emptyTaskProgress,
       selectedNodeIds: [],
@@ -204,6 +212,7 @@ describe("renderMapScene", () => {
     const harness = createPixiTestHarness();
 
     renderMapScene(harness.app as never, harness.constructors as never, {
+      learnDisplay: inactiveLearnDisplay,
       nodes,
       taskProgress: emptyTaskProgress,
       selectedNodeIds: [],

@@ -1,3 +1,4 @@
+const inactiveLearnDisplay = { learningActive: false, revealedNodeIds: new Set<number>() };
 import { act, fireEvent } from "@testing-library/react";
 import {
   Suspense,
@@ -105,7 +106,8 @@ function KeyboardCreationHarness({ initiallySelected = true }: { initiallySelect
 
   return (
     <>
-      <MapStage taskProgress={new Map()}
+      <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()}
         nodes={nodes}
         highlightNodeIds={new Set<number>()}
         pinnedNodeIds={new Set<number>()}
@@ -166,7 +168,8 @@ function MouseConnectionHarness() {
 
   return (
     <>
-      <MapStage taskProgress={new Map()}
+      <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()}
         nodes={nodes}
         highlightNodeIds={new Set<number>()}
         pinnedNodeIds={new Set<number>()}
@@ -228,7 +231,8 @@ function SubtreeMoveHarness() {
 
   return (
     <>
-      <MapStage taskProgress={new Map()}
+      <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()}
         nodes={nodes}
         highlightNodeIds={new Set<number>()}
         pinnedNodeIds={new Set<number>()}
@@ -295,7 +299,8 @@ function ConcurrentInteractionHarness({
 
   return (
     <Suspense fallback={null}>
-      <MapStage taskProgress={new Map()}
+      <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()}
         {...defaultProps}
         nodes={[isPendingRender ? pendingNode : committedNode]}
         onSelectNode={isPendingRender ? pendingOnSelectNode : committedOnSelectNode}
@@ -325,7 +330,8 @@ function ResetTimingHarness({ onReady, onMoveNode }: ResetTimingHarnessProps) {
   }, [resetRevision]);
 
   return (
-    <MapStage taskProgress={new Map()}
+    <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()}
       {...defaultProps}
       nodes={sampleNodes}
       resetRevision={resetRevision}
@@ -344,13 +350,15 @@ afterEach(() => {
 
 describe("MapStage boundary", () => {
   it("renders the map container", async () => {
-    await renderReady(<MapStage taskProgress={new Map()} {...defaultProps} />);
+    await renderReady(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} />);
 
     expect(document.querySelector(".cursor-crosshair")).toBeInTheDocument();
   });
 
   it("キャンバスコンテナに aria-label=マップキャンバス を付け、tree 役割は付けない", async () => {
-    await renderReady(<MapStage taskProgress={new Map()} {...defaultProps} />);
+    await renderReady(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} />);
     const container = document.querySelector(".cursor-crosshair") as HTMLElement;
     expect(container).toHaveAttribute("aria-label", "マップキャンバス");
     expect(container).not.toHaveAttribute("role", "tree");
@@ -358,7 +366,8 @@ describe("MapStage boundary", () => {
   });
 
   it("unmount時に共有runtimeへ登録したstage listenerを解除する", async () => {
-    const { unmount } = await renderReady(<MapStage taskProgress={new Map()} {...defaultProps} />);
+    const { unmount } = await renderReady(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} />);
     const registeredHandlers = Object.entries(mockStageHandlers);
 
     expect(registeredHandlers.length).toBeGreaterThan(0);
@@ -371,7 +380,8 @@ describe("MapStage boundary", () => {
   });
 
   it("親要素の実寸高を使い固定header高へ依存しない", async () => {
-    await renderReady(<MapStage taskProgress={new Map()} {...defaultProps} />);
+    await renderReady(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} />);
     const container = document.querySelector(".cursor-crosshair") as HTMLElement;
 
     expect(container).toHaveClass("h-full");
@@ -380,7 +390,8 @@ describe("MapStage boundary", () => {
 
   it("routes a blank double-click with container-relative coordinates", async () => {
     const onDoubleClick = jest.fn();
-    await renderReady(<MapStage taskProgress={new Map()} {...defaultProps} onDoubleClick={onDoubleClick} />);
+    await renderReady(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} onDoubleClick={onDoubleClick} />);
     const container = document.querySelector(".cursor-crosshair") as HTMLElement;
     mockStageBounds(container, 100, 50);
 
@@ -393,7 +404,8 @@ describe("MapStage boundary", () => {
   it("変換後座標が非有限のdouble-clickでは追加も編集もしない", async () => {
     const onDoubleClick = jest.fn();
     const { queryByTestId } = await renderReady(
-      <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} onDoubleClick={onDoubleClick} />,
+      <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} onDoubleClick={onDoubleClick} />,
     );
     const container = document.querySelector(".cursor-crosshair") as HTMLElement;
     mockStageBounds(container, -Number.MAX_VALUE, 0);
@@ -406,7 +418,8 @@ describe("MapStage boundary", () => {
 
   it("opens the editor for a node double-click", async () => {
     const { getByTestId } = await renderReady(
-      <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} />,
+      <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} />,
     );
     const container = document.querySelector(".cursor-crosshair") as HTMLElement;
     mockStageBounds(container);
@@ -423,7 +436,8 @@ describe("MapStage boundary", () => {
     "関連線／グループ選択中はノードダブルクリックでラベル編集を始めない（%s・L-061）",
     async (_kind, canvasSelection) => {
       const { queryByTestId } = await renderReady(
-        <MapStage taskProgress={new Map()}
+        <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()}
           {...defaultProps}
           nodes={sampleNodes}
           canvasSelection={canvasSelection}
@@ -446,7 +460,8 @@ describe("MapStage boundary", () => {
     async (_kind, canvasSelection) => {
       const onDoubleClick = jest.fn();
       await renderReady(
-        <MapStage taskProgress={new Map()}
+        <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()}
           {...defaultProps}
           nodes={sampleNodes}
           canvasSelection={canvasSelection}
@@ -465,7 +480,8 @@ describe("MapStage boundary", () => {
   it("関連線クリックで選択するとき進行中のノードラベル編集をキャンセルする（L-061）", async () => {
     const onSelectRelation = jest.fn();
     const { getByTestId, queryByTestId } = await renderReady(
-      <MapStage taskProgress={new Map()}
+      <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()}
         {...defaultProps}
         nodes={sampleNodes}
         relations={[
@@ -492,7 +508,8 @@ describe("MapStage boundary", () => {
   it("グループクリックで選択するとき進行中のノードラベル編集をキャンセルする（L-061）", async () => {
     const onSelectGroup = jest.fn();
     const { getByTestId, queryByTestId } = await renderReady(
-      <MapStage taskProgress={new Map()}
+      <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()}
         {...defaultProps}
         nodes={sampleNodes}
         groups={[{ id: 20, nodeIds: [1, 2], label: "束" }]}
@@ -515,7 +532,8 @@ describe("MapStage boundary", () => {
   });
 
   it("wheelでpointer位置をanchorにworld containerを拡大する", async () => {
-    await renderReady(<MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1} />);
+    await renderReady(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1} />);
     const canvas = document.querySelector("canvas")!;
     mockStageBounds(canvas);
 
@@ -533,7 +551,8 @@ describe("MapStage boundary", () => {
   });
 
   it("viewport更新ではworld containerを再生成せずtransformだけ変更する", async () => {
-    await renderReady(<MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} />);
+    await renderReady(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} />);
     const worldContainer = lastWorldContainer();
     const containerCount = mockContainers.length;
     const sceneAddCount = mockStage.addChild.mock.calls.length;
@@ -551,14 +570,16 @@ describe("MapStage boundary", () => {
 
   it("scene再生成とviewport更新が同じcommitでもtransformを1回だけ適用する", async () => {
     const { rerender } = await renderReady(
-      <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} />,
+      <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} />,
     );
 
     act(() => {
       mockStageHandlers.pointerdown?.(pointer(0, 0, { target: mockStage }));
       mockStageHandlers.pointermove?.(pointer(20, 10));
       rerender(
-        <MapStage taskProgress={new Map()}
+        <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()}
           {...defaultProps}
           nodes={[...sampleNodes, createTestNode({
             id: 3,
@@ -581,7 +602,8 @@ describe("MapStage boundary", () => {
 
   it("パン後の空白double-clickを変換済みworld座標で追加へ渡す", async () => {
     const onDoubleClick = jest.fn();
-    await renderReady(<MapStage taskProgress={new Map()} {...defaultProps} onDoubleClick={onDoubleClick} />);
+    await renderReady(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} onDoubleClick={onDoubleClick} />);
     const container = document.querySelector(".cursor-crosshair") as HTMLElement;
     mockStageBounds(container);
 
@@ -597,7 +619,8 @@ describe("MapStage boundary", () => {
 
   it("ズーム後の変換済みnode位置でdouble-click編集を開始する", async () => {
     const { getByTestId } = await renderReady(
-      <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} />,
+      <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} />,
     );
     const canvas = document.querySelector("canvas")!;
     const container = document.querySelector(".cursor-crosshair") as HTMLElement;
@@ -621,7 +644,8 @@ describe("MapStage boundary", () => {
   it("ズーム後の画面差分をworld差分へ変換してノードを移動する", async () => {
     const onMoveNode = jest.fn();
     await renderReady(
-      <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} onMoveNode={onMoveNode} />,
+      <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} onMoveNode={onMoveNode} />,
     );
     const canvas = document.querySelector("canvas")!;
     mockStageBounds(canvas);
@@ -646,7 +670,8 @@ describe("MapStage boundary", () => {
   it("ズーム後の画面座標から接続先ノードを判定する", async () => {
     const onConnectNodes = jest.fn();
     await renderReady(
-      <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} onConnectNodes={onConnectNodes} />,
+      <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} onConnectNodes={onConnectNodes} />,
     );
     const canvas = document.querySelector("canvas")!;
     mockStageBounds(canvas);
@@ -672,7 +697,8 @@ describe("MapStage boundary", () => {
   it("wheelズーム前に進行中のノード移動をキャンセルする", async () => {
     const onMoveNode = jest.fn();
     await renderReady(
-      <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} onMoveNode={onMoveNode} />,
+      <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} onMoveNode={onMoveNode} />,
     );
     const canvas = document.querySelector("canvas")!;
     mockStageBounds(canvas);
@@ -700,7 +726,8 @@ describe("MapStage boundary", () => {
   it("wheelズーム前に進行中のノード接続をキャンセルする", async () => {
     const onConnectNodes = jest.fn();
     await renderReady(
-      <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} onConnectNodes={onConnectNodes} />,
+      <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} onConnectNodes={onConnectNodes} />,
     );
     const canvas = document.querySelector("canvas")!;
     mockStageBounds(canvas);
@@ -726,7 +753,8 @@ describe("MapStage boundary", () => {
   });
 
   it("Fキーで倍率を保ち選択ノードを中央へ移す", async () => {
-    await renderReady(<MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1} />);
+    await renderReady(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1} />);
 
     fireEvent.keyDown(window, { key: "f" });
 
@@ -735,10 +763,12 @@ describe("MapStage boundary", () => {
   });
 
   it("外部focus要求で倍率を保ちノードを中央へ1回だけ移す", async () => {
-    const { rerender } = await renderReady(<MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} />);
+    const { rerender } = await renderReady(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} />);
     const request = { nodeId: 1, sequence: 1, documentRevision: 0 };
 
-    rerender(<MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} focusRequest={request} />);
+    rerender(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} focusRequest={request} />);
 
     const worldContainer = lastWorldContainer();
     expect(worldContainer?.position.set).toHaveBeenLastCalledWith(300, 240);
@@ -749,7 +779,8 @@ describe("MapStage boundary", () => {
       mockStageHandlers.pointermove?.(pointer(20, 10));
       mockStageHandlers.pointerup?.(pointer(20, 10));
     });
-    rerender(<MapStage taskProgress={new Map()} {...defaultProps} nodes={[...sampleNodes]} focusRequest={request} />);
+    rerender(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} nodes={[...sampleNodes]} focusRequest={request} />);
 
     expect(worldContainer?.position.set).toHaveBeenLastCalledWith(320, 250);
   });
@@ -758,7 +789,8 @@ describe("MapStage boundary", () => {
     const viewportRef = { current: null as MapStageViewportHandle | null };
     const next = { offsetX: 120, offsetY: 260, scale: 2 };
     const before = jest.fn();
-    await renderReady(<MapStage taskProgress={new Map()} {...defaultProps} viewportHandleRef={viewportRef} />);
+    await renderReady(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} viewportHandleRef={viewportRef} />);
     const handle = viewportRef.current!;
 
     expect(handle.getScreenSize()).toEqual({ width: 800, height: 600 });
@@ -784,18 +816,21 @@ describe("MapStage boundary", () => {
       isCurrentFocusRequest: (request: typeof oldRequest) => request.sequence === nextRequest.sequence,
       onFocusRequestApplied,
     };
-    const { rerender } = await renderReady(<MapStage taskProgress={new Map()} {...props} focusRequest={oldRequest} />);
+    const { rerender } = await renderReady(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...props} focusRequest={oldRequest} />);
 
     expect(lastWorldContainer()?.position.set.mock.lastCall).toEqual([0, 0]);
     expect(onFocusRequestApplied).not.toHaveBeenCalled();
-    rerender(<MapStage taskProgress={new Map()} {...props} focusRequest={nextRequest} />);
+    rerender(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...props} focusRequest={nextRequest} />);
     expect(lastWorldContainer()?.position.set.mock.lastCall).toEqual([300, 240]);
     expect(onFocusRequestApplied.mock.calls).toEqual([[nextRequest]]);
   });
 
   it("旧文書の中央移動要求を適用しない", async () => {
     const before = jest.fn();
-    await renderReady(<MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} documentRevision={1}
+    await renderReady(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} documentRevision={1}
       focusRequest={{ nodeId: 1, sequence: 1, documentRevision: 0 }}
       onBeforeCenterNode={before} />);
     expect(before).not.toHaveBeenCalled();
@@ -805,11 +840,13 @@ describe("MapStage boundary", () => {
   it("Pixiの画面計測が完了すると保留した中央移動を一度だけ再開する", async () => {
     const beforeCenter = jest.fn();
     const props = { ...defaultProps, nodes: sampleNodes, onBeforeCenterNode: beforeCenter };
-    const { rerender, unmount } = await renderReady(<MapStage taskProgress={new Map()} {...props} />);
+    const { rerender, unmount } = await renderReady(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...props} />);
     const { renderer } = jest.mocked(Application).mock.results.at(-1)!.value;
     act(() => renderer.resize(0, 600));
     const request = { nodeId: 1, sequence: 1, documentRevision: 0 };
-    rerender(<MapStage taskProgress={new Map()} {...props} focusRequest={request} />);
+    rerender(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...props} focusRequest={request} />);
     expect(beforeCenter).not.toHaveBeenCalled();
 
     act(() => renderer.resize(800, 600));
@@ -829,11 +866,13 @@ describe("MapStage boundary", () => {
     const beforeCenter = jest.fn();
     const beforeFit = jest.fn();
     const props = { ...defaultProps, nodes: sampleNodes, viewportHandleRef: viewportRef, onBeforeCenterNode: beforeCenter };
-    const { rerender } = await renderReady(<MapStage taskProgress={new Map()} {...props} />);
+    const { rerender } = await renderReady(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...props} />);
     const { screen: pixiScreen, renderer } = jest.mocked(Application).mock.results.at(-1)!.value;
     act(() => renderer.resize(0, 600));
     const request = { nodeId: 1, sequence: 1, documentRevision: 0 };
-    rerender(<MapStage taskProgress={new Map()} {...props} focusRequest={request} />);
+    rerender(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...props} focusRequest={request} />);
 
     expect(viewportRef.current?.getScreenSize()).toBeNull();
     expect(viewportRef.current?.fitNodes(sampleNodes, beforeFit)).toBe(false);
@@ -845,14 +884,16 @@ describe("MapStage boundary", () => {
       expect(viewportRef.current?.fitNodes(sampleNodes, beforeFit)).toBe(true);
     });
     const positionAfterFit = lastWorldContainer()?.position.set.mock.lastCall;
-    rerender(<MapStage taskProgress={new Map()} {...props} nodes={[...sampleNodes]} focusRequest={request} />);
+    rerender(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...props} nodes={[...sampleNodes]} focusRequest={request} />);
     expect(beforeFit).toHaveBeenCalledTimes(1);
     expect(beforeCenter).not.toHaveBeenCalled();
     expect(lastWorldContainer()?.position.set.mock.lastCall).toEqual(positionAfterFit);
   });
 
   it("gesture中のFキーではviewportを変更しない", async () => {
-    await renderReady(<MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1} />);
+    await renderReady(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1} />);
     const worldContainerBeforeKeyDown = lastWorldContainer();
     const event = new KeyboardEvent("keydown", { key: "f", cancelable: true });
 
@@ -888,7 +929,8 @@ describe("MapStage boundary", () => {
       const onDeleteNode = jest.fn();
       const onCopySubtree = jest.fn(() => ({ ok: false, reason: "invalid" }) as const);
       await renderReady(
-        <MapStage taskProgress={new Map()}
+        <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()}
           {...defaultProps}
           nodes={sampleNodes}
           selectedNodeId={1}
@@ -921,9 +963,11 @@ describe("MapStage boundary", () => {
         onDeleteNode,
         onCopySubtree,
       };
-      const { rerender } = await renderReady(<MapStage taskProgress={new Map()} {...props} shortcutsEnabled={false} />);
+      const { rerender } = await renderReady(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...props} shortcutsEnabled={false} />);
 
-      rerender(<MapStage taskProgress={new Map()} {...props} shortcutsEnabled />);
+      rerender(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...props} shortcutsEnabled />);
       fireShortcuts();
 
       expect(onAddChildNode).toHaveBeenCalledWith(1);
@@ -937,12 +981,14 @@ describe("MapStage boundary", () => {
     it("ノードの移動を中止し、その後の pointerup でも移動しない", async () => {
       const onMoveNode = jest.fn();
       const props = { ...defaultProps, nodes: sampleNodes, onMoveNode };
-      const { rerender } = await renderReady(<MapStage taskProgress={new Map()} {...props} />);
+      const { rerender } = await renderReady(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...props} />);
 
       act(() => {
         mockNodePointerHandlers.at(-2)?.pointerdown?.(pointer(100, 60));
       });
-      rerender(<MapStage taskProgress={new Map()} {...props} shortcutsEnabled={false} />);
+      rerender(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...props} shortcutsEnabled={false} />);
       act(() => {
         mockStageHandlers.pointermove?.(pointer(140, 100));
         mockStageHandlers.pointerup?.(pointer(140, 100));
@@ -954,13 +1000,15 @@ describe("MapStage boundary", () => {
     it("Shift+ドラッグの接続を中止し、その後の pointerup でも接続しない", async () => {
       const onConnectNodes = jest.fn();
       const props = { ...defaultProps, nodes: sampleNodes, onConnectNodes };
-      const { rerender } = await renderReady(<MapStage taskProgress={new Map()} {...props} />);
+      const { rerender } = await renderReady(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...props} />);
 
       act(() => {
         mockNodePointerHandlers.at(-2)?.pointerdown?.(pointer(100, 60, { shiftKey: true }));
         mockStageHandlers.pointermove?.(pointer(250, 130));
       });
-      rerender(<MapStage taskProgress={new Map()} {...props} shortcutsEnabled={false} />);
+      rerender(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...props} shortcutsEnabled={false} />);
       act(() => {
         mockStageHandlers.pointermove?.(pointer(250, 130));
         mockStageHandlers.pointerup?.(pointer(250, 130));
@@ -973,13 +1021,16 @@ describe("MapStage boundary", () => {
       const onMoveNode = jest.fn();
       const onConnectNodes = jest.fn();
       const props = { ...defaultProps, nodes: sampleNodes, onMoveNode, onConnectNodes };
-      const { rerender } = await renderReady(<MapStage taskProgress={new Map()} {...props} />);
+      const { rerender } = await renderReady(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...props} />);
 
       act(() => {
         mockNodePointerHandlers.at(-2)?.pointerdown?.(pointer(100, 60));
       });
-      rerender(<MapStage taskProgress={new Map()} {...props} shortcutsEnabled={false} />);
-      rerender(<MapStage taskProgress={new Map()} {...props} shortcutsEnabled />);
+      rerender(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...props} shortcutsEnabled={false} />);
+      rerender(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...props} shortcutsEnabled />);
       act(() => {
         mockNodePointerHandlers.at(-2)?.pointerdown?.(pointer(100, 60));
         mockStageHandlers.pointermove?.(pointer(140, 100));
@@ -1000,7 +1051,8 @@ describe("MapStage boundary", () => {
     it("Alt+↑で選択中のノードを1つ上へ移す要求を onReorderSibling へ渡し、既定動作を止める", async () => {
       const onReorderSibling = jest.fn();
       await renderReady(
-        <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onReorderSibling={onReorderSibling} />,
+        <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onReorderSibling={onReorderSibling} />,
       );
 
       const notCanceled = fireEvent.keyDown(document.body, { key: "ArrowUp", altKey: true });
@@ -1013,7 +1065,8 @@ describe("MapStage boundary", () => {
     it("shortcutsEnabled が false なら Alt+↑ で onReorderSibling を呼ばない", async () => {
       const onReorderSibling = jest.fn();
       await renderReady(
-        <MapStage taskProgress={new Map()}
+        <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()}
           {...defaultProps}
           nodes={sampleNodes}
           selectedNodeId={1}
@@ -1030,7 +1083,8 @@ describe("MapStage boundary", () => {
     it("ラベル編集中は Alt+↑ で onReorderSibling を呼ばない", async () => {
       const onReorderSibling = jest.fn();
       const { getByTestId } = await renderReady(
-        <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onReorderSibling={onReorderSibling} />,
+        <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onReorderSibling={onReorderSibling} />,
       );
       const container = document.querySelector(".cursor-crosshair") as HTMLElement;
       mockStageBounds(container);
@@ -1047,7 +1101,8 @@ describe("MapStage boundary", () => {
     it("Alt+Shift+↑ では onReorderSibling を呼ばない", async () => {
       const onReorderSibling = jest.fn();
       await renderReady(
-        <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onReorderSibling={onReorderSibling} />,
+        <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onReorderSibling={onReorderSibling} />,
       );
 
       fireEvent.keyDown(document.body, { key: "ArrowUp", altKey: true, shiftKey: true });
@@ -1060,7 +1115,8 @@ describe("MapStage boundary", () => {
     it("Alt+→で選択中のノードの階層を下げる要求を onChangeNodeIndent へ渡し、既定動作を止める", async () => {
       const onChangeNodeIndent = jest.fn();
       await renderReady(
-        <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onChangeNodeIndent={onChangeNodeIndent} />,
+        <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onChangeNodeIndent={onChangeNodeIndent} />,
       );
 
       const notCanceled = fireEvent.keyDown(document.body, { key: "ArrowRight", altKey: true });
@@ -1073,7 +1129,8 @@ describe("MapStage boundary", () => {
     it("Alt+←で選択中のノードの階層を上げる要求を onChangeNodeIndent へ渡し、既定動作を止める", async () => {
       const onChangeNodeIndent = jest.fn();
       await renderReady(
-        <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onChangeNodeIndent={onChangeNodeIndent} />,
+        <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onChangeNodeIndent={onChangeNodeIndent} />,
       );
 
       const notCanceled = fireEvent.keyDown(document.body, { key: "ArrowLeft", altKey: true });
@@ -1086,7 +1143,8 @@ describe("MapStage boundary", () => {
     it("shortcutsEnabled が false なら Alt+→ で onChangeNodeIndent を呼ばず、既定動作も止めない", async () => {
       const onChangeNodeIndent = jest.fn();
       await renderReady(
-        <MapStage taskProgress={new Map()}
+        <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()}
           {...defaultProps}
           nodes={sampleNodes}
           selectedNodeId={1}
@@ -1104,7 +1162,8 @@ describe("MapStage boundary", () => {
     it("ラベル編集中は Alt+→ で onChangeNodeIndent を呼ばない", async () => {
       const onChangeNodeIndent = jest.fn();
       const { getByTestId } = await renderReady(
-        <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onChangeNodeIndent={onChangeNodeIndent} />,
+        <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onChangeNodeIndent={onChangeNodeIndent} />,
       );
       const container = document.querySelector(".cursor-crosshair") as HTMLElement;
       mockStageBounds(container);
@@ -1121,7 +1180,8 @@ describe("MapStage boundary", () => {
     it("Alt+Shift+→ では onChangeNodeIndent を呼ばない", async () => {
       const onChangeNodeIndent = jest.fn();
       await renderReady(
-        <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onChangeNodeIndent={onChangeNodeIndent} />,
+        <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onChangeNodeIndent={onChangeNodeIndent} />,
       );
 
       fireEvent.keyDown(document.body, { key: "ArrowRight", altKey: true, shiftKey: true });
@@ -1133,7 +1193,8 @@ describe("MapStage boundary", () => {
       const onChangeNodeIndent = jest.fn();
       const onReorderSibling = jest.fn();
       await renderReady(
-        <MapStage taskProgress={new Map()}
+        <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()}
           {...defaultProps}
           nodes={sampleNodes}
           selectedNodeId={1}
@@ -1152,7 +1213,8 @@ describe("MapStage boundary", () => {
       const onChangeNodeIndent = jest.fn();
       const onReorderSibling = jest.fn();
       await renderReady(
-        <MapStage taskProgress={new Map()}
+        <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()}
           {...defaultProps}
           nodes={sampleNodes}
           selectedNodeId={1}
@@ -1170,7 +1232,8 @@ describe("MapStage boundary", () => {
     it("選択が無いときの Alt+← は onChangeNodeIndent を呼ばず、ブラウザの「戻る」は止める", async () => {
       const onChangeNodeIndent = jest.fn();
       await renderReady(
-        <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={null} onChangeNodeIndent={onChangeNodeIndent} />,
+        <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={null} onChangeNodeIndent={onChangeNodeIndent} />,
       );
 
       const notCanceled = fireEvent.keyDown(document.body, { key: "ArrowLeft", altKey: true });
@@ -1185,7 +1248,8 @@ describe("MapStage boundary", () => {
       const onInsertParentNode = jest.fn();
       defaultProps.onAddSiblingNode.mockClear();
       await renderReady(
-        <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onInsertParentNode={onInsertParentNode} />,
+        <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onInsertParentNode={onInsertParentNode} />,
       );
 
       const notCanceled = fireEvent.keyDown(document.body, { key: "Enter", altKey: true });
@@ -1200,7 +1264,8 @@ describe("MapStage boundary", () => {
       const onInsertParentNode = jest.fn();
       const onAddSiblingNode = jest.fn(() => null);
       await renderReady(
-        <MapStage taskProgress={new Map()}
+        <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()}
           {...defaultProps}
           nodes={sampleNodes}
           selectedNodeId={1}
@@ -1218,7 +1283,8 @@ describe("MapStage boundary", () => {
     it("shortcutsEnabled が false なら Alt+Enter で onInsertParentNode を呼ばず、既定動作も止めない", async () => {
       const onInsertParentNode = jest.fn();
       await renderReady(
-        <MapStage taskProgress={new Map()}
+        <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()}
           {...defaultProps}
           nodes={sampleNodes}
           selectedNodeId={1}
@@ -1236,7 +1302,8 @@ describe("MapStage boundary", () => {
     it("ラベル編集中は Alt+Enter で onInsertParentNode を呼ばない", async () => {
       const onInsertParentNode = jest.fn();
       const { getByTestId } = await renderReady(
-        <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onInsertParentNode={onInsertParentNode} />,
+        <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} selectedNodeId={1} onInsertParentNode={onInsertParentNode} />,
       );
       const container = document.querySelector(".cursor-crosshair") as HTMLElement;
       mockStageBounds(container);
@@ -1252,7 +1319,8 @@ describe("MapStage boundary", () => {
 
     it("labelEditRequest を受けると、そのノードのラベルを空の入力欄で編集し始め、入力欄へフォーカスを移す", async () => {
       const { getByTestId } = await renderReady(
-        <MapStage taskProgress={new Map()}
+        <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()}
           {...defaultProps}
           nodes={sampleNodes}
           labelEditRequest={{ nodeId: 1, sequence: 1, documentRevision: 0 }}
@@ -1267,12 +1335,14 @@ describe("MapStage boundary", () => {
     it("ジェスチャー中に labelEditRequest を受けると、ジェスチャーを中止して編集を始める", async () => {
       const onMoveNode = jest.fn();
       const props = { ...defaultProps, nodes: sampleNodes, onMoveNode };
-      const { rerender, getByTestId } = await renderReady(<MapStage taskProgress={new Map()} {...props} />);
+      const { rerender, getByTestId } = await renderReady(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...props} />);
 
       act(() => {
         mockNodePointerHandlers.at(-2)?.pointerdown?.(pointer(100, 60));
       });
-      rerender(<MapStage taskProgress={new Map()} {...props} labelEditRequest={{ nodeId: 1, sequence: 1, documentRevision: 0 }} />);
+      rerender(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...props} labelEditRequest={{ nodeId: 1, sequence: 1, documentRevision: 0 }} />);
       act(() => {
         mockStageHandlers.pointermove?.(pointer(140, 100));
         mockStageHandlers.pointerup?.(pointer(140, 100));
@@ -1284,7 +1354,8 @@ describe("MapStage boundary", () => {
 
     it("documentRevision が違う labelEditRequest では編集を始めない", async () => {
       const { queryByTestId } = await renderReady(
-        <MapStage taskProgress={new Map()}
+        <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()}
           {...defaultProps}
           nodes={sampleNodes}
           documentRevision={1}
@@ -1298,7 +1369,8 @@ describe("MapStage boundary", () => {
 
   it("preserves the current draft when the editing input is double-clicked", async () => {
     const { getByTestId } = await renderReady(
-      <MapStage taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} />,
+      <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} nodes={sampleNodes} />,
     );
     const container = document.querySelector(".cursor-crosshair") as HTMLElement;
     mockStageBounds(container);
@@ -1315,7 +1387,8 @@ describe("MapStage boundary", () => {
     const onMoveNode = jest.fn();
     const onUpdateLabel = jest.fn();
     const { getByTestId, queryByTestId, rerender } = await renderReady(
-      <MapStage taskProgress={new Map()}
+      <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()}
         {...defaultProps}
         nodes={sampleNodes}
         resetRevision={0}
@@ -1334,7 +1407,8 @@ describe("MapStage boundary", () => {
       mockStageHandlers.pointermove?.(pointer(20, 10));
       mockNodePointerHandlers.at(-2)?.pointerdown?.(pointer(100, 60));
       rerender(
-        <MapStage taskProgress={new Map()}
+        <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()}
           {...defaultProps}
           nodes={[{ ...sampleNodes[0], label: "読込後" }, sampleNodes[1]]}
           resetRevision={1}
@@ -1722,7 +1796,8 @@ describe("MapStage boundary", () => {
       const onSetSelectionFromMarquee = jest.fn();
       const onClearSelection = jest.fn();
       await renderReady(
-        <MapStage taskProgress={new Map()}
+        <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()}
           {...defaultProps}
           nodes={sampleNodes}
           onSetSelectionFromMarquee={onSetSelectionFromMarquee}

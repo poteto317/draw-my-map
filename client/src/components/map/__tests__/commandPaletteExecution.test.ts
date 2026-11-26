@@ -50,6 +50,16 @@ function context(overrides: Partial<CommandAvailabilityContext> = {}): CommandAv
     outlineCanAddRoot: false,
     outlineCanAddRelated: false,
     outlineCanEdit: false,
+    learningActive: false,
+    playingPresentation: false,
+    canLearnStart: true,
+    canLearnEnd: false,
+    canLearnReset: false,
+    canLearnGenerateCards: false,
+    canLearnOpenCards: false,
+    learnStartDisabledReason: null,
+    learnResetDisabledReason: null,
+    learnGenerateDisabledReason: null,
     ...overrides,
   };
 }

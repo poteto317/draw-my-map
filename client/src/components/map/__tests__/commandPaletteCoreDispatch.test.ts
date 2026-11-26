@@ -28,6 +28,9 @@ function immediateHandlers(
     addOutlineChild: jest.fn(),
     addOutlineSibling: jest.fn(),
     beginOutlineEdit: jest.fn(() => true),
+    startLearn: jest.fn(() => true),
+    endLearn: jest.fn(() => true),
+    generateLearnCards: jest.fn(() => true),
     ...overrides,
   };
 }
@@ -50,6 +53,8 @@ function dialogHandlers(
     openRegisterPart: jest.fn(),
     openInsertPart: jest.fn(),
     openDeletePart: jest.fn(),
+    openLearnReset: jest.fn(),
+    openLearnCards: jest.fn(),
     ...overrides,
   };
 }
