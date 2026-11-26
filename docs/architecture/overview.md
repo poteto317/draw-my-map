@@ -1175,6 +1175,10 @@ AI（Claude API・OpenAI API）に枝の要約と重要度を提案させ、利�
 
 依存の向きは components → hooks → services / domain、server → domain です。domain は server・services・React を import しません。`MapEditor` は `editorShortcutsEnabled` の積に `aiAssist.screen === "closed"` を加え、ダイアログの表示中は根を `inert` にして編集のショートカット（Undo / Redo を含む）を止めます。閉じたときは `useAiAssistFocusReturn` が入口のボタン（パレットから開いたときはキャンバス）へフォーカスを戻します。コマンドパレットの可否と理由は `aiAssist.summaryEntry`・`importanceEntry` から直接作ります。
 
+## 音声・タブレット・狭幅（Phase 36・候補090・091・092）
+
+音声の聞き取り状態は `useMapEditorVoice`／`useVoiceInput` のメモリ `listening` のみで、JSON には載りません。開始可否と構造編集の拒否は `domain/map/mapVoiceGuards.ts` が学習・プレゼン・選択形（`MapCanvasSelection`）と併せて先頭一本化します。確定テキストの取込は既存 `insertForest` に委譲し、コマンド可否は `resolveCommandAvailability` と `buildCommandAvailabilityContext` に `voiceListening` 等を載せます。タッチは `MapStage` 側でヒット拡大と長押しコンテキストを `pointerType === "touch"` に限定し、ピンチ／ダイアログ閉鎖窓は既存 coordinator と `dialogMouseClickedAtRef` を共有します。狭幅は `domain/view/narrowViewport.ts` の `NARROW_VIEWPORT_MAX_PX` と `useNarrowViewport` が `matchMedia` を購読し、`MapEditor` の `viewMode` 既定（アウトライン優先）と `userChoseMapOnNarrow` を `mapId` 再マウントでリセットします。
+
 ## 学習と復習（Phase 35・候補088・089）
 
 文書級 `learn`（`types/mapLearn.ts` の `MapLearnState`）は開示済みノード ID と復習カードを V3 JSON・`localStorage` に載せます。学習モードのオン／オフは `useMapLearnMode` のメモリ `learningActive` のみで、永続化しません。`mapDocumentDecoder` / `mapDocumentEncoder` と `mapDocumentState` の投影は `tour` と同型で往復し、`mapHistory` / `mapConflict` の equal に接続します。開示・進捗リセット・カード全置換は `domain/map/mapLearnMode.ts` と `useMapLearnActions` が `useNodes` の `applyStateChange` で 1 Undo に載せます。ラベル表示は `resolveLearnLabelDisplay` が学習中かつ未開示のときだけプレースホルダにし、幅は実ラベルを `renderMapNodes` と `OutlineEditor` が使います。復習カード生成は `domain/map/mapReviewCards.ts` の `generateReviewCards`（決定的・最大 50）。`LearnReviewCardsPanel` と `useMapLearnMode` がパネル開閉・表裏・前後（非 Undo）を担当します。`MapEditor` は `LearnModeControl` と `editorShortcutsEnabled` に `!learningActive` を積み、プレゼン再生（`usePresentationPlayback`）と相互排他します。新規マップ・別名保存・テンプレ新規・枝切り出し先では `mapDocumentOptionsForNewMap` / `omitLearnFromMapDocument` が `learn` を落とします。
