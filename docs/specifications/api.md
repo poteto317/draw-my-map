@@ -1,6 +1,6 @@
 # Draw My Map API 仕様書
 
-本書は、**Draw My Map** におけるノードアイコン・イラスト生成エンドポイント（`POST /api/illustrations`）の詳細な API 仕様、内部アーキテクチャ、処理パイプライン、クライアント側画像処理、および本番公開に向けた運用・セキュリティ考慮事項をまとめた技術仕様書です。9〜19章ではクライアントAPIを、20章では AI 支援のエンドポイント（`/api/ai-assist/*`）を扱います。
+本書は、**Draw My Map** におけるノードアイコン・イラスト生成エンドポイント（`POST /api/illustrations`）の詳細な API 仕様、内部アーキテクチャ、処理パイプライン、クライアント側画像処理、および本番公開に向けた運用・セキュリティ考慮事項をまとめた技術仕様書です。9〜19章ではクライアントAPIを、20章では AI 支援のエンドポイント（`/api/ai-assist/*`）、21章では学習と復習（Phase 35）のクライアント API を扱います。
 
 ---
 
@@ -26,6 +26,7 @@
 18. [OPML・CSV/TSV 交換のクライアントAPI](#18-opmlcsvtsv-交換のクライアントapi)
 19. [プレゼンテーションと案内のクライアントAPI](#19-プレゼンテーションと案内のクライアントapi)
 20. [AI 支援の API（`/api/ai-assist/*`）](#20-ai-支援の-apiapiai-assist)
+21. [学習と復習のクライアント API](#21-学習と復習のクライアントapi)
 
 ---
 
@@ -1147,3 +1148,76 @@ POST /api/ai-assist/missing-perspectives — 081。200 { "items": [{ "label", "p
 - `client/src/app/api/ai-assist/*`（`status`・`branch-summary`・`importance`・`child-candidates`・`classify-reorder`・`duplicates`・`missing-perspectives` の `route.ts`）
 - `client/src/services/aiAssist/aiAssistClient.ts`
 - `client/src/domain/aiAssist/*`（`aiBranchInput.ts`・`aiAssistOutput.ts`・`aiProposal.ts`・`aiStructureProposal.ts`・`aiAssistEntryAvailability.ts`）
+
+## 21. 学習と復習のクライアント API
+
+Phase 35（候補088・089）。HTTP エンドポイントと MapDocument V3 の版は増やしません。操作入口のガード正本は inventory（`docs/superpowers/specs/2026-11-26-phase35-learn-review-inventory.md`）。
+
+### 21.1 型・正規化（`types/mapLearn.ts`）
+
+```typescript
+export const MAP_LEARN_VERSION = 1;
+export const MAP_LEARN_CARD_MAX = 100;
+export const MAP_REVIEW_CARD_TEXT_MAX_CODEPOINTS = 500;
+
+export type MapReviewCard = {
+  id: string;
+  prompt: string;
+  answer: string;
+  sourceNodeIds: readonly number[];
+};
+export type MapLearnState = {
+  version: typeof MAP_LEARN_VERSION;
+  revealedNodeIds: readonly number[];
+  cards?: readonly MapReviewCard[];
+};
+
+export function normalizeLearn(raw: unknown): MapLearnState | undefined;
+export function projectLearn(learn: MapLearnState | undefined): { learn?: MapLearnState };
+export function areMapLearnsEqual(a: MapLearnState | undefined, b: MapLearnState | undefined): boolean;
+```
+
+- 生成 domain: `mapReviewCards.ts` の `generateReviewCards(nodes)`（最大 50、UI 用。永続化上限 100 は codec）。
+
+### 21.2 `useNodes.ts`（文書変更）
+
+```typescript
+learn: NodeMapState["learn"];
+revealLearnNode: (
+  nodeId: number,
+  guard: LearnSelectionGuardInput & { revealedNodeIds: ReadonlySet<number> },
+) => LearnMutationOutcome;
+resetLearnProgress: (guard: LearnMutationGuardInput) => LearnMutationOutcome;
+replaceLearnCards: (cards: readonly MapReviewCard[]) => LearnMutationOutcome;
+generateLearnReviewCards: (guard: LearnMutationGuardInput) => LearnMutationOutcome;
+```
+
+- 成功時のみ 1 操作の Undo / Redo。`replaceLearnCards` は **0 件を拒否**（文書不変）。
+- フック経路: `useMapLearnActions.ts`（`applyStateChangeRaw` を注入）。
+
+### 21.3 学習モード（メモリ）
+
+```typescript
+// useMapLearnMode.ts
+export function useMapLearnMode(options: UseMapLearnModeOptions): {
+  learningActive: boolean;
+  start: () => LearnStartOutcome;
+  end: () => boolean;
+  /* 復習カードパネル: open/close、index、表裏（非 Undo） */
+};
+
+// domain/map/mapLearnMode.ts
+export function resolveLearnLabelDisplay(
+  node: Node,
+  context: LearnLabelDisplayContext,
+): { text: string; realLabelForWidth: string };
+```
+
+- `MapEditor` は `!learningActive` を `editorShortcutsEnabled` に積み、プレゼン再生と相互排他。
+- 開示キー: `useLearnRevealKeyboard.ts`（Enter）。
+
+### 21.4 UI 連携
+
+- ヘッダー: `LearnModeControl.tsx`（学習トグル）。
+- 復習カード: `LearnReviewCardsPanel.tsx`（`useLearnReviewCardsKeyboard.ts` で Space / ← / →）。
+- 投影: `mapDocumentState.ts` の `mapDocumentOptionsForNewMap` / `omitLearnFromMapDocument` が §3.2「含めない」経路を実装。
