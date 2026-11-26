@@ -39,7 +39,9 @@ export function AutoLayoutMapStageHarness({ shortcutsEnabled = true }: AutoLayou
 
   return (
     <>
-      <MapStage taskProgress={new Map()}
+      <MapStage
+        learnDisplay={{ learningActive: false, revealedNodeIds: new Set<number>() }}
+        taskProgress={new Map()}
         nodes={nodes}
         highlightNodeIds={new Set<number>()}
         pinnedNodeIds={new Set<number>()}

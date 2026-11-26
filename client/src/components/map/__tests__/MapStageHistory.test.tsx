@@ -1,3 +1,5 @@
+const inactiveLearnDisplay = { learningActive: false, revealedNodeIds: new Set<number>() };
+
 import { act, fireEvent } from "@testing-library/react";
 import { useEffect, useLayoutEffect, useRef, type MutableRefObject } from "react";
 import { MapStage } from "@/components/map/MapStage";
@@ -48,7 +50,8 @@ function HistoryHarness({ apiRef, setup, visibleNodeIds }: HistoryHarnessProps) 
   }, [api, setup]);
 
   return (
-    <MapStage taskProgress={new Map()}
+    <MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()}
       nodes={api.nodes}
       highlightNodeIds={new Set<number>()}
       pinnedNodeIds={new Set<number>()}

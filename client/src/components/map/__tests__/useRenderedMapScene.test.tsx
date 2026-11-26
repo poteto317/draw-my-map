@@ -1,3 +1,4 @@
+const inactiveLearnDisplay = { learningActive: false, revealedNodeIds: new Set<number>() };
 import { renderHook } from "@testing-library/react";
 import { INITIAL_VIEWPORT, type Viewport } from "@/components/map/mapViewport";
 import { applyViewportTransform } from "@/components/map/pixi/applyViewportTransform";
@@ -32,6 +33,7 @@ function createOptions(
   createNodePointerDownHandler: () => RenderMapSceneOptions["onNodePointerDown"];
 } {
   return {
+    learnDisplay: inactiveLearnDisplay,
     nodes,
     selectedNodeIds: [],
     editingNodeId: null,
@@ -98,6 +100,7 @@ describe("useRenderedMapScene", () => {
         onGroupPointerDown: undefined,
         onNodePointerDown,
         viewport: INITIAL_VIEWPORT,
+        learnDisplay: inactiveLearnDisplay,
       },
     );
     expect(result.current).toBe(mockedRenderMapScene.mock.results[0].value);
@@ -245,7 +248,8 @@ describe("useRenderedMapScene", () => {
       ({ illustrationTextures }: { illustrationTextures: ReadonlyMap<string, Texture> }) =>
         useRenderedMapScene({
           runtime,
-          options: { ...baseOptions, illustrationTextures },
+          options: {
+      ...baseOptions, illustrationTextures },
           viewport: INITIAL_VIEWPORT,
           viewportRef,
           screenSize,
@@ -271,7 +275,8 @@ describe("useRenderedMapScene", () => {
       ({ siblingReorderIndicator }: { siblingReorderIndicator: SiblingReorderIndicator | null }) =>
         useRenderedMapScene({
           runtime,
-          options: { ...baseOptions, siblingReorderSourceNodeId: 1, siblingReorderIndicator },
+          options: {
+      ...baseOptions, siblingReorderSourceNodeId: 1, siblingReorderIndicator },
           viewport: INITIAL_VIEWPORT,
           viewportRef,
           screenSize,
@@ -302,7 +307,8 @@ describe("useRenderedMapScene", () => {
       ({ taskProgress }: { taskProgress: ReadonlyMap<number, { percent: number; remaining: number }> }) =>
         useRenderedMapScene({
           runtime,
-          options: { ...options, taskProgress },
+          options: {
+      ...options, taskProgress },
           viewport: INITIAL_VIEWPORT,
           viewportRef,
           screenSize,
@@ -327,7 +333,8 @@ describe("useRenderedMapScene", () => {
       ({ siblingReorderSourceNodeId }: { siblingReorderSourceNodeId: number | null }) =>
         useRenderedMapScene({
           runtime,
-          options: { ...baseOptions, siblingReorderSourceNodeId },
+          options: {
+      ...baseOptions, siblingReorderSourceNodeId },
           viewport: INITIAL_VIEWPORT,
           viewportRef,
           screenSize,

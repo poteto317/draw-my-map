@@ -14,7 +14,10 @@ import {
   resolveLabelTextPresentation,
   resolveLabelUnderline,
 } from "@/domain/nodes/labelTextStyle";
-import { getNodeDisplayLabel } from "@/domain/nodes/nodeDisplayLabel";
+import {
+  resolveLearnLabelDisplay,
+  type LearnLabelDisplayContext,
+} from "@/domain/map/mapLearnMode";
 import {
   getNodeIconCenterX,
   NODE_ICON_DISPLAY_SIZE_PX,
@@ -38,6 +41,8 @@ function nodeKindBarPixiColor(kind: NodeKind): number {
 
 export type RenderMapNodesOptions = {
   nodes: readonly Node[];
+  /** 省略不可（L-060） */
+  learnDisplay: LearnLabelDisplayContext;
   taskProgress: ReadonlyMap<number, TaskProgress>;
   selectedNodeIds: readonly number[];
   editingNodeId: number | null;
@@ -165,23 +170,30 @@ function createNodeLockMarker(constructors: PixiConstructors, node: Node): Graph
   return marker;
 }
 
-function createNodeLabelText(constructors: PixiConstructors, node: Node): Text {
+function createNodeLabelText(
+  constructors: PixiConstructors,
+  node: Node,
+  learnDisplay: LearnLabelDisplayContext,
+): Text {
+  const { text, realLabelForWidth } = resolveLearnLabelDisplay(node, learnDisplay);
   const presentation = resolveLabelTextPresentation(node);
-  const text = new constructors.Text({
-    text: getNodeDisplayLabel(node.label),
-    style: {
-      fontSize: presentation.fontSize,
-      fontWeight: presentation.fontWeight,
-      fill: NODE_LABEL_FILL,
-      wordWrap: true,
-      wordWrapWidth: node.width - 16,
-      align: "center",
-    },
-  });
-  text.anchor.set(0.5);
-  text.x = node.x + node.width / 2;
-  text.y = node.y + getNodeLabelCenterOffset(node);
-  return text;
+  const style = {
+    fontSize: presentation.fontSize,
+    fontWeight: presentation.fontWeight,
+    fill: NODE_LABEL_FILL,
+    wordWrap: true,
+    wordWrapWidth: node.width - 16,
+    align: "center" as const,
+  };
+  const labelText = new constructors.Text({ text, style });
+  if (text !== realLabelForWidth) {
+    const measureText = new constructors.Text({ text: realLabelForWidth, style });
+    labelText.width = measureText.width;
+  }
+  labelText.anchor.set(0.5);
+  labelText.x = node.x + node.width / 2;
+  labelText.y = node.y + getNodeLabelCenterOffset(node);
+  return labelText;
 }
 
 function createNodeKindBar(constructors: PixiConstructors, node: Node): Graphics | null {
@@ -269,7 +281,7 @@ export function renderMapNodes(
     }
 
     if (!isEditing) {
-      const text = createNodeLabelText(constructors, node);
+      const text = createNodeLabelText(constructors, node, options.learnDisplay);
       text.alpha = contentAlpha;
       const icon = createNodeIconText(constructors, node, text);
       if (icon !== null) {

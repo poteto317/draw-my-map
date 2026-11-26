@@ -1,6 +1,7 @@
 "use client";
 
 import type { TaskProgress } from "@/domain/nodes/nodeTaskProgress";
+import type { LearnLabelDisplayContext } from "@/domain/map/mapLearnMode";
 import { useCallback, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type RefObject } from "react";
 import { fitViewportToNodes, isValidScreenSize, type ScreenSize, type Viewport } from "@/components/map/mapViewport";
 import { NodeContextMenu } from "@/components/map/NodeContextMenu";
@@ -82,6 +83,7 @@ export type MapStageViewportHandle = {
 };
 
 type MapStageProps = {
+  learnDisplay: LearnLabelDisplayContext;
   taskProgress: ReadonlyMap<number, TaskProgress>;
   nodes: readonly Node[];
   focusRequest: NodeFocusRequest | null;
@@ -169,6 +171,7 @@ type MapStageProps = {
 };
 
 export function MapStage({
+  learnDisplay,
   taskProgress,
   nodes,
   focusRequest,
@@ -364,6 +367,7 @@ export function MapStage({
   const scene = useRenderedMapScene({
     runtime,
     options: {
+      learnDisplay,
       taskProgress,
       nodes,
       selectedNodeIds: resolvedSelectedNodeIds,

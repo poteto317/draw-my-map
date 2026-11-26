@@ -24,6 +24,9 @@ export type CommandPaletteImmediateCoreHandlers = {
   addOutlineChild: () => void;
   addOutlineSibling: () => void;
   beginOutlineEdit: () => boolean;
+  startLearn: () => boolean;
+  endLearn: () => boolean;
+  generateLearnCards: () => boolean;
 };
 
 export type CommandPaletteDialogHandlers = {
@@ -41,6 +44,8 @@ export type CommandPaletteDialogHandlers = {
   openRegisterPart: () => void;
   openInsertPart: () => void;
   openDeletePart: () => void;
+  openLearnReset: () => void;
+  openLearnCards: () => void;
 };
 
 /**
@@ -113,6 +118,12 @@ export function runCommandPaletteImmediateCore(
       return true;
     case "outline.begin-edit":
       return handlers.beginOutlineEdit();
+    case "learn.start":
+      return handlers.startLearn();
+    case "learn.end":
+      return handlers.endLearn();
+    case "learn.generate-cards":
+      return handlers.generateLearnCards();
     default:
       return false;
   }
@@ -165,6 +176,12 @@ export function openCommandPaletteDialog(
       return true;
     case "edit.delete-part":
       handlers.openDeletePart();
+      return true;
+    case "learn.reset-progress":
+      handlers.openLearnReset();
+      return true;
+    case "learn.open-cards":
+      handlers.openLearnCards();
       return true;
     default:
       return false;
