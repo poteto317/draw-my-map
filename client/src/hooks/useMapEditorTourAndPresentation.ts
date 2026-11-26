@@ -21,6 +21,8 @@ export type UseMapEditorTourAndPresentationOptions = {
   tour: MapTour | undefined;
   storageMode: "persistent" | "protected";
   conflictState: ConflictState;
+  /** 音声 listening 中はツアー編集を塞ぐ（inventory P31-N1）。useMapEditorVoice より先に呼ぶためミラーを渡す */
+  voiceListening: boolean;
   captureView: () => MapViewSnapshot;
   applyView: ApplyMapView;
   createTour: (title: string) => CreateTourOutcome;
@@ -50,6 +52,7 @@ export function useMapEditorTourAndPresentation({
   tour,
   storageMode,
   conflictState,
+  voiceListening,
   captureView,
   applyView,
   createTour,
@@ -106,7 +109,7 @@ export function useMapEditorTourAndPresentation({
     buttonRef: tourEditorButtonRef,
     fallbackRefs: tourFocusFallbacks,
   });
-  const tourHeaderDisabled = tourEditDisabled || playingPresentation;
+  const tourHeaderDisabled = tourEditDisabled || playingPresentation || voiceListening;
   const presentationStartDisabled = !presentationPlayback.canStart || playingPresentation;
   const previewTourStep = useCallback((stepId: string) => {
     const step = tour?.steps.find((item) => item.id === stepId);

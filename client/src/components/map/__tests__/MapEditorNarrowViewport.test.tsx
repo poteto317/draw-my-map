@@ -149,6 +149,38 @@ describe("MapEditor narrow viewport", () => {
     expect(screen.getByRole("button", { name: "アウトライン" })).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("狭幅でプレゼン自動マップ切替は userChoseMapOnNarrow を立てない（§5.2）", async () => {
+    installNarrowViewportMatchMedia(true);
+    const user = userEvent.setup();
+    const base = JSON.parse(baseNodesJson) as Record<string, unknown>;
+    const withTour = JSON.stringify({
+      ...base,
+      tour: {
+        version: 1,
+        title: "案内",
+        steps: [{
+          id: "step-1",
+          snapshot: {
+            viewport: { offsetX: 0, offsetY: 0, scale: 1 },
+            selectedNodeId: null,
+            selectedNodeIds: [],
+            focusRootId: null,
+            collapsedNodeIds: [],
+            resolutionMode: "auto",
+            autoResolutionLevel: "all",
+          },
+        }],
+      },
+    });
+    await renderEditor({ storage: createTestStorageSession({ initialJson: withTour }) });
+    expect(screen.getByRole("button", { name: "アウトライン" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "プレゼン開始" }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "マップ" })).toHaveAttribute("aria-pressed", "true");
+    });
+    expect(screen.getByRole("banner")).toHaveAttribute("data-user-chose-map-on-narrow", "false");
+  });
+
   it("L-060: Voice と Header に狭幅 props を配線する", async () => {
     installNarrowViewportMatchMedia(true);
     await renderEditor();

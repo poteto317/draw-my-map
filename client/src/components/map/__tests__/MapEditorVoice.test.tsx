@@ -159,4 +159,11 @@ describe("MapEditor voice input", () => {
     expect(screen.getByRole("button", { name: "枝を複製" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "選択中のノードだけ削除" })).toBeDisabled();
   });
+
+  it("listening 中はツアー編集ボタンが無効（inventory P31-N1）", async () => {
+    const user = userEvent.setup();
+    await renderEditor();
+    await user.click(screen.getByRole("button", { name: "音声入力" }));
+    expect(screen.getByRole("button", { name: "ツアー" })).toBeDisabled();
+  });
 });
