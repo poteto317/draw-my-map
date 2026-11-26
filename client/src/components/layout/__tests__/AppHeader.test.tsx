@@ -1,10 +1,16 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { AppHeader } from "@/components/layout/AppHeader";
 
+const defaultNarrowProps = {
+  isNarrowViewport: false,
+  userChoseMapOnNarrow: false,
+} as const;
+
 describe("AppHeader", () => {
   it("タイトル『Draw My Map』が表示される", () => {
     render(
       <AppHeader
+        {...defaultNarrowProps}
         viewControls={null}
         showCanvasHints={true}
         layoutMode="manual"
@@ -17,9 +23,10 @@ describe("AppHeader", () => {
     expect(screen.getByRole("heading", { name: "Draw My Map" })).toBeInTheDocument();
   });
 
-  it("狭い画面で内容を複数行に折り返せる", () => {
+  it("広幅ではヘッダー上段を複数行に折り返せる", () => {
     render(
       <AppHeader
+        {...defaultNarrowProps}
         viewControls={null}
         showCanvasHints={true}
         layoutMode="manual"
@@ -31,11 +38,39 @@ describe("AppHeader", () => {
 
     const topRow = screen.getByTestId("header-primary");
     expect(topRow).toHaveClass("flex-wrap");
+    expect(topRow).not.toHaveClass("overflow-x-auto");
+  });
+
+  it("狭幅ではヘッダー上段を横スクロールし先頭付近に表示モード・音声・保存を並べる", () => {
+    render(
+      <AppHeader
+        isNarrowViewport
+        userChoseMapOnNarrow={false}
+        viewControls={<div data-testid="view-controls">表示</div>}
+        voiceControls={<button type="button">音声入力</button>}
+        showCanvasHints={false}
+        layoutMode="manual"
+        onLayoutModeChange={jest.fn()}
+        searchControls={null}
+        mapControls={null}
+        saveStatus="saved"
+      />,
+    );
+
+    const topRow = screen.getByTestId("header-primary");
+    expect(topRow).toHaveClass("overflow-x-auto");
+    expect(topRow).not.toHaveClass("flex-wrap");
+    const viewControls = screen.getByTestId("view-controls");
+    const voice = screen.getByRole("button", { name: "音声入力" });
+    const save = screen.getByRole("status", { name: "保存状態: 保存済み" });
+    expect(viewControls.compareDocumentPosition(voice)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(voice.compareDocumentPosition(save)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it("高さ上限と縦スクロールで折り返し内容へ届く", () => {
     render(
       <AppHeader
+        {...defaultNarrowProps}
         viewControls={null}
         showCanvasHints={true}
         layoutMode="manual"
@@ -61,6 +96,7 @@ describe("AppHeader", () => {
   it("操作系スロットがすべて未指定のとき下段スクロール領域を描画しない", () => {
     render(
       <AppHeader
+        {...defaultNarrowProps}
         viewControls={null}
         showCanvasHints={true}
         layoutMode="manual"
@@ -77,6 +113,7 @@ describe("AppHeader", () => {
   it("操作系スロットがすべて falsy のとき下段スクロール領域を描画しない", () => {
     render(
       <AppHeader
+        {...defaultNarrowProps}
         viewControls={null}
         showCanvasHints={true}
         layoutMode="manual"
@@ -97,6 +134,7 @@ describe("AppHeader", () => {
   it("検索結果の absolute 配置をヘッダー overflow で切らない", () => {
     render(
       <AppHeader
+        {...defaultNarrowProps}
         viewControls={null}
         showCanvasHints={true}
         layoutMode="manual"
@@ -128,6 +166,7 @@ describe("AppHeader", () => {
     const onLayoutModeChange = jest.fn();
     render(
       <AppHeader
+        {...defaultNarrowProps}
         viewControls={null}
         showCanvasHints={true}
         layoutMode="manual"
@@ -149,6 +188,7 @@ describe("AppHeader", () => {
   ] as const)("%sモードの操作案内を組み込む", (layoutMode, expectedHint) => {
     render(
       <AppHeader
+        {...defaultNarrowProps}
         viewControls={null}
         showCanvasHints={true}
         layoutMode={layoutMode}
@@ -165,6 +205,7 @@ describe("AppHeader", () => {
   it("操作コントロールと通知をヘッダー内へ配置する", () => {
     render(
       <AppHeader
+        {...defaultNarrowProps}
         viewControls={null}
         showCanvasHints={true}
         layoutMode="manual"
@@ -185,6 +226,7 @@ describe("AppHeader", () => {
   it("重要度・表示スロットを操作案内の後、操作コントロールの前へDOM順で配置する", () => {
     render(
       <AppHeader
+        {...defaultNarrowProps}
         viewControls={null}
         showCanvasHints={true}
         layoutMode="manual"
@@ -219,6 +261,7 @@ describe("AppHeader", () => {
   it("マップ操作をh1の直後に描画する", () => {
     render(
       <AppHeader
+        {...defaultNarrowProps}
         viewControls={null}
         showCanvasHints={true}
         layoutMode="manual"
@@ -234,7 +277,7 @@ describe("AppHeader", () => {
 });
 
 it("outlineのview controlsを表示しcanvasヒントを隠す", () => {
-  render(<AppHeader layoutMode="manual" onLayoutModeChange={jest.fn()} mapControls={null} saveStatus="saved" searchControls={null}
+  render(<AppHeader {...defaultNarrowProps} layoutMode="manual" onLayoutModeChange={jest.fn()} mapControls={null} saveStatus="saved" searchControls={null}
     viewControls={<button>アウトライン表示</button>} showCanvasHints={false} />);
   expect(screen.getByRole("button", { name: "アウトライン表示" })).toBeInTheDocument();
   expect(screen.queryByText(/空白ダブルクリックで追加/)).not.toBeInTheDocument();
@@ -242,7 +285,7 @@ it("outlineのview controlsを表示しcanvasヒントを隠す", () => {
 
 
 it("通知がなくてもマップ操作の直後の通常行に保存状態を表示する", () => {
-  render(<AppHeader layoutMode="manual" onLayoutModeChange={jest.fn()}
+  render(<AppHeader {...defaultNarrowProps} layoutMode="manual" onLayoutModeChange={jest.fn()}
     mapControls={<button>マップ操作</button>} saveStatus="beforeSave"
     searchControls={null} viewControls={null} showCanvasHints={false} operationNotices={null} />);
 
@@ -254,7 +297,7 @@ it("通知がなくてもマップ操作の直後の通常行に保存状態を�
 });
 
 it("保存失敗通知だけを alert とし、保存状態を通知行より前に表示する", () => {
-  render(<AppHeader layoutMode="manual" onLayoutModeChange={jest.fn()}
+  render(<AppHeader {...defaultNarrowProps} layoutMode="manual" onLayoutModeChange={jest.fn()}
     mapControls={null} saveStatus="failed" searchControls={null} viewControls={null}
     showCanvasHints={false} operationNotices={<p role="alert">JSONで書き出してください。</p>} />);
 
