@@ -44,6 +44,7 @@
 35. [OPML・CSV/TSV 交換（Phase 30 前半）](#35-opmlcsvtsv-交換phase-30-前半)
 36. [プレゼンテーションと案内（Phase 31）](#36-プレゼンテーションと案内phase-31)
 37. [学習と復習（Phase 35）](#37-学習と復習phase-35)
+38. [音声・タブレット・モバイル（Phase 36）](#38-音声タブレットモバイルphase-36)
 
 ---
 
@@ -88,6 +89,7 @@ Pixi.js による高速な 2D キャンバス描画と、React 19 による宣�
 | **Phase 30** | 外部形式との交換（進行中・前半。OPML・CSV/TSV） | ヘッダー「OPML取り込み」「CSV・TSV取り込み」でファイルをプレビューして追加（068・069・35 章）。書き出し群に OPML・CSV・TSV を追加し、`ExportScope`（全件／表示中／選択）を共有（29.1 節）。067 PDF、070 他形式、071 HTML は対象外 |
 | **Phase 31** | プレゼンテーションと案内（完了。072・073） | 文書級 `tour`（`MapViewSnapshot` ステップ列＋任意キャプション）の編集と再生（36 章）。ヘッダー「ツアー」「プレゼン開始」。再生中は編集・取込を抑止しパン・ズームは可。コマンドパレットへの新操作掲載は非目標 |
 | **Phase 35** | 学習と復習（完了。088・089） | 文書級 `learn`（開示済みノード ID・復習カード）とメモリ上の学習モード（37 章）。ヘッダー「学習」トグル・復習カードパネル。学習中は構造編集を抑止しプレゼンと相互排他。幅は実ラベルで維持 |
+| **Phase 36** | 音声・タブレット・モバイル（完了。090・091・092） | Web Speech API の音声入力（メモリ上 `listening`・確定で `insertForest`）、タッチのヒット拡大・長押しコンテキスト、狭幅（767px 以下）でアウトライン既定（38 章）。V3 に新フィールドなし |
 
 ### 1.2 アプリケーション画面レイアウト
 
@@ -3452,3 +3454,39 @@ Phase 35 の候補088（学習用の穴埋め表示）・089（復習カード�
 
 - **競合・履歴**: `areMapStatesEqual` / `isDocumentContentEqual` が `learn` 差分を検出。`revealedNodeIds` は数値昇順ソート後に比較、`cards` は配列順で比較。
 - **検証範囲**: Jest（jsdom）で `mapLearn` codec・`mapLearnMode`・`mapReviewCards`・`useMapLearnActions`・`useMapLearnMode`・`MapEditor` 統合・inventory 代表経路を検査。`npm run verify` で lint・typecheck・test・build を通します。実ブラウザ確認は未実施（[browser-test-cases.md の AN 節](../testing/browser-test-cases.md)）。
+
+## 38. 音声・タブレット・モバイル（Phase 36）
+
+Phase 36 の候補090（音声入力）・091（タブレット向け操作）・092（スマートフォン向け簡易編集）の仕様です。`listening` は **メモリのみ**（永続化しない）。MapDocument V3 に音声専用フィールドは足しません。操作入口のガード正本は inventory（`docs/superpowers/specs/2026-11-26-phase36-voice-tablet-mobile-inventory.md`）。
+
+### 38.1 音声入力（090）
+
+| 項目 | 内容 |
+|------|------|
+| 入口 | ヘッダー「音声入力」トグル（`VoiceInputControl.tsx`）。コマンド `voice-input-start` / `voice-input-stop` |
+| 認識 | ブラウザ Web Speech API（`ja-JP` 既定）。`continuous: false`・`interimResults: true` でセッションをループ |
+| 取込 | 確定テキストを主選択 1 件の子、未選択時は新ルートとして `insertForest`（1 Undo） |
+| 開始拒否 | 保護・競合・外部削除・学習・プレゼン・ダイアログ／パレット・関連線／グループ選択など（`mapVoiceGuards.ts`） |
+| 編集ロック | `listening` 中は構造編集・取込・AI 適用などを無効。排他状態へ入ったら認識を即停止 |
+| 中間結果 | ヘッダー近傍の一時表示のみ（ライブ通知は確定・エラー・停止に限る） |
+
+### 38.2 タブレット向け操作（091）
+
+| 項目 | 内容 |
+|------|------|
+| ヒット | タッチ時のみノードヒット領域に追加パディング（描画サイズは不変） |
+| 長押し | ノード上の長押しで既存コンテキストメニュー。移動超過時はパン／ドラッグへ |
+| 誤タップ | ダイアログ閉鎖直後の pointer 無視窓をタッチでも共有。ピンチ中は単指コンテキストを開始しない |
+
+### 38.3 狭幅とアウトライン（092）
+
+| 項目 | 内容 |
+|------|------|
+| 狭幅 | `NARROW_VIEWPORT_MAX_PX = 767`（`useNarrowViewport`） |
+| 既定表示 | 狭幅で `outline` を既定。ユーザーがマップを選んだら `userChoseMapOnNarrow` で尊重 |
+| リセット | `mapId` 再マウント・保護モード等の画面再構築でフラグ解除 |
+| ヘッダー | 狭幅は横スクロール。表示モード・音声・保存状態が先頭付近に並ぶ |
+
+### 38.4 検証範囲
+
+Jest（jsdom）で `mapVoiceGuards`・`useVoiceInput`／`useMapEditorVoice`・タッチヒット／長押し・`useNarrowViewport`・`MapEditor` 統合を検査し、`npm run verify` を通します。実ブラウザ確認は未実施（[browser-test-cases.md の AO 節](../testing/browser-test-cases.md)）。
