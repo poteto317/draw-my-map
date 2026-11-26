@@ -1,3 +1,4 @@
+import { areCustomAttributesEqual, areNodeTasksEqual } from "@/domain/nodes/nodeTaskAttributes";
 import { areGroupsEqual, areRelationsEqual } from "@/domain/map/relationGroupModel";
 import { areLayoutSpacingEqual } from "@/domain/persistence/mapDocumentLayoutSpacing";
 import { areLabelTextStylesEqual } from "@/domain/nodes/labelTextStyle";
@@ -45,10 +46,12 @@ function areNodesEqual(a: Node, b: Node): boolean {
   // 書式キーは欠落＝標準としてまとめて比べる（キー有無の差だけでは履歴を積まない）
   if (!areLabelTextStylesEqual(a, b)) return false;
   // Node は型エイリアスのため、キャストなしで任意のキーを読める型へ代入できる（illustration・links・tags・sources・mapLinks・labelFontSize・labelBold・labelUnderline・icon・kind の有無も比較する）
+  if (!areNodeTasksEqual(a.task, b.task) || !areCustomAttributesEqual(a.customAttributes, b.customAttributes)) return false;
   const left: Readonly<Record<string, unknown>> = a;
   const right: Readonly<Record<string, unknown>> = b;
   const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
   for (const key of keys) {
+    if (key === "task" || key === "customAttributes") continue;
     if (key === "labelFontSize" || key === "labelBold" || key === "labelUnderline") continue;
     const leftValue = left[key];
     const rightValue = right[key];

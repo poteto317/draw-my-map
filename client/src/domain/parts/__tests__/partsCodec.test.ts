@@ -220,3 +220,12 @@ describe("encodePartsStore / decodePartsStore", () => {
     });
   });
 });
+
+test("タスクと選択肢を部品で往復する", () => {
+  const attributes = {
+    task: { completed: false, dueDate: "2024-02-29", assignee: "担当者" },
+    customAttributes: [{ name: "分類", type: "choice", options: ["B", "A"], value: "A" }],
+  } as const;
+  const store: PartsStore = { version: 1, parts: [samplePart({ nodes: [node(1, null, attributes)] })] };
+  expect(decodePartsStore(encodePartsStore(store))).toMatchObject({ status: "ok", store, repaired: false });
+});

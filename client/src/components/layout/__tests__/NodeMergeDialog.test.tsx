@@ -391,3 +391,12 @@ describe("NodeMergeDialog", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("");
   });
 });
+
+
+test("タスクの引き継ぎとカスタム属性の破棄を確定前に表示する", () => {
+  const taskText = "『リンゴ』のタスク、完了、期限 2026-11-26、担当者 担当、他の 1 件を破棄";
+  const customAttributeText = "1 件を保持、同名 1 件を破棄（種別）";
+  renderDialog({ preview: preview({ taskText, customAttributeText }) });
+  expect(screen.getByText(taskText)).toBeInTheDocument();
+  expect(screen.getByText(customAttributeText)).toBeInTheDocument();
+});

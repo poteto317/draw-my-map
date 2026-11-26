@@ -1,3 +1,4 @@
+import { withCustomAttributes } from "@/domain/nodes/nodeTaskAttributes";
 import { createNodeIdAllocator } from "@/domain/nodes/nodeIdAllocator";
 import { duplicateNodeSubtree } from "@/domain/nodes/nodeSubtreeDuplication";
 import { createTestNode } from "@/testing/createTestNode";
@@ -248,4 +249,20 @@ describe("duplicateNodeSubtree", () => {
       expect(node.parentId).toBe(copies[index].id);
     });
   });
+});
+
+test("複製はタスク属性を保持し、値の変更が複製元へ波及しない", () => {
+  const original = createTestNode({
+    id: 1,
+    task: { completed: false, assignee: "担当者" },
+    customAttributes: [{ name: "分類", type: "choice", options: ["B", "A"], value: "A" }],
+  });
+  const result = duplicateNodeSubtree([original], 1, "manual", idsFrom([10]));
+  const copy = result?.nodes.find((node) => node.id === 10);
+  expect(copy?.task).toEqual(original.task);
+  expect(copy?.customAttributes).toEqual(original.customAttributes);
+  if (!copy) throw new Error("複製ノードが見つかりません");
+  const updated = withCustomAttributes(copy, [{ name: "分類", type: "choice", options: ["B", "A"], value: "B" }]);
+  expect(updated.customAttributes?.[0].value).toBe("B");
+  expect(original.customAttributes?.[0].value).toBe("A");
 });

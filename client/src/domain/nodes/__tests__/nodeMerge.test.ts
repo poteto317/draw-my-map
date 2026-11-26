@@ -108,6 +108,15 @@ describe("planNodeMerge", () => {
     expect(okPlan(family, [2, 3, 4], 3)).toEqual({
       ok: true,
       survivorId: 3,
+      taskAttributes: {
+        task: undefined,
+        taskSourceId: null,
+        discardedTaskCount: 0,
+        customAttributes: undefined,
+        duplicateAttributeCount: 0,
+        discardedAttributeNames: [],
+        sources: [3, 2, 4].map((id) => ({ id, task: undefined, customAttributes: undefined })),
+      },
       absorbedIds: [2, 4],
       label: "りんご リンゴ apple",
       importance: "high",
@@ -1415,4 +1424,41 @@ describe("mergeNodes", () => {
       expect(visibleAfterMerge([3], 3).has(5)).toBe(false);
     });
   });
+});
+
+test("破棄されるタスクの期限だけが変わった場合も古いプレビューを拒む", () => {
+  const nodes = [
+    node(1, null, "親"),
+    node(2, 1, "吸収", { task: { completed: false, dueDate: "2026-11-26" } }),
+    node(3, 1, "主選択", { task: { completed: true, assignee: "担当" } }),
+  ];
+  const plan = (items: readonly Node[]) => planNodeMerge(items, [2, 3], 3, "、", new Set([1, 2, 3]), CURRENT_MAP_ID);
+  const before = plan(nodes);
+  expect(before).toMatchObject({ ok: true, taskAttributes: { taskSourceId: 3, discardedTaskCount: 1 } });
+  const after = plan(nodes.map((item) => item.id === 2 ? { ...item, task: { completed: false, dueDate: "2026-11-27" } } : item));
+  expect(isSameNodeMergePlan(before, after)).toBe(false);
+});
+
+test("同名の異種属性は主選択の値を残す", () => {
+  const nodes = [
+    node(1, null, "親"),
+    node(2, 1, "吸収", { customAttributes: [{ name: "Ａ", type: "date", value: "2024-02-29" }] }),
+    node(3, 1, "主選択", { customAttributes: [{ name: "a", type: "number", value: 0 }] }),
+  ];
+  expect(planNodeMerge(nodes, [2, 3], 3, "、", new Set([1, 2, 3]), CURRENT_MAP_ID)).toMatchObject({
+    ok: true,
+    taskAttributes: { customAttributes: nodes[2].customAttributes, discardedAttributeNames: ["Ａ"] },
+  });
+});
+
+test("11種類目のカスタム属性が失われる統合を拒む", () => {
+  const nodes = [
+    node(1, null, "親"),
+    node(2, 1, "先", { customAttributes: Array.from({ length: 10 }, (_, index) => ({
+      name: `属性${index}`, type: "number", value: index,
+    })) }),
+    node(3, 1, "後", { customAttributes: [{ name: "追加", type: "number", value: 0 }] }),
+  ];
+  expect(planNodeMerge(nodes, [2, 3], 2, "、", visibleOf(nodes), CURRENT_MAP_ID))
+    .toEqual({ ok: false, reason: "custom-attributes-too-many" });
 });

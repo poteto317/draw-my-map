@@ -1,3 +1,5 @@
+import { areNodeTaskAttributeMergesEqual, planNodeTaskAttributeMerge, type NodeTaskAttributeMerge } from "@/domain/nodes/nodeTaskAttributeMerge";
+import { withCustomAttributes, withNodeTask } from "@/domain/nodes/nodeTaskAttributes";
 import { ILLUSTRATED_NODE_HEIGHT } from "@/config/shapes";
 import { assertNodesEditable } from "@/domain/nodes/nodeEditLock";
 import { keepFirstRootPosition } from "@/domain/nodes/nodeFirstRootPosition";
@@ -44,6 +46,7 @@ export type NodeMergeFailureReason =
   // 選択中の出典を同じ出典とみなすもの（nodeSourceKey）を除いて連結すると上限（NODE_SOURCES_MAX_COUNT）を超える。黙って切り詰めない
   | "sources-too-many"
   // 選択中のマップ間リンクを同じリンクとみなすもの（nodeMapLinkKey）を除いて連結すると上限（NODE_MAP_LINKS_MAX_COUNT）を超える。黙って切り詰めない
+  | "custom-attributes-too-many"
   | "map-links-too-many"
   | "locked"
   // 確定時の再計画が、プレビューで見せた計画と違う（useNodes.mergeNodes が返す）
@@ -53,6 +56,7 @@ export type NodeMergePlan =
   | {
     ok: true;
     survivorId: number;
+    taskAttributes: NodeTaskAttributeMerge;
     // 配列順
     absorbedIds: number[];
     label: string;
@@ -218,8 +222,11 @@ export function planNodeMerge(
   // 検査の順の最後（sources-too-many の後）
   if (mapLinks.length > NODE_MAP_LINKS_MAX_COUNT) return failed("map-links-too-many");
 
+  const taskAttributes = planNodeTaskAttributeMerge([survivor, ...absorbed]);
+  if (!taskAttributes) return failed("custom-attributes-too-many");
   return {
     ok: true,
+    taskAttributes,
     survivorId: survivor.id,
     absorbedIds: absorbed.map((node) => node.id),
     // 空文字のラベルを除いて連結する。前後の空白は削らない
@@ -255,6 +262,7 @@ export function planNodeMerge(
 export function isSameNodeMergePlan(a: NodeMergePlan, b: NodeMergePlan): boolean {
   if (!a.ok || !b.ok) return false;
   return a.survivorId === b.survivorId
+    && areNodeTaskAttributeMergesEqual(a.taskAttributes, b.taskAttributes)
     && a.label === b.label
     && a.importance === b.importance
     && a.illustrationFrom === b.illustrationFrom
@@ -341,7 +349,7 @@ function mergeNodeAppearance(survivor: Node, absorbed: readonly Node[]): Node {
 }
 
 function applyPlanToSurvivor(survivor: Node, plan: Extract<NodeMergePlan, { ok: true }>): Node {
-  const updated = withNodeMapLinks(
+  const withLinks = withNodeMapLinks(
     withNodeSources(
       withNodeTags(
         withNodeLinks(
@@ -354,6 +362,8 @@ function applyPlanToSurvivor(survivor: Node, plan: Extract<NodeMergePlan, { ok: 
     ),
     plan.mapLinks,
   );
+  const { task, customAttributes } = plan.taskAttributes;
+  const updated = withCustomAttributes(withNodeTask(withLinks, task), customAttributes);
   if (plan.illustrationFrom !== "absorbed" || plan.illustration === undefined) return updated;
   return { ...updated, illustration: plan.illustration, height: ILLUSTRATED_NODE_HEIGHT };
 }

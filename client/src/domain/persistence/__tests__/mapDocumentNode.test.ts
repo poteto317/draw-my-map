@@ -214,3 +214,37 @@ describe("normalizeMapDocumentNode の sources", () => {
     });
   });
 });
+
+test("V3では属性を保持し、旧バージョンでは新しいキーを除く", () => {
+  const attributes = {
+    task: { completed: false, dueDate: "2024-02-29", assignee: "担当者" },
+    customAttributes: [{ name: "分類", type: "choice", options: ["B", "A"], value: "A" }],
+  } as const;
+  expect(normalizeMapDocumentNode({ ...validNode, ...attributes }, 0, 3)).toEqual({
+    ok: true, value: { ...validNode, ...attributes },
+  });
+  for (const version of [1, 2] as const) {
+    expect(normalizeMapDocumentNode({ ...validNode, task: null, customAttributes: null }, 0, version)).toEqual({
+      ok: true, value: validNode,
+    });
+    expect(normalizeMapDocumentNode({ ...validNode, ...attributes }, 0, version)).toEqual({
+      ok: true, value: validNode,
+    });
+  }
+});
+
+test("V3では task / customAttributes の null を省略と同じ扱いにする", () => {
+  expect(normalizeMapDocumentNode({ ...validNode, task: null, customAttributes: null }, 0, 3)).toEqual({
+    ok: true, value: validNode,
+  });
+});
+
+test.each([
+  { task: { completed: true, unknown: 1 } },
+  { customAttributes: [{ name: "数", type: "number", value: "1" }] },
+  { customAttributes: [{ name: "選択", type: "choice", options: ["A"], value: "B" }] },
+])("不正なV3属性を拒絶する %j", (attributes) => {
+  expect(normalizeMapDocumentNode({ ...validNode, ...attributes }, 2, 3)).toMatchObject({
+    ok: false, error: expect.stringContaining("node[2]."),
+  });
+});

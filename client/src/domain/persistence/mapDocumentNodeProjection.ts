@@ -1,3 +1,4 @@
+import { projectNodeTaskAttributes } from "@/domain/nodes/nodeTaskAttributes";
 import { projectLabelTextStyle } from "@/domain/nodes/labelTextStyle";
 import { projectNodeIcon } from "@/domain/nodes/nodeIcon";
 import { projectNodeKind } from "@/domain/nodes/nodeKindUpdate";
@@ -25,5 +26,6 @@ export function projectMapDocumentNode(node: Node): Node {
     ...projectLabelTextStyle(node),
     ...projectNodeIcon(node),
     ...projectNodeKind(node),
+    ...projectNodeTaskAttributes(node),
   };
 }
