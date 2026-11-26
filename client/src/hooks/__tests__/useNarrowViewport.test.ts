@@ -10,6 +10,7 @@ function mountHook(
     storageMode: "persistent" | "protected";
     viewMode: EditorViewMode;
     applyViewMode: (mode: EditorViewMode) => void;
+    suppressOutlineOverride: boolean;
   }> = {},
 ) {
   const applyViewMode = overrides.applyViewMode ?? jest.fn();
@@ -20,17 +21,20 @@ function mountHook(
         mapId: string;
         storageMode: "persistent" | "protected";
         viewMode: EditorViewMode;
+        suppressOutlineOverride: boolean;
       }) => useNarrowViewport({
         mapId: props.mapId,
         storageMode: props.storageMode,
         viewMode: props.viewMode,
         applyViewMode,
+        suppressOutlineOverride: props.suppressOutlineOverride,
       }),
       {
         initialProps: {
           mapId: overrides.mapId ?? "map-a",
           storageMode: overrides.storageMode ?? "persistent",
           viewMode: overrides.viewMode ?? "map",
+          suppressOutlineOverride: overrides.suppressOutlineOverride ?? false,
         },
       },
     ),
@@ -60,6 +64,13 @@ describe("useNarrowViewport", () => {
     expect(applyViewMode).toHaveBeenCalledWith("outline");
   });
 
+  it("suppressOutlineOverride 中は狭幅でも map を outline へ上書きしない", () => {
+    installNarrowViewportMatchMedia(true);
+    const applyViewMode = jest.fn();
+    mountHook({ applyViewMode, viewMode: "map", suppressOutlineOverride: true });
+    expect(applyViewMode).not.toHaveBeenCalled();
+  });
+
   it("狭幅で userChoseMapOnNarrow 中は outline へ上書きしない", () => {
     const media = installNarrowViewportMatchMedia(true);
     const applyViewMode = jest.fn();
@@ -67,7 +78,12 @@ describe("useNarrowViewport", () => {
     act(() => {
       result.current.recordManualViewModeChange("map");
     });
-    rerender({ mapId: "map-a", storageMode: "persistent", viewMode: "map" });
+    rerender({
+      mapId: "map-a",
+      storageMode: "persistent",
+      viewMode: "map",
+      suppressOutlineOverride: false,
+    });
     applyViewMode.mockClear();
     act(() => {
       media.setMatches(false);
@@ -87,7 +103,12 @@ describe("useNarrowViewport", () => {
     act(() => {
       media.setMatches(false);
     });
-    rerender({ mapId: "map-a", storageMode: "persistent", viewMode: "outline" });
+    rerender({
+      mapId: "map-a",
+      storageMode: "persistent",
+      viewMode: "outline",
+      suppressOutlineOverride: false,
+    });
     expect(applyViewMode).not.toHaveBeenCalled();
   });
 
@@ -99,7 +120,12 @@ describe("useNarrowViewport", () => {
       result.current.recordManualViewModeChange("map");
     });
     expect(result.current.userChoseMapOnNarrow).toBe(true);
-    rerender({ mapId: "map-b", storageMode: "persistent", viewMode: "map" });
+    rerender({
+      mapId: "map-b",
+      storageMode: "persistent",
+      viewMode: "map",
+      suppressOutlineOverride: false,
+    });
     expect(result.current.userChoseMapOnNarrow).toBe(false);
   });
 
@@ -111,7 +137,12 @@ describe("useNarrowViewport", () => {
       result.current.recordManualViewModeChange("map");
     });
     expect(result.current.userChoseMapOnNarrow).toBe(true);
-    rerender({ mapId: "map-a", storageMode: "protected", viewMode: "map" });
+    rerender({
+      mapId: "map-a",
+      storageMode: "protected",
+      viewMode: "map",
+      suppressOutlineOverride: false,
+    });
     expect(result.current.userChoseMapOnNarrow).toBe(false);
   });
 });
