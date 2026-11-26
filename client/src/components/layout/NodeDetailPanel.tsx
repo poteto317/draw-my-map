@@ -230,6 +230,7 @@ export function NodeDetailPanel({
           {/* タグ・リンク・出典・マップ間リンクの節の key はノードの ID だけ（兄弟の NodeNoteEditor や互いと重ならないよう接頭辞を付ける）。
               documentRevision では作り直さず、節の中で下書きとエラーだけを消す（作り直すとリンク・削除ボタンのフォーカスが
               body へ落ちる。L-155・L-397・L-588） */}
+          {/* タスク／カスタム属性の表示可否は MapEditor の taskEditing 配線で決める（見た目節の visible 相当。L-061） */}
           {selectedNode && taskEditing && <NodeTaskSection key={`task:${selectedNode.id}`}
             target={{ nodeId: selectedNode.id, documentRevision }} task={selectedNode.task}
             disabled={taskEditing.disabled} commitTask={taskEditing.commitTask} />}
