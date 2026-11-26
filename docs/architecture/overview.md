@@ -10,8 +10,8 @@ Draw My Map のシステム全体アーキテクチャ、レイヤード設計�
 
 Draw My Map は、思考の整理・アイデア発想を直感的に支援する**ブラウザ完結型シングルページ・マインドマップアプリケーション**（SPA）です。
 
-- **ローカルファースト & クライアント完結**: マップデータ（ノードツリー、配置座標、重要度、レイアウトモード）はすべてブラウザ上の React 状態および `localStorage` で安全に保持・管理され（Phase 12 から、名前を付けた複数のマップを一覧のインデックスとマップごとの本体に分けて保存）、外部データベースへの認証や接続なしにオフラインでも動作します。JSON ファイルとしてのエクスポート/インポート、SVG/PNG 形式の画像書き出し、OPML/CSV/TSV による他ツールとのデータ交換もすべてクライアントサイドで処理されます。
-- **軽量サーバーサイド連携（BFF / Route Handler）**: AI によるノードイラスト生成機能のみ、Next.js App Router の Route Handler（`POST /api/illustrations`）を介して Cloudflare Workers AI（`@cf/meta/m2m100-1.2b` による日本語プロンプト英訳、`@cf/black-forest-labs/flux-1-schnell` による画像生成）と安全に通信します。API キー等の機密情報はサーバーサイドでのみ保持されます。
+- **ローカルファースト & クライアント完結**: マップデータ（ノードツリー、配置座標、重要度、レイアウトモード）はすべてブラウザ上の React 状態および `localStorage` で安全に保持・管理され（Phase 12 から、名前を付けた複数のマップを一覧のインデックスとマップごとの本体に分けて保存）、外部データベースへの認証や接続なしにオフラインでも動作します。JSON ファイルとしてのエクスポート/インポート、SVG/PNG 形式の画像書き出し、OPML/CSV/TSV による他ツールとのデータ交換もすべてクライアントサイドで処理されます。共有（Phase 37）でも編集の正本はローカルのままです。
+- **軽量サーバーサイド連携（BFF / Route Handler）**: Next.js App Router の Route Handler 経由で、(1) AI イラスト生成（`POST /api/illustrations` → Cloudflare Workers AI）、(2) AI 支援（`/api/ai-assist/*`）、(3) 共有（Auth.js Google・`/api/share/*` → Cloudflare D1／R2）を扱います。API キー・OAuth 秘密・共有用資格情報はサーバーサイドでのみ保持されます。
 
 ```mermaid
 graph TD
@@ -23,19 +23,22 @@ graph TD
             Services["Services Layer (Storage / Export / API Client)"]
             Domain["Domain Layer (Layout / Tree / Search / Math / Codec)"]
             PixiApp["Pixi.js 8 (2D WebGL / Canvas Stage)"]
+            ShareViewer["Share Viewer (/share/token)"]
         end
-        LocalStorage[("localStorage<br/>(draw-my-map.maps.v1 /<br/>draw-my-map.maps.v1.doc.&lt;id&gt; /<br/>draw-my-map.library-meta.v1)")]
+        LocalStorage[("localStorage<br/>(maps / library-meta /<br/>share-local-meta.v1)")]
         FileIO["File System<br/>(JSON / PNG / SVG / OPML / CSV / TSV)"]
     end
 
     subgraph Server ["Next.js Server (Route Handler)"]
-        RouteHandler["POST /api/illustrations"]
-        ServerDomain["Server Logic (Translator / Generator)"]
+        Illustrations["POST /api/illustrations"]
+        ShareAPI["/api/share/* + Auth.js"]
+        ServerDomain["Server Logic"]
     end
 
-    subgraph Cloudflare ["Cloudflare Workers AI"]
-        TranslationModel["@cf/meta/m2m100-1.2b<br/>(日本語 → 英語翻訳)"]
-        ImageModel["@cf/black-forest-labs/flux-1-schnell<br/>(画像生成)"]
+    subgraph Cloudflare ["Cloudflare"]
+        TranslationModel["Workers AI 翻訳・画像"]
+        D1[("D1 共有メタ")]
+        R2[("R2 スナップショット")]
     end
 
     UI --> State
@@ -44,11 +47,15 @@ graph TD
     State --> PixiApp
     Services --> LocalStorage
     Services --> FileIO
-    Services -->|HTTP POST| RouteHandler
+    Services -->|HTTP| Illustrations
+    Services -->|HTTP| ShareAPI
+    ShareViewer -->|token| ShareAPI
 
-    RouteHandler --> ServerDomain
-    ServerDomain -->|REST API| TranslationModel
-    ServerDomain -->|REST API| ImageModel
+    Illustrations --> ServerDomain
+    ShareAPI --> ServerDomain
+    ServerDomain -->|REST| TranslationModel
+    ServerDomain -->|HTTP| D1
+    ServerDomain -->|S3 互換| R2
 ```
 
 ### 1.2 レイヤードアーキテクチャの採用理由と単一責任原則（SRP）
@@ -70,7 +77,8 @@ Draw My Map では**単一責任原則（Single Responsibility Principle: SRP）
 
 | カテゴリ | 採用技術・バージョン | 設定・構成の特徴 |
 | :--- | :--- | :--- |
-| **アプリケーション基盤** | **Next.js 16.1.6** (App Router) | クライアント SPA + Route Handler (`POST /api/illustrations`) |
+| **アプリケーション基盤** | **Next.js 16.1.6** (App Router) | クライアント SPA + Route Handler（イラスト・AI 支援・共有） |
+| **所有者認証** | **Auth.js / next-auth ^5**（Google） | 共有操作の所有者識別。未ログインでもローカル編集可 |
 | **UI ランタイム** | **React 19.2.3** (`react`, `react-dom`) | 宣言的 DOM レンダリング、カスタムフックによる状態管理 |
 | **Markdown 表示** | **`react-markdown` ^10.1.0** + **`remark-gfm` ^4.0.1** | 詳細メモの安全な Markdown（CommonMark + GFM）プレビュー描画（`rehype-raw` 不使用） |
 | **React Compiler** | **`babel-plugin-react-compiler` 1.0.0** | `client/next.config.ts` にて **`reactCompiler: true`** を有効化。ビルド時の自動メモ化により不要な再レンダリングを最適化 |
@@ -93,16 +101,19 @@ client/src/
 │   ├── map/         #    Pixi.js ステージ、ジェスチャー制御、DOM オーバーレイ、ステージ用テストハーネス
 │   │   ├── pixi/    #    Pixi.js シーン描画・ポインタ/タッチジェスチャー・Tween アニメーター・Pixi 単体ハーネス
 │   │   └── testing/ #    MapStage 統合テスト用ランタイム & 自動レイアウト統合ハーネス & 兄弟の順序・階層のショートカットの target の要素の補助
-│   └── outline/     #    アウトラインエディタ・ツールバー等のアウトライン UI コンポーネント
+│   ├── outline/     #    アウトラインエディタ・ツールバー等のアウトライン UI コンポーネント
+│   ├── share/       #    閲覧専用シェル（ShareViewer / ShareMapView / ShareOutlineView）
+│   └── auth/        #    AuthSessionProvider 等
 ├── hooks/           # 3. Application State & Coordination Layer (カスタムフック)
 ├── services/        # 4. Application Services Layer (ブラウザ API・副作用の抽象化)
 │   ├── illustration/  # イラスト生成通信・サムネイル生成
 │   ├── imageExport/   # PNG/SVG 画像エクスポート
 │   ├── outlineExport/ # Markdown/テキスト等のアウトライン書き出し
 │   ├── exchange/      # OPML・CSV/TSV のテキストダウンロード
-│   └── persistence/   # ストレージ・ファイル永続化・バックアップ復元
+│   ├── persistence/   # ストレージ・ファイル永続化・バックアップ復元・共有ローカルメタ
+│   └── share/         # D1/R2 HTTP クライアント・共有 API クライアント
 ├── domain/          # 5. Domain Layer (純粋ビジネスロジック・幾何演算・スキーマ検証)
-├── server/          # 6. Server Layer (サーバーサイド API 処理・Cloudflare Workers AI 連携)
+├── server/          # 6. Server Layer (イラスト / AI 支援 / 共有 API)
 ├── config/          # 7. Config & Constants Layer (アプリケーション共通定数)
 ├── types/           # 8. Shared Types & Interfaces (TypeScript 型定義)
 └── testing/         # 共通テストヘルパー・フィクスチャ (createTestNode, createTestMapHistoryLease, jpegFixture, createTestStorageSession, mapLibraryTestStorage)
@@ -1178,6 +1189,16 @@ AI（Claude API・OpenAI API）に枝の要約と重要度を提案させ、利�
 ## 音声・タブレット・狭幅（Phase 36・候補090・091・092）
 
 音声の聞き取り状態は `useMapEditorVoice`／`useVoiceInput` のメモリ `listening` のみで、JSON には載りません。開始可否と構造編集の拒否は `domain/map/mapVoiceGuards.ts` が学習・プレゼン・選択形（`MapCanvasSelection`）と併せて先頭一本化します。確定テキストの取込は既存 `insertForest` に委譲し、コマンド可否は `resolveCommandAvailability` と `buildCommandAvailabilityContext` に `voiceListening` 等を載せます。タッチは `MapStage` 側でヒット拡大と長押しコンテキストを `pointerType === "touch"` に限定し、ピンチ／ダイアログ閉鎖窓は既存 coordinator と `dialogMouseClickedAtRef` を共有します。狭幅は `domain/view/narrowViewport.ts` の `NARROW_VIEWPORT_MAX_PX` と `useNarrowViewport` が `matchMedia` を購読し、`MapEditor` の `viewMode` 既定（アウトライン優先）と `userChoseMapOnNarrow` を `mapId` 再マウントでリセットします。
+
+## 共有の基盤と閲覧公開（Phase 37・候補094・095）
+
+編集の正本は従来どおり `localStorage`（MapLibrary）。公開の正本は Cloudflare D1（メタ）＋ R2（MapDocument V3 スナップショット）です。所有者は Auth.js Google（`src/auth.ts`・`/api/auth/[...nextauth]`）で識別し、未ログインでもローカル編集は可能です。共有操作だけログイン必須です。
+
+- **ドメイン**（`domain/share/`）: `tokenHash`・`assertViewPermission`・publish／リンク計画・`shareLocalMeta`（未共有／present／read-error を分離）・固定文言 `shareMessages`・`ShareResult`。
+- **サーバー**（`server/share/`）: `readShareEnvConfig`（`CF_SHARE_*`、トークン秘密は `CF_SHARE_TOKEN_SECRET` または `AUTH_SECRET`）、D1／R2 クライアント配線、`handleShareApi`／`shareService`、レート制限、404 統一。
+- **API**: `GET/POST /api/share/maps`、`POST .../publish`・`.../links`、`POST /api/share/links/:id/revoke|reissue`、`DELETE /api/share/maps/:id`、`GET /api/share/view/:token`（失効・不明は 404）。
+- **UI**: ヘッダー `ShareControl`／`ShareDialog`（必須 props・Result。一覧は `loading`／`ready`／`error`）。ローカルキャッシュは `draw-my-map.share-local-meta.v1`。閲覧は `/share/[token]` の `ShareViewer`（読み取り専用 Pixi＋折りたたみアウトライン）。`MapEditor`・書き出し・共有操作はマウントしない。
+- **非目標**: Magic Link／パスワード（#64）、他クラウド（#65）、クラウド正本化（#66）、招待限定・パスワード付きリンク（#67）、自動公開・ポーリング（#68）、comment（#69／Phase 38）。
 
 ## 学習と復習（Phase 35・候補088・089）
 

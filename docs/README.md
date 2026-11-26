@@ -87,6 +87,10 @@ Draw My Map の設計・仕様・環境構築・テスト・開発運用に関�
   - Phase 32 の AI 支援（枝の要約・重要度の提案）で外部へ送る内容と送らない内容。
   - Claude API・OpenAI API のキーの取得と `client/.env.local` の書き方、提供元とモデルの選び方（上書きできるモデルの条件）、止め方。
   - 誤りの種類ごとの原因と対処、課金の目安、公開時の注意。
+- **[共有（閲覧専用リンク）の設定ガイド](setup/share-setup.md)** (`docs/setup/share-setup.md`)
+  - Phase 37 の Google OAuth（Auth.js）と Cloudflare D1／R2（`CF_SHARE_*`）の用意。
+  - `client/.env.example` と整合する環境変数、イラスト用 `CLOUDFLARE_*` との分離。
+  - ログイン・リンク発行・失効・再発行の動作確認の目安と見送り（#64–#69）。
 
 ### 4. テスト・品質保証
 
@@ -97,7 +101,7 @@ Draw My Map の設計・仕様・環境構築・テスト・開発運用に関�
 ### 5. プロジェクト管理・開発履歴
 
 - **[開発ロードマップ](../ROADMAP.md)** (`ROADMAP.md`)
-  - プロジェクトのビジョン、差別化ポイント、各フェーズ（Phase 0〜18 は完了、Phase 19 は完了（全マップ横断検索・マップ間リンク・お気に入り／最近使用・フォルダー管理・被リンク一覧・リンク切れの検出）、Phase 20〜39 は未着手。次の未完了項目は Phase 20 の「名前付きスナップショット」）の実装完了状況。
+  - プロジェクトのビジョン、差別化ポイント、各フェーズの実装完了状況。Phase 37（共有の基盤と閲覧公開）まで完了した項目あり。次の未完了の全体項目は Phase 20 の「名前付きスナップショット」。共有の次は Phase 38（コメント）。
 - **[エージェント・開発ルール](../AGENTS.md)** (`AGENTS.md`)
   - サブエージェント駆動開発（Subagent-Driven Development）、二段階レビュー運用、PR運用ルール。
 - **[レビュー指摘の記録](review-findings/)** (`docs/review-findings/`)
@@ -124,7 +128,8 @@ docs/
 │   └── api.md                          # イラスト生成と AI 支援の API 仕様
 ├── setup/                              # 環境構築ガイド
 │   ├── illustration-generation-setup.md # イラスト生成設定
-│   └── ai-assist-setup.md              # AI 支援（Claude API・OpenAI API）の設定
+│   ├── ai-assist-setup.md              # AI 支援（Claude API・OpenAI API）の設定
+│   └── share-setup.md                  # 共有（Google OAuth・CF_SHARE_*）の設定
 ├── testing/                            # テスト関連
 │   └── browser-test-cases.md           # 実ブラウザテストケース
 ├── review-findings/                    # 過去のレビュー指摘記録
