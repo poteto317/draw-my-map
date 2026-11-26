@@ -13,20 +13,21 @@ export function nodeMapStateFromDocument(document: MapDocumentV3): NodeMapState 
     ...(document.relations === undefined ? {} : { relations: document.relations }),
     ...(document.groups === undefined ? {} : { groups: document.groups }),
     ...(document.tour === undefined ? {} : { tour: document.tour }),
+    ...(document.learn === undefined ? {} : { learn: document.learn }),
   };
 }
 
 type MapDocumentStateFields = Pick<
   NodeMapState,
-  "treeDirection" | "layoutSpacing" | "layoutStyle" | "branchLayouts" | "relations" | "groups" | "tour"
+  "treeDirection" | "layoutSpacing" | "layoutStyle" | "branchLayouts" | "relations" | "groups" | "tour" | "learn"
 >;
 
 type MapDocumentOptions = Pick<
   MapDocumentV3,
-  "treeDirection" | "layoutSpacing" | "layoutStyle" | "branchLayouts" | "relations" | "groups" | "tour"
+  "treeDirection" | "layoutSpacing" | "layoutStyle" | "branchLayouts" | "relations" | "groups" | "tour" | "learn"
 >;
 
-function mapDocumentLayoutOptions(state: MapDocumentStateFields): Omit<MapDocumentOptions, "tour"> {
+function mapDocumentLayoutOptions(state: MapDocumentStateFields): Omit<MapDocumentOptions, "tour" | "learn"> {
   return {
     treeDirection: state.treeDirection,
     layoutSpacing: state.layoutSpacing,
@@ -41,16 +42,25 @@ export function mapDocumentOptionsFromState(state: MapDocumentStateFields): MapD
   return {
     ...mapDocumentLayoutOptions(state),
     tour: state.tour,
+    learn: state.learn,
   };
 }
 
-/** §3.2: 別名保存・新規作成・テンプレ新規・枝切り出し先では tour を含めない */
-export function mapDocumentOptionsForNewMap(state: MapDocumentStateFields): Omit<MapDocumentOptions, "tour"> {
+/** §3.2: 別名保存・新規作成・テンプレ新規・枝切り出し先では tour / learn を含めない */
+export function mapDocumentOptionsForNewMap(
+  state: MapDocumentStateFields,
+): Omit<MapDocumentOptions, "tour" | "learn"> {
   return mapDocumentLayoutOptions(state);
 }
 
 export function omitTourFromMapDocument(document: MapDocumentV3): MapDocumentV3 {
   const rest = { ...document };
   delete rest.tour;
+  return rest;
+}
+
+export function omitLearnFromMapDocument(document: MapDocumentV3): MapDocumentV3 {
+  const rest = { ...document };
+  delete rest.learn;
   return rest;
 }

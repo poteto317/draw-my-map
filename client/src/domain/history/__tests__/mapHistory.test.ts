@@ -405,5 +405,33 @@ describe("mapHistory", () => {
         ).toBe(false);
       });
     });
+
+    describe("文書級 learn", () => {
+      const n1 = createTestNode({ id: 1 });
+      const base = (extra: Partial<NodeMapState> = {}): NodeMapState => ({
+        layoutMode: "manual",
+        nodes: [n1],
+        ...extra,
+      });
+
+      it("learn だけ違うと等しくない", () => {
+        expect(
+          areMapStatesEqual(
+            base(),
+            base({
+              learn: {
+                version: 1,
+                revealedNodeIds: [1],
+              },
+            }),
+          ),
+        ).toBe(false);
+      });
+
+      it("revealed の順序違いは等価", () => {
+        const learn = { version: 1 as const, revealedNodeIds: [2, 1] };
+        expect(areMapStatesEqual(base({ learn }), base({ learn: { ...learn, revealedNodeIds: [1, 2] } }))).toBe(true);
+      });
+    });
   });
 });

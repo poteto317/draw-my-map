@@ -2,6 +2,7 @@ import {
   mapDocumentOptionsForNewMap,
   mapDocumentOptionsFromState,
   nodeMapStateFromDocument,
+  omitLearnFromMapDocument,
   omitTourFromMapDocument,
 } from "@/domain/persistence/mapDocumentState";
 import { serializeMapDocument } from "@/domain/persistence/mapDocumentCodec";
@@ -45,5 +46,40 @@ describe("mapDocumentState tour 投影", () => {
     const stripped = omitTourFromMapDocument(document);
     expect(stripped.tour).toBeUndefined();
     expect(serializeMapDocument(stripped)).not.toContain("tour");
+  });
+});
+
+describe("mapDocumentState learn 投影", () => {
+  const document: MapDocumentV3 = {
+    version: 3,
+    layoutMode: "manual",
+    nodes: [createTestNode({ id: 1, parentId: null })],
+    learn: {
+      version: 1,
+      revealedNodeIds: [1],
+      cards: [{
+        id: "c1",
+        prompt: "p",
+        answer: "a",
+        sourceNodeIds: [1],
+      }],
+    },
+  };
+
+  it("document↔state で learn が落ちない", () => {
+    const state = nodeMapStateFromDocument(document);
+    expect(state.learn).toEqual(document.learn);
+    expect(mapDocumentOptionsFromState(state)).toEqual({ learn: document.learn });
+  });
+
+  it("新規マップ用 projection は learn を含めない", () => {
+    const state = nodeMapStateFromDocument(document);
+    expect(mapDocumentOptionsForNewMap(state)).not.toHaveProperty("learn");
+  });
+
+  it("omitLearnFromMapDocument はシリアライズ JSON から learn を除く", () => {
+    const stripped = omitLearnFromMapDocument(document);
+    expect(stripped.learn).toBeUndefined();
+    expect(serializeMapDocument(stripped)).not.toContain("learn");
   });
 });

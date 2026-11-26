@@ -587,3 +587,60 @@ describe("version 3 の tour", () => {
     expect(result.ok && result.value.tour?.steps[49]?.id).toBe("s49");
   });
 });
+
+describe("version 3 の learn", () => {
+  const baseDoc = {
+    version: 3,
+    layoutMode: "manual" as const,
+    nodes: [node(1, null), node(2, 1)],
+  };
+
+  it("不正 learn でもマップは開き、learn だけ落とす", () => {
+    const result = parseMapDocumentJson(JSON.stringify({
+      ...baseDoc,
+      learn: { version: 2, revealedNodeIds: [1] },
+    }));
+    expect(result.ok).toBe(true);
+    expect(result.ok && "learn" in result.value).toBe(false);
+  });
+
+  it("不正カードを除外し、revealed 欠落は空配列", () => {
+    const result = parseMapDocumentJson(JSON.stringify({
+      ...baseDoc,
+      learn: {
+        version: 1,
+        cards: [
+          { id: "ok", prompt: "p", answer: "a", sourceNodeIds: [2, 1] },
+          { id: "", prompt: "p", answer: "a", sourceNodeIds: [1] },
+        ],
+      },
+    }));
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        ...baseDoc,
+        learn: {
+          version: 1,
+          revealedNodeIds: [],
+          cards: [{ id: "ok", prompt: "p", answer: "a", sourceNodeIds: [2, 1] }],
+        },
+      },
+    });
+  });
+
+  it("101 件超は先頭 100 に切り詰める", () => {
+    const cards = Array.from({ length: 101 }, (_, index) => ({
+      id: `c${index}`,
+      prompt: `p${index}`,
+      answer: `a${index}`,
+      sourceNodeIds: [1],
+    }));
+    const result = parseMapDocumentJson(JSON.stringify({
+      ...baseDoc,
+      learn: { version: 1, revealedNodeIds: [1], cards },
+    }));
+    expect(result.ok && result.value.learn?.cards?.length).toBe(100);
+    expect(result.ok && result.value.learn?.cards?.[0]?.id).toBe("c0");
+    expect(result.ok && result.value.learn?.cards?.[99]?.id).toBe("c99");
+  });
+});

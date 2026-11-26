@@ -6,6 +6,7 @@ import { areNodeMapLinksEqual } from "@/domain/nodes/nodeMapLink";
 import { areNodeSourcesEqual } from "@/domain/nodes/nodeSource";
 import { areBranchLayoutsEqual } from "@/types/branchLayout";
 import { areLayoutStylesEqual } from "@/types/layoutStyle";
+import { areMapLearnsEqual } from "@/types/mapLearn";
 import { areMapToursEqual } from "@/types/mapTour";
 import type { Node, NodeMapLink, NodeSource } from "@/types/node";
 import type { NodeMapState } from "@/types/nodeMapState";
@@ -94,6 +95,7 @@ export function areMapStatesEqual(a: NodeMapState, b: NodeMapState): boolean {
   if (!areRelationsEqual(a.relations, b.relations)) return false;
   if (!areGroupsEqual(a.groups, b.groups)) return false;
   if (!areMapToursEqual(a.tour, b.tour)) return false;
+  if (!areMapLearnsEqual(a.learn, b.learn)) return false;
   return a.nodes.every((node, index) => areNodesEqual(node, b.nodes[index]));
 }
 

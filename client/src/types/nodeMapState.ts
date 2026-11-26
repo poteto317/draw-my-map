@@ -3,6 +3,7 @@ import type { LayoutSpacing } from "@/types/layoutSpacing";
 import type { LayoutStyle } from "@/types/layoutStyle";
 import type { MapGroup } from "@/types/mapGroup";
 import type { MapRelation } from "@/types/mapRelation";
+import type { MapLearnState } from "@/types/mapLearn";
 import type { MapTour } from "@/types/mapTour";
 import type { Node } from "@/types/node";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
@@ -25,4 +26,6 @@ export type NodeMapState = {
   groups?: readonly MapGroup[];
   // プレゼンテーションツアー（Phase 31・072/073）。欠落キー＝ツアーなし。steps が空の下書きは永続化時にキー省略（`types/mapTour.ts` の `normalizeTour` / `projectTour`）
   tour?: MapTour;
+  // 学習・復習（Phase 35・088/089）。欠落キー＝学習状態なし。空の進捗は永続化時にキー省略（`types/mapLearn.ts` の `normalizeLearn` / `projectLearn`）
+  learn?: MapLearnState;
 };

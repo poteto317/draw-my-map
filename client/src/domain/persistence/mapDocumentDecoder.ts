@@ -6,6 +6,7 @@ import { normalizeMapDocumentTreeDirection } from "@/domain/persistence/mapDocum
 import { isRecord } from "@/domain/shared/unknownRecord";
 import { normalizeBranchLayouts } from "@/types/branchLayout";
 import { normalizeLayoutStyle, projectLayoutStyle } from "@/types/layoutStyle";
+import { normalizeLearn, projectLearn } from "@/types/mapLearn";
 import { normalizeTour, projectTour } from "@/types/mapTour";
 import type { MapDocumentResult, MapDocumentV3, MapDocumentVersion } from "@/types/mapDocument";
 import type { Node } from "@/types/node";
@@ -75,6 +76,9 @@ export function parseMapDocumentJsonWithVersion(
   const tour = record.version === 3
     ? normalizeTour(record.tour, nodeIdSet, graph.value)
     : undefined;
+  const learn = record.version === 3
+    ? normalizeLearn(record.learn)
+    : undefined;
 
   return {
     ok: true,
@@ -90,6 +94,7 @@ export function parseMapDocumentJsonWithVersion(
         ...(relations === undefined ? {} : { relations }),
         ...(groups === undefined ? {} : { groups }),
         ...projectTour(tour),
+        ...projectLearn(learn),
       },
       sourceVersion: record.version,
     },
