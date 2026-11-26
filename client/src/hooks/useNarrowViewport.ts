@@ -16,6 +16,8 @@ export type UseNarrowViewportOptions = {
   readonly storageMode: "persistent" | "protected";
   readonly viewMode: EditorViewMode;
   readonly applyViewMode: (mode: EditorViewMode) => void;
+  /** プレゼン自動マップ切替など、明示選択以外で map を一時維持するとき true */
+  readonly suppressOutlineOverride?: boolean;
 };
 
 export type UseNarrowViewportResult = {
@@ -29,6 +31,7 @@ export function useNarrowViewport({
   storageMode,
   viewMode,
   applyViewMode,
+  suppressOutlineOverride = false,
 }: UseNarrowViewportOptions): UseNarrowViewportResult {
   const [isNarrowViewport, setIsNarrowViewport] = useState(readInitialNarrowViewport);
   const [userChoseMapOnNarrow, setUserChoseMapOnNarrow] = useState(false);
@@ -51,9 +54,22 @@ export function useNarrowViewport({
   /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
-    if (!isNarrowViewport || userChoseMapOnNarrow || viewMode !== "map") return;
+    if (
+      !isNarrowViewport
+      || userChoseMapOnNarrow
+      || suppressOutlineOverride
+      || viewMode !== "map"
+    ) {
+      return;
+    }
     applyViewMode("outline");
-  }, [applyViewMode, isNarrowViewport, userChoseMapOnNarrow, viewMode]);
+  }, [
+    applyViewMode,
+    isNarrowViewport,
+    suppressOutlineOverride,
+    userChoseMapOnNarrow,
+    viewMode,
+  ]);
 
   const recordManualViewModeChange = useCallback((nextMode: EditorViewMode) => {
     if (isNarrowViewport && nextMode === "map") {
