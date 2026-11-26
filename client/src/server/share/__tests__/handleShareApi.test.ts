@@ -315,7 +315,7 @@ describe("Share API 契約", () => {
     expect(miss.status).toBe(404);
   });
 
-  it("GET view は成功・404 とも Cache-Control: private, no-store", async () => {
+  it("GET view は成功・404 とも Cache-Control: private, no-store と Referrer-Policy: no-referrer", async () => {
     const store = createMemoryShareStore();
     const d = deps({ store });
     const created = await createShare(d);
@@ -327,6 +327,7 @@ describe("Share API 契約", () => {
     );
     expect(ok.status).toBe(200);
     expect(ok.headers.get("Cache-Control")).toBe(SHARE_VIEW_CACHE_CONTROL);
+    expect(ok.headers.get("Referrer-Policy")).toBe("no-referrer");
 
     const miss = await handleViewShare(
       jsonRequest("http://localhost/api/share/view/missing-token", "GET"),
@@ -335,6 +336,7 @@ describe("Share API 契約", () => {
     );
     expect(miss.status).toBe(404);
     expect(miss.headers.get("Cache-Control")).toBe(SHARE_VIEW_CACHE_CONTROL);
+    expect(miss.headers.get("Referrer-Policy")).toBe("no-referrer");
   });
 
   it("viewByToken で contentSha256 不一致は storage-error（文書を返さない）", async () => {
@@ -466,6 +468,54 @@ describe("Share API 契約", () => {
     );
     expect(second.status).toBe(429);
     expect(await second.json()).toEqual({ ok: false, reason: "rate-limited" });
+  });
+
+  it("view API は異なるトークンでも同一 IP ならレート制限する", async () => {
+    const viewRateLimiter = createShareRateLimiter({ limit: 1, windowMs: 60_000 });
+    const d = deps({ viewRateLimiter });
+    const first = await handleViewShare(
+      new Request("http://localhost/api/share/view/tok-a", {
+        method: "GET",
+        headers: { "cf-connecting-ip": "203.0.113.10" },
+      }),
+      "tok-a",
+      d,
+    );
+    expect(first.status).toBe(404);
+    const second = await handleViewShare(
+      new Request("http://localhost/api/share/view/tok-b", {
+        method: "GET",
+        headers: { "cf-connecting-ip": "203.0.113.10" },
+      }),
+      "tok-b",
+      d,
+    );
+    expect(second.status).toBe(429);
+    expect(await second.json()).toEqual({ ok: false, reason: "rate-limited" });
+  });
+
+  it("view API は IP が違えば別バケット（token 単位制限は維持）", async () => {
+    const viewRateLimiter = createShareRateLimiter({ limit: 1, windowMs: 60_000 });
+    const d = deps({ viewRateLimiter });
+    const a = await handleViewShare(
+      new Request("http://localhost/api/share/view/same-tok", {
+        method: "GET",
+        headers: { "cf-connecting-ip": "203.0.113.1" },
+      }),
+      "same-tok",
+      d,
+    );
+    expect(a.status).toBe(404);
+    const b = await handleViewShare(
+      new Request("http://localhost/api/share/view/same-tok", {
+        method: "GET",
+        headers: { "cf-connecting-ip": "203.0.113.2" },
+      }),
+      "same-tok",
+      d,
+    );
+    // 同一 tokenHash なので IP が違っても token 側で 429
+    expect(b.status).toBe(429);
   });
 
   it("d1/r2 は deps 経由で注入され、store 未指定時に createCloudflareShareStore 経路を使う", async () => {

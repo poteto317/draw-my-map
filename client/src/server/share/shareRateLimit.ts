@@ -1,6 +1,8 @@
 export type ShareRateLimiter = {
   /** true = 許可、false = 超過 */
   take(key: string): boolean;
+  /** 期限切れ掃除後のバケット数（診断・テスト用） */
+  size(): number;
 };
 
 export type ShareRateLimitOptions = {
@@ -16,11 +18,19 @@ export function createShareRateLimiter(options: ShareRateLimitOptions): ShareRat
   const buckets = new Map<string, { count: number; resetAt: number }>();
   const now = options.now ?? Date.now;
 
+  function gcExpired(t: number): void {
+    for (const [key, bucket] of buckets) {
+      if (t >= bucket.resetAt) buckets.delete(key);
+    }
+  }
+
   return {
     take(key) {
       const t = now();
+      // allow / deny とも期限切れを掃除（ユニークキー増加でのメモリ枯渇を防ぐ）
+      gcExpired(t);
       const current = buckets.get(key);
-      if (!current || t >= current.resetAt) {
+      if (!current) {
         buckets.set(key, { count: 1, resetAt: t + options.windowMs });
         return true;
       }
@@ -28,13 +38,17 @@ export function createShareRateLimiter(options: ShareRateLimitOptions): ShareRat
       current.count += 1;
       return true;
     },
+    size() {
+      gcExpired(now());
+      return buckets.size;
+    },
   };
 }
 
 /** 所有者 API: ユーザーあたり 1 分 60 回 */
 export const SHARE_OWNER_RATE_LIMIT = { limit: 60, windowMs: 60_000 } as const;
 
-/** 閲覧 API: tokenHash キーあたり 1 分 120 回 */
+/** 閲覧 API: tokenHash / IP キーあたり 1 分 120 回 */
 export const SHARE_VIEW_RATE_LIMIT = { limit: 120, windowMs: 60_000 } as const;
 
 /**
