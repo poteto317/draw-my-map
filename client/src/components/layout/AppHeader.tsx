@@ -15,6 +15,9 @@ type AppHeaderProps = {
   viewControls: ReactNode;
   showCanvasHints: boolean;
   searchControls: ReactNode;
+  isNarrowViewport: boolean;
+  userChoseMapOnNarrow: boolean;
+  voiceControls?: ReactNode;
   importanceControls?: ReactNode;
   resolutionControls?: ReactNode;
   operationControls?: ReactNode;
@@ -31,6 +34,9 @@ export function AppHeader({
   viewControls,
   showCanvasHints,
   searchControls,
+  isNarrowViewport,
+  userChoseMapOnNarrow,
+  voiceControls,
   importanceControls,
   resolutionControls,
   operationControls,
@@ -43,17 +49,35 @@ export function AppHeader({
     Boolean(operationNotices);
 
   return (
-    <header className="flex max-h-[40dvh] flex-col gap-4 bg-white px-6 py-3 shadow-sm dark:bg-zinc-800">
+    <header
+      className="flex max-h-[40dvh] flex-col gap-4 bg-white px-6 py-3 shadow-sm dark:bg-zinc-800"
+      data-narrow-viewport={isNarrowViewport}
+      data-user-chose-map-on-narrow={userChoseMapOnNarrow}
+    >
       <div
         data-testid="header-primary"
-        className="flex shrink-0 flex-wrap items-center gap-4"
+        className={
+          isNarrowViewport
+            ? "flex shrink-0 items-center gap-4 overflow-x-auto overscroll-x-contain"
+            : "flex shrink-0 flex-wrap items-center gap-4"
+        }
       >
         <h1 className="shrink-0 text-lg font-semibold text-zinc-800 dark:text-zinc-100">
           Draw My Map
         </h1>
         {mapControls}
-        <MapSaveStatusDisplay status={saveStatus} />
-        {viewControls}
+        {isNarrowViewport ? (
+          <>
+            {viewControls}
+            {voiceControls}
+            <MapSaveStatusDisplay status={saveStatus} />
+          </>
+        ) : (
+          <>
+            <MapSaveStatusDisplay status={saveStatus} />
+            {viewControls}
+          </>
+        )}
         {searchControls}
         <LayoutModeSelector
           layoutMode={layoutMode}

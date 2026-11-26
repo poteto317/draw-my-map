@@ -397,9 +397,11 @@ describe("Home", () => {
     it("可変高headerを除いたviewport内の残領域をmapへ割り当てる", () => {
       render(<Home />);
       const main = screen.getByTestId("map-stage").closest("main")!;
-      const editor = main.parentElement!;
+      const body = main.parentElement!;
+      const editor = body.parentElement!;
       const shell = editor.parentElement!;
 
+      expect(body).toHaveClass("flex", "min-h-0", "flex-1", "flex-col");
       expect(editor).toHaveClass("flex", "min-h-0", "flex-1", "flex-col");
       expect(editor).not.toHaveClass("overflow-hidden");
       expect(shell).toHaveClass("h-dvh");
