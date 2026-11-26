@@ -1,4 +1,5 @@
 import { fireEvent, screen, within } from "@testing-library/react";
+import { LEARN_LABEL_PLACEHOLDER } from "@/domain/map/mapLearnMode";
 import userEvent from "@testing-library/user-event";
 import type { RefObject } from "react";
 import { MapEditor } from "@/components/map/MapEditor";
@@ -152,5 +153,27 @@ describe("MapEditor learn mode", () => {
     await user.click(learnButton());
     const reset = screen.getByRole("button", { name: "進捗をリセット" });
     expect(reset).toBeDisabled();
+  });
+
+  it("学習中アウトラインでダブルクリックしてもラベル編集を開かず Enter で開示する", async () => {
+    const user = userEvent.setup();
+    await renderEditor();
+    await user.click(screen.getByRole("button", { name: "アウトライン" }));
+    await user.click(learnButton());
+    const childRow = screen.getByRole("button", { name: `階層2・${LEARN_LABEL_PLACEHOLDER}` });
+    await user.click(childRow);
+    fireEvent.doubleClick(childRow);
+    expect(screen.queryByRole("textbox", { name: "ラベル編集" })).not.toBeInTheDocument();
+    fireEvent.keyDown(childRow, { key: "Enter" });
+    expect(screen.getByRole("button", { name: "階層2・子" })).toBeInTheDocument();
+  });
+
+  it("学習中にヘッダーの学習を終了へフォーカスして Enter すると終了する", async () => {
+    const user = userEvent.setup();
+    await renderEditor();
+    await user.click(learnButton());
+    screen.getByRole("button", { name: "学習を終了" }).focus();
+    await user.keyboard("{Enter}");
+    expect(learnButton()).toBeInTheDocument();
   });
 });
