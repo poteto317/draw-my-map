@@ -4,6 +4,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useReannouncedNotice } from "@/components/layout/useReannouncedNotice";
 import {
   buildCustomAttributeFromDraft,
+  formatCustomAttributeFailure,
   parseChoiceOptions,
   type CustomAttributeFormDraft,
 } from "@/domain/nodes/nodeCustomAttributeUpdate";
@@ -240,7 +241,12 @@ export function NodeCustomAttributesSection({
                         ? draft.choiceValue
                         : "";
                       setDraft({ ...draft, choiceOptions, choiceValue: nextValue });
-                      setError(null);
+                      if (!nextOptions.ok) {
+                        setError(formatCustomAttributeFailure(nextOptions.reason));
+                        setSequence((value) => value + 1);
+                      } else {
+                        setError(null);
+                      }
                     }} />
                 </label>
                 <label>値

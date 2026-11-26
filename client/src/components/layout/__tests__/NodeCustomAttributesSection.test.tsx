@@ -2,6 +2,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NodeCustomAttributesSection } from "@/components/layout/NodeCustomAttributesSection";
 import type { CommitCustomAttribute } from "@/hooks/useNodeTaskAttributeEditing";
+import { formatCustomAttributeFailure } from "@/domain/nodes/nodeCustomAttributeUpdate";
+import { MAX_CUSTOM_OPTIONS } from "@/domain/nodes/nodeTaskAttributes";
 import { NODE_TAG_INPUT_MAX_LENGTH, nodeTagKey } from "@/domain/nodes/nodeTag";
 
 const target = { nodeId: 1, documentRevision: 0 };
@@ -212,6 +214,18 @@ it("同一エラーは再送信ごとに読み上げられる", async () => {
   await user.click(screen.getByRole("button", { name: "保存" }));
   await waitFor(() => {
     expect(screen.getByRole("alert")).toHaveTextContent("同じエラー");
+  });
+});
+
+it("候補が上限を超えると保存前にエラーを出す", async () => {
+  const user = userEvent.setup();
+  renderSection();
+  await user.click(screen.getByRole("button", { name: "属性を追加" }));
+  await user.selectOptions(screen.getByLabelText("種類"), "choice");
+  const tooMany = Array.from({ length: MAX_CUSTOM_OPTIONS + 1 }, (_, index) => `候補${index}`).join("\n");
+  fireEvent.change(screen.getByLabelText("候補"), { target: { value: tooMany } });
+  await waitFor(() => {
+    expect(screen.getByRole("alert")).toHaveTextContent(formatCustomAttributeFailure("too-many-options"));
   });
 });
 
