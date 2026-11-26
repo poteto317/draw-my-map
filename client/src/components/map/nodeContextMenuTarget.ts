@@ -9,6 +9,7 @@ type NodeContextMenuTargetInput = {
   bounds: Pick<DOMRect, "left" | "top">;
   viewport: Viewport;
   nodes: readonly Node[];
+  pointerType?: string;
 };
 
 export function resolveNodeContextMenuTarget({
@@ -16,11 +17,12 @@ export function resolveNodeContextMenuTarget({
   bounds,
   viewport,
   nodes,
+  pointerType,
 }: NodeContextMenuTargetInput): NodeContextMenuTarget | null {
   const anchor = toLocalPoint(client.x, client.y, bounds);
   const world = screenToWorld(anchor, viewport);
   if (!Number.isFinite(world.x) || !Number.isFinite(world.y)) return null;
 
-  const node = findNodeAtPoint(nodes, world);
+  const node = findNodeAtPoint(nodes, world, pointerType);
   return node ? { nodeId: node.id, anchor } : null;
 }

@@ -5,6 +5,7 @@ import {
   getEdgeCurve,
   toLocalPoint,
 } from "@/components/map/mapGeometry";
+import { TOUCH_NODE_HIT_PADDING_PX } from "@/domain/map/touchTabletConstants";
 
 const target: Node = createTestNode({
   id: 1,
@@ -53,6 +54,24 @@ describe("map geometry", () => {
   it("returns the last matching node because later nodes render in front", () => {
     const overlapping = { ...target, id: 2 };
     expect(findNodeAtPoint([target, overlapping], { x: target.x + 1, y: target.y + 1 })).toBe(overlapping);
+  });
+
+  it("touch のときだけヒット矩形をパディング拡大する", () => {
+    expect(findNodeAtPoint(
+      [target],
+      { x: target.x - TOUCH_NODE_HIT_PADDING_PX, y: target.y },
+      "touch",
+    )).toBe(target);
+    expect(findNodeAtPoint(
+      [target],
+      { x: target.x - TOUCH_NODE_HIT_PADDING_PX, y: target.y },
+      "mouse",
+    )).toBeUndefined();
+    expect(findNodeAtPoint(
+      [target],
+      { x: target.x - TOUCH_NODE_HIT_PADDING_PX - 1, y: target.y },
+      "touch",
+    )).toBeUndefined();
   });
 
   it("builds a bezier edge from parent right-center to child left-center", () => {

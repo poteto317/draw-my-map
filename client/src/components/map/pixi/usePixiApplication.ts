@@ -3,6 +3,10 @@
 import { useEffect, useState, type RefObject } from "react";
 import type { Application } from "pixi.js";
 import type { ScreenSize } from "@/components/map/mapViewport";
+import {
+  resetFederatedPointerTypeForHitTest,
+  setFederatedPointerTypeForHitTest,
+} from "@/components/map/pixi/federatedPointerTypeScope";
 import type { PixiRuntime } from "./pixiTypes";
 
 export type { PixiRuntime } from "./pixiTypes";
@@ -21,6 +25,8 @@ export function usePixiApplication(
     let initialized = false;
     let destroyed = false;
     let app: Application | null = null;
+    let canvasPointerTypeListener: ((event: PointerEvent) => void) | null = null;
+    let attachedCanvas: HTMLCanvasElement | null = null;
     const notifyScreenResize = (width: number, height: number) => onScreenResize?.({ width, height });
     const destroy = () => {
       if (app && !destroyed) {
@@ -52,7 +58,14 @@ export function usePixiApplication(
       createdApp.canvas.style.position = "absolute";
       createdApp.canvas.style.inset = "0px";
       createdApp.canvas.style.touchAction = "none";
-      container.appendChild(createdApp.canvas);
+      canvasPointerTypeListener = (event: PointerEvent) => {
+        setFederatedPointerTypeForHitTest(event.pointerType);
+      };
+      attachedCanvas = createdApp.canvas;
+      attachedCanvas.addEventListener("pointerdown", canvasPointerTypeListener, { capture: true });
+      attachedCanvas.addEventListener("pointerup", canvasPointerTypeListener, { capture: true });
+      attachedCanvas.addEventListener("pointercancel", canvasPointerTypeListener, { capture: true });
+      container.appendChild(attachedCanvas);
       if (onScreenResize) {
         createdApp.renderer.on("resize", notifyScreenResize);
         notifyScreenResize(createdApp.screen.width, createdApp.screen.height);
@@ -71,7 +84,13 @@ export function usePixiApplication(
 
     return () => {
       cancelled = true;
+      resetFederatedPointerTypeForHitTest();
       if (initialized && app && !destroyed) {
+        if (attachedCanvas && canvasPointerTypeListener) {
+          attachedCanvas.removeEventListener("pointerdown", canvasPointerTypeListener, { capture: true });
+          attachedCanvas.removeEventListener("pointerup", canvasPointerTypeListener, { capture: true });
+          attachedCanvas.removeEventListener("pointercancel", canvasPointerTypeListener, { capture: true });
+        }
         if (onScreenResize) app.renderer.off("resize", notifyScreenResize);
         destroy();
       }

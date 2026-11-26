@@ -1,3 +1,4 @@
+import { TOUCH_NODE_HIT_PADDING_PX } from "@/domain/map/touchTabletConstants";
 import type { Node } from "@/types/node";
 import type { Point } from "@/domain/nodes/nodeEdgeCurve";
 
@@ -13,12 +14,21 @@ export function toLocalPoint(
   return { x: clientX - bounds.left, y: clientY - bounds.top };
 }
 
-export function findNodeAtPoint(nodes: readonly Node[], point: Point): Node | undefined {
+function resolveNodeHitPadding(pointerType?: string): number {
+  return pointerType === "touch" ? TOUCH_NODE_HIT_PADDING_PX : 0;
+}
+
+export function findNodeAtPoint(
+  nodes: readonly Node[],
+  point: Point,
+  pointerType?: string,
+): Node | undefined {
+  const padding = resolveNodeHitPadding(pointerType);
   for (let index = nodes.length - 1; index >= 0; index -= 1) {
     const node = nodes[index];
     if (
-      point.x >= node.x && point.x <= node.x + node.width
-      && point.y >= node.y && point.y <= node.y + node.height
+      point.x >= node.x - padding && point.x <= node.x + node.width + padding
+      && point.y >= node.y - padding && point.y <= node.y + node.height + padding
     ) {
       return node;
     }

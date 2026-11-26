@@ -16,6 +16,11 @@ import { resolveAutoNodeDragKind } from "@/components/map/pixi/resolveAutoNodeDr
 import { createShiftNodePendingGesture } from "@/components/map/pixi/shiftNodePendingGesture";
 import { createSiblingReorderGesture } from "@/components/map/pixi/siblingReorderGesture";
 import { createToggleNodePendingGesture } from "@/components/map/pixi/toggleNodePendingGesture";
+import {
+  createTouchLongPressGesture,
+  type TouchLongPressContextRequest,
+} from "@/components/map/pixi/touchLongPressGesture";
+import { canStartTouchLongPressContext } from "@/components/map/pixi/touchTabletLongPressPolicy";
 import { createTouchGestureCoordinator } from "@/components/map/pixi/touchGestureCoordinator";
 import { wrapBackgroundGesture } from "@/components/map/pixi/wrapBackgroundGesture";
 import type { SiblingReorderPreview } from "@/components/map/siblingReorderDropSlot";
@@ -59,8 +64,11 @@ type StageInteractionOptions = {
   shouldIgnorePointerDownRef?: LatestValue<() => boolean>;
   structureEditEnabledRef?: LatestValue<boolean>;
   isApplePlatformRef?: LatestValue<() => boolean>;
+  onLongPressContextMenuRef?: LatestValue<(request: TouchLongPressContextRequest) => void>;
   dragThreshold?: number;
 };
+
+export type { TouchLongPressContextRequest };
 
 type InteractiveStage = Pick<Container, "on" | "off">;
 
@@ -109,6 +117,7 @@ export function createStageInteractions({
   shouldIgnorePointerDownRef,
   structureEditEnabledRef,
   isApplePlatformRef,
+  onLongPressContextMenuRef,
   dragThreshold = 4,
 }: StageInteractionOptions) {
   let activeBinding: StageBinding | null = null;
@@ -136,6 +145,23 @@ export function createStageInteractions({
 
   const clearSelection = () => {
     onClearSelectionRef?.current();
+  };
+
+  const activeTouchPointerIds = new Set<number>();
+
+  const trackTouchPointerDown = (sample: PointerSample) => {
+    if (sample.pointerType === "touch") activeTouchPointerIds.add(sample.pointerId);
+  };
+
+  const trackTouchPointerUp = (sample: PointerSample) => {
+    if (sample.pointerType === "touch") activeTouchPointerIds.delete(sample.pointerId);
+  };
+
+  const shouldAbortLongPressRef: LatestValue<() => boolean> = {
+    get current() {
+      return () => !canStartTouchLongPressContext(touchGestures, activeTouchPointerIds.size)
+        || (shouldIgnorePointerDownRef?.current?.() ?? false);
+    },
   };
 
   const touchGestures = createTouchGestureCoordinator({
@@ -283,6 +309,31 @@ export function createStageInteractions({
     return createPlainNodeGesture(nodeId, sample);
   };
 
+  const createTouchNodeGesture = (
+    nodeId: number,
+    sample: PointerSample,
+    modifiers: ModifierKeys,
+  ): PointerGesture | null => {
+    if (modifiers.shiftKey || isToggleModifier(modifiers)) {
+      return createNodeGesture(nodeId, sample, modifiers);
+    }
+    if (onLongPressContextMenuRef?.current === undefined) {
+      return createPlainNodeGesture(nodeId, sample);
+    }
+    return createTouchLongPressGesture({
+      nodeId,
+      startSample: sample,
+      onLongPressContextMenuRef: onLongPressContextMenuRef as LatestValue<
+        (request: TouchLongPressContextRequest) => void
+      >,
+      createActivatedDragGesture: () => createPlainNodeGesture(nodeId, sample),
+      dragThreshold,
+      shouldAbortLongPressRef,
+      schedule: setTimeout,
+      clearScheduled: clearTimeout,
+    });
+  };
+
   const handleNodePointerDown = (
     bindingAtEntry: StageBinding,
     nodeId: number,
@@ -298,11 +349,15 @@ export function createStageInteractions({
 
     const sample = toPointerSample(event, viewportRef.current);
     if (!hasFinitePointerCoordinates(sample)) return;
+    trackTouchPointerDown(sample);
     if (!isNodeInteractive(nodeId)) {
       if (pointerGestures.owns(sample.pointerId)) pointerGestures.cancel();
       return;
     }
-    if (touchGestures.pointerDown(sample)) return;
+    if (touchGestures.pointerDown(sample)) {
+      pointerGestures.cancel();
+      return;
+    }
 
     pointerGestures.cancel();
     if (hasActiveGesture() || activeBinding !== bindingAtEntry || !isNodeInteractive(nodeId)) {
@@ -315,7 +370,9 @@ export function createStageInteractions({
       ctrlKey: event.ctrlKey,
       altKey: event.altKey,
     };
-    const gesture = createNodeGesture(nodeId, sample, modifiers);
+    const gesture = sample.pointerType === "touch"
+      ? createTouchNodeGesture(nodeId, sample, modifiers)
+      : createNodeGesture(nodeId, sample, modifiers);
     if (!gesture) return;
 
     const nextGesture = pointerGestures.start(sample.pointerId, gesture);
@@ -361,6 +418,7 @@ export function createStageInteractions({
 
       const sample = toPointerSample(event, viewportRef.current);
       if (!hasFinitePointerCoordinates(sample)) return;
+      trackTouchPointerDown(sample);
       if (touchGestures.pointerDown(sample)) return;
 
       const gestureAtEntry = pointerGestures.current();
@@ -405,18 +463,21 @@ export function createStageInteractions({
     const handlePointerUp = (event: FederatedPointerEvent) => {
       if (activeBinding !== binding) return;
       const sample = toPointerSample(event, viewportRef.current);
+      trackTouchPointerUp(sample);
       touchGestures.pointerUp(sample);
       pointerGestures.end(sample);
     };
     const handlePointerUpOutside = (event: FederatedPointerEvent) => {
       if (activeBinding !== binding) return;
       const sample = toPointerSample(event, viewportRef.current);
+      trackTouchPointerUp(sample);
       touchGestures.pointerUp(sample);
       if (pointerGestures.owns(event.pointerId)) pointerGestures.cancel();
     };
     const handlePointerCancel = (event: FederatedPointerEvent) => {
       if (activeBinding !== binding) return;
       const sample = toPointerSample(event, viewportRef.current);
+      trackTouchPointerUp(sample);
       touchGestures.pointerUp(sample);
       if (pointerGestures.owns(event.pointerId)) pointerGestures.cancel();
     };

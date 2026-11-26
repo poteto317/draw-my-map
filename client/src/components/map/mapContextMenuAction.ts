@@ -21,6 +21,7 @@ type MapContextMenuInput = {
   bounds: Pick<DOMRect, "left" | "top" | "width" | "height">;
   viewport: Viewport;
   visibleNodes: readonly Node[];
+  pointerType?: string;
 };
 
 export function resolveMapContextMenuAction({
@@ -33,6 +34,7 @@ export function resolveMapContextMenuAction({
   bounds,
   viewport,
   visibleNodes,
+  pointerType,
 }: MapContextMenuInput): MapContextMenuAction {
   if (isEditing || isTextEntryTarget) return { type: "native" };
   if (isInsideMenu || hasActiveGesture) return { type: "suppress" };
@@ -42,6 +44,7 @@ export function resolveMapContextMenuAction({
     bounds,
     viewport,
     nodes: visibleNodes,
+    pointerType,
   });
   if (target === null) return { type: "dismiss" };
   if (!canOpenMenu) return { type: "select", nodeId: target.nodeId };

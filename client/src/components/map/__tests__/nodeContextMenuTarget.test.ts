@@ -20,6 +20,26 @@ describe("resolveNodeContextMenuTarget", () => {
     expect(resolveNodeContextMenuTarget({ ...input, nodes: [] })).toBeNull();
   });
 
+  it("touch ではヒットパディング内をノードとして解決する", () => {
+    const paddedNode = createTestNode({ id: 2, x: 70, y: 45, width: 10, height: 10 });
+    const clientAtPaddingEdge = { x: 288, y: 200 };
+    expect(resolveNodeContextMenuTarget({
+      ...input,
+      nodes: [paddedNode],
+      client: clientAtPaddingEdge,
+      pointerType: "touch",
+    })).toEqual({
+      nodeId: 2,
+      anchor: { x: 188, y: 150 },
+    });
+    expect(resolveNodeContextMenuTarget({
+      ...input,
+      nodes: [paddedNode],
+      client: clientAtPaddingEdge,
+      pointerType: "mouse",
+    })).toBeNull();
+  });
+
   it("変換後座標が非有限ならnullを返す", () => {
     expect(resolveNodeContextMenuTarget({
       ...input,
