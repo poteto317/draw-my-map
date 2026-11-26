@@ -152,6 +152,8 @@ export function useOutlineEditorActions(options: UseOutlineEditorActionsOptions)
             current.publishNotice({ kind: "error", message: formatOutlineInsertFailure(result.reason) });
     }
     function runBeginEdit(id: number, ignoreEnabled: boolean) {
+        if (latest.current.options.learningActive)
+            return;
         if (!(ignoreEnabled ? mayEditIgnoringEnabled(id) : mayEdit(id)))
             return;
         latest.current.options.api.selectNode(id);
