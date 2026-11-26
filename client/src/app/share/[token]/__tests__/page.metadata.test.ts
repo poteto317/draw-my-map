@@ -11,4 +11,8 @@ describe("share/[token] page metadata", () => {
       follow: false,
     });
   });
+
+  it("referrer は no-referrer（平文トークンを Referer に載せない）", () => {
+    expect(metadata.referrer).toBe("no-referrer");
+  });
 });

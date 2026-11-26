@@ -5,12 +5,13 @@ type PageProps = {
   params: Promise<{ token: string }>;
 };
 
-/** 平文トークン URL を検索エンジンに載せない */
+/** 平文トークン URL を検索エンジン・Referer に載せない */
 export const metadata: Metadata = {
   robots: {
     index: false,
     follow: false,
   },
+  referrer: "no-referrer",
 };
 
 /** 閲覧専用ルート。平文トークンは UI・エラー文言に出さない。 */
