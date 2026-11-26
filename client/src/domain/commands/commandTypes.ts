@@ -81,6 +81,10 @@ export type CommandAvailabilityContext = {
   readonly learnStartDisabledReason: string | null;
   readonly learnResetDisabledReason: string | null;
   readonly learnGenerateDisabledReason: string | null;
+  readonly voiceListening: boolean;
+  readonly canVoiceInputStart: boolean;
+  readonly canVoiceInputStop: boolean;
+  readonly voiceStartDisabledReason: string | null;
 };
 
 export type FilteredCommand = {

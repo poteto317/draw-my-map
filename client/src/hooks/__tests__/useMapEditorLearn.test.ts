@@ -52,6 +52,16 @@ describe("useMapEditorLearn", () => {
     expect(result.current.learnNotice).not.toBeNull();
   });
 
+  it("音声入力中は学習開始が拒否される", () => {
+    const { result } = mountHook({ voiceListening: true });
+    expect(result.current.learnStartBlockedReason).toMatch(/音声入力中/);
+    act(() => {
+      result.current.startLearnFromPalette();
+    });
+    expect(result.current.learningActive).toBe(false);
+    expect(result.current.learnNotice?.message).toMatch(/音声入力中/);
+  });
+
   it("パレット用 start/end とトグルが同じ開始経路を使う", () => {
     const { result } = mountHook();
     act(() => {

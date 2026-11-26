@@ -27,6 +27,8 @@ export type CommandPaletteImmediateCoreHandlers = {
   startLearn: () => boolean;
   endLearn: () => boolean;
   generateLearnCards: () => boolean;
+  startVoiceInput: () => boolean;
+  stopVoiceInput: () => boolean;
 };
 
 export type CommandPaletteDialogHandlers = {
@@ -118,6 +120,10 @@ export function runCommandPaletteImmediateCore(
       return true;
     case "outline.begin-edit":
       return handlers.beginOutlineEdit();
+    case "voice-input.start":
+      return handlers.startVoiceInput();
+    case "voice-input.stop":
+      return handlers.stopVoiceInput();
     case "learn.start":
       return handlers.startLearn();
     case "learn.end":

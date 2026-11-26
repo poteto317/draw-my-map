@@ -1,4 +1,5 @@
 import { isAiAssistBlockedByLearn } from "@/domain/map/mapLearnGuards";
+import { isVoiceStructureEditBlocked, MAP_VOICE_MESSAGES } from "@/domain/map/mapVoiceGuards";
 import { collectSubtreeIds } from "@/domain/nodes/nodeTree";
 import type { Node } from "@/types/node";
 
@@ -16,6 +17,7 @@ export type AiAssistEntryBlockers = {
   readonly isExternallyDeleted: boolean;
   readonly playingPresentation: boolean;
   readonly learningActive: boolean;
+  readonly voiceListening: boolean;
 };
 
 export type AiAssistEntryAvailability = { enabled: true; rootId: number } | { enabled: false; reason: string };
@@ -50,6 +52,9 @@ export function resolveAiAssistEntryAvailability(
   if (blockers.hasConflict) return disabled(AI_ASSIST_ENTRY_MESSAGES.conflict);
   if (blockers.isProtectedMode) return disabled(AI_ASSIST_ENTRY_MESSAGES.protected);
   if (blockers.playingPresentation) return disabled(AI_ASSIST_ENTRY_MESSAGES.presentation);
+  if (isVoiceStructureEditBlocked(blockers.voiceListening)) {
+    return disabled(MAP_VOICE_MESSAGES.listeningBlock);
+  }
   if (isAiAssistBlockedByLearn(blockers.learningActive)) return disabled(AI_ASSIST_ENTRY_MESSAGES.learning);
   if (selectedNodeIds.length !== 1) return disabled(AI_ASSIST_ENTRY_MESSAGES.selectOne);
   const rootId = selectedNodeIds[0];

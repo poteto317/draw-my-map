@@ -109,10 +109,18 @@ import { TourEditorDialog } from "@/components/layout/TourEditorDialog";
 import { PresentationStartControl } from "@/components/layout/PresentationStartControl";
 import { PresentationPlaybackBar } from "@/components/layout/PresentationPlaybackBar";
 import { LearnModeControl } from "@/components/layout/LearnModeControl";
+import { VoiceInputControl } from "@/components/layout/VoiceInputControl";
 import { LearnResetProgressDialog } from "@/components/layout/LearnResetProgressDialog";
 import { LearnReviewCardsPanel } from "@/components/layout/LearnReviewCardsPanel";
-import { resolveLearnCrossFeatureLocks } from "@/domain/map/mapLearnEditorAvailability";
+import { resolveMapEditorCrossFeatureLocks } from "@/domain/map/mapEditorCrossFeatureLocks";
+import { resolveMapEditorModalsBlockEditing } from "@/domain/map/mapEditorModalBlocking";
 import { useMapEditorLearn } from "@/hooks/useMapEditorLearn";
+import { useMapEditorVoice } from "@/hooks/useMapEditorVoice";
+import { useNarrowViewport } from "@/hooks/useNarrowViewport";
+import {
+  MAP_VOICE_MESSAGES,
+  resolveVoiceExclusiveStopRequested,
+} from "@/domain/map/mapVoiceGuards";
 import { useLearnRevealKeyboard } from "@/hooks/useLearnRevealKeyboard";
 import { resolveOutlineParentCandidate } from "@/components/layout/outlineParentCandidate";
 import { NodeSearchBox } from "@/components/layout/NodeSearchBox";
@@ -731,6 +739,8 @@ export function MapEditor({
   const isProtectedMode = storageMode === "protected";
   const hasMapConflict = persistence.conflictState === "conflict";
   const isMapExternallyDeleted = persistence.conflictState === "externallyDeleted";
+  // useMapEditorLearn が useMapEditorVoice より先に走るため、学習×音声の排他は listening のミラー state で渡す
+  const [voiceListening, setVoiceListening] = useState(false);
   const {
     learnMode,
     learningActive,
@@ -762,44 +772,7 @@ export function MapEditor({
     resetLearnProgress,
     generateLearnReviewCards,
     selectNode,
-  });
-  const learnCrossFeatureLocks = useMemo(
-    () => resolveLearnCrossFeatureLocks({
-      learningActive,
-      playingPresentation,
-      isProtectedMode,
-      hasConflict: hasMapConflict,
-      isExternallyDeleted: isMapExternallyDeleted,
-    }),
-    [hasMapConflict, isMapExternallyDeleted, isProtectedMode, learningActive, playingPresentation],
-  );
-  const presentationStartDisabled = presentationStartDisabledFromTour
-    || learnCrossFeatureLocks.presentationStartBlockedByLearn;
-  const { headerLayoutControls, layoutSnapPrefs } = useMapHeaderLayoutControls({
-    viewMode,
-    isProtectedMode: storageMode === "protected",
-    hasConflict: persistence.conflictState === "conflict",
-    isExternallyDeleted: persistence.conflictState === "externallyDeleted",
-    canvasSelection,
-    nodes,
-    layoutMode,
-    layoutStyle,
-    treeDirection,
-    layoutSpacing,
-    selectedNodeId,
-    selectedNodeIds,
-    selectedNodeLocked: selectedNode?.locked === true,
-    setLayoutStyle,
-    setTreeDirection,
-    setLayoutSpacing,
-    commitManualNodes,
-    toggleNodeEditLock,
-    lockNodeSubtree,
-    unlockNodeSubtree,
-    setLabelFontSize,
-    toggleLabelBold,
-    toggleLabelUnderline,
-    layoutEditingBlocked: learnCrossFeatureLocks.layoutEditBlocked,
+    voiceListening,
   });
   const siblingReorder = useSiblingReorderAction({
     selectedNodeId,
@@ -933,22 +906,14 @@ export function MapEditor({
   // blockers はフック内の useMemo を効かせるため、値が変わったときだけ作り直す
   const taskNodeId = selectedNode && importanceTargetIds.length === 1
     && (viewMode === "outline" || (!selectedRelation && !selectedGroup)) ? selectedNode.id : null;
-  const taskEditingDisabled = isProtectedMode || hasMapConflict || isMapExternallyDeleted
-    || learnCrossFeatureLocks.attributeEditBlocked || selectedNode?.locked === true;
-  const { commitTask, commitCustomAttribute, getAttributeGeneration } = useNodeTaskAttributeEditing(
-    taskNodeId,
-    documentRevision,
-    taskEditingDisabled,
-    applyTask,
-    applyCustomAttribute,
-  );
   const aiAssistBlockers = useMemo(() => ({
     isProtectedMode,
     hasConflict: hasMapConflict,
     isExternallyDeleted: isMapExternallyDeleted,
     playingPresentation,
     learningActive,
-  }), [isProtectedMode, hasMapConflict, isMapExternallyDeleted, learningActive, playingPresentation]);
+    voiceListening,
+  }), [isProtectedMode, hasMapConflict, isMapExternallyDeleted, learningActive, playingPresentation, voiceListening]);
   const aiAssist = useAiAssistDialog({
     mapId,
     documentRevision,
@@ -1011,28 +976,131 @@ export function MapEditor({
     notice: commandPaletteNotice,
     publishNotice: publishCommandPaletteNotice,
   } = useRevisionScopedNotice(documentRevision);
+  const viewModeRef = useLatestRef(viewMode);
+  const editorModalsBlockEditing = resolveMapEditorModalsBlockEditing({
+    commandPaletteOpen: commandPalette.screen !== "closed",
+    printSettingsOpen,
+    outlineImportOpen: outlineImport.screen !== "closed",
+    exchangeImportOpen: exchangeImport.screen !== "closed",
+    tourEditorOpen: tourEditor.screen !== "closed",
+    presentationPlaybackOpen: presentationPlayback.screen !== "closed",
+    branchMoveOpen: branchMove.screen !== "closed",
+    branchExtractOpen: branchExtract.screen !== "closed",
+    labelReplaceOpen: labelReplace.screen !== "closed",
+    nodeSplitOpen: nodeSplit.screen !== "closed",
+    nodeMergeOpen: nodeMerge.screen !== "closed",
+    aiAssistOpen: aiAssist.screen !== "closed",
+    partsDialogOpen: partsDialogMode !== null,
+    relationPartnerOpen: relationPartnerFromId !== null,
+    crossMapSearchOpen: crossMapDialogs.crossMapSearchOpen,
+    brokenLinksDialogOpen: crossMapDialogs.brokenLinksDialogOpen,
+    persistenceConfirmOpen: persistence.isConfirmOpen,
+  });
+  const voiceExclusiveStopRequested = resolveVoiceExclusiveStopRequested({
+    modalBlockingVoiceStart: editorModalsBlockEditing,
+    learningActive,
+    playingPresentation,
+  });
+  const voiceStartGuard = useMemo(() => ({
+    isProtectedMode,
+    hasConflict: hasMapConflict,
+    isExternallyDeleted: isMapExternallyDeleted,
+    learningActive,
+    playingPresentation,
+    modalBlockingVoiceStart: editorModalsBlockEditing,
+    canvasSelection,
+    relationPartnerOpen: relationPartnerFromId !== null,
+  }), [
+    canvasSelection,
+    hasMapConflict,
+    isMapExternallyDeleted,
+    isProtectedMode,
+    learningActive,
+    editorModalsBlockEditing,
+    playingPresentation,
+    relationPartnerFromId,
+  ]);
+  const voiceInputButtonRef = useRef<HTMLButtonElement>(null);
+  const {
+    listening,
+    interimTranscript,
+    voiceNotice,
+    voiceStartDisabledReason,
+    canVoiceInputStart,
+    canVoiceInputStop,
+    handleVoiceToggle,
+    startVoiceFromPalette,
+    stopVoiceFromPalette,
+  } = useMapEditorVoice({
+    mapId,
+    documentRevision,
+    insertForest,
+    selectNode,
+    selectedNodeId,
+    selectedNodeIds,
+    startGuard: voiceStartGuard,
+    exclusiveStopRequested: voiceExclusiveStopRequested,
+    onListeningChange: setVoiceListening,
+    onInsertSuccessInMap: (rootId) => {
+      if (viewModeRef.current === "map") canvasFocus.issueRequest(rootId);
+    },
+  });
+  const crossFeatureLocks = useMemo(
+    () => resolveMapEditorCrossFeatureLocks({
+      learningActive,
+      playingPresentation,
+      isProtectedMode,
+      hasConflict: hasMapConflict,
+      isExternallyDeleted: isMapExternallyDeleted,
+      voiceListening: listening,
+    }),
+    [hasMapConflict, isMapExternallyDeleted, isProtectedMode, learningActive, listening, playingPresentation],
+  );
+  const { headerLayoutControls, layoutSnapPrefs } = useMapHeaderLayoutControls({
+    viewMode,
+    isProtectedMode: storageMode === "protected",
+    hasConflict: persistence.conflictState === "conflict",
+    isExternallyDeleted: persistence.conflictState === "externallyDeleted",
+    canvasSelection,
+    nodes,
+    layoutMode,
+    layoutStyle,
+    treeDirection,
+    layoutSpacing,
+    selectedNodeId,
+    selectedNodeIds,
+    selectedNodeLocked: selectedNode?.locked === true,
+    setLayoutStyle,
+    setTreeDirection,
+    setLayoutSpacing,
+    commitManualNodes,
+    toggleNodeEditLock,
+    lockNodeSubtree,
+    unlockNodeSubtree,
+    setLabelFontSize,
+    toggleLabelBold,
+    toggleLabelUnderline,
+    layoutEditingBlocked: crossFeatureLocks.layoutEditBlocked,
+  });
+  const taskEditingDisabled = isProtectedMode || hasMapConflict || isMapExternallyDeleted
+    || crossFeatureLocks.attributeEditBlocked || selectedNode?.locked === true;
+  const { commitTask, commitCustomAttribute, getAttributeGeneration } = useNodeTaskAttributeEditing(
+    taskNodeId,
+    documentRevision,
+    taskEditingDisabled,
+    applyTask,
+    applyCustomAttribute,
+  );
+  const presentationStartControlDisabled = presentationStartDisabledFromTour
+    || crossFeatureLocks.presentationStartBlockedByLearn
+    || crossFeatureLocks.presentationStartBlockedByVoice;
   // 入口をすべて同じ値で止める（L-061）。commandPalette.screen === "closed" を積に含める
   // 相手ピッカー表示中も inert／shortcuts 停止（設計 §10）
   const editorShortcutsEnabled = shortcutsEnabled
-    && commandPalette.screen === "closed"
-    && !printSettingsOpen
-    && outlineImport.screen === "closed"
-    && exchangeImport.screen === "closed"
-    && tourEditor.screen === "closed"
-    && presentationPlayback.screen === "closed"
+    && !editorModalsBlockEditing
     && !learningActive
-    && branchMove.screen === "closed"
-    && branchExtract.screen === "closed"
-    && labelReplace.screen === "closed"
-    && nodeSplit.screen === "closed"
-    && nodeMerge.screen === "closed"
-    && aiAssist.screen === "closed"
-    && partsDialogMode === null
-    && relationPartnerFromId === null
-    && !crossMapDialogs.crossMapSearchOpen
-    && !crossMapDialogs.brokenLinksDialogOpen
-    && !persistence.isConfirmOpen;
-  useMapHistoryShortcuts({ undo, redo, enabled: editorShortcutsEnabled });
+    && !listening;
+  useMapHistoryShortcuts({ undo, redo, enabled: editorShortcutsEnabled || listening });
   useCrossMapSearchShortcut({
     enabled: editorShortcutsEnabled,
     onOpen: crossMapDialogs.openCrossMapSearch,
@@ -1084,10 +1152,9 @@ export function MapEditor({
     onValidTarget: clearFocusOutsideBranch,
   });
   // パレット実行用コア（editorShortcutsEnabled ガードなし）
-  const viewModeRef = useLatestRef(viewMode);
   const pendingViewModeFocusRef = useRef<EditorViewMode | null>(null);
   const pendingMapSearchFocusRef = useRef(false);
-  const applyViewMode = useCallback((nextMode: EditorViewMode) => {
+  const applyViewModeCore = useCallback((nextMode: EditorViewMode) => {
     if (nextMode === viewModeRef.current) return;
     viewNavigation.clearCanvasFocus();
     // 関連線／グループ選択のままアウトラインへ行くと isNodeOpBlocked で構造操作が止まる（inventory: 無関係）
@@ -1103,6 +1170,20 @@ export function MapEditor({
     pendingViewModeFocusRef.current = nextMode;
     setViewMode(nextMode);
   }, [viewModeRef, viewNavigation, resolutionFilter, returnToCanvas, clearNonNodeSelection]);
+  const {
+    isNarrowViewport,
+    userChoseMapOnNarrow,
+    recordManualViewModeChange,
+  } = useNarrowViewport({
+    mapId,
+    storageMode,
+    viewMode,
+    applyViewMode: applyViewModeCore,
+  });
+  const applyViewMode = useCallback((nextMode: EditorViewMode) => {
+    recordManualViewModeChange(nextMode);
+    applyViewModeCore(nextMode);
+  }, [applyViewModeCore, recordManualViewModeChange]);
   function changeViewMode(nextMode: EditorViewMode) {
     if (!editorShortcutsEnabled || playingPresentation) return;
     applyViewMode(nextMode);
@@ -1207,7 +1288,11 @@ export function MapEditor({
         outlineSelectedVisible: selectedNodeId !== null && outlineModel.allNodeIds.has(selectedNodeId),
         learningActive,
         playingPresentation,
-        canLearnStart: learnStartBlockedReason === null && !learningActive,
+        canLearnStart: learnStartBlockedReason === null && !learningActive && !listening,
+        voiceListening: listening,
+        canVoiceInputStart,
+        canVoiceInputStop,
+        voiceStartDisabledReason,
         canLearnEnd: learningActive,
         canLearnReset: learningActive && learnResetBlockedReason === null,
         canLearnGenerateCards: learningActive && learnGenerateBlockedReason === null,
@@ -1218,8 +1303,8 @@ export function MapEditor({
       }),
     [
       viewMode, selectedNodeId, focusRootId, storageMode, persistence.conflictState,
-      learningActive, playingPresentation, learnStartBlockedReason, learnResetBlockedReason,
-      learnGenerateBlockedReason,
+      learningActive, playingPresentation, listening, learnStartBlockedReason, learnResetBlockedReason,
+      learnGenerateBlockedReason, canVoiceInputStart, canVoiceInputStop, voiceStartDisabledReason,
       nodeOpsBlockedByCanvasSelection,
       canUndo, canRedo, displayState.fitNodes.length, selectedFitNodes.length, selectedBranchIds,
       canExpandSelectedBranch, canCollapseSelectedBranch, selectedNode, nodeOnlyDeletion.canDelete,
@@ -1309,12 +1394,15 @@ export function MapEditor({
       startLearn: () => startLearnFromPalette(),
       endLearn: () => endLearnFromPalette(),
       generateLearnCards: () => handleGenerateLearnReviewCards(),
+      startVoiceInput: () => startVoiceFromPalette(),
+      stopVoiceInput: () => stopVoiceFromPalette(),
     });
   }, [
     viewMode, selectedNodeId, displayState.fitNodes, selectedFitNodes, recordBeforeViewportChange,
     setFocusRootId, branchCollapse, undo, redo, duplication, outlineActions, nodeOnlyDeletion,
     nodeParentInsertion, moveSelectedSiblingUp, moveSelectedSiblingDown, indentSelected, outdentSelected,
     applyViewMode, endLearnFromPalette, handleGenerateLearnReviewCards, startLearnFromPalette,
+    startVoiceFromPalette, stopVoiceFromPalette,
   ]);
   const openDialogCommand = useCallback((id: CommandId) => {
     openCommandPaletteDialog(id, {
@@ -1401,6 +1489,7 @@ export function MapEditor({
     treeEditNotice,
     commandPaletteNotice,
     learnNotice,
+    voiceNotice,
     persistence.conflictActionNotice,
   ];
 
@@ -1422,12 +1511,19 @@ export function MapEditor({
 
   const pendingPresentationStartRef = useRef(false);
   const handleNodeSearchSelect = useCallback((nodeId: number) => {
-    if (learnCrossFeatureLocks.layoutEditBlocked) return;
+    if (crossFeatureLocks.layoutEditBlocked) return;
     navigateToNode(nodeId);
-  }, [learnCrossFeatureLocks.layoutEditBlocked, navigateToNode]);
+  }, [crossFeatureLocks.layoutEditBlocked, navigateToNode]);
   const handlePresentationStart = useCallback(() => {
-    if (learnCrossFeatureLocks.presentationStartBlockedByLearn) {
+    if (crossFeatureLocks.presentationStartBlockedByLearn) {
       publishPresentationBlockedDuringLearn();
+      return;
+    }
+    if (crossFeatureLocks.presentationStartBlockedByVoice) {
+      publishCommandPaletteNotice({
+        kind: "status",
+        message: MAP_VOICE_MESSAGES.listeningBlock,
+      });
       return;
     }
     if (viewMode !== "map") {
@@ -1438,8 +1534,10 @@ export function MapEditor({
     presentationPlayback.start();
   }, [
     applyViewMode,
-    learnCrossFeatureLocks.presentationStartBlockedByLearn,
+    crossFeatureLocks.presentationStartBlockedByLearn,
+    crossFeatureLocks.presentationStartBlockedByVoice,
     presentationPlayback,
+    publishCommandPaletteNotice,
     publishPresentationBlockedDuringLearn,
     viewMode,
   ]);
@@ -1450,12 +1548,24 @@ export function MapEditor({
     pendingPresentationStartRef.current = false;
   }, [viewMode, viewportFrame, presentationPlayback]);
 
+  const voiceInputControl = (
+    <VoiceInputControl
+      voiceListening={listening}
+      interimTranscript={interimTranscript}
+      onVoiceToggle={handleVoiceToggle}
+      disabled={voiceStartDisabledReason !== null && !listening}
+      isNarrowViewport={isNarrowViewport}
+      userChoseMapOnNarrow={userChoseMapOnNarrow}
+      buttonRef={voiceInputButtonRef}
+    />
+  );
+
   return (
     <>
       <div
         className="flex min-h-0 flex-1 flex-col"
         data-map-id={mapId}
-        inert={!editorShortcutsEnabled && !playingPresentation && !learningActive}
+        inert={!editorShortcutsEnabled && !playingPresentation && !learningActive && !listening}
       >
         <AppHeader
           layoutMode={layoutMode}
@@ -1466,7 +1576,16 @@ export function MapEditor({
             : null}
           mapControls={mapControls}
           saveStatus={persistence.saveStatus}
-          viewControls={<EditorViewModeControl mode={viewMode} onChange={changeViewMode} disabled={playingPresentation} />}
+          isNarrowViewport={isNarrowViewport}
+          userChoseMapOnNarrow={userChoseMapOnNarrow}
+          voiceControls={isNarrowViewport ? voiceInputControl : null}
+          viewControls={(
+            <EditorViewModeControl
+              mode={viewMode}
+              onChange={changeViewMode}
+              disabled={playingPresentation || listening}
+            />
+          )}
           showCanvasHints={viewMode === "map"}
           searchControls={(
             <div className="flex flex-wrap items-center gap-2">
@@ -1479,7 +1598,7 @@ export function MapEditor({
                   total={nodeSearch.total}
                   onSelectResult={handleNodeSearchSelect}
                   inputRef={nodeSearchInputRef}
-                  disabled={playingPresentation}
+                  disabled={playingPresentation || listening}
                 />
               )}
               <button
@@ -1487,9 +1606,9 @@ export function MapEditor({
                 type="button"
                 aria-haspopup="dialog"
                 aria-expanded={crossMapDialogs.crossMapSearchOpen}
-                disabled={playingPresentation}
+                disabled={playingPresentation || listening}
                 onClick={() => {
-                  if (playingPresentation) return;
+                  if (playingPresentation || listening) return;
                   crossMapDialogs.openCrossMapSearch();
                 }}
                 className="shrink-0 rounded-md bg-zinc-100 px-3 py-1 text-sm text-zinc-700 transition-colors hover:bg-zinc-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-600"
@@ -1548,8 +1667,8 @@ export function MapEditor({
                 buttonRef={commandPaletteButtonRef}
               />
               <MapHistoryControls
-                canUndo={canUndo && editorShortcutsEnabled && !playingPresentation}
-                canRedo={canRedo && editorShortcutsEnabled && !playingPresentation}
+                canUndo={canUndo && (editorShortcutsEnabled || listening) && !playingPresentation}
+                canRedo={canRedo && (editorShortcutsEnabled || listening) && !playingPresentation}
                 onUndo={undo}
                 onRedo={redo}
               />
@@ -1560,16 +1679,22 @@ export function MapEditor({
                 buttonRef={tourEditorButtonRef}
               />
               <PresentationStartControl
-                disabled={presentationStartDisabled}
+                disabled={presentationStartControlDisabled}
                 onStart={handlePresentationStart}
                 buttonRef={presentationStartButtonRef}
               />
               <LearnModeControl
                 learningActive={learningActive}
-                disabled={playingPresentation || hasMapConflict || isMapExternallyDeleted}
+                disabled={
+                  playingPresentation
+                  || hasMapConflict
+                  || isMapExternallyDeleted
+                  || (!learningActive && (learnStartBlockedReason !== null || listening))
+                }
                 onToggle={handleToggleLearnMode}
                 buttonRef={learnModeButtonRef}
               />
+              {!isNarrowViewport && voiceInputControl}
               {learningActive && (
                 <>
                   <button
@@ -1786,6 +1911,10 @@ export function MapEditor({
             ? <MapOperationNoticeList notices={operationNotices} />
             : null}
         />
+        <div
+          className="flex min-h-0 flex-1 flex-col"
+          inert={listening}
+        >
         <MapConflictNotice
           conflictState={persistence.conflictState}
           onSaveAsCopy={persistence.handleSaveAsCopy}
@@ -1926,7 +2055,7 @@ export function MapEditor({
               relationEditDisabled={relationEditDisabled || playingPresentation}
               selectedGroup={selectedGroup}
               groupEditDisabled={groupEditDisabled || playingPresentation}
-              attributeEditDisabled={learnCrossFeatureLocks.attributeEditBlocked}
+              attributeEditDisabled={crossFeatureLocks.attributeEditBlocked}
               taskEditing={taskNodeId === null ? null : { disabled: taskEditingDisabled, commitTask }}
               customAttributeEditing={taskNodeId === null ? null : {
                 disabled: taskEditingDisabled,
@@ -1997,6 +2126,7 @@ export function MapEditor({
             />
           )}
         />
+        </div>
       </div>
       {branchExtract.screen === "open" && (
         <BranchExtractDialog

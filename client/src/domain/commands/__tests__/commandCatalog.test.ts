@@ -32,6 +32,8 @@ const REQUIRED_V1_IDS: readonly CommandId[] = [
   "edit.register-part",
   "edit.insert-part",
   "edit.delete-part",
+  "voice-input.start",
+  "voice-input.stop",
   "learn.start",
   "learn.end",
   "learn.reset-progress",

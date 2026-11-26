@@ -59,6 +59,10 @@ function base(overrides: Partial<CommandAvailabilityContextInput> = {}): Command
     learnStartDisabledReason: null,
     learnResetDisabledReason: null,
     learnGenerateDisabledReason: null,
+    voiceListening: false,
+    canVoiceInputStart: true,
+    canVoiceInputStop: false,
+    voiceStartDisabledReason: null,
     ...overrides,
   };
 }

@@ -13,6 +13,7 @@ const NONE: AiAssistEntryBlockers = {
   isExternallyDeleted: false,
   playingPresentation: false,
   learningActive: false,
+  voiceListening: false,
 };
 const nodes = [
   createTestNode({ id: 1, label: "根" }),
