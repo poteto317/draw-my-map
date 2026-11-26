@@ -1,5 +1,7 @@
 "use client";
 
+import { collectTaskProgress } from "@/domain/nodes/nodeTaskProgress";
+import { useNodeTaskAttributeEditing } from "@/hooks/useNodeTaskAttributeEditing";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { BrokenMapLinksDialog } from "@/components/layout/BrokenMapLinksDialog";
 import { CrossMapSearchDialog } from "@/components/layout/CrossMapSearchDialog";
@@ -299,6 +301,8 @@ export function MapEditor({
     toggleLabelBold,
     toggleLabelUnderline,
     setNodeIcon,
+    applyTask,
+    applyCustomAttribute,
     setNodeKind,
     beginMoveHistory,
     documentRevision,
@@ -345,6 +349,7 @@ export function MapEditor({
     if (viewMode === "map") return selectedNodeIds;
     return selectedNodeId === null ? [] : [selectedNodeId];
   }, [viewMode, selectedNodeIds, selectedNodeId]);
+  const taskProgress = useMemo(() => collectTaskProgress(nodes), [nodes]);
   const importanceSummary = summarizeSelectionImportance(nodes, importanceTargetIds);
   const branchCollapse = useBranchCollapse({ nodes, documentRevision });
   const { expandNodes, index: collapseIndex } = branchCollapse;
@@ -872,6 +877,17 @@ export function MapEditor({
   const isProtectedMode = storageMode === "protected";
   const hasMapConflict = persistence.conflictState === "conflict";
   const isMapExternallyDeleted = persistence.conflictState === "externallyDeleted";
+  const taskNodeId = selectedNode && importanceTargetIds.length === 1
+    && (viewMode === "outline" || (!selectedRelation && !selectedGroup)) ? selectedNode.id : null;
+  const taskEditingDisabled = isProtectedMode || hasMapConflict || isMapExternallyDeleted
+    || playingPresentation || selectedNode?.locked === true;
+  const { commitTask, commitCustomAttribute, getAttributeGeneration } = useNodeTaskAttributeEditing(
+    taskNodeId,
+    documentRevision,
+    taskEditingDisabled,
+    applyTask,
+    applyCustomAttribute,
+  );
   const aiAssistBlockers = useMemo(() => ({
     isProtectedMode,
     hasConflict: hasMapConflict,
@@ -1638,7 +1654,7 @@ export function MapEditor({
         />
         <AppWorkspace
           canvas={viewMode === "outline" ? (
-            <OutlineEditor nodes={nodes} model={outlineModel} selectedNodeId={selectedNodeId}
+            <OutlineEditor nodes={nodes} taskProgress={taskProgress} model={outlineModel} selectedNodeId={selectedNodeId}
               documentRevision={documentRevision} enabled={editorShortcutsEnabled} actions={outlineActions} />
           ) : (
             <div className="relative h-full min-h-0 w-full">
@@ -1650,6 +1666,7 @@ export function MapEditor({
                 </div>
               )}
               <MapStage
+                taskProgress={taskProgress}
                 canvasContainerRef={canvasContainerRef}
                 viewportHandleRef={viewportHandleRef}
                 nodes={displayState.displayNodes}
@@ -1768,6 +1785,12 @@ export function MapEditor({
               selectedGroup={selectedGroup}
               groupEditDisabled={groupEditDisabled || playingPresentation}
               attributeEditDisabled={playingPresentation}
+              taskEditing={taskNodeId === null ? null : { disabled: taskEditingDisabled, commitTask }}
+              customAttributeEditing={taskNodeId === null ? null : {
+                disabled: taskEditingDisabled,
+                commitCustomAttribute,
+                getAttributeGeneration,
+              }}
               // アウトライン表示では主選択だけ（キャンバスで残った複数選択の件数を見せない）
               selectionCount={importanceTargetIds.length}
               documentRevision={documentRevision}

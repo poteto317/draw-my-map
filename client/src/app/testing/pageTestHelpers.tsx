@@ -30,6 +30,7 @@ export type ExportedNode = {
   tags?: readonly string[];
   sources?: readonly { title: string; page?: string; url?: string }[];
   mapLinks?: readonly NodeMapLink[];
+  task?: { completed: boolean; dueDate?: string; assignee?: string };
 };
 export type ExportedMap = { version: number; layoutMode: string; nodes: ExportedNode[] };
 

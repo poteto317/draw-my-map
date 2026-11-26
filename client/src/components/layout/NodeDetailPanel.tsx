@@ -1,3 +1,6 @@
+import { NodeCustomAttributesSection } from "@/components/layout/NodeCustomAttributesSection";
+import { NodeTaskSection } from "@/components/layout/NodeTaskSection";
+import type { CommitCustomAttribute, CommitTask } from "@/hooks/useNodeTaskAttributeEditing";
 import { AiAssistSection, type AiAssistSectionProps } from "@/components/layout/AiAssistSection";
 import { IllustrationPanel } from "@/components/layout/IllustrationPanel";
 import { NodeAppearanceSection } from "@/components/layout/NodeAppearanceSection";
@@ -29,6 +32,8 @@ type NodeDetailPanelProps = {
     Node,
     | "id"
     | "label"
+    | "task"
+    | "customAttributes"
     | "note"
     | "tags"
     | "links"
@@ -46,6 +51,12 @@ type NodeDetailPanelProps = {
   /** グループ選択時。ノード節と同時には出さない想定（選択が排他） */
   selectedGroup?: Pick<MapGroup, "id" | "label"> | null;
   groupEditDisabled?: boolean;
+  taskEditing: { disabled: boolean; commitTask: CommitTask } | null;
+  customAttributeEditing: {
+    disabled: boolean;
+    commitCustomAttribute: CommitCustomAttribute;
+    getAttributeGeneration: (key: string) => number;
+  } | null;
   selectionCount: number;
   documentRevision: number;
   viewMode: EditorViewMode;
@@ -89,6 +100,8 @@ type NodeDetailPanelProps = {
 // 右のパネル。関連線／グループ選択時はその節だけ、それ以外はノードの詳細メモ〜イラストを縦に積み、内容が高さを超えたら縦にスクロールする
 export function NodeDetailPanel({
   selectedNode,
+  taskEditing,
+  customAttributeEditing,
   selectedRelation = null,
   relationEditDisabled = false,
   selectedGroup = null,
@@ -217,6 +230,19 @@ export function NodeDetailPanel({
           {/* タグ・リンク・出典・マップ間リンクの節の key はノードの ID だけ（兄弟の NodeNoteEditor や互いと重ならないよう接頭辞を付ける）。
               documentRevision では作り直さず、節の中で下書きとエラーだけを消す（作り直すとリンク・削除ボタンのフォーカスが
               body へ落ちる。L-155・L-397・L-588） */}
+          {selectedNode && taskEditing && <NodeTaskSection key={`task:${selectedNode.id}`}
+            target={{ nodeId: selectedNode.id, documentRevision }} task={selectedNode.task}
+            disabled={taskEditing.disabled} commitTask={taskEditing.commitTask} />}
+          {selectedNode && customAttributeEditing && (
+            <NodeCustomAttributesSection
+              key={`custom:${selectedNode.id}`}
+              target={{ nodeId: selectedNode.id, documentRevision }}
+              customAttributes={selectedNode.customAttributes}
+              disabled={customAttributeEditing.disabled}
+              commitCustomAttribute={customAttributeEditing.commitCustomAttribute}
+              getAttributeGeneration={customAttributeEditing.getAttributeGeneration}
+            />
+          )}
           <NodeTagsSection
             key={selectedNode === null ? "tags:none" : `tags:${selectedNode.id}`}
             node={selectedNode}

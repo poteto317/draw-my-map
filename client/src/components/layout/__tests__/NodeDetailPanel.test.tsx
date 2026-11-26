@@ -139,6 +139,8 @@ function renderPanel(overrides: Partial<Props> = {}) {
     onGenerate: jest.fn(),
     onAttach: jest.fn(),
     onRemove: jest.fn(),
+    taskEditing: null,
+    customAttributeEditing: null,
     ...overrides,
   };
   return { props, ...render(<NodeDetailPanel {...props} />) };
