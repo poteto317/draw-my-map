@@ -82,6 +82,22 @@ export type Node = {
   // 分割では元のノードにだけ残し、統合では survivor-else-first、親の挿入では新しい親に持たせない。
   // 描画・アウトライン・画像書き出しで左端色バー。検索一覧には出さない
   kind?: NodeKind;
+  // タスク（完了・期限・担当者。domain/nodes/nodeTaskAttributes.ts・nodeTaskUpdate.ts で正規化・更新。
+  // 担当者・属性名は nodeTag.ts と同じ表記規則。無いノードでは項目ごと持たない）。
+  // 分割では元のノードにだけ残し、統合では survivor-else-first（期限と担当者を合成しない）、
+  // 親の挿入では新しい親に持たせない。複製・貼り付け・別マップへの移動では写す。
+  // 永続化は mapDocumentNodeTaskAttributes.ts・投影は mapDocumentNodeProjection.ts。
+  // 競合（mapConflict.ts）・履歴（mapHistory.ts）は task の全フィールドを比較する。
+  // 検索（nodeLabelSearch.ts）・キャンバス描画のラベル（renderMapNodes.ts の進捗バッジのみ）・
+  // アウトライン書き出し・画像書き出しにはタスク本文を載せない（設計書）。
+  task?: NodeTask;
+  // カスタム属性（最大 MAX_CUSTOM_ATTRIBUTES 件。domain/nodes/nodeTaskAttributes.ts・
+  // nodeCustomAttributeUpdate.ts で正規化・更新。名前・選択肢は nodeTag.ts と同じ表記規則。
+  // 無いノード・空配列は項目ごと持たない）。
+  // 分割では元のノードにだけ残し、統合では union（同名は先勝ち・10件超は拒否）、
+  // 親の挿入では新しい親に持たせない。複製・貼り付け・別マップへの移動では写す。
+  // 永続化・投影・競合・履歴は task と同経路。検索・画像書き出し・アウトライン書き出しには載せない（設計書）。
+  customAttributes?: readonly NodeCustomAttribute[];
 };
 
 // 出典 1 件。任意の page / url は無いときキーごと持たない。規則は domain/nodes/nodeSource.ts
@@ -96,3 +112,10 @@ export type NodeMapLink = {
   readonly targetMapId: string;
   readonly targetNodeId?: number;
 };
+
+export type NodeTask = Readonly<{ completed: boolean; dueDate?: string; assignee?: string }>;
+
+export type NodeCustomAttribute =
+  | Readonly<{ name: string; type: "number"; value: number }>
+  | Readonly<{ name: string; type: "date"; value: string }>
+  | Readonly<{ name: string; type: "choice"; value: string; options: readonly string[] }>;

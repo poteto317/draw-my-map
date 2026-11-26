@@ -32,5 +32,7 @@ export const NODE_ATTRIBUTE_POLICY = {
   labelBold: { split: "original-only", merge: "survivor-else-first", parentInsert: "none" },
   labelUnderline: { split: "original-only", merge: "survivor-else-first", parentInsert: "none" },
   icon: { split: "original-only", merge: "survivor-else-first", parentInsert: "none" },
+  task: { split: "original-only", merge: "survivor-else-first", parentInsert: "none" },
+  customAttributes: { split: "original-only", merge: "union", parentInsert: "none" },
   kind: { split: "original-only", merge: "survivor-else-first", parentInsert: "none" },
 } satisfies Record<OptionalNodeKey, NodeAttributePolicy>;
