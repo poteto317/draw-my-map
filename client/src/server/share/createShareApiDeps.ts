@@ -1,5 +1,10 @@
 import { auth } from "@/auth";
-import { toShareSession, type ShareSession } from "@/domain/share/shareSession";
+import {
+  toShareCommenter,
+  toShareSession,
+  type ShareCommenter,
+  type ShareSession,
+} from "@/domain/share/shareSession";
 import type { ShareApiDeps } from "@/server/share/handleShareApi";
 import {
   createShareClientsFromConfig,
@@ -7,6 +12,7 @@ import {
   resolveSharePublicOrigin,
 } from "@/server/share/shareConfig";
 import {
+  processShareCommentWriteRateLimiter,
   processShareOwnerRateLimiter,
   processShareViewRateLimiter,
 } from "@/server/share/shareRateLimit";
@@ -14,6 +20,12 @@ import {
 export async function sessionFromAuth(): Promise<ShareSession> {
   const session = await auth();
   return toShareSession(session?.user);
+}
+
+/** コメント投稿者。email は使わない（toShareCommenter） */
+export async function commenterFromAuth(): Promise<ShareCommenter | null> {
+  const session = await auth();
+  return toShareCommenter(session?.user);
 }
 
 /** 本番ルート用。設定欠落時は null → 呼び出し側が 503 */
@@ -27,6 +39,7 @@ export function createShareApiDepsFromEnv(
 
   return {
     getSession: sessionFromAuth,
+    getCommenter: commenterFromAuth,
     d1,
     r2,
     tokenSecret: config.tokenSecret,
@@ -34,6 +47,7 @@ export function createShareApiDepsFromEnv(
     // プロセス共有リミッタ（リクエストごとに新規 create しない）
     ownerRateLimiter: processShareOwnerRateLimiter,
     viewRateLimiter: processShareViewRateLimiter,
+    commentWriteRateLimiter: processShareCommentWriteRateLimiter,
   };
 }
 

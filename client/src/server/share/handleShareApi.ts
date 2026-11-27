@@ -1,10 +1,11 @@
 import { tokenHash } from "@/domain/share/tokenHash";
-import type { ShareSession } from "@/domain/share/shareSession";
+import type { ShareCommenter, ShareSession } from "@/domain/share/shareSession";
 import {
   parseShareJson,
   readShareBodyWithinLimit,
   SHARE_MAX_BODY_BYTES,
 } from "@/server/share/shareBody";
+import type { ShareCommentService } from "@/server/share/shareCommentService";
 import {
   createCloudflareShareCommentStore,
   type ShareCommentStore,
@@ -29,6 +30,8 @@ import type { R2Client } from "@/services/share/r2Client";
 
 export type ShareApiDeps = {
   getSession: () => Promise<ShareSession>;
+  /** コメント投稿者（Google sub と名前）。表示名はクライアントから受け取らない */
+  getCommenter: () => Promise<ShareCommenter | null>;
   d1: D1Client;
   r2: R2Client;
   tokenSecret: string;
@@ -38,8 +41,12 @@ export type ShareApiDeps = {
   /** テスト用。省略時は d1 から生成 */
   commentStore?: ShareCommentStore;
   service?: ShareService;
+  /** テスト用。省略時は store・commentStore から生成 */
+  commentService?: ShareCommentService;
   ownerRateLimiter?: ShareRateLimiter;
   viewRateLimiter?: ShareRateLimiter;
+  /** 省略時は processShareCommentWriteRateLimiter */
+  commentWriteRateLimiter?: ShareRateLimiter;
   maxBodyBytes?: number;
   nowIso?: () => string;
   createId?: () => string;
@@ -69,7 +76,7 @@ function viewLimiter(deps: ShareApiDeps): ShareRateLimiter {
   return deps.viewRateLimiter ?? processShareViewRateLimiter;
 }
 
-async function readJsonBody(
+export async function readJsonBody(
   request: Request,
   maxBodyBytes: number,
 ): Promise<{ ok: true; value: unknown } | { ok: false; response: Response }> {
@@ -87,7 +94,7 @@ async function readJsonBody(
   return { ok: true, value: parsed };
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
+export function asRecord(value: unknown): Record<string, unknown> | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
 }
@@ -241,7 +248,7 @@ export function clientIpFromRequest(request: Request): string {
   return "unknown";
 }
 
-function withViewResponseHeaders(response: Response): Response {
+export function withViewResponseHeaders(response: Response): Response {
   // トークン付き閲覧は成否ともキャッシュさせない（失効後の CDN 残存を防ぐ）
   response.headers.set("Cache-Control", SHARE_VIEW_CACHE_CONTROL);
   // 平文トークンを Referer 経由で外部・ログへ出さない

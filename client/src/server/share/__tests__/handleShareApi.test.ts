@@ -61,6 +61,8 @@ function deps(overrides: Partial<ShareApiDeps> & { session?: ShareSession } = {}
   const { session = OWNER, ...rest } = overrides;
   return {
     getSession: async () => session,
+    getCommenter: async () =>
+      session ? { userId: session.userId, displayName: null } : null,
     d1: clients.d1,
     r2: clients.r2,
     tokenSecret: SECRET,
@@ -535,6 +537,7 @@ describe("Share API 契約", () => {
     clients.d1.exec.mockResolvedValue({ results: [], meta: undefined });
     const d: ShareApiDeps = {
       getSession: async () => OWNER,
+      getCommenter: async () => ({ userId: OWNER.userId, displayName: null }),
       d1: clients.d1,
       r2: clients.r2,
       tokenSecret: SECRET,

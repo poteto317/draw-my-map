@@ -51,9 +51,13 @@ export const SHARE_OWNER_RATE_LIMIT = { limit: 60, windowMs: 60_000 } as const;
 /** 閲覧 API: tokenHash / IP キーあたり 1 分 120 回 */
 export const SHARE_VIEW_RATE_LIMIT = { limit: 120, windowMs: 60_000 } as const;
 
+/** コメント書込み: ユーザー / IP キーあたり 1 分 20 回（経路の枠に追加で掛ける） */
+export const SHARE_COMMENT_WRITE_RATE_LIMIT = { limit: 20, windowMs: 60_000 } as const;
+
 /**
  * プロセス共有の既定リミッタ。
  * リクエストごとに create すると窓がリセットされるため、本番 deps はこれを注入する。
  */
 export const processShareOwnerRateLimiter = createShareRateLimiter(SHARE_OWNER_RATE_LIMIT);
 export const processShareViewRateLimiter = createShareRateLimiter(SHARE_VIEW_RATE_LIMIT);
+export const processShareCommentWriteRateLimiter = createShareRateLimiter(SHARE_COMMENT_WRITE_RATE_LIMIT);
