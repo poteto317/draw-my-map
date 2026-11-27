@@ -1,3 +1,7 @@
+import {
+  parseShareLinkPermission,
+  type ShareLinkPermission,
+} from "@/domain/share/shareLinkPermission";
 import type { ShareLocalMetaRead } from "@/domain/share/shareLocalMeta";
 import { SHARE_MESSAGES } from "@/domain/share/shareMessages";
 
@@ -6,6 +10,8 @@ export type ShareDialogLinkRef = {
   readonly id: string;
   readonly createdAt: string;
   readonly revokedAt: string | null;
+  /** サーバーの生値。表示前に parseShareLinkPermission で解釈する */
+  readonly permission: string;
 };
 
 /** ダイアログがマップ照合に使う一覧項目の最小形 */
@@ -39,7 +45,7 @@ export function listActiveShareLinksForMap(
   shareList: readonly ShareDialogListItemRef[],
   mapId: string,
   localMeta: ShareLocalMetaRead,
-): Array<{ id: string; createdAt: string }> {
+): Array<{ id: string; createdAt: string; permission: ShareLinkPermission | null }> {
   if (localMeta.status !== "present") return [];
   const shared = shareList.find(
     (item) => item.id === localMeta.value.sharedMapId || item.localMapId === mapId,
@@ -47,5 +53,16 @@ export function listActiveShareLinksForMap(
   if (!shared) return [];
   return shared.links
     .filter((link) => link.revokedAt === null)
-    .map((link) => ({ id: link.id, createdAt: link.createdAt }));
+    .map((link) => ({
+      id: link.id,
+      createdAt: link.createdAt,
+      permission: parseShareLinkPermission(link.permission),
+    }));
+}
+
+/** リンクの権限ラベル。解釈できない値（null）は「不明」 */
+export function formatShareLinkPermissionLabel(permission: ShareLinkPermission | null): string {
+  if (permission === "view") return SHARE_MESSAGES.permissionView;
+  if (permission === "comment") return SHARE_MESSAGES.permissionComment;
+  return SHARE_MESSAGES.permissionUnknown;
 }

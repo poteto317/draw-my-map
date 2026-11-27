@@ -156,4 +156,67 @@ describe("MapEditor share wiring (L-060)", () => {
     );
     expect(screen.queryByText(SHARE_MESSAGES.loginRequired)).not.toBeInTheDocument();
   });
+
+  it("ShareDialog に onCreateCommentLink を配線し、comment 権限でリンクを発行する", async () => {
+    const user = userEvent.setup();
+    const storage = createTestStorageSession({ initialJson: baseNodesJson });
+    const fetchMock = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/share/maps" && init?.method === "GET") {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            ok: true,
+            value: [
+              {
+                id: "sm-1",
+                localMapId: storage.session.mapId,
+                title: "テストのマップ",
+                currentRevisionId: "r1",
+                createdAt: "2026-11-01T00:00:00.000Z",
+                updatedAt: "2026-11-01T00:00:00.000Z",
+                links: [],
+              },
+            ],
+          }),
+        };
+      }
+      if (url === "/api/share/maps/sm-1/links" && init?.method === "POST") {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            ok: true,
+            value: {
+              linkId: "l-c",
+              url: "https://example.com/share/tc",
+              token: "tc",
+              permission: "comment",
+            },
+          }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({ ok: false, reason: "unexpected" }) };
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await renderEditor({
+      storage,
+      shareSession: { userId: "u1", email: "a@example.com" },
+      shareDialogOpen: true,
+    });
+    const button = await screen.findByRole("button", { name: SHARE_MESSAGES.createCommentLink });
+    await waitFor(() => expect(button).toBeEnabled());
+    await user.click(button);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("share-issued-link")).toHaveTextContent("https://example.com/share/tc");
+    });
+    const linkCall = fetchMock.mock.calls.find(([input]) => String(input) === "/api/share/maps/sm-1/links");
+    expect(JSON.parse(String(linkCall?.[1]?.body))).toEqual({ permission: "comment" });
+    expect(screen.getByTestId("share-issued-link-permission")).toHaveTextContent(
+      SHARE_MESSAGES.permissionComment,
+    );
+  });
 });

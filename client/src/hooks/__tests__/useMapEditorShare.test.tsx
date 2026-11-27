@@ -96,6 +96,176 @@ describe("useMapEditorShare", () => {
     });
   });
 
+  it("onCreateLink は view 権限でリンクを発行する", async () => {
+    const { storage } = createRecordingStorage({
+      initial: {
+        [SHARE_LOCAL_META_STORAGE_KEY]: encodeShareLocalMetaStore({
+          version: 1,
+          byMapId: { "map-1": EXISTING_META },
+        }),
+      },
+    });
+    const api = createApi();
+    const { result } = renderHook(() =>
+      useMapEditorShare({
+        mapId: "map-1",
+        mapTitle: "タイトル",
+        shareSession: { userId: "u1", email: "a@example.com" },
+        documentRevision: 1,
+        shareDialogOpen: true,
+        getDocumentJson: () => "{}",
+        api,
+        getStorage: () => storage,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.onCreateLink();
+    });
+    expect(api.createLink).toHaveBeenCalledTimes(1);
+    expect(api.createLink).toHaveBeenCalledWith("sm-1", "view");
+    expect(result.current.lastIssuedLink?.permission).toBe("view");
+  });
+
+  it("onCreateCommentLink は comment 権限でリンクを発行し、成功文言と発行リンクを出す", async () => {
+    const { storage } = createRecordingStorage({
+      initial: {
+        [SHARE_LOCAL_META_STORAGE_KEY]: encodeShareLocalMetaStore({
+          version: 1,
+          byMapId: { "map-1": EXISTING_META },
+        }),
+      },
+    });
+    const api = createApi();
+    const { result } = renderHook(() =>
+      useMapEditorShare({
+        mapId: "map-1",
+        mapTitle: "タイトル",
+        shareSession: { userId: "u1", email: "a@example.com" },
+        documentRevision: 1,
+        shareDialogOpen: true,
+        getDocumentJson: () => "{}",
+        api,
+        getStorage: () => storage,
+      }),
+    );
+
+    let returned: Awaited<ReturnType<typeof result.current.onCreateCommentLink>> | undefined;
+    await act(async () => {
+      returned = await result.current.onCreateCommentLink();
+    });
+    expect(api.createLink).toHaveBeenCalledTimes(1);
+    expect(api.createLink).toHaveBeenCalledWith("sm-1", "comment");
+    expect(returned?.ok).toBe(true);
+    expect(result.current.lastIssuedLink?.permission).toBe("comment");
+    expect(result.current.notice).toEqual({
+      kind: "status",
+      message: SHARE_MESSAGES.createCommentLinkSuccess,
+    });
+    expect(readShareLocalMeta(storage, "map-1")).toEqual({
+      status: "present",
+      value: expect.objectContaining({ linkActive: true }),
+    });
+  });
+
+  it("onCreateCommentLink の失敗では発行リンクを出さず失敗文言を出す（L-001）", async () => {
+    const { storage } = createRecordingStorage({
+      initial: {
+        [SHARE_LOCAL_META_STORAGE_KEY]: encodeShareLocalMetaStore({
+          version: 1,
+          byMapId: { "map-1": EXISTING_META },
+        }),
+      },
+    });
+    const api = createApi({
+      createLink: jest.fn(async () => ({ ok: false as const, reason: "network-error" })),
+    });
+    const { result } = renderHook(() =>
+      useMapEditorShare({
+        mapId: "map-1",
+        mapTitle: "タイトル",
+        shareSession: { userId: "u1", email: "a@example.com" },
+        documentRevision: 1,
+        shareDialogOpen: true,
+        getDocumentJson: () => "{}",
+        api,
+        getStorage: () => storage,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.onCreateCommentLink();
+    });
+    expect(result.current.lastIssuedLink).toBeNull();
+    expect(result.current.notice?.kind).toBe("error");
+  });
+
+  it("再発行の成功後、一覧の新リンクの permission は成功値（サーバー確定値）を使う", async () => {
+    const { storage } = createRecordingStorage({
+      initial: {
+        [SHARE_LOCAL_META_STORAGE_KEY]: encodeShareLocalMetaStore({
+          version: 1,
+          byMapId: { "map-1": EXISTING_META },
+        }),
+      },
+    });
+    const listItem: ShareListItemClient = {
+      id: "sm-1",
+      localMapId: "map-1",
+      title: "タイトル",
+      currentRevisionId: "r1",
+      createdAt: "2026-11-01T00:00:00.000Z",
+      updatedAt: "2026-11-01T00:00:00.000Z",
+      links: [
+        {
+          id: "l-c",
+          permission: "comment",
+          createdAt: "2026-11-01T00:00:00.000Z",
+          revokedAt: null,
+          expiresAt: null,
+        },
+      ],
+    };
+    const api = createApi({
+      listMaps: jest.fn(async () => ({ ok: true as const, value: [listItem] })),
+      reissueLink: jest.fn(async () => ({
+        ok: true as const,
+        value: {
+          linkId: "l-new",
+          url: "https://example.com/share/t9",
+          token: "t9",
+          permission: "comment" as const,
+        },
+      })),
+    });
+    const { result } = renderHook(() =>
+      useMapEditorShare({
+        mapId: "map-1",
+        mapTitle: "タイトル",
+        shareSession: { userId: "u1", email: "a@example.com" },
+        documentRevision: 1,
+        shareDialogOpen: true,
+        getDocumentJson: () => "{}",
+        api,
+        getStorage: () => storage,
+      }),
+    );
+
+    await waitFor(() => expect(result.current.listState).toBe("ready"));
+    await act(async () => {
+      await result.current.onReissueLink("l-c");
+    });
+
+    const links = result.current.shareList[0]?.links ?? [];
+    expect(links.find((link) => link.id === "l-c")?.revokedAt).not.toBeNull();
+    expect(links.find((link) => link.id === "l-new")).toEqual(
+      expect.objectContaining({ permission: "comment", revokedAt: null }),
+    );
+    expect(result.current.lastIssuedLink?.permission).toBe("comment");
+    // 権限を問わない文言（コメントリンクの再発行でも「閲覧」と出さない）
+    expect(result.current.notice).toEqual({ kind: "status", message: "リンクを再発行しました。" });
+  });
+
   it("未ログインの createShare は成功扱いにせず notice を出す", async () => {
     const { storage } = createRecordingStorage();
     const api = createApi();
@@ -467,6 +637,7 @@ describe("useMapEditorShare", () => {
     await act(async () => {
       await result.current.onRevokeLink("l-only");
     });
+    expect(result.current.notice).toEqual({ kind: "status", message: "リンクを失効しました。" });
 
     expect(result.current.localMeta).toEqual({
       status: "present",

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   ShareDialog,
@@ -29,6 +29,10 @@ function createProps(overrides: Partial<ShareDialogProps> = {}): ShareDialogProp
       ok: true as const,
       value: { linkId: "l2", url: "https://example.com/share/t2", token: "t2", permission: "view" as const },
     })),
+    onCreateCommentLink: jest.fn(async () => ({
+      ok: true as const,
+      value: { linkId: "l4", url: "https://example.com/share/t4", token: "t4", permission: "comment" as const },
+    })),
     onRevokeLink: jest.fn(async () => ({ ok: true as const, value: undefined })),
     onReissueLink: jest.fn(async () => ({
       ok: true as const,
@@ -53,12 +57,39 @@ const REQUIRED_SHARE_DIALOG_PROP_KEYS = [
   "onCreateShare",
   "onPublish",
   "onCreateLink",
+  "onCreateCommentLink",
   "onRevokeLink",
   "onReissueLink",
   "onDeleteShare",
   "onLogin",
   "dialogMouseClickedAtRef",
 ] as const satisfies ReadonlyArray<keyof ShareDialogProps>;
+
+const SHARED_META: ShareLocalMetaRead = {
+  status: "present",
+  value: {
+    sharedMapId: "sm-1",
+    lastPublishedAt: "2026-11-26T00:00:00.000Z",
+    linkActive: true,
+  },
+};
+
+function sharedListWith(
+  links: ReadonlyArray<{ id: string; permission: string }>,
+): ShareDialogProps["shareList"] {
+  return [
+    {
+      id: "sm-1",
+      localMapId: "map-1",
+      links: links.map((link) => ({
+        id: link.id,
+        createdAt: "2026-11-20T12:00:00.000Z",
+        revokedAt: null,
+        permission: link.permission,
+      })),
+    },
+  ];
+}
 
 describe("ShareDialog", () => {
   it("L-060: 必須 props キーが揃っている（未配線 RED 用の正本）", () => {
@@ -206,6 +237,7 @@ describe("ShareDialog", () => {
                   id: "link-42",
                   createdAt: "2026-11-20T12:00:00.000Z",
                   revokedAt: null,
+                  permission: "view",
                 },
               ],
             },
@@ -215,12 +247,12 @@ describe("ShareDialog", () => {
     );
     expect(
       screen.getByRole("button", {
-        name: `${SHARE_MESSAGES.revokeLink}（2026-11-20T12:00:00.000Z / link-42）`,
+        name: `${SHARE_MESSAGES.revokeLink}（${SHARE_MESSAGES.permissionView} / 2026-11-20T12:00:00.000Z / link-42）`,
       }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", {
-        name: `${SHARE_MESSAGES.reissueLink}（2026-11-20T12:00:00.000Z / link-42）`,
+        name: `${SHARE_MESSAGES.reissueLink}（${SHARE_MESSAGES.permissionView} / 2026-11-20T12:00:00.000Z / link-42）`,
       }),
     ).toBeInTheDocument();
   });
@@ -243,6 +275,112 @@ describe("ShareDialog", () => {
     );
     await waitFor(() => {
       expect(screen.getByTestId("share-notice")).toHaveTextContent("完了");
+    });
+  });
+
+  describe("コメントリンク（Phase 38）", () => {
+    it("共有中は「コメントリンクを追加」があり、押すと onCreateCommentLink を呼ぶ", async () => {
+      const user = userEvent.setup();
+      const props = createProps({ localMeta: SHARED_META });
+      render(<ShareDialog {...props} />);
+      await user.click(screen.getByRole("button", { name: SHARE_MESSAGES.createCommentLink }));
+      expect(props.onCreateCommentLink).toHaveBeenCalledTimes(1);
+      expect(props.onCreateLink).not.toHaveBeenCalled();
+    });
+
+    it("「閲覧リンクを追加」と同じく busy で無効になる", async () => {
+      const user = userEvent.setup();
+      const props = createProps({ localMeta: SHARED_META, busy: true });
+      render(<ShareDialog {...props} />);
+      const button = screen.getByRole("button", { name: SHARE_MESSAGES.createCommentLink });
+      expect(button).toBeDisabled();
+      expect(screen.getByRole("button", { name: SHARE_MESSAGES.createLink })).toBeDisabled();
+      await user.click(button);
+      expect(props.onCreateCommentLink).not.toHaveBeenCalled();
+    });
+
+    it("未共有・メタ読取失敗では「コメントリンクを追加」を出さない", () => {
+      const { rerender } = render(
+        <ShareDialog {...createProps({ localMeta: { status: "missing" } })} />,
+      );
+      expect(
+        screen.queryByRole("button", { name: SHARE_MESSAGES.createCommentLink }),
+      ).not.toBeInTheDocument();
+      rerender(
+        <ShareDialog {...createProps({ localMeta: { status: "read-error", error: "corrupt" } })} />,
+      );
+      expect(
+        screen.queryByRole("button", { name: SHARE_MESSAGES.createCommentLink }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("リンク行に権限ラベルを出し、未知の permission は「不明」で失効だけ押せる", () => {
+      render(
+        <ShareDialog
+          {...createProps({
+            localMeta: SHARED_META,
+            shareList: sharedListWith([
+              { id: "l-view", permission: "view" },
+              { id: "l-comment", permission: "comment" },
+              { id: "l-unknown", permission: "admin" },
+            ]),
+          })}
+        />,
+      );
+      const rows = within(screen.getByTestId("share-link-list")).getAllByRole("listitem");
+      expect(rows).toHaveLength(3);
+      expect(within(rows[0]!).getByTestId("share-link-permission")).toHaveTextContent(
+        SHARE_MESSAGES.permissionView,
+      );
+      expect(within(rows[1]!).getByTestId("share-link-permission")).toHaveTextContent(
+        SHARE_MESSAGES.permissionComment,
+      );
+      expect(within(rows[2]!).getByTestId("share-link-permission")).toHaveTextContent(
+        SHARE_MESSAGES.permissionUnknown,
+      );
+      const unknownLabel = `（${SHARE_MESSAGES.permissionUnknown} / 2026-11-20T12:00:00.000Z / l-unknown）`;
+      expect(
+        screen.getByRole("button", { name: `${SHARE_MESSAGES.revokeLink}${unknownLabel}` }),
+      ).toBeEnabled();
+      expect(
+        screen.getByRole("button", { name: `${SHARE_MESSAGES.reissueLink}${unknownLabel}` }),
+      ).toBeDisabled();
+      expect(
+        screen.getByRole("button", {
+          name: `${SHARE_MESSAGES.reissueLink}（${SHARE_MESSAGES.permissionComment} / 2026-11-20T12:00:00.000Z / l-comment）`,
+        }),
+      ).toBeEnabled();
+    });
+
+    it("発行直後の URL 枠に権限ラベルを出す", () => {
+      render(
+        <ShareDialog
+          {...createProps({
+            localMeta: SHARED_META,
+            lastIssuedLink: {
+              linkId: "l4",
+              url: "https://example.com/share/t4",
+              token: "t4",
+              permission: "comment",
+            },
+          })}
+        />,
+      );
+      expect(
+        within(screen.getByTestId("share-issued-link")).getByTestId("share-issued-link-permission"),
+      ).toHaveTextContent(SHARE_MESSAGES.permissionComment);
+    });
+
+    it("「共有を解除」の直前にコメントも消える注意文を出す", () => {
+      render(<ShareDialog {...createProps({ localMeta: SHARED_META })} />);
+      const warning = screen.getByTestId("share-delete-comments-warning");
+      expect(warning).toHaveTextContent(SHARE_MESSAGES.deleteShareCommentsWarning);
+      expect(warning.nextElementSibling).toBe(
+        screen.getByRole("button", { name: SHARE_MESSAGES.deleteShare }),
+      );
+      expect(SHARE_MESSAGES.deleteShareCommentsWarning).toBe(
+        "共有を解除すると、このマップのコメントもすべて削除されます。",
+      );
     });
   });
 });

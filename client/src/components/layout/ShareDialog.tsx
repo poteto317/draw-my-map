@@ -8,6 +8,7 @@ import {
 } from "@/components/layout/useDialogFocusTrap";
 import { useReannouncedNotice } from "@/components/layout/useReannouncedNotice";
 import {
+  formatShareLinkPermissionLabel,
   formatShareLocalMetaSummary,
   listActiveShareLinksForMap,
   type ShareDialogListItemRef,
@@ -36,6 +37,7 @@ export type ShareDialogProps = {
   onCreateShare: () => Promise<ShareResult<CreateShareValue>>;
   onPublish: () => Promise<ShareResult<{ revisionId: string }>>;
   onCreateLink: () => Promise<ShareResult<ShareLinkIssued>>;
+  onCreateCommentLink: () => Promise<ShareResult<ShareLinkIssued>>;
   onRevokeLink: (linkId: string) => Promise<ShareResult<void>>;
   onReissueLink: (linkId: string) => Promise<ShareResult<ShareLinkIssued>>;
   onDeleteShare: () => Promise<ShareResult<void>>;
@@ -59,6 +61,7 @@ export function ShareDialog({
   onCreateShare,
   onPublish,
   onCreateLink,
+  onCreateCommentLink,
   onRevokeLink,
   onReissueLink,
   onDeleteShare,
@@ -211,18 +214,34 @@ export function ShareDialog({
                 >
                   {SHARE_MESSAGES.createLink}
                 </button>
+                <button
+                  type="button"
+                  className="rounded-md bg-zinc-100 px-3 py-2 text-sm text-zinc-800 disabled:opacity-60 dark:bg-zinc-700 dark:text-zinc-100"
+                  disabled={busy || mutationsBlocked}
+                  onClick={() => {
+                    void onCreateCommentLink();
+                  }}
+                >
+                  {SHARE_MESSAGES.createCommentLink}
+                </button>
                 <ul className="space-y-2" data-testid="share-link-list">
                   {links.map((link) => (
                     <li
                       key={link.id}
                       className="flex flex-wrap items-center gap-2 rounded border border-zinc-200 p-2 text-sm dark:border-zinc-600"
                     >
+                      <span
+                        className="rounded bg-zinc-200 px-1.5 py-0.5 text-xs text-zinc-800 dark:bg-zinc-600 dark:text-zinc-100"
+                        data-testid="share-link-permission"
+                      >
+                        {formatShareLinkPermissionLabel(link.permission)}
+                      </span>
                       <span className="text-zinc-600 dark:text-zinc-300">{link.createdAt}</span>
                       <button
                         type="button"
                         className="rounded bg-zinc-100 px-2 py-1 text-xs disabled:opacity-60 dark:bg-zinc-700"
                         disabled={busy || mutationsBlocked}
-                        aria-label={`${SHARE_MESSAGES.revokeLink}（${link.createdAt} / ${link.id}）`}
+                        aria-label={`${SHARE_MESSAGES.revokeLink}（${formatShareLinkPermissionLabel(link.permission)} / ${link.createdAt} / ${link.id}）`}
                         onClick={() => {
                           void onRevokeLink(link.id);
                         }}
@@ -232,8 +251,9 @@ export function ShareDialog({
                       <button
                         type="button"
                         className="rounded bg-zinc-100 px-2 py-1 text-xs disabled:opacity-60 dark:bg-zinc-700"
-                        disabled={busy || mutationsBlocked}
-                        aria-label={`${SHARE_MESSAGES.reissueLink}（${link.createdAt} / ${link.id}）`}
+                        // 権限を解釈できないリンクは再発行させない（失効だけ押せる）
+                        disabled={busy || mutationsBlocked || link.permission === null}
+                        aria-label={`${SHARE_MESSAGES.reissueLink}（${formatShareLinkPermissionLabel(link.permission)} / ${link.createdAt} / ${link.id}）`}
                         onClick={() => {
                           void onReissueLink(link.id);
                         }}
@@ -243,6 +263,12 @@ export function ShareDialog({
                     </li>
                   ))}
                 </ul>
+                <p
+                  className="text-sm text-zinc-600 dark:text-zinc-300"
+                  data-testid="share-delete-comments-warning"
+                >
+                  {SHARE_MESSAGES.deleteShareCommentsWarning}
+                </p>
                 <button
                   type="button"
                   className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 disabled:opacity-60 dark:bg-red-950 dark:text-red-200"
@@ -263,6 +289,12 @@ export function ShareDialog({
               >
                 <p className="font-medium text-amber-900 dark:text-amber-100">
                   {SHARE_MESSAGES.issuedOnce}
+                </p>
+                <p
+                  className="mt-1 text-xs text-amber-900 dark:text-amber-100"
+                  data-testid="share-issued-link-permission"
+                >
+                  {formatShareLinkPermissionLabel(lastIssuedLink.permission)}
                 </p>
                 <p className="mt-1 break-all text-amber-900 dark:text-amber-100">{lastIssuedLink.url}</p>
                 <button

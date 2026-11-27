@@ -2539,6 +2539,7 @@ export function MapEditor({
           onCreateShare={share.onCreateShare}
           onPublish={share.onPublish}
           onCreateLink={share.onCreateLink}
+          onCreateCommentLink={share.onCreateCommentLink}
           onRevokeLink={share.onRevokeLink}
           onReissueLink={share.onReissueLink}
           onDeleteShare={share.onDeleteShare}
