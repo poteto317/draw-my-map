@@ -2,12 +2,6 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useMemo, useState } from "react";
 
-const signInMock = jest.fn();
-
-jest.mock("next-auth/react", () => ({
-  signIn: (...args: unknown[]) => signInMock(...args),
-}));
-
 import { useShareViewerComments } from "@/app/share/[token]/useShareViewerComments";
 import { ShareCommentsPanel } from "@/components/share/ShareCommentsPanel";
 import { classifyShareCommentThreads } from "@/domain/share/classifyShareCommentThreads";
@@ -103,10 +97,11 @@ type HarnessProps = {
   sessionStatus?: "loading" | "ready";
   signedIn?: boolean;
   initialSelectedNodeId?: number | null;
+  onLogin?: () => void;
 };
 
 /** ShareViewerPage と同じ組み立て（hook → classify → パネル） */
-function Harness({ api, sessionStatus = "ready", signedIn = true, initialSelectedNodeId = null }: HarnessProps) {
+function Harness({ api, sessionStatus = "ready", signedIn = true, initialSelectedNodeId = null, onLogin = () => undefined }: HarnessProps) {
   const comments = useShareViewerComments({
     token: "tok-1",
     enabled: true,
@@ -133,6 +128,7 @@ function Harness({ api, sessionStatus = "ready", signedIn = true, initialSelecte
         nodeLabelById={NODE_LABELS}
         selectedNodeId={selectedNodeId}
         onSelectNode={setSelectedNodeId}
+        onLogin={onLogin}
       />
     </div>
   );
@@ -150,10 +146,6 @@ async function renderReady(props: HarnessProps) {
 }
 
 describe("ShareCommentsPanel", () => {
-  beforeEach(() => {
-    signInMock.mockReset();
-  });
-
   it("未選択では案内文、選択するとノードのラベルを出す", async () => {
     const user = userEvent.setup();
     await renderReady({ api: createApi() });
@@ -230,18 +222,17 @@ describe("ShareCommentsPanel", () => {
     expect(screen.getByRole("button", { name: SHARE_COMMENT_MESSAGES.reload })).toBeDisabled();
   });
 
-  it("未ログインはログイン導線で、現在のパスへ戻る signIn を呼ぶ（投稿欄は出さない）", async () => {
+  it("未ログインはログイン導線で、押すと onLogin を呼ぶ（投稿欄は出さない）", async () => {
     const user = userEvent.setup();
-    window.history.pushState({}, "", "/share/tok-1");
+    const onLogin = jest.fn();
     const api = createApi([thread()]);
     api.list.mockResolvedValue(listResult([thread()], { signedIn: false, canPost: false, isOwner: false }));
-    await renderReady({ api, signedIn: false, initialSelectedNodeId: 1 });
+    await renderReady({ api, signedIn: false, initialSelectedNodeId: 1, onLogin });
 
     expect(screen.getByText(SHARE_COMMENT_MESSAGES.loginRequired)).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: SHARE_COMMENT_MESSAGES.loginButton }));
-    expect(signInMock).toHaveBeenCalledWith("google", { redirectTo: "/share/tok-1" });
-    window.history.pushState({}, "", "/");
+    expect(onLogin).toHaveBeenCalledTimes(1);
   });
 
   it("ログイン済みで viewer.canPost が false なら投稿欄を出さない", async () => {

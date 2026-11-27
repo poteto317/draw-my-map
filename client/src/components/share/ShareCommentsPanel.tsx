@@ -1,6 +1,5 @@
 "use client";
 
-import { signIn } from "next-auth/react";
 import { useId, useMemo, useRef } from "react";
 import { useReannouncedNotice } from "@/components/layout/useReannouncedNotice";
 import { ShareCommentComposer } from "@/components/share/ShareCommentComposer";
@@ -47,6 +46,8 @@ export type ShareCommentsPanelProps = {
   nodeLabelById: ReadonlyMap<number, string>;
   selectedNodeId: number | null;
   onSelectNode: (nodeId: number) => void;
+  /** 未ログイン時のログイン導線。認証の手段は呼び出し側が決める */
+  onLogin: () => void;
 };
 
 const reloadButtonClassName = "shrink-0 rounded-md bg-zinc-100 px-2 py-1 text-xs text-zinc-700 transition-colors hover:bg-zinc-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:opacity-60";
@@ -64,6 +65,7 @@ export function ShareCommentsPanel({
   nodeLabelById,
   selectedNodeId,
   onSelectNode,
+  onLogin,
 }: ShareCommentsPanelProps) {
   const headingId = useId();
   const listHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -99,9 +101,7 @@ export function ShareCommentsPanel({
           <button
             type="button"
             className={loginButtonClassName}
-            onClick={() => {
-              void signIn("google", { redirectTo: window.location.pathname });
-            }}
+            onClick={onLogin}
           >
             {SHARE_COMMENT_MESSAGES.loginButton}
           </button>
