@@ -48,12 +48,13 @@ const OWNER_ID = "sub-owner-0001";
 const ALICE_ID = "sub-alice-0002";
 const BOB_ID = "sub-bob-0003";
 const OWNER_EMAIL = "owner@example.com";
-const OWNER_SESSION: ShareSession = { userId: OWNER_ID, email: OWNER_EMAIL };
+const OWNER_SESSION: ShareSession = { userId: OWNER_ID, email: OWNER_EMAIL, displayName: null };
 const ALICE_SESSION: ShareSession = {
   userId: ALICE_ID,
   email: "alice@example.com",
+displayName: null,
 };
-const BOB_SESSION: ShareSession = { userId: BOB_ID, email: "bob@example.com" };
+const BOB_SESSION: ShareSession = { userId: BOB_ID, email: "bob@example.com", displayName: null };
 const OWNER_COMMENTER: ShareCommenter = {
   userId: OWNER_ID,
   displayName: "所有者",

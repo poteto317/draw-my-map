@@ -32,8 +32,8 @@ import {
 } from "@/server/share/testing/memoryShareStore";
 import { createTestNode } from "@/testing/createTestNode";
 
-const OWNER: ShareSession = { userId: "user-1", email: "a@example.com" };
-const OTHER: ShareSession = { userId: "user-2", email: "b@example.com" };
+const OWNER: ShareSession = { userId: "user-1", email: "a@example.com", displayName: null };
+const OTHER: ShareSession = { userId: "user-2", email: "b@example.com", displayName: null };
 const SECRET = "test-token-secret";
 
 function validDocumentJson(): string {
@@ -772,6 +772,34 @@ describe("Share API の comment リンク", () => {
     expect(body.value.permission).toBe("comment");
   });
 
+  it("permission: edit のリンクを発行でき、URL は /collab/", async () => {
+    const d = deps();
+    const created = await createShare(d);
+    const response = await createLink(d, created.value.sharedMapId, {
+      permission: "edit",
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.ok).toBe(true);
+    expect(body.value.permission).toBe("edit");
+    expect(body.value.url).toContain("/collab/");
+    expect(body.value.url).not.toContain("/share/");
+  });
+
+  it("未ログインでは permission: edit の発行も 401（成功扱いにしない）", async () => {
+    const store = createMemoryShareStore();
+    const ownerDeps = deps({ store });
+    const created = await createShare(ownerDeps);
+    const response = await createLink(
+      deps({ store, session: null }),
+      created.value.sharedMapId,
+      { permission: "edit" },
+    );
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ ok: false, reason: "unauthenticated" });
+    expect(await store.listLinksByMap(created.value.sharedMapId)).toHaveLength(1);
+  });
+
   it("permission 省略時は view で発行する", async () => {
     const d = deps();
     const created = await createShare(d);
@@ -780,7 +808,7 @@ describe("Share API の comment リンク", () => {
     expect((await response.json()).value.permission).toBe("view");
   });
 
-  it.each<unknown>(["edit", "View", " view", "", ["comment"], 123, null, {}])(
+  it.each<unknown>(["View", " view", "", ["comment"], 123, null, {}])(
     "permission: %p のリンク発行は 400 invalid-permission",
     async (permission) => {
       const store = createMemoryShareStore();
@@ -849,7 +877,7 @@ describe("Share API の comment リンク", () => {
     expect(commentViewed.value.documentJson).toBe(viewed.value.documentJson);
   });
 
-  it("未知の permission（edit）の行のトークンは view 404、再発行も 404 で行が変わらない", async () => {
+  it("edit リンクは view API で 404、再発行は edit を引き継ぎ /collab/ URL", async () => {
     const store = createMemoryShareStore();
     const d = deps({ store });
     const created = await createShare(d);
@@ -867,13 +895,44 @@ describe("Share API の comment リンク", () => {
     expect(viewRes.status).toBe(404);
     expect(await viewRes.json()).toEqual({ ok: false, reason: "not-found" });
 
-    const before = await store.listLinksByMap(created.value.sharedMapId);
     const reissued = await reissueLink(d, "link-edit");
+    expect(reissued.status).toBe(200);
+    const body = await reissued.json();
+    expect(body.value.permission).toBe("edit");
+    expect(body.value.url).toContain("/collab/");
+    const links = await listedLinks(d);
+    expect(links.find((link) => link.id === "link-edit")?.revokedAt).not.toBeNull();
+    expect(links.find((link) => link.id === body.value.linkId)).toMatchObject({
+      permission: "edit",
+      revokedAt: null,
+    });
+  });
+
+  it("未知の permission の行のトークンは view 404、再発行も 404 で行が変わらない", async () => {
+    const store = createMemoryShareStore();
+    const d = deps({ store });
+    const created = await createShare(d);
+    await store.insertLink({
+      id: "link-admin",
+      sharedMapId: created.value.sharedMapId,
+      tokenHash: tokenHash("admin-token", SECRET),
+      permission: "admin",
+      createdAt: "2026-11-26T00:00:00.000Z",
+      revokedAt: null,
+      expiresAt: null,
+    });
+
+    const viewRes = await viewShare(d, "admin-token");
+    expect(viewRes.status).toBe(404);
+    expect(await viewRes.json()).toEqual({ ok: false, reason: "not-found" });
+
+    const before = await store.listLinksByMap(created.value.sharedMapId);
+    const reissued = await reissueLink(d, "link-admin");
     expect(reissued.status).toBe(404);
     expect(await reissued.json()).toEqual({ ok: false, reason: "not-found" });
     const after = await store.listLinksByMap(created.value.sharedMapId);
     expect(after).toEqual(before);
-    expect(after.find((link) => link.id === "link-edit")?.revokedAt).toBeNull();
+    expect(after.find((link) => link.id === "link-admin")?.revokedAt).toBeNull();
   });
 });
 

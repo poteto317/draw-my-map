@@ -11,7 +11,7 @@ function createProps(overrides: Partial<ShareDialogProps> = {}): ShareDialogProp
   return {
     mapId: "map-1",
     mapTitle: "テストマップ",
-    shareSession: { userId: "u1", email: "a@example.com" },
+    shareSession: { userId: "u1", email: "a@example.com", displayName: null },
     shareSessionStatus: "ready",
     localMeta: { status: "missing" },
     listState: "ready",
@@ -32,6 +32,10 @@ function createProps(overrides: Partial<ShareDialogProps> = {}): ShareDialogProp
     onCreateCommentLink: jest.fn(async () => ({
       ok: true as const,
       value: { linkId: "l4", url: "https://example.com/share/t4", token: "t4", permission: "comment" as const },
+    })),
+    onCreateEditLink: jest.fn(async () => ({
+      ok: true as const,
+      value: { linkId: "l5", url: "https://example.com/collab/t5", token: "t5", permission: "edit" as const },
     })),
     onRevokeLink: jest.fn(async () => ({ ok: true as const, value: undefined })),
     onReissueLink: jest.fn(async () => ({
@@ -58,6 +62,7 @@ const REQUIRED_SHARE_DIALOG_PROP_KEYS = [
   "onPublish",
   "onCreateLink",
   "onCreateCommentLink",
+  "onCreateEditLink",
   "onRevokeLink",
   "onReissueLink",
   "onDeleteShare",
@@ -278,7 +283,7 @@ describe("ShareDialog", () => {
     });
   });
 
-  describe("コメントリンク（Phase 38）", () => {
+  describe("コメント・編集リンク", () => {
     it("共有中は「コメントリンクを追加」があり、押すと onCreateCommentLink を呼ぶ", async () => {
       const user = userEvent.setup();
       const props = createProps({ localMeta: SHARED_META });
@@ -286,6 +291,26 @@ describe("ShareDialog", () => {
       await user.click(screen.getByRole("button", { name: SHARE_MESSAGES.createCommentLink }));
       expect(props.onCreateCommentLink).toHaveBeenCalledTimes(1);
       expect(props.onCreateLink).not.toHaveBeenCalled();
+      expect(props.onCreateEditLink).not.toHaveBeenCalled();
+    });
+
+    it("共有中は「編集リンクを追加」があり、押すと onCreateEditLink を呼ぶ", async () => {
+      const user = userEvent.setup();
+      const props = createProps({ localMeta: SHARED_META });
+      render(<ShareDialog {...props} />);
+      await user.click(screen.getByRole("button", { name: SHARE_MESSAGES.createEditLink }));
+      expect(props.onCreateEditLink).toHaveBeenCalledTimes(1);
+      expect(props.onCreateLink).not.toHaveBeenCalled();
+      expect(props.onCreateCommentLink).not.toHaveBeenCalled();
+      expect(SHARE_MESSAGES.createEditLink).toBe("編集リンクを追加");
+    });
+
+    it("未ログインでは編集リンク発行 UI を出さずログイン導線のみ", () => {
+      render(<ShareDialog {...createProps({ shareSession: null, localMeta: SHARED_META })} />);
+      expect(screen.getByText(SHARE_MESSAGES.loginRequired)).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: SHARE_MESSAGES.createEditLink }),
+      ).not.toBeInTheDocument();
     });
 
     it("「閲覧リンクを追加」と同じく busy で無効になる", async () => {
@@ -295,22 +320,29 @@ describe("ShareDialog", () => {
       const button = screen.getByRole("button", { name: SHARE_MESSAGES.createCommentLink });
       expect(button).toBeDisabled();
       expect(screen.getByRole("button", { name: SHARE_MESSAGES.createLink })).toBeDisabled();
+      expect(screen.getByRole("button", { name: SHARE_MESSAGES.createEditLink })).toBeDisabled();
       await user.click(button);
       expect(props.onCreateCommentLink).not.toHaveBeenCalled();
     });
 
-    it("未共有・メタ読取失敗では「コメントリンクを追加」を出さない", () => {
+    it("未共有・メタ読取失敗では「コメントリンクを追加」「編集リンクを追加」を出さない", () => {
       const { rerender } = render(
         <ShareDialog {...createProps({ localMeta: { status: "missing" } })} />,
       );
       expect(
         screen.queryByRole("button", { name: SHARE_MESSAGES.createCommentLink }),
       ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: SHARE_MESSAGES.createEditLink }),
+      ).not.toBeInTheDocument();
       rerender(
         <ShareDialog {...createProps({ localMeta: { status: "read-error", error: "corrupt" } })} />,
       );
       expect(
         screen.queryByRole("button", { name: SHARE_MESSAGES.createCommentLink }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: SHARE_MESSAGES.createEditLink }),
       ).not.toBeInTheDocument();
     });
 
@@ -322,13 +354,14 @@ describe("ShareDialog", () => {
             shareList: sharedListWith([
               { id: "l-view", permission: "view" },
               { id: "l-comment", permission: "comment" },
+              { id: "l-edit", permission: "edit" },
               { id: "l-unknown", permission: "admin" },
             ]),
           })}
         />,
       );
       const rows = within(screen.getByTestId("share-link-list")).getAllByRole("listitem");
-      expect(rows).toHaveLength(3);
+      expect(rows).toHaveLength(4);
       expect(within(rows[0]!).getByTestId("share-link-permission")).toHaveTextContent(
         SHARE_MESSAGES.permissionView,
       );
@@ -336,6 +369,9 @@ describe("ShareDialog", () => {
         SHARE_MESSAGES.permissionComment,
       );
       expect(within(rows[2]!).getByTestId("share-link-permission")).toHaveTextContent(
+        SHARE_MESSAGES.permissionEdit,
+      );
+      expect(within(rows[3]!).getByTestId("share-link-permission")).toHaveTextContent(
         SHARE_MESSAGES.permissionUnknown,
       );
       const unknownLabel = `（${SHARE_MESSAGES.permissionUnknown} / 2026-11-20T12:00:00.000Z / l-unknown）`;

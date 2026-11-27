@@ -1,7 +1,15 @@
 import type { ShareResult } from "@/domain/share/shareResult";
 
-/** 共有操作の所有者。userId / email は非空が前提 */
-export type ShareOwner = { userId: string; email: string };
+/**
+ * 共有操作の所有者。userId / email は非空が前提。
+ * displayName は Google アカウントの name（toShareCommenter と同じ経路。無ければ null。email は載せない）。
+ * ShareCommenter と同様に必須（省略不可。欠落は null）。
+ */
+export type ShareOwner = {
+  userId: string;
+  email: string;
+  displayName: string | null;
+};
 
 /** useShareSession の ready 時の正本。null = 未ログイン */
 export type ShareSession = ShareOwner | null;
@@ -13,9 +21,10 @@ function isBlank(value: string): boolean {
 /**
  * Auth.js の user 断片を ShareSession に正規化する（純関数）。
  * id / email 欠落・空は未ログイン（null）。
+ * displayName は toShareCommenter の name 経路（email フォールバックなし）。
  */
 export function toShareSession(
-  user: { id?: string | null; email?: string | null } | undefined | null,
+  user: { id?: string | null; email?: string | null; name?: string | null } | undefined | null,
 ): ShareSession {
   const userId = user?.id;
   const email = user?.email;
@@ -25,7 +34,12 @@ export function toShareSession(
   if (typeof email !== "string" || email.length === 0) {
     return null;
   }
-  return { userId, email };
+  const commenter = toShareCommenter({ id: userId, name: user?.name });
+  return {
+    userId,
+    email,
+    displayName: commenter?.displayName ?? null,
+  };
 }
 
 /** 未ログイン・空の識別子は失敗。共有操作の成功扱いにしない（L-001） */

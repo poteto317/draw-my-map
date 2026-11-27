@@ -38,6 +38,7 @@ describe("listActiveShareLinksForMap", () => {
       links: [
         { id: "l1", createdAt: "2026-11-01T00:00:00.000Z", revokedAt: null, permission: "view" },
         { id: "lc", createdAt: "2026-11-02T00:00:00.000Z", revokedAt: null, permission: "comment" },
+        { id: "le", createdAt: "2026-11-02T12:00:00.000Z", revokedAt: null, permission: "edit" },
         { id: "lx", createdAt: "2026-11-03T00:00:00.000Z", revokedAt: null, permission: "admin" },
         {
           id: "l0",
@@ -65,18 +66,21 @@ describe("listActiveShareLinksForMap", () => {
     })).toEqual([
       { id: "l1", createdAt: "2026-11-01T00:00:00.000Z", permission: "view" },
       { id: "lc", createdAt: "2026-11-02T00:00:00.000Z", permission: "comment" },
+      { id: "le", createdAt: "2026-11-02T12:00:00.000Z", permission: "edit" },
       { id: "lx", createdAt: "2026-11-03T00:00:00.000Z", permission: null },
     ]);
   });
 });
 
 describe("formatShareLinkPermissionLabel", () => {
-  it("閲覧 / コメント可 / 不明 を返す", () => {
+  it("閲覧 / コメント可 / 編集可 / 不明 を返す", () => {
     expect(formatShareLinkPermissionLabel("view")).toBe(SHARE_MESSAGES.permissionView);
     expect(formatShareLinkPermissionLabel("comment")).toBe(SHARE_MESSAGES.permissionComment);
+    expect(formatShareLinkPermissionLabel("edit")).toBe(SHARE_MESSAGES.permissionEdit);
     expect(formatShareLinkPermissionLabel(null)).toBe(SHARE_MESSAGES.permissionUnknown);
     expect(SHARE_MESSAGES.permissionView).toBe("閲覧");
     expect(SHARE_MESSAGES.permissionComment).toBe("コメント可");
+    expect(SHARE_MESSAGES.permissionEdit).toBe("編集可");
     expect(SHARE_MESSAGES.permissionUnknown).toBe("不明");
   });
 });

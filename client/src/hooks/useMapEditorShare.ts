@@ -318,7 +318,7 @@ export function useMapEditorShare({
     );
   }, [localMeta, mapId, resolveApi, runOperation, sharedMapId]);
 
-  /** 閲覧・コメントリンクの発行を 1 経路にまとめる（権限と成功文言だけが違う） */
+  /** 閲覧・コメント・編集リンクの発行を 1 経路にまとめる（権限と成功文言だけが違う） */
   const createLinkWithPermission = useCallback(async (
     permission: ShareLinkPermission,
     successMessage: string,
@@ -348,6 +348,11 @@ export function useMapEditorShare({
 
   const onCreateCommentLink = useCallback(
     () => createLinkWithPermission("comment", SHARE_MESSAGES.createCommentLinkSuccess),
+    [createLinkWithPermission],
+  );
+
+  const onCreateEditLink = useCallback(
+    () => createLinkWithPermission("edit", SHARE_MESSAGES.createEditLinkSuccess),
     [createLinkWithPermission],
   );
 
@@ -446,6 +451,7 @@ export function useMapEditorShare({
     onPublish,
     onCreateLink,
     onCreateCommentLink,
+    onCreateEditLink,
     onRevokeLink,
     onReissueLink,
     onDeleteShare,
