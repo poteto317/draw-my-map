@@ -8,14 +8,20 @@ import {
   deriveNodeCollapse,
   toggleCollapsedNode,
 } from "@/domain/nodes/nodeCollapse";
+import type { ShareCommentTarget } from "@/components/share/shareCommentTarget";
+import { SHARE_COMMENT_MESSAGES } from "@/domain/share/shareCommentMessages";
 import { SHARE_MESSAGES } from "@/domain/share/shareMessages";
 import type { Node } from "@/types/node";
 
 type ShareOutlineViewProps = {
   nodes: readonly Node[];
+  /** comment リンクのときだけ非 null（行の件数と「コメント」ボタン） */
+  commentTarget: ShareCommentTarget | null;
 };
 
-export function ShareOutlineView({ nodes }: ShareOutlineViewProps) {
+const commentButtonClassName = "shrink-0 rounded px-1.5 py-0.5 text-xs text-zinc-700 hover:bg-zinc-100 aria-pressed:bg-blue-100 aria-pressed:text-blue-800";
+
+export function ShareOutlineView({ nodes, commentTarget }: ShareOutlineViewProps) {
   const model = useMemo(() => buildOutlineRows(nodes), [nodes]);
   const index = useMemo(() => createNodeCollapseIndex(nodes), [nodes]);
   const [collapsedIds, setCollapsedIds] = useState<ReadonlySet<number>>(() => new Set());
@@ -76,10 +82,31 @@ export function ShareOutlineView({ nodes }: ShareOutlineViewProps) {
                 <span className="mt-0.5 inline-block w-4 shrink-0" aria-hidden />
               )}
               <span>{node.label || "（無題）"}</span>
+              {commentTarget !== null && renderCommentControls(commentTarget, row.nodeId, node.label || "（無題）")}
             </li>
           );
         })}
       </ul>
     </div>
+  );
+}
+
+function renderCommentControls(target: ShareCommentTarget, nodeId: number, label: string) {
+  const openCount = target.counts.get(nodeId) ?? 0;
+  return (
+    <span className="ml-auto flex shrink-0 items-center gap-2">
+      {openCount > 0 && (
+        <span className="text-xs text-zinc-600">{`${SHARE_COMMENT_MESSAGES.title} ${openCount}`}</span>
+      )}
+      <button
+        type="button"
+        className={commentButtonClassName}
+        aria-pressed={target.selectedNodeId === nodeId}
+        aria-label={`${SHARE_COMMENT_MESSAGES.title}（${label}）`}
+        onClick={() => target.onSelectNode(nodeId)}
+      >
+        {SHARE_COMMENT_MESSAGES.title}
+      </button>
+    </span>
   );
 }

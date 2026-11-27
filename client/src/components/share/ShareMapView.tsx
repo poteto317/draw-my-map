@@ -10,6 +10,7 @@ import { usePixiApplication } from "@/components/map/pixi/usePixiApplication";
 import { useMapViewport } from "@/components/map/useMapViewport";
 import { useMapWheelZoom } from "@/components/map/useMapWheelZoom";
 import { useRenderedMapScene } from "@/components/map/useRenderedMapScene";
+import type { ShareCommentTarget } from "@/components/share/shareCommentTarget";
 import {
   canCollapse,
   createNodeCollapseIndex,
@@ -27,7 +28,12 @@ type ShareMapViewProps = {
   nodes: readonly Node[];
   relations?: readonly MapRelation[];
   groups?: readonly MapGroup[];
+  /** comment リンクのときだけ非 null（ノードのタップで選択・件数バッジ） */
+  commentTarget: ShareCommentTarget | null;
 };
+
+/** ノードの pointerdown から pointerup までの移動がこれ以下ならタップ（超えたらパン） */
+export const SHARE_VIEWER_NODE_TAP_SLOP_PX = 4;
 
 const INACTIVE_LEARN_DISPLAY = {
   learningActive: false,
@@ -44,7 +50,7 @@ const EMPTY_TASK_PROGRESS: ReadonlyMap<number, { percent: number; remaining: num
  * MapStage / MapEditor / コンテキストメニュー / ラベル編集は載せない。
  * usePixiApplication + useRenderedMapScene + viewport / wheel zoom のみ。
  */
-export function ShareMapView({ nodes, relations, groups }: ShareMapViewProps) {
+export function ShareMapView({ nodes, relations, groups, commentTarget }: ShareMapViewProps) {
   const index = useMemo(() => createNodeCollapseIndex(nodes), [nodes]);
   const [collapsedIds, setCollapsedIds] = useState<ReadonlySet<number>>(() => new Set());
   const containerRef = useRef<HTMLDivElement>(null);
@@ -83,9 +89,21 @@ export function ShareMapView({ nodes, relations, groups }: ShareMapViewProps) {
 
   const runtime = usePixiApplication(containerRef, onScreenResize);
 
-  const createNodePointerDownHandler = useCallback(() => () => {
-    // 閲覧専用: ノード上でも構造編集・選択メニューは起動しない
-  }, []);
+  const commentTargetRef = useLatestRef(commentTarget);
+  /** ノードの pointerdown で控えた候補。pointerup / pointercancel で必ず捨てる */
+  const tapCandidateNodeIdRef = useRef<number | null>(null);
+
+  const createNodePointerDownHandler = useCallback(() => (nodeId: number) => {
+    // 閲覧専用: 構造編集・選択メニューは起動しない。comment リンクではタップの候補だけ控える
+    if (commentTargetRef.current === null) return;
+    tapCandidateNodeIdRef.current = nodeId;
+  }, [commentTargetRef]);
+
+  const selectedNodeId = commentTarget?.selectedNodeId ?? null;
+  const selectedNodeIds = useMemo(
+    () => (selectedNodeId === null ? EMPTY_SELECTED_NODE_IDS : [selectedNodeId]),
+    [selectedNodeId],
+  );
 
   useRenderedMapScene({
     runtime,
@@ -93,7 +111,7 @@ export function ShareMapView({ nodes, relations, groups }: ShareMapViewProps) {
       learnDisplay: INACTIVE_LEARN_DISPLAY,
       taskProgress: EMPTY_TASK_PROGRESS,
       nodes,
-      selectedNodeIds: EMPTY_SELECTED_NODE_IDS,
+      selectedNodeIds,
       editingNodeId: null,
       connectionTargetNodeId: null,
       siblingReorderSourceNodeId: null,
@@ -102,7 +120,7 @@ export function ShareMapView({ nodes, relations, groups }: ShareMapViewProps) {
       visibleNodeIds: derived.visibleNodeIds,
       highlightNodeIds: EMPTY_HIGHLIGHT_NODE_IDS,
       pinnedNodeIds: EMPTY_PINNED_NODE_IDS,
-      commentNodeCounts: EMPTY_COMMENT_NODE_COUNTS,
+      commentNodeCounts: commentTarget?.counts ?? EMPTY_COMMENT_NODE_COUNTS,
       relations,
       groups,
     },
@@ -124,10 +142,13 @@ export function ShareMapView({ nodes, relations, groups }: ShareMapViewProps) {
     if (!runtime) return;
     const canvas = runtime.app.canvas;
     let dragging: { pointerId: number; x: number; y: number } | null = null;
+    /** タップ判定用の押下位置（パンで dragging が動いても元の位置を保つ） */
+    let pressed: { pointerId: number; x: number; y: number } | null = null;
 
     const onDown = (event: PointerEvent) => {
       if (event.button !== 0) return;
       dragging = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+      pressed = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
       try {
         canvas.setPointerCapture(event.pointerId);
       } catch {
@@ -141,19 +162,32 @@ export function ShareMapView({ nodes, relations, groups }: ShareMapViewProps) {
     };
     const onUp = (event: PointerEvent) => {
       if (dragging?.pointerId === event.pointerId) dragging = null;
+      const candidate = tapCandidateNodeIdRef.current;
+      const start = pressed;
+      tapCandidateNodeIdRef.current = null;
+      pressed = null;
+      const target = commentTargetRef.current;
+      if (target === null || candidate === null || start === null || start.pointerId !== event.pointerId) return;
+      const moved = Math.hypot(event.clientX - start.x, event.clientY - start.y);
+      if (moved <= SHARE_VIEWER_NODE_TAP_SLOP_PX) target.onSelectNode(candidate);
+    };
+    const onCancel = (event: PointerEvent) => {
+      if (dragging?.pointerId === event.pointerId) dragging = null;
+      tapCandidateNodeIdRef.current = null;
+      pressed = null;
     };
 
     canvas.addEventListener("pointerdown", onDown);
     canvas.addEventListener("pointermove", onMove);
     canvas.addEventListener("pointerup", onUp);
-    canvas.addEventListener("pointercancel", onUp);
+    canvas.addEventListener("pointercancel", onCancel);
     return () => {
       canvas.removeEventListener("pointerdown", onDown);
       canvas.removeEventListener("pointermove", onMove);
       canvas.removeEventListener("pointerup", onUp);
-      canvas.removeEventListener("pointercancel", onUp);
+      canvas.removeEventListener("pointercancel", onCancel);
     };
-  }, [runtime, panBy]);
+  }, [runtime, panBy, commentTargetRef]);
 
   if (nodes.length === 0) {
     return (

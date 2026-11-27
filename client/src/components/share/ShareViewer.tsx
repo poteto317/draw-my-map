@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { EditorViewModeControl } from "@/components/layout/EditorViewModeControl";
 import { ShareMapView } from "@/components/share/ShareMapView";
 import { ShareOutlineView } from "@/components/share/ShareOutlineView";
+import type { ShareCommentTarget } from "@/components/share/shareCommentTarget";
 import { asShareViewDocument } from "@/domain/share/parseShareViewDocument";
 import { SHARE_MESSAGES } from "@/domain/share/shareMessages";
 import type { MapDocument } from "@/types/mapDocument";
@@ -15,6 +16,9 @@ export type ShareViewerProps = {
   loadError: string | null;
   viewMode: "map" | "outline";
   onViewModeChange: (mode: "map" | "outline") => void;
+  /** comment リンクのコメントパネル。view リンクでは null を明示する（L-060・L-061） */
+  commentsPanel: ReactNode | null;
+  commentTarget: ShareCommentTarget | null;
 };
 
 type ResolvedView =
@@ -30,6 +34,8 @@ export function ShareViewer({
   loadError,
   viewMode,
   onViewModeChange,
+  commentsPanel,
+  commentTarget,
 }: ShareViewerProps) {
   const resolved = useMemo((): ResolvedView => {
     if (loadError) return { kind: "error", message: loadError };
@@ -64,23 +70,32 @@ export function ShareViewer({
   const nodes = mapDocument.nodes;
 
   return (
-    <div data-testid="share-viewer" className="flex min-h-screen flex-col bg-white">
+    <div data-testid="share-viewer" className="flex min-h-screen flex-col bg-white md:h-dvh md:min-h-0">
       <header className="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3">
         <h1 className="text-base font-semibold text-zinc-900">{SHARE_MESSAGES.viewTitle}</h1>
         <EditorViewModeControl mode={viewMode} onChange={onViewModeChange} />
       </header>
-      <main className="min-h-0 flex-1">
-        {viewMode === "map" ? (
-          <ShareMapView
-            key={nodes.map((n) => n.id).join(",") || "empty"}
-            nodes={nodes}
-            relations={mapDocument.relations}
-            groups={mapDocument.groups}
-          />
-        ) : (
-          <ShareOutlineView nodes={nodes} />
+      {/* パネルは md 以上で右の 360px 列、狭い画面ではマップの下 */}
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <main className="min-h-0 flex-1">
+          {viewMode === "map" ? (
+            <ShareMapView
+              key={nodes.map((n) => n.id).join(",") || "empty"}
+              nodes={nodes}
+              relations={mapDocument.relations}
+              groups={mapDocument.groups}
+              commentTarget={commentTarget}
+            />
+          ) : (
+            <ShareOutlineView nodes={nodes} commentTarget={commentTarget} />
+          )}
+        </main>
+        {commentsPanel !== null && (
+          <aside className="w-full border-t border-zinc-200 md:min-h-0 md:w-[360px] md:shrink-0 md:overflow-y-auto md:border-t-0 md:border-l">
+            {commentsPanel}
+          </aside>
         )}
-      </main>
+      </div>
     </div>
   );
 }
