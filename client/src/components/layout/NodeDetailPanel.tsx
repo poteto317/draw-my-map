@@ -5,6 +5,7 @@ import { AiAssistSection, type AiAssistSectionProps } from "@/components/layout/
 import { IllustrationPanel } from "@/components/layout/IllustrationPanel";
 import { NodeAppearanceSection } from "@/components/layout/NodeAppearanceSection";
 import { NodeBacklinksSection } from "@/components/layout/NodeBacklinksSection";
+import { NodeCommentsSection } from "@/components/layout/NodeCommentsSection";
 import { NodeLinksSection } from "@/components/layout/NodeLinksSection";
 import { NodeMapLinksSection } from "@/components/layout/NodeMapLinksSection";
 import { NodeNoteEditor } from "@/components/layout/NodeNoteEditor";
@@ -95,6 +96,12 @@ type NodeDetailPanelProps = {
   onRemove: (nodeId: number) => void;
   /** 再生中等、属性の読取以外の編集を止める */
   attributeEditDisabled?: boolean;
+  /** 選択ノードのコメント件数。一覧 ready・ノード選択中だけ非 null（L-002） */
+  commentSummary: { open: number; resolved: number } | null;
+  /** 選択ノードで絞ったコメントダイアログを開く。未共有なら null（節を出さない） */
+  onOpenNodeComments: (() => void) | null;
+  /** 学習中・再生中の理由。それ以外は null */
+  openNodeCommentsDisabledReason: string | null;
 };
 
 // 右のパネル。関連線／グループ選択時はその節だけ、それ以外はノードの詳細メモ〜イラストを縦に積み、内容が高さを超えたら縦にスクロールする
@@ -138,6 +145,9 @@ export function NodeDetailPanel({
   onAttach,
   onRemove,
   attributeEditDisabled = false,
+  commentSummary,
+  onOpenNodeComments,
+  openNodeCommentsDisabledReason,
 }: NodeDetailPanelProps) {
   // 関連線／グループ節と同条件でノード節を抑止（アウトラインでは残ってもノード UI を出す）
   const relationVisible = selectedRelation !== null && viewMode === "map";
@@ -298,6 +308,14 @@ export function NodeDetailPanel({
             }
           />
         </fieldset>
+      )}
+      {/* コメントはローカル文書を書き換えないので、属性編集の fieldset（保護・競合・listening で無効）の外に置く */}
+      {!nonNodeDetailVisible && commentSummary !== null && onOpenNodeComments !== null && (
+        <NodeCommentsSection
+          summary={commentSummary}
+          onOpen={onOpenNodeComments}
+          disabledReason={openNodeCommentsDisabledReason}
+        />
       )}
     </aside>
   );

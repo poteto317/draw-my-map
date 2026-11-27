@@ -141,6 +141,9 @@ function renderPanel(overrides: Partial<Props> = {}) {
     onRemove: jest.fn(),
     taskEditing: null,
     customAttributeEditing: null,
+    commentSummary: null,
+    onOpenNodeComments: null,
+    openNodeCommentsDisabledReason: null,
     ...overrides,
   };
   return { props, ...render(<NodeDetailPanel {...props} />) };
@@ -568,5 +571,67 @@ describe("NodeDetailPanel", () => {
 
     rerender(<NodeDetailPanel {...props} documentRevision={1} selectedNode={{ id: 2, label: "みかん", note: "みかんのメモ" }} />);
     expect(screen.getByRole("tab", { name: "編集" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  describe("コメント節（Phase 38 C4）", () => {
+    it("commentSummary が null なら節を出さない", () => {
+      renderPanel({ commentSummary: null, onOpenNodeComments: jest.fn() });
+      expect(screen.queryByRole("region", { name: "コメント" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /コメントを開く/ })).not.toBeInTheDocument();
+    });
+
+    it("onOpenNodeComments が null なら節を出さない", () => {
+      renderPanel({ commentSummary: { open: 1, resolved: 0 }, onOpenNodeComments: null });
+      expect(screen.queryByRole("region", { name: "コメント" })).not.toBeInTheDocument();
+    });
+
+    it("0 件でも節と「コメントを開く」を出し、押すと onOpenNodeComments を呼ぶ", async () => {
+      const user = userEvent.setup();
+      const onOpenNodeComments = jest.fn();
+      renderPanel({ commentSummary: { open: 0, resolved: 0 }, onOpenNodeComments });
+      const section = screen.getByRole("region", { name: "コメント" });
+      expect(section).toHaveTextContent("コメント: 未解決 0 / 解決済み 0");
+      await user.click(within(section).getByRole("button", { name: "コメントを開く" }));
+      expect(onOpenNodeComments).toHaveBeenCalledTimes(1);
+    });
+
+    it("件数を表示する", () => {
+      renderPanel({ commentSummary: { open: 2, resolved: 3 }, onOpenNodeComments: jest.fn() });
+      expect(screen.getByRole("region", { name: "コメント" })).toHaveTextContent("コメント: 未解決 2 / 解決済み 3");
+    });
+
+    it("openNodeCommentsDisabledReason で disabled・title・aria-label に理由を出す", async () => {
+      const user = userEvent.setup();
+      const onOpenNodeComments = jest.fn();
+      const reason = "学習モード中はコメントを開けません。";
+      renderPanel({
+        commentSummary: { open: 1, resolved: 0 },
+        onOpenNodeComments,
+        openNodeCommentsDisabledReason: reason,
+      });
+      const button = screen.getByRole("button", { name: `コメントを開く（${reason}）` });
+      expect(button).toBeDisabled();
+      expect(button).toHaveAttribute("title", reason);
+      await user.click(button);
+      expect(onOpenNodeComments).not.toHaveBeenCalled();
+    });
+
+    it("属性編集の無効化（attributeEditDisabled）ではコメントを開くを止めない", () => {
+      renderPanel({
+        commentSummary: { open: 1, resolved: 0 },
+        onOpenNodeComments: jest.fn(),
+        attributeEditDisabled: true,
+      });
+      expect(screen.getByRole("button", { name: "コメントを開く" })).toBeEnabled();
+    });
+
+    it("関連線を選択中はコメント節を出さない", () => {
+      renderPanel({
+        selectedRelation: { id: 5, kind: "related", directed: false },
+        commentSummary: { open: 1, resolved: 0 },
+        onOpenNodeComments: jest.fn(),
+      });
+      expect(screen.queryByRole("region", { name: "コメント" })).not.toBeInTheDocument();
+    });
   });
 });
