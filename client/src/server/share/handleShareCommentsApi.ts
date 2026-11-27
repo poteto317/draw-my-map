@@ -1,15 +1,12 @@
-import { hasOnlyKeys } from "@/domain/shared/unknownRecord";
+import { hasOnlyKeys, isRecord } from "@/domain/shared/unknownRecord";
 import type { ShareCommentsScope } from "@/domain/share/shareComment";
 import { SHARE_COMMENT_MAX_BODY_BYTES } from "@/domain/share/shareCommentLimits";
 import type { ShareResult } from "@/domain/share/shareResult";
-import { tokenHash } from "@/domain/share/tokenHash";
 import {
-  asRecord,
   clientIpFromRequest,
-  readJsonBody,
-  withViewResponseHeaders,
   type ShareApiDeps,
 } from "@/server/share/handleShareApi";
+import { readJsonBody } from "@/server/share/shareBody";
 import {
   createShareCommentService,
   type CommentAccess,
@@ -20,10 +17,13 @@ import {
   processShareCommentWriteRateLimiter,
   processShareOwnerRateLimiter,
   processShareViewRateLimiter,
+  shareOwnerRateKey,
+  shareViewRateKeys,
 } from "@/server/share/shareRateLimit";
 import {
   SHARE_PRIVATE_NO_STORE,
   shareResultResponse,
+  withViewResponseHeaders,
 } from "@/server/share/shareResponses";
 import { createCloudflareShareStore } from "@/server/share/shareStore";
 
@@ -76,17 +76,16 @@ async function takeScopeRateLimit(
 ): Promise<boolean> {
   if (scope.kind === "token") {
     const limiter = deps.viewRateLimiter ?? processShareViewRateLimiter;
-    if (!limiter.take(`view:ip:${clientIpFromRequest(request)}`)) return false;
-    // 平文トークンをレートキーに載せない（keyed hash の非可逆キー）
-    const rateKey =
-      scope.token.length > 0
-        ? tokenHash(scope.token, deps.tokenSecret)
-        : "empty";
-    return limiter.take(`view:${rateKey}`);
+    const [ipKey, tokenKey] = shareViewRateKeys(
+      clientIpFromRequest(request),
+      scope.token,
+      deps.tokenSecret,
+    );
+    return limiter.take(ipKey) && limiter.take(tokenKey);
   }
   const session = await deps.getSession();
   const limiter = deps.ownerRateLimiter ?? processShareOwnerRateLimiter;
-  return limiter.take(`owner:${session?.userId ?? "anonymous"}`);
+  return limiter.take(shareOwnerRateKey(session));
 }
 
 /** 判定順 3: 書込みの枠。resolveAccess で 404 / 401 を確定した後にだけ取る */
@@ -154,8 +153,8 @@ async function readCommentBody(
   }
   const body = await readJsonBody(request, SHARE_COMMENT_MAX_BODY_BYTES);
   if (!body.ok) return body;
-  const record = asRecord(body.value);
-  if (!record || !hasOnlyKeys(record, allowedKeys)) {
+  const record = body.value;
+  if (!isRecord(record) || !hasOnlyKeys(record, allowedKeys)) {
     return { ok: false, response: shareResultResponse(INVALID_REQUEST) };
   }
   return { ok: true, record };

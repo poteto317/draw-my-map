@@ -1,3 +1,6 @@
+import type { ShareSession } from "@/domain/share/shareSession";
+import { tokenHash } from "@/domain/share/tokenHash";
+
 export type ShareRateLimiter = {
   /** true = 許可、false = 超過 */
   take(key: string): boolean;
@@ -53,6 +56,24 @@ export const SHARE_VIEW_RATE_LIMIT = { limit: 120, windowMs: 60_000 } as const;
 
 /** コメント書込み: ユーザー / IP キーあたり 1 分 20 回（経路の枠に追加で掛ける） */
 export const SHARE_COMMENT_WRITE_RATE_LIMIT = { limit: 20, windowMs: 60_000 } as const;
+
+/**
+ * 閲覧枠のキー。IP（または unknown 共有窓）を先に取り、回転トークンでの制限迂回とキー増殖を抑える。
+ * 平文トークンはキーに載せない（keyed hash の非可逆キー）。空トークンは共有キー
+ */
+export function shareViewRateKeys(
+  ip: string,
+  token: string,
+  secret: string,
+): readonly [string, string] {
+  const rateKey = token.length > 0 ? tokenHash(token, secret) : "empty";
+  return [`view:ip:${ip}`, `view:${rateKey}`];
+}
+
+/** 所有者枠のキー。未ログインは共有キー */
+export function shareOwnerRateKey(session: ShareSession): string {
+  return `owner:${session?.userId ?? "anonymous"}`;
+}
 
 /**
  * プロセス共有の既定リミッタ。

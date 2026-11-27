@@ -1,10 +1,6 @@
-import { tokenHash } from "@/domain/share/tokenHash";
+import { isRecord } from "@/domain/shared/unknownRecord";
 import type { ShareCommenter, ShareSession } from "@/domain/share/shareSession";
-import {
-  parseShareJson,
-  readShareBodyWithinLimit,
-  SHARE_MAX_BODY_BYTES,
-} from "@/server/share/shareBody";
+import { readJsonBody, SHARE_MAX_BODY_BYTES } from "@/server/share/shareBody";
 import type { ShareCommentService } from "@/server/share/shareCommentService";
 import {
   createCloudflareShareCommentStore,
@@ -13,12 +9,13 @@ import {
 import {
   processShareOwnerRateLimiter,
   processShareViewRateLimiter,
+  shareOwnerRateKey,
+  shareViewRateKeys,
   type ShareRateLimiter,
 } from "@/server/share/shareRateLimit";
 import {
-  SHARE_VIEW_CACHE_CONTROL,
-  SHARE_VIEW_REFERRER_POLICY,
   shareResultResponse,
+  withViewResponseHeaders,
 } from "@/server/share/shareResponses";
 import { createShareService, type ShareService } from "@/server/share/shareService";
 import {
@@ -76,36 +73,12 @@ function viewLimiter(deps: ShareApiDeps): ShareRateLimiter {
   return deps.viewRateLimiter ?? processShareViewRateLimiter;
 }
 
-export async function readJsonBody(
-  request: Request,
-  maxBodyBytes: number,
-): Promise<{ ok: true; value: unknown } | { ok: false; response: Response }> {
-  const read = await readShareBodyWithinLimit(request, maxBodyBytes);
-  if (read.kind === "too-large") {
-    return { ok: false, response: shareResultResponse({ ok: false, reason: "too-large" }) };
-  }
-  if (read.kind === "error") {
-    return { ok: false, response: shareResultResponse({ ok: false, reason: "invalid-request" }) };
-  }
-  const parsed = parseShareJson(read.text);
-  if (parsed === undefined) {
-    return { ok: false, response: shareResultResponse({ ok: false, reason: "invalid-request" }) };
-  }
-  return { ok: true, value: parsed };
-}
-
-export function asRecord(value: unknown): Record<string, unknown> | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
-}
-
 async function withOwnerRateLimit(
   deps: ShareApiDeps,
   session: ShareSession,
   run: () => Promise<Response>,
 ): Promise<Response> {
-  const key = session?.userId ?? "anonymous";
-  if (!ownerLimiter(deps).take(`owner:${key}`)) {
+  if (!ownerLimiter(deps).take(shareOwnerRateKey(session))) {
     return shareResultResponse({ ok: false, reason: "rate-limited" });
   }
   return run();
@@ -130,7 +103,7 @@ export async function handleCreateShareMap(
   return withOwnerRateLimit(deps, session, async () => {
     const body = await readJsonBody(request, deps.maxBodyBytes ?? SHARE_MAX_BODY_BYTES);
     if (!body.ok) return body.response;
-    const record = asRecord(body.value);
+    const record = isRecord(body.value) ? body.value : null;
     if (!record) {
       return shareResultResponse({ ok: false, reason: "invalid-request" });
     }
@@ -166,7 +139,7 @@ export async function handlePublishShareMap(
   return withOwnerRateLimit(deps, session, async () => {
     const body = await readJsonBody(request, deps.maxBodyBytes ?? SHARE_MAX_BODY_BYTES);
     if (!body.ok) return body.response;
-    const record = asRecord(body.value);
+    const record = isRecord(body.value) ? body.value : null;
     if (!record || typeof record.documentJson !== "string") {
       return shareResultResponse({ ok: false, reason: "invalid-request" });
     }
@@ -186,7 +159,7 @@ export async function handleCreateShareLink(
   return withOwnerRateLimit(deps, session, async () => {
     const body = await readJsonBody(request, deps.maxBodyBytes ?? SHARE_MAX_BODY_BYTES);
     if (!body.ok) return body.response;
-    const record = asRecord(body.value) ?? {};
+    const record = isRecord(body.value) ? body.value : {};
     if ("expiresAt" in record || "expires_at" in record) {
       return shareResultResponse({ ok: false, reason: "invalid-request" });
     }
@@ -248,31 +221,23 @@ export function clientIpFromRequest(request: Request): string {
   return "unknown";
 }
 
-export function withViewResponseHeaders(response: Response): Response {
-  // トークン付き閲覧は成否ともキャッシュさせない（失効後の CDN 残存を防ぐ）
-  response.headers.set("Cache-Control", SHARE_VIEW_CACHE_CONTROL);
-  // 平文トークンを Referer 経由で外部・ログへ出さない
-  response.headers.set("Referrer-Policy", SHARE_VIEW_REFERRER_POLICY);
-  return response;
-}
-
 export async function handleViewShare(
   request: Request,
   token: string,
   deps: ShareApiDeps,
 ): Promise<Response> {
   const limiter = viewLimiter(deps);
-  // IP（または unknown 共有窓）を先に取り、回転トークンでの制限迂回とキー増殖を抑える
-  const ip = clientIpFromRequest(request);
-  if (!limiter.take(`view:ip:${ip}`)) {
+  const [ipKey, tokenKey] = shareViewRateKeys(
+    clientIpFromRequest(request),
+    token,
+    deps.tokenSecret,
+  );
+  if (!limiter.take(ipKey)) {
     return withViewResponseHeaders(
       shareResultResponse({ ok: false, reason: "rate-limited" }),
     );
   }
-  // 平文トークンをレートキーに載せない（keyed hash の非可逆キー）
-  const rateKey =
-    token.length > 0 ? tokenHash(token, deps.tokenSecret) : "empty";
-  if (!limiter.take(`view:${rateKey}`)) {
+  if (!limiter.take(tokenKey)) {
     return withViewResponseHeaders(
       shareResultResponse({ ok: false, reason: "rate-limited" }),
     );

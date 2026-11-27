@@ -1,6 +1,11 @@
 /** @jest-environment node */
 
-import { createShareRateLimiter } from "@/server/share/shareRateLimit";
+import { tokenHash } from "@/domain/share/tokenHash";
+import {
+  createShareRateLimiter,
+  shareOwnerRateKey,
+  shareViewRateKeys,
+} from "@/server/share/shareRateLimit";
 
 describe("createShareRateLimiter", () => {
   it("窓内の limit 回まで許可し、超過で拒否する", () => {
@@ -33,5 +38,33 @@ describe("createShareRateLimiter", () => {
     // 新しいキーの allow で期限切れ a/b/c を掃除し、d だけ残る
     expect(limiter.take("d")).toBe(true);
     expect(limiter.size()).toBe(1);
+  });
+});
+
+describe("shareViewRateKeys", () => {
+  it("IP キーを先に、トークンは keyed hash のキーで返す（平文を載せない）", () => {
+    const keys = shareViewRateKeys("203.0.113.1", "plain-token", "secret");
+    expect(keys).toEqual([
+      "view:ip:203.0.113.1",
+      `view:${tokenHash("plain-token", "secret")}`,
+    ]);
+    expect(keys[1]).not.toContain("plain-token");
+  });
+
+  it("空トークンは view:empty の共有キーにする", () => {
+    expect(shareViewRateKeys("unknown", "", "secret")).toEqual([
+      "view:ip:unknown",
+      "view:empty",
+    ]);
+  });
+});
+
+describe("shareOwnerRateKey", () => {
+  it("ログイン中はユーザー ID のキーにする", () => {
+    expect(shareOwnerRateKey({ userId: "user-1", email: "user-1@example.com" })).toBe("owner:user-1");
+  });
+
+  it("未ログインは owner:anonymous の共有キーにする", () => {
+    expect(shareOwnerRateKey(null)).toBe("owner:anonymous");
   });
 });
