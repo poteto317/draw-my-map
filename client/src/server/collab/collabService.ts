@@ -296,13 +296,21 @@ export function createCollabService(deps: CollabServiceDeps) {
 
         const r2Key = artifactR2Key(sessionId);
         await store.putArtifact(r2Key, exported.value);
+        const endedAt = nowIso();
         await store.updateStatus(sessionId, "ended", {
-          endedAt: nowIso(),
+          endedAt,
           artifactR2Key: r2Key,
         });
 
-        // ended 後は DO/WS を破棄（残留編集・ticket 再接続を防ぐ）
-        await room.destroy(sessionId);
+        // 仕様: 成功後に DO destroy。失敗なら end 全体を失敗とし status を戻す（再試行可）
+        const destroyed = await room.destroy(sessionId);
+        if (!destroyed.ok) {
+          await store.updateStatus(sessionId, "active", {
+            endedAt: null,
+            artifactR2Key: null,
+          });
+          return { ok: false, reason: "destroy-failed" };
+        }
 
         return { ok: true, value: { documentJson: documentJson.value } };
       } catch {

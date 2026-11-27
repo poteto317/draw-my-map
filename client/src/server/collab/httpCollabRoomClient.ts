@@ -105,12 +105,17 @@ export function createHttpCollabRoomClient(
 
     async destroy(sessionId) {
       try {
-        await fetchImpl(`${base}/rooms/${encodeURIComponent(sessionId)}/destroy`, {
-          method: "POST",
-          headers: authHeaders(options.serviceSecret),
-        });
+        const response = await fetchImpl(
+          `${base}/rooms/${encodeURIComponent(sessionId)}/destroy`,
+          {
+            method: "POST",
+            headers: authHeaders(options.serviceSecret),
+          },
+        );
+        if (!response.ok) return { ok: false, reason: "destroy-failed" };
+        return { ok: true };
       } catch {
-        /* end 後の best-effort。D1 は ended 済み */
+        return { ok: false, reason: "destroy-failed" };
       }
     },
   };
