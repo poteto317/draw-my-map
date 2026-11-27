@@ -6,6 +6,7 @@ import { postParticipantDrop } from "./participantDrop.js";
 import { createSlidingWindowLimiter } from "./rateLimit.js";
 import { RoomConnectionCore } from "./roomCore.js";
 import { verifyCollabTicket } from "./ticket.js";
+import { armWsAuthTimeout } from "./wsAuthTimeout.js";
 import {
   applySeedUpdate,
   classifyMessage,
@@ -34,6 +35,7 @@ type SessionSocket = {
   userId: string;
   socket: WebSocket;
   authed: boolean;
+  clearAuthTimeout?: () => void;
 };
 
 const TICKET_PREFIX = "ticket:";
@@ -195,6 +197,7 @@ export class CollabRoom implements DurableObject {
       authed: false,
     };
     this.sockets.set(server, session);
+    session.clearAuthTimeout = armWsAuthTimeout(server, () => session.authed);
 
     server.addEventListener("message", (event) => {
       void this.onSocketMessage(sessionId, session, event.data);
@@ -249,6 +252,8 @@ export class CollabRoom implements DurableObject {
       }
       session.userId = claims.userId;
       session.authed = true;
+      session.clearAuthTimeout?.();
+      session.clearAuthTimeout = undefined;
       await this.flushGraceDrops();
       void this.scheduleNextAlarm();
       try {
@@ -280,6 +285,8 @@ export class CollabRoom implements DurableObject {
   }
 
   private onSocketClose(session: SessionSocket): void {
+    session.clearAuthTimeout?.();
+    session.clearAuthTimeout = undefined;
     this.sockets.delete(session.socket);
     if (session.authed && session.userId) {
       // 参照カウント: 同一 userId の別 WS が残っていれば空室 TTL に入らない
