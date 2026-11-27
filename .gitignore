@@ -4,6 +4,11 @@ client/.next/
 client/out/
 client/.env*.local
 
+# Collab Durable Object worker
+collab-worker/node_modules/
+collab-worker/.wrangler/
+collab-worker/dist/
+
 # Env files at repo root (package-local rules are in client/.gitignore)
 .env
 .env.*
