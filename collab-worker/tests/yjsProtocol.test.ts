@@ -1,9 +1,9 @@
-import { encodeSyncUpdate, classifyMessage } from "../yjsProtocol.js";
+import { encodeSyncUpdate, classifyMessage } from "../src/yjsProtocol";
 import * as decoding from "lib0/decoding";
 import * as encoding from "lib0/encoding";
 import * as syncProtocol from "y-protocols/sync";
 import * as Y from "yjs";
-import { MSG_SYNC } from "../constants.js";
+import { MSG_SYNC } from "../src/constants";
 
 describe("encodeSyncUpdate", () => {
   it("sync update メッセージとして分類できる", () => {
