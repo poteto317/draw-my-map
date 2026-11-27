@@ -36,7 +36,30 @@ describe("useShareSession", () => {
     const { result } = renderHook(() => useShareSession());
     expect(result.current).toEqual({
       status: "ready",
-      session: { userId: "google-sub-1", email: "owner@example.com" },
+      session: {
+        userId: "google-sub-1",
+        email: "owner@example.com",
+        displayName: "Owner",
+      },
+    });
+  });
+
+  it("name 欠落時は displayName: null（email を表示名にしない）", () => {
+    useSessionMock.mockReturnValue({
+      data: {
+        user: { id: "google-sub-1", email: "owner@example.com" },
+        expires: "2099-01-01T00:00:00.000Z",
+      },
+      status: "authenticated",
+    });
+    const { result } = renderHook(() => useShareSession());
+    expect(result.current).toEqual({
+      status: "ready",
+      session: {
+        userId: "google-sub-1",
+        email: "owner@example.com",
+        displayName: null,
+      },
     });
   });
 

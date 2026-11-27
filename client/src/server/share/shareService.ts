@@ -5,6 +5,7 @@ import { planShareLinkCreate } from "@/domain/share/planShareLinkCreate";
 import type { CreateShareValue, ShareLinkIssued } from "@/domain/share/shareLink";
 import {
   assertIssuableLinkPermission,
+  linkPermissionAllowsShareView,
   parseShareLinkPermission,
   type ShareLinkPermission,
 } from "@/domain/share/shareLinkPermission";
@@ -49,8 +50,10 @@ function revisionR2Key(sharedMapId: string, revisionId: string): string {
   return `shares/${sharedMapId}/${revisionId}.json`;
 }
 
-function buildViewUrl(origin: string, token: string): string {
-  return `${origin.replace(/\/$/, "")}/share/${token}`;
+/** view/comment は /share、edit は /collab（参加入口を分離） */
+function buildLinkUrl(origin: string, token: string, permission: ShareLinkPermission): string {
+  const path = permission === "edit" ? "collab" : "share";
+  return `${origin.replace(/\/$/, "")}/${path}/${token}`;
 }
 
 function toIssued(
@@ -61,7 +64,7 @@ function toIssued(
 ): ShareLinkIssued {
   return {
     linkId,
-    url: buildViewUrl(origin, token),
+    url: buildLinkUrl(origin, token, permission),
     token,
     permission,
   };
@@ -443,6 +446,10 @@ export function createShareService(deps: ShareServiceDeps) {
     ): Promise<ShareResult<{ documentJson: string; permission: ShareLinkPermission }>> {
       const resolved = await resolveShareLinkByToken(store, token, tokenSecret);
       if (!resolved.ok) return resolved;
+      // edit は /collab 専用。閲覧 API では存在を漏らさず not-found
+      if (!linkPermissionAllowsShareView(resolved.value.permission)) {
+        return { ok: false, reason: "not-found" };
+      }
       const loaded = await loadCurrentShareDocument(store, resolved.value.map);
       if (!loaded.ok) return loaded;
       return {

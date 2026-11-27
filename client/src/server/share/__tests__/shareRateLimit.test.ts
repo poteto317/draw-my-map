@@ -61,7 +61,7 @@ describe("shareViewRateKeys", () => {
 
 describe("shareOwnerRateKey", () => {
   it("ログイン中はユーザー ID のキーにする", () => {
-    expect(shareOwnerRateKey({ userId: "user-1", email: "user-1@example.com" })).toBe("owner:user-1");
+    expect(shareOwnerRateKey({ userId: "user-1", email: "user-1@example.com", displayName: null })).toBe("owner:user-1");
   });
 
   it("未ログインは owner:anonymous の共有キーにする", () => {

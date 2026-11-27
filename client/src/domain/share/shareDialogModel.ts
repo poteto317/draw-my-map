@@ -64,5 +64,6 @@ export function listActiveShareLinksForMap(
 export function formatShareLinkPermissionLabel(permission: ShareLinkPermission | null): string {
   if (permission === "view") return SHARE_MESSAGES.permissionView;
   if (permission === "comment") return SHARE_MESSAGES.permissionComment;
+  if (permission === "edit") return SHARE_MESSAGES.permissionEdit;
   return SHARE_MESSAGES.permissionUnknown;
 }

@@ -38,7 +38,10 @@ describe("planShareViewLoad", () => {
     }
   });
 
-  it.each(["edit", "View", ""])("未知の permission（%p）は文書が妥当でも error", (permission) => {
+  it.each(["edit", "View", ""])(
+    "閲覧ルートでは使えない permission（%p）は文書が妥当でも error",
+    (permission) => {
+
     const document = createMapDocument([], "manual");
     expect(planShareViewLoad({
       ok: true,

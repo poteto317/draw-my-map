@@ -39,10 +39,12 @@ const BOB_ID = "sub-bob-0003";
 const OWNER_SESSION: ShareSession = {
   userId: OWNER_ID,
   email: "owner@example.com",
+displayName: null,
 };
 const OTHER_SESSION: ShareSession = {
   userId: BOB_ID,
   email: "bob@example.com",
+displayName: null,
 };
 const OWNER_COMMENTER: ShareCommenter = {
   userId: OWNER_ID,
@@ -454,7 +456,7 @@ describe("ShareCommentService.resolveAccess（トークン経路）", () => {
     });
   });
 
-  it("未知の permission のリンクは not-found", async () => {
+  it("edit リンクはコメント経路では not-found（permission は漏らない）", async () => {
     const fx = await setup();
     await fx.store.insertLink({
       id: "link-edit",
@@ -469,6 +471,26 @@ describe("ShareCommentService.resolveAccess（トークン経路）", () => {
     expect(
       await service.resolveAccess(
         { kind: "token", token: "edit-token" },
+        { requireActor: false },
+      ),
+    ).toEqual({ ok: false, reason: "not-found" });
+  });
+
+  it("未知の permission のリンクは not-found", async () => {
+    const fx = await setup();
+    await fx.store.insertLink({
+      id: "link-admin",
+      sharedMapId: fx.mapA.sharedMapId,
+      tokenHash: tokenHash("admin-token", SECRET),
+      permission: "admin",
+      createdAt: "2026-11-26T00:00:00.000Z",
+      revokedAt: null,
+      expiresAt: null,
+    });
+    const service = fx.service({ session: null, commenter: OWNER_COMMENTER });
+    expect(
+      await service.resolveAccess(
+        { kind: "token", token: "admin-token" },
         { requireActor: false },
       ),
     ).toEqual({ ok: false, reason: "not-found" });

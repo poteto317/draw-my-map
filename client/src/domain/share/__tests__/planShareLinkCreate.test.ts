@@ -13,7 +13,7 @@ describe("planShareLinkCreate", () => {
     expect(planned.expiresAt).toBeNull();
   });
 
-  it.each(["view", "comment"] as const)(
+  it.each(["view", "comment", "edit"] as const)(
     "permission %j をそのまま保存し、token_hash は平文を保存しない",
     (permission) => {
       const token = "plain-token";

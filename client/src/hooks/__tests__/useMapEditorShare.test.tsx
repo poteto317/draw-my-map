@@ -76,7 +76,7 @@ describe("useMapEditorShare", () => {
       useMapEditorShare({
         mapId: "map-1",
         mapTitle: "タイトル",
-        shareSession: { userId: "u1", email: "a@example.com" },
+        shareSession: { userId: "u1", email: "a@example.com", displayName: null },
         documentRevision: 1,
         shareDialogOpen: true,
         getDocumentJson: () => "{}",
@@ -110,7 +110,7 @@ describe("useMapEditorShare", () => {
       useMapEditorShare({
         mapId: "map-1",
         mapTitle: "タイトル",
-        shareSession: { userId: "u1", email: "a@example.com" },
+        shareSession: { userId: "u1", email: "a@example.com", displayName: null },
         documentRevision: 1,
         shareDialogOpen: true,
         getDocumentJson: () => "{}",
@@ -141,7 +141,7 @@ describe("useMapEditorShare", () => {
       useMapEditorShare({
         mapId: "map-1",
         mapTitle: "タイトル",
-        shareSession: { userId: "u1", email: "a@example.com" },
+        shareSession: { userId: "u1", email: "a@example.com", displayName: null },
         documentRevision: 1,
         shareDialogOpen: true,
         getDocumentJson: () => "{}",
@@ -168,6 +168,59 @@ describe("useMapEditorShare", () => {
     });
   });
 
+  it("onCreateEditLink は edit 権限でリンクを発行し、成功文言と発行リンクを出す", async () => {
+    const { storage } = createRecordingStorage({
+      initial: {
+        [SHARE_LOCAL_META_STORAGE_KEY]: encodeShareLocalMetaStore({
+          version: 1,
+          byMapId: { "map-1": EXISTING_META },
+        }),
+      },
+    });
+    const api = createApi({
+      createLink: jest.fn(async (_sharedMapId, permission) => ({
+        ok: true as const,
+        value: {
+          linkId: "l-edit",
+          url: "https://example.com/collab/te",
+          token: "te",
+          permission,
+        },
+      })),
+    });
+    const { result } = renderHook(() =>
+      useMapEditorShare({
+        mapId: "map-1",
+        mapTitle: "タイトル",
+        shareSession: { userId: "u1", email: "a@example.com", displayName: null },
+        documentRevision: 1,
+        shareDialogOpen: true,
+        getDocumentJson: () => "{}",
+        api,
+        getStorage: () => storage,
+      }),
+    );
+
+    let returned: Awaited<ReturnType<typeof result.current.onCreateEditLink>> | undefined;
+    await act(async () => {
+      returned = await result.current.onCreateEditLink();
+    });
+    expect(api.createLink).toHaveBeenCalledTimes(1);
+    expect(api.createLink).toHaveBeenCalledWith("sm-1", "edit");
+    expect(returned?.ok).toBe(true);
+    expect(result.current.lastIssuedLink).toEqual({
+      linkId: "l-edit",
+      url: "https://example.com/collab/te",
+      token: "te",
+      permission: "edit",
+    });
+    expect(result.current.notice).toEqual({
+      kind: "status",
+      message: SHARE_MESSAGES.createEditLinkSuccess,
+    });
+    expect(SHARE_MESSAGES.createEditLinkSuccess).toBe("編集リンクを発行しました。");
+  });
+
   it("onCreateCommentLink の失敗では発行リンクを出さず失敗文言を出す（L-001）", async () => {
     const { storage } = createRecordingStorage({
       initial: {
@@ -184,7 +237,7 @@ describe("useMapEditorShare", () => {
       useMapEditorShare({
         mapId: "map-1",
         mapTitle: "タイトル",
-        shareSession: { userId: "u1", email: "a@example.com" },
+        shareSession: { userId: "u1", email: "a@example.com", displayName: null },
         documentRevision: 1,
         shareDialogOpen: true,
         getDocumentJson: () => "{}",
@@ -242,7 +295,7 @@ describe("useMapEditorShare", () => {
       useMapEditorShare({
         mapId: "map-1",
         mapTitle: "タイトル",
-        shareSession: { userId: "u1", email: "a@example.com" },
+        shareSession: { userId: "u1", email: "a@example.com", displayName: null },
         documentRevision: 1,
         shareDialogOpen: true,
         getDocumentJson: () => "{}",
@@ -317,7 +370,7 @@ describe("useMapEditorShare", () => {
       useMapEditorShare({
         mapId: "map-1",
         mapTitle: "タイトル",
-        shareSession: { userId: "u1", email: "a@example.com" },
+        shareSession: { userId: "u1", email: "a@example.com", displayName: null },
         documentRevision: 1,
         shareDialogOpen: false,
         getDocumentJson: () => "{}",
@@ -352,7 +405,7 @@ describe("useMapEditorShare", () => {
         useMapEditorShare({
           mapId: "map-1",
           mapTitle: "タイトル",
-          shareSession: { userId: "u1", email: "a@example.com" },
+          shareSession: { userId: "u1", email: "a@example.com", displayName: null },
           documentRevision: props.revision,
           shareDialogOpen: false,
           getDocumentJson: () => "{}",
@@ -381,7 +434,7 @@ describe("useMapEditorShare", () => {
         useMapEditorShare({
           mapId: "map-1",
           mapTitle: "タイトル",
-          shareSession: { userId: "u1", email: "a@example.com" },
+          shareSession: { userId: "u1", email: "a@example.com", displayName: null },
           documentRevision: 1,
           shareDialogOpen: props.open,
           getDocumentJson: () => "{}",
@@ -411,7 +464,7 @@ describe("useMapEditorShare", () => {
         useMapEditorShare({
           mapId: props.mapId,
           mapTitle: "タイトル",
-          shareSession: { userId: "u1", email: "a@example.com" },
+          shareSession: { userId: "u1", email: "a@example.com", displayName: null },
           documentRevision: 1,
           shareDialogOpen: false,
           getDocumentJson: () => "{}",
@@ -449,7 +502,7 @@ describe("useMapEditorShare", () => {
       useMapEditorShare({
         mapId: "map-1",
         mapTitle: "タイトル",
-        shareSession: { userId: "u1", email: "a@example.com" },
+        shareSession: { userId: "u1", email: "a@example.com", displayName: null },
         documentRevision: 1,
         shareDialogOpen: false,
         getDocumentJson: () => "{}",
@@ -490,7 +543,7 @@ describe("useMapEditorShare", () => {
       useMapEditorShare({
         mapId: "map-1",
         mapTitle: "タイトル",
-        shareSession: { userId: "u1", email: "a@example.com" },
+        shareSession: { userId: "u1", email: "a@example.com", displayName: null },
         documentRevision: 1,
         shareDialogOpen: false,
         getDocumentJson: () => "{}",
@@ -558,7 +611,7 @@ describe("useMapEditorShare", () => {
       useMapEditorShare({
         mapId: "map-1",
         mapTitle: "タイトル",
-        shareSession: { userId: "u1", email: "a@example.com" },
+        shareSession: { userId: "u1", email: "a@example.com", displayName: null },
         documentRevision: 1,
         shareDialogOpen: true,
         getDocumentJson: () => "{}",
@@ -623,7 +676,7 @@ describe("useMapEditorShare", () => {
       useMapEditorShare({
         mapId: "map-1",
         mapTitle: "タイトル",
-        shareSession: { userId: "u1", email: "a@example.com" },
+        shareSession: { userId: "u1", email: "a@example.com", displayName: null },
         documentRevision: 1,
         shareDialogOpen: true,
         getDocumentJson: () => "{}",

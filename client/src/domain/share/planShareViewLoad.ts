@@ -3,6 +3,7 @@ import {
   type ShareViewDocumentParse,
 } from "@/domain/share/parseShareViewDocument";
 import {
+  linkPermissionAllowsShareView,
   parseShareLinkPermission,
   type ShareLinkPermission,
 } from "@/domain/share/shareLinkPermission";
@@ -35,9 +36,9 @@ export function planShareViewLoad(
       loadError: shareViewLoadFailureMessage(result.reason),
     };
   }
-  // 未知の権限は応答の破損として扱い、文書を表示しない
+  // 未知の権限・edit（/collab 専用）は閲覧ルートでは文書を表示しない
   const permission = parseShareLinkPermission(result.value.permission);
-  if (permission === null) {
+  if (permission === null || !linkPermissionAllowsShareView(permission)) {
     return { status: "error", document: null, loadError: SHARE_MESSAGES.viewLoadFailed };
   }
   return planShareViewDocumentParse(

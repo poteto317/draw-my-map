@@ -7,10 +7,21 @@ import {
 import type { ShareSession } from "@/domain/share/shareSession";
 
 describe("toShareSession", () => {
-  it("id と email があるとき ShareOwner を返す", () => {
+  it("id と email があるとき ShareOwner を返す（displayName は toShareCommenter の name 経路）", () => {
+    expect(
+      toShareSession({ id: "google-sub-1", email: "owner@example.com", name: "山田" }),
+    ).toEqual({
+      userId: "google-sub-1",
+      email: "owner@example.com",
+      displayName: "山田",
+    });
+  });
+
+  it("name 欠落時は displayName: null（email を表示名にしない）", () => {
     expect(toShareSession({ id: "google-sub-1", email: "owner@example.com" })).toEqual({
       userId: "google-sub-1",
       email: "owner@example.com",
+      displayName: null,
     });
   });
 
@@ -31,13 +42,13 @@ describe("requireOwner", () => {
   });
 
   it("userId が空文字なら unauthenticated で失敗する", () => {
-    const session: ShareSession = { userId: "", email: "owner@example.com" };
+    const session: ShareSession = { userId: "", email: "owner@example.com", displayName: null };
     const result = requireOwner(session);
     expect(result).toEqual({ ok: false, reason: "unauthenticated" });
   });
 
   it("email が空文字なら unauthenticated で失敗する", () => {
-    const session: ShareSession = { userId: "google-sub-1", email: "" };
+    const session: ShareSession = { userId: "google-sub-1", email: "", displayName: null };
     const result = requireOwner(session);
     expect(result).toEqual({ ok: false, reason: "unauthenticated" });
   });
@@ -46,11 +57,16 @@ describe("requireOwner", () => {
     const session: ShareSession = {
       userId: "google-sub-1",
       email: "owner@example.com",
+      displayName: "山田",
     };
     const result = requireOwner(session);
     expect(result).toEqual({
       ok: true,
-      value: { userId: "google-sub-1", email: "owner@example.com" },
+      value: {
+        userId: "google-sub-1",
+        email: "owner@example.com",
+        displayName: "山田",
+      },
     });
   });
 });

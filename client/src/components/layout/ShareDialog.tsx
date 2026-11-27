@@ -38,6 +38,7 @@ export type ShareDialogProps = {
   onPublish: () => Promise<ShareResult<{ revisionId: string }>>;
   onCreateLink: () => Promise<ShareResult<ShareLinkIssued>>;
   onCreateCommentLink: () => Promise<ShareResult<ShareLinkIssued>>;
+  onCreateEditLink: () => Promise<ShareResult<ShareLinkIssued>>;
   onRevokeLink: (linkId: string) => Promise<ShareResult<void>>;
   onReissueLink: (linkId: string) => Promise<ShareResult<ShareLinkIssued>>;
   onDeleteShare: () => Promise<ShareResult<void>>;
@@ -62,6 +63,7 @@ export function ShareDialog({
   onPublish,
   onCreateLink,
   onCreateCommentLink,
+  onCreateEditLink,
   onRevokeLink,
   onReissueLink,
   onDeleteShare,
@@ -223,6 +225,16 @@ export function ShareDialog({
                   }}
                 >
                   {SHARE_MESSAGES.createCommentLink}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md bg-zinc-100 px-3 py-2 text-sm text-zinc-800 disabled:opacity-60 dark:bg-zinc-700 dark:text-zinc-100"
+                  disabled={busy || mutationsBlocked}
+                  onClick={() => {
+                    void onCreateEditLink();
+                  }}
+                >
+                  {SHARE_MESSAGES.createEditLink}
                 </button>
                 <ul className="space-y-2" data-testid="share-link-list">
                   {links.map((link) => (
