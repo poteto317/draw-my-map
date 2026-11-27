@@ -47,6 +47,7 @@
 38. [音声・タブレット・モバイル（Phase 36）](#38-音声タブレットモバイルphase-36)
 39. [共有の基盤と閲覧公開（Phase 37）](#39-共有の基盤と閲覧公開phase-37)
 40. [ノードコメントと解決管理（Phase 38）](#40-ノードコメントと解決管理phase-38)
+41. [リアルタイム共同編集（Phase 39）](#41-リアルタイム共同編集phase-39)
 
 ---
 
@@ -94,6 +95,7 @@ Pixi.js による高速な 2D キャンバス描画と、React 19 による宣�
 | **Phase 36** | 音声・タブレット・モバイル（完了。090・091・092） | Web Speech API の音声入力（メモリ上 `listening`・確定で `insertForest`）、タッチのヒット拡大・長押しコンテキスト、狭幅（767px 以下）でアウトライン既定（38 章）。V3 に新フィールドなし |
 | **Phase 37** | 共有の基盤と閲覧公開（完了。094・095） | Google OAuth で所有者識別、D1／R2 上の公開スナップショット、閲覧専用トークンリンク（39 章）。MapDocument V3 に共有権限フィールドは足さない。ローカルメタは `draw-my-map.share-local-meta.v1` |
 | **Phase 38** | コメントと非同期の共同作業（進行中。096・097 完了、098 は未実装） | comment 権限の共有リンク、ノードごとのコメントスレッドと解決・再開（40 章）。コメントの正本は D1。MapDocument V3 とローカル保存は変えない |
+| **Phase 39** | リアルタイム共同編集（完了。099・100） | セッション中のみ Yjs + Durable Object で同時編集。edit リンクは `/collab/[token]`。presence（選択色・ビューポート枠）。単独編集は localStorage 正本のまま（41 章） |
 
 ### 1.2 アプリケーション画面レイアウト
 
@@ -2253,7 +2255,7 @@ map / outline の共通ヘッダーに「Markdown書き出し」と「箇条書�
   - Jest / jsdom による結合テスト（`pageMapConflict.test.tsx`）で、別タブ更新・削除、別名保存の flush バイパス、未編集時の最新読込、未保存あり時の破棄確認モーダル、楽観ロック照合を網羅検証済み。
   - 実ブラウザでの確認手順は [browser-test-cases.md の Z 節](../testing/browser-test-cases.md#z-複数タブの編集競合検出phase-16候補008) を参照してください。
 - **対象外（YAGNI）**:
-  - 複数端末・複数ブラウザ間でのリアルタイム共同編集（CRDT / OT / WebSocket 等）。
+  - 複数端末・複数ブラウザ間でのリアルタイム共同編集は、複数タブ競合（本節）の対象外。Phase 39（41 章）でセッション中の共同編集として提供する。共同編集セッション中は本節のタブ競合ガードを無効化する。
   - 開いていない他マップのリアルタイム同期や名称変更追従。
   - 削除マップの一定期間取り消し（12.12 節「削除マップのゴミ箱」で提供。複数タブ間でのゴミ箱の同期は一覧・ゴミ箱表示時および操作時の再読込で協調する）。
 
@@ -3508,7 +3510,7 @@ Phase 37 の候補094（共有権限・公開範囲）・095（閲覧専用リ�
 | 所有者 | 当該共有マップの edit（初回共有・更新・リンク発行／失効／再発行・共有解除） |
 | 閲覧リンク | view のみ（パン／ズーム／折りたたみ表示可。構造編集・保存・共有操作・書き出しは不可） |
 | その他 | HTTP **404**（存在を漏らさない。403 は使わない） |
-| 公開範囲 UI | Phase 37 は「リンクを知っている人＝view」の 1 モード。Phase 38 で `comment` を追加し、`permission` は API で `view`・`comment` 以外を拒否（40.1 節） |
+| 公開範囲 UI | Phase 37 は「リンクを知っている人＝view」の 1 モード。Phase 38 で `comment`、Phase 39 で `edit` を追加（40.1 節・41 章）。`permission` は API で `view`・`comment`・`edit` を許可 |
 
 ### 39.2 閲覧専用リンク（095）
 
@@ -3532,7 +3534,7 @@ Phase 37 の候補094（共有権限・公開範囲）・095（閲覧専用リ�
 | GET | `/api/share/maps` | 所有者 | 自分の共有一覧（正本） |
 | POST | `/api/share/maps` | 所有者 | 初回共有＋publish＋view リンク |
 | POST | `/api/share/maps/:id/publish` | 所有者 | 新 revision |
-| POST | `/api/share/maps/:id/links` | 所有者 | 追加 view／comment リンク（permission。40.1 節。token は 1 回） |
+| POST | `/api/share/maps/:id/links` | 所有者 | 追加 view／comment／edit リンク（permission。40.1 節・41 章。token は 1 回。edit の URL は `/collab/[token]`） |
 | POST | `/api/share/links/:id/revoke` | 所有者 | 失効 |
 | POST | `/api/share/links/:id/reissue` | 所有者 | 再発行 |
 | DELETE | `/api/share/maps/:id` | 所有者 | 共有解除 |
@@ -3552,7 +3554,7 @@ Phase 38 の候補096（ノードへのコメント）・097（コメントの�
 
 | 項目 | 内容 |
 |------|------|
-| リンクの権限 | `view`（閲覧のみ）と `comment`（マップの閲覧＋コメントの閲覧・投稿）。それ以外の値は発行が 400（`invalid-permission`）、閲覧・コメントとも 404 |
+| リンクの権限 | `view`（閲覧のみ）と `comment`（マップの閲覧＋コメントの閲覧・投稿）。`edit` は共同編集参加用（Phase 39・41 章。URL は `/collab/[token]`）。コメント API・`/share` 閲覧では `edit` も 404 |
 | comment リンクの発行 | 所有者が共有ダイアログの「コメントリンクを追加」で発行（成功文言「コメントリンクを発行しました。」）。初回共有で作るリンクは従来どおり `view` |
 | 再発行 | 旧リンクの権限を引き継ぐ（comment リンクは comment のまま）。一覧の権限は再発行 API の成功値（サーバーの確定値）を使う |
 | 投稿者 | comment リンクを開いた人が Google でログイン（既存 Auth.js）。表示名は Google アカウントの名前（サーバーがセッションから設定。制御文字を除き 50 コードポイントで切り、空なら「名前未設定」）。投稿時点の名前を保存する |
@@ -3642,8 +3644,58 @@ Phase 38 の候補096（ノードへのコメント）・097（コメントの�
 - ノード ID の再利用の検出（[#76](https://scrum-board-jkcejsb6ka-an.a.run.app/items/76?project=5)）
 - コメントの監査ログ・削除の取り消し（[#77](https://scrum-board-jkcejsb6ka-an.a.run.app/items/77?project=5)）
 - 未共有マップ・ローカルだけのノードへのコメント、スレッド丸ごとの削除
-- ポーリング・リアルタイム更新（[#68](https://scrum-board-jkcejsb6ka-an.a.run.app/items/68?project=5) / Phase 39）
+- ポーリング・コメントのリアルタイム同期（[#68](https://scrum-board-jkcejsb6ka-an.a.run.app/items/68?project=5) / [#83](https://scrum-board-jkcejsb6ka-an.a.run.app/items/83?project=5)）。文書の同時編集は Phase 39（41 章）
 
 ### 40.8 検証範囲
 
 Jest（jsdom）で本文の正規化・能力判定・分類、コメントストア（D1 のモック）・サービス・API（権限表の各セル・判定順・ヘッダー）、API クライアント、共用部品（`ShareCommentThreadList`・`ShareCommentComposer`）、閲覧シェルと編集シェルの組み立て（必須 props の配線・view リンクでコメント UI が 0 件）を検査し、`npm run verify` を通します。実環境の D1 と実ブラウザでの確認は未実施（[browser-test-cases.md の AQ 節](../testing/browser-test-cases.md)）。API の詳細は [api.md の 22 章](./api.md)。
+
+## 41. リアルタイム共同編集（Phase 39）
+
+Phase 39 の候補099（リアルタイム共同編集）・100（参加者の選択位置・カーソル表示）の仕様です。設計は `docs/superpowers/specs/2026-11-27-phase39-realtime-collab-design.md`。単独編集は従来どおり `localStorage` 正本です。**共同編集セッション中だけ** Yjs 文書を Cloudflare Durable Object（DO）ルームに置き、終了時に MapDocument V3 へ写します。コメントのリアルタイム化・常時クラウド正本・ポーリングは非目標（#66 / #68 / #83）。
+
+### 41.1 正本の切替と ACL
+
+| 状態 | 正本 | できること |
+|------|------|------------|
+| 単独編集（既定） | `localStorage` の MapDocument V3 | 従来どおり。共有 publish は明示ボタン（39 章） |
+| 共同編集セッション中 | DO 上の Yjs 文書 | 所有者と `permission=edit` リンク保持者（要 Google ログイン）が編集。`view` / `comment` は文書を編集しない |
+| セッション終了後 | 所有者クライアントへ export → localStorage | 共有中なら UI で「公開を更新しますか？」を任意表示（**自動 publish しない**） |
+
+- **所有者の開始**: ヘッダー「共同編集」から開始。未共有でも可（`localMapId` のみ）。共有中なら `sharedMapId` を付ける。
+- **edit リンク参加**: `/collab/[token]`（編集シェル相当。`MapEditor` を共同編集モードでマウント）。未ログインはログイン導線のみ。`/share/[token]` とは分離。アクティブ session が無ければ 404 `no-active-session`。
+- **同時接続上限**: 8（超過は 429）。
+- **Undo**: Yjs UndoManager で自操作のみ。他者操作は自分の Undo で消さない。
+- **タブ競合**: セッション中は既存タブ競合ガードを無効化（21 章）。セッション外は従来どおり。
+- **再接続**: 切断中は入力を一時ブロック（キューしない）。**2 分以内**の再接続は Yjs 再同期。**2 分超**はセッション脱落→再参加が必要（長時間オフライン完全マージは #78）。
+- **全員切断**: 最後の接続切断から TTL 5 分でルーム破棄。可能な範囲で成果物を退避。
+
+### 41.2 presence（100）
+
+awareness で `{ userId, displayName, color, selectedNodeIds, viewportCenter }` を共有します。マップ上に他者選択の輪郭色と他者ビューポートの薄い枠を出します。**ポインタ座標の連続送信・マウスカーソル追従は非目標**（ROADMAP の「カーソル」は選択位置・視点の意味）。
+
+### 41.3 API・トランスポート（要約）
+
+| メソッド | パス | 認証 | 結果 |
+|----------|------|------|------|
+| POST | `/api/collab/sessions` | 所有者 | 開始。`{ sessionId, ticket, wsUrl }` |
+| POST | `/api/collab/join` | ログイン＋edit トークン | 参加。view/comment は 404 |
+| POST | `/api/collab/sessions/:id/end` | 所有者 | export して終了 |
+| GET | `/api/collab/sessions/:id` | 所有者または参加者 | それ以外は 404。成否とも `Cache-Control: private, no-store` |
+| WS | Durable Object（ticket 検証後） | 短命チケット | Yjs 同期・awareness |
+
+`POST /api/share/maps/:id/links` で `permission=edit` を発行できる（要ログイン。URL は `/collab/[token]`）。チケット署名鍵・`SERVICE_SECRET` は Next と `collab-worker/` で共有する（[share-setup.md](../setup/share-setup.md) の共同編集節）。
+
+### 41.4 非目標
+
+- 常時クラウド正本化・共有時クラウド必須（[#66](https://scrum-board-jkcejsb6ka-an.a.run.app/items/66?project=5)）
+- 保存のたび自動公開・ポーリング同期（[#68](https://scrum-board-jkcejsb6ka-an.a.run.app/items/68?project=5)）
+- 長時間オフラインの完全マージ（[#78](https://scrum-board-jkcejsb6ka-an.a.run.app/items/78?project=5)）
+- ポインタ軌跡、音声同時編集（[#79](https://scrum-board-jkcejsb6ka-an.a.run.app/items/79?project=5)）、モバイル専用 UI（[#80](https://scrum-board-jkcejsb6ka-an.a.run.app/items/80?project=5)）
+- 共同編集の監査ログ（[#81](https://scrum-board-jkcejsb6ka-an.a.run.app/items/81?project=5)）、E2E 暗号（[#82](https://scrum-board-jkcejsb6ka-an.a.run.app/items/82?project=5)）
+- コメントのリアルタイム同期（[#83](https://scrum-board-jkcejsb6ka-an.a.run.app/items/83?project=5)）
+- ログインなし edit、PartyKit、OT / LWW 全文置換
+
+### 41.5 検証範囲
+
+Jest（jsdom）で Yjs ↔ MapDocument 往復、Collab API（権限・上限・no-store・origin）、DO メモリモック、MapEditor／`/collab` 配線、presence の必須 props を検査し、`npm run verify` を通します。実 DO・実ブラウザでの確認は未実施（[browser-test-cases.md の AR 節](../testing/browser-test-cases.md)）。

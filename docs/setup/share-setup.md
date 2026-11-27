@@ -1,14 +1,15 @@
-# 共有（閲覧リンク・コメントリンク）を使えるようにする手順書
+# 共有・コメント・共同編集を使えるようにする手順書
 
-このアプリの「共有」（Phase 37。候補094・095）と「ノードコメント」（Phase 38。候補096・097）を動かすために、利用者が行う手順をまとめた文書です。機能仕様は `docs/specifications/features.md` の 39 章・40 章、設計は `docs/superpowers/specs/2026-11-26-phase37-share-view-link-design.md` と `docs/superpowers/specs/2026-11-27-phase38-comments-design.md` を見てください。
+このアプリの「共有」（Phase 37。候補094・095）、「ノードコメント」（Phase 38。候補096・097）、および「リアルタイム共同編集」（Phase 39。候補099・100）を動かすために、利用者が行う手順をまとめた文書です。機能仕様は `docs/specifications/features.md` の 39〜41 章、設計は `docs/superpowers/specs/2026-11-26-phase37-share-view-link-design.md`・`docs/superpowers/specs/2026-11-27-phase38-comments-design.md`・`docs/superpowers/specs/2026-11-27-phase39-realtime-collab-design.md` を見てください。共同編集 Worker の詳細はリポジトリルートの `collab-worker/README.md` も参照してください。
 
 ## 1. 概要
 
-- **所有者**: Google でログインした人だけが、ローカルのマップをクラウドへ公開したり、閲覧リンクを発行・失効・再発行したりできます。未ログインでもローカル編集は従来どおり使えます。
+- **所有者**: Google でログインした人だけが、ローカルのマップをクラウドへ公開したり、閲覧／コメント／編集リンクを発行・失効・再発行したり、共同編集セッションを開始・終了したりできます。未ログインでもローカル編集は従来どおり使えます。
 - **閲覧者**: 推測困難な URL（`/share/[token]`）を開くだけで、公開スナップショットを閲覧できます（ログイン不要）。編集・保存・書き出しはできません。
 - **コメントリンク（Phase 38）**: 所有者は閲覧リンクとは別に、権限が `comment` の「コメントリンク」を発行できます。コメントリンクを開いた人は、ログインせずにコメントを読めます。投稿・返信・解決・削除には Google でログインします（表示名は Google アカウントの名前）。閲覧リンク（`view`）ではコメントは見えません。コメントはサーバーの D1 に保存し、ローカルのマップ文書には保存しません。
-- **保存先**: メタは Cloudflare D1、文書スナップショットは Cloudflare R2。Next.js の Route Handler から HTTP API で読み書きします（Workers バインディング専用デプロイはしません）。
-- **イラスト生成との分離**: イラスト用の `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` と、共有用の `CF_SHARE_*` は **別名・別資格情報** にしてください。同じトークンの使い回しは避けます。
+- **編集リンク・共同編集（Phase 39）**: 権限が `edit` のリンク（URL は `/collab/[token]`）を発行できます。参加には Google ログインが必要です。共同編集セッション中だけ Yjs 文書を Cloudflare Durable Object に置き、終了後は所有者の localStorage へ写します。共有の自動 publish はしません。
+- **保存先**: メタは Cloudflare D1、文書スナップショットは Cloudflare R2。共有・コメントは Next.js の Route Handler から HTTP API で読み書きします。共同編集の Yjs 同期は `collab-worker/`（Durable Object）への WebSocket です。
+- **イラスト生成との分離**: イラスト用の `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` と、共有・共同編集用の `CF_SHARE_*` / `CF_COLLAB_*` は **別名・別資格情報** にしてください。同じトークンの使い回しは避けます。
 
 **秘密はパスワードと同じ扱いです。** 画面共有・チャット・Git のコミット・ログに出さないでください。漏れた可能性があれば、該当するキーや OAuth クライアントの秘密を無効化し、作り直してください。
 
@@ -101,7 +102,7 @@ Phase 37 には DDL の正本が無かったため、`share_links.permission` �
    SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'share_links' AND sql IS NOT NULL;
    ```
 
-4. 手順 2 で控えた文をコピーし、テーブル名を `share_links_new` に、CHECK だけを `CHECK (permission IN ('view', 'comment'))` に直して実行する（他の列・制約は変えない）。
+4. 手順 2 で控えた文をコピーし、テーブル名を `share_links_new` に、CHECK だけを `CHECK (permission IN ('view', 'comment', 'edit'))` に直して実行する（他の列・制約は変えない。Phase 38 時点で `view`/`comment` だけにしている場合も、Phase 39 では `'edit'` を追加する）。
 5. 次を実行し、2 つの `COUNT(*)` が一致することを確かめる。手順 4 の `CREATE TABLE` か、この `INSERT` がエラーになった、または件数が一致しない場合は、`DROP TABLE share_links_new;` で戻して中止する（`share_links` はまだ変えていない）。
 
    ```sql
@@ -118,9 +119,75 @@ Phase 37 には DDL の正本が無かったため、`share_links.permission` �
    ```
 
 7. 手順 3 で控えた `CREATE INDEX` 文をそのまま実行して、インデックスを作り直す。
-8. 手順 2 の `SELECT` をもう一度実行し、CHECK が `CHECK (permission IN ('view', 'comment'))` に直っていることを確かめる。
+8. 手順 2 の `SELECT` をもう一度実行し、CHECK が `CHECK (permission IN ('view', 'comment', 'edit'))` に直っていることを確かめる。
 
 公式ドキュメントの URL は検索結果や他人のメッセージからたどらず、Cloudflare / Google の公式サイトのトップから進んでください。
+
+### 4.3 Phase 39: 共同編集用テーブルの追加
+
+共同編集（Phase 39）を使うには、次の 2 つのテーブルを共有用の D1 に作ります。リポジトリにマイグレーションを実行する仕組みは無いので、Cloudflare ダッシュボードの D1 コンソールで実行します。
+
+- **実行する前に、コンソールで開いているデータベースの名前が共有用の D1 であることを確かめてください。**
+- FOREIGN KEY は付けません。削除の順番はアプリが守ります。
+
+```sql
+CREATE TABLE collab_sessions (
+  id TEXT PRIMARY KEY,
+  owner_user_id TEXT NOT NULL,
+  local_map_id TEXT NOT NULL,
+  shared_map_id TEXT,
+  status TEXT NOT NULL CHECK (status IN ('creating', 'active', 'ended', 'failed')),
+  artifact_r2_key TEXT,
+  created_at TEXT NOT NULL,
+  ended_at TEXT
+);
+CREATE INDEX idx_collab_sessions_shared_active
+  ON collab_sessions (shared_map_id, status, created_at);
+CREATE INDEX idx_collab_sessions_owner_local
+  ON collab_sessions (owner_user_id, local_map_id, status);
+
+CREATE TABLE collab_participants (
+  session_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  joined_at TEXT NOT NULL,
+  PRIMARY KEY (session_id, user_id)
+);
+CREATE INDEX idx_collab_participants_session
+  ON collab_participants (session_id, joined_at);
+```
+
+### 4.4 Phase 39: Durable Object（`collab-worker/`）と鍵の共有
+
+Yjs の常時接続はリポジトリルートの `collab-worker/`（Cloudflare Worker + Durable Object）が担います。Next.js の CollabAPI と **同じ秘密** を Worker 側にも置く必要があります。
+
+1. `collab-worker` で依存関係を入れ、必要ならデプロイする（手順の詳細は `collab-worker/README.md` と Cloudflare の公式ドキュメント）。
+
+   ```bash
+   cd collab-worker
+   npm install
+   ```
+
+2. Worker に次の秘密を設定する（値はリポジトリ・ログ・画面共有に出さない）。
+
+   | Worker 秘密 | Next（`.env.local`） | 意味 |
+   |-------------|----------------------|------|
+   | `TICKET_SECRET` | `CF_COLLAB_TICKET_SECRET`（空なら `AUTH_SECRET`） | 参加チケットの署名・検証。**両方で同じ値** |
+   | `SERVICE_SECRET` | `CF_COLLAB_SERVICE_SECRET` | Next → Worker 管理 API（seed／export／connections）の共有秘密。**両方で同じ値** |
+
+   ```bash
+   npx wrangler secret put TICKET_SECRET
+   npx wrangler secret put SERVICE_SECRET
+   ```
+
+3. Durable Object のバインディング名は `wrangler.toml` の `COLLAB_ROOM` と揃える（Next の `CF_COLLAB_DO_BINDING` に同じ名前を書く）。
+4. ローカル開発では DO のメモリモックまたは `wrangler` ローカルを使えます。実 DO が無い CI はモック契約テストで固定します。
+5. 全員切断 TTL 5 分後の成果物退避先を Worker に設定する（本番は推奨。未設定だと DO 破棄後も D1 が `active` のまま残り得る）。
+
+   | Worker 変数 | Next | 意味 |
+   |-------------|------|------|
+   | `ARTIFACT_EVACUATE_URL` | `https://<app>/api/collab/evacuate` | TTL 退避 POST 先。`Authorization: Bearer SERVICE_SECRET` と `x-collab-session-id`。空 body は拒否（空文書で上書きしない） |
+
+   `CF_COLLAB_TICKET_SECRET` が空のときの `AUTH_SECRET` フォールバックは共有トークン（`CF_SHARE_TOKEN_SECRET`）と同型。ローカル開発用。本番では `CF_COLLAB_TICKET_SECRET` を明示し、Worker の `TICKET_SECRET` と同一値にすること。
 
 ## 5. `.env.local` の作り方
 
@@ -139,7 +206,7 @@ Phase 37 には DDL の正本が無かったため、`share_links.permission` �
    cp .env.example .env.local
    ```
 
-   **`exists` と出たら `cp` を実行しないでください**（既存のイラスト／AI 支援のキーを消します）。その場合は `.env.example` の「共有（Phase 37）」の節を既存の `.env.local` へ追記します。
+   **`exists` と出たら `cp` を実行しないでください**（既存のイラスト／AI 支援のキーを消します）。その場合は `.env.example` の「共有（Phase 37）」および「共同編集（Phase 39）」の節を既存の `.env.local` へ追記します。
 
 3. 次の変数に値を入れます（空欄のままでは共有 API は 503 になります）。
 
@@ -158,13 +225,23 @@ Phase 37 には DDL の正本が無かったため、`share_links.permission` �
    | `CF_SHARE_TOKEN_SECRET` | 閲覧トークンの keyed hash 用。**空なら `AUTH_SECRET` を使う** |
    | `CF_SHARE_PUBLIC_ORIGIN` | 共有リンク URL の origin（優先）。無ければ `AUTH_URL` → `NEXT_PUBLIC_APP_URL` → リクエスト origin |
 
-4. 開発サーバーを起動し直します（`npm run dev`）。環境変数は起動時に読みます。
+4. 共同編集（Phase 39）を使うときは、続けて次も入れます（名前の見本は `client/.env.example`。値はリポジトリに書かない）。
+
+   | 変数 | 意味 |
+   |------|------|
+   | `CF_COLLAB_TICKET_SECRET` | 参加チケット署名。**空なら `AUTH_SECRET` を使う**。Worker の `TICKET_SECRET` と同一 |
+   | `CF_COLLAB_WS_ORIGIN` | 発行する `wsUrl` の origin 正本（`x-forwarded-host` は使わない） |
+   | `CF_COLLAB_DO_BINDING` | Durable Object バインディング名（Worker の `COLLAB_ROOM` と揃える） |
+   | `CF_COLLAB_SERVICE_SECRET` | Next → collab-worker 管理 API 用。Worker の `SERVICE_SECRET` と同一 |
+
+5. 開発サーバーを起動し直します（`npm run dev`）。環境変数は起動時に読みます。
 
 注意:
 
 - `.env.local` はコミットしません（`.gitignore` で除外済み）。
 - **シェルで同じ名前の変数を `export` していると、`.env.local` より優先されます。**
-- イラスト用の `CLOUDFLARE_*` を `CF_SHARE_*` にコピーして済ませないでください（役割の分離）。
+- イラスト用の `CLOUDFLARE_*` を `CF_SHARE_*` / `CF_COLLAB_*` にコピーして済ませないでください（役割の分離）。
+- 平文の edit トークン・参加チケットをログや分析に出さないでください。
 
 ## 6. 動作確認の目安
 
@@ -184,16 +261,24 @@ Phase 37 には DDL の正本が無かったため、`share_links.permission` �
 6. コメントリンクを「リンクを再発行」しても、新しいリンクは「コメント可」のまま。
 7. 「共有を解除」すると、そのマップのコメントもすべて削除される。
 
-詳細な手動ケースは `docs/testing/browser-test-cases.md` の AP 節（共有）と AQ 節（コメント）です。
+共同編集（Phase 39。4.3・4.4 と `CF_COLLAB_*` を用意したあと）:
+
+1. 所有者がヘッダー「共同編集」からセッションを開始できる（未共有でも可）。
+2. 共有ダイアログで「編集リンクを追加」し、別プロファイルで `/collab/[token]` を開き、Google ログイン後に同じマップを同時編集できる。
+3. 他参加者の選択色とビューポート枠が見える。
+4. 所有者の「終了」後、ローカルに保存され、共有中なら「公開を更新しますか？」が任意（自動では公開されない）。
+5. 閲覧リンク（`/share/[token]`）では編集できない。
+
+詳細な手動ケースは `docs/testing/browser-test-cases.md` の AP 節（共有）、AQ 節（コメント）、AR 節（共同編集）です。
 
 ## 7. 対象外（見送り）
 
-次は Phase 37 では実装しません（かんばん #64–#69 など）。
+次は Phase 37 では実装しません（かんばん #64–#69 など。comment 権限は Phase 38、リアルタイム共同編集は Phase 39 で実装）。
 
 - Magic Link / パスワードアカウント / 所有者無ログイン
-- Supabase 等の他スタック、クラウドを編集の正本にする運用
+- Supabase 等の他スタック、クラウドを編集の正本にする運用（常時クラウド正本は [#66](https://scrum-board-jkcejsb6ka-an.a.run.app/items/66?project=5)）
 - 招待限定・パスワード付き閲覧リンク、有効期限設定 UI
-- 保存のたびの自動公開・ポーリング同期・リアルタイム共同編集
+- 保存のたびの自動公開・ポーリング同期（[#68](https://scrum-board-jkcejsb6ka-an.a.run.app/items/68?project=5)）
 
 次は Phase 38 では実装しません。
 
@@ -205,4 +290,15 @@ Phase 37 には DDL の正本が無かったため、`share_links.permission` �
 - コメントからコメント先ノードへの移動（[#75](https://scrum-board-jkcejsb6ka-an.a.run.app/items/75?project=5)）
 - コメント先ノード ID の再利用の検出（[#76](https://scrum-board-jkcejsb6ka-an.a.run.app/items/76?project=5)）
 - コメントの監査ログ・削除の取り消し（[#77](https://scrum-board-jkcejsb6ka-an.a.run.app/items/77?project=5)）
-- コメントのリアルタイム更新・ポーリング（[#68](https://scrum-board-jkcejsb6ka-an.a.run.app/items/68?project=5) / Phase 39）
+- コメントのリアルタイム更新・ポーリング（[#68](https://scrum-board-jkcejsb6ka-an.a.run.app/items/68?project=5) / [#83](https://scrum-board-jkcejsb6ka-an.a.run.app/items/83?project=5)）
+
+次は Phase 39 では実装しません。
+
+- 常時クラウド正本化（[#66](https://scrum-board-jkcejsb6ka-an.a.run.app/items/66?project=5)）
+- 保存のたび自動公開・ポーリング（[#68](https://scrum-board-jkcejsb6ka-an.a.run.app/items/68?project=5)）
+- 長時間オフラインの完全マージ（[#78](https://scrum-board-jkcejsb6ka-an.a.run.app/items/78?project=5)）
+- 音声の同時編集チャネル（[#79](https://scrum-board-jkcejsb6ka-an.a.run.app/items/79?project=5)）
+- モバイル専用 UI（[#80](https://scrum-board-jkcejsb6ka-an.a.run.app/items/80?project=5)）
+- 共同編集の監査ログ（[#81](https://scrum-board-jkcejsb6ka-an.a.run.app/items/81?project=5)）
+- エンドツーエンド暗号（[#82](https://scrum-board-jkcejsb6ka-an.a.run.app/items/82?project=5)）
+- コメントのリアルタイム同期（[#83](https://scrum-board-jkcejsb6ka-an.a.run.app/items/83?project=5)）
