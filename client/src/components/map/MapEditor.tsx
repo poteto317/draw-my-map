@@ -2,7 +2,19 @@
 
 import { collectTaskProgress } from "@/domain/nodes/nodeTaskProgress";
 import { useNodeTaskAttributeEditing } from "@/hooks/useNodeTaskAttributeEditing";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import {
+  cloneElement,
+  isValidElement,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { BrokenMapLinksDialog } from "@/components/layout/BrokenMapLinksDialog";
 import { CrossMapSearchDialog } from "@/components/layout/CrossMapSearchDialog";
 import { RelationPartnerPickerDialog } from "@/components/layout/RelationPartnerPickerDialog";
@@ -105,6 +117,8 @@ import { MapConflictConfirmDialog } from "@/components/layout/MapConflictConfirm
 import { OutlineImportControl } from "@/components/layout/OutlineImportControl";
 import { OutlineImportDialog } from "@/components/layout/OutlineImportDialog";
 import { CommentsControl } from "@/components/layout/CommentsControl";
+import { CollabControl } from "@/components/layout/CollabControl";
+import { CollabPublishConfirmDialog } from "@/components/layout/CollabPublishConfirmDialog";
 import { MapCommentsDialog, type MapCommentsDialogFilter } from "@/components/layout/MapCommentsDialog";
 import { ShareControl } from "@/components/layout/ShareControl";
 import { ShareDialog } from "@/components/layout/ShareDialog";
@@ -123,10 +137,23 @@ import {
   shareOpenBlockedMessage,
 } from "@/domain/share/shareOpenGuards";
 import { resolveCommentsEntry } from "@/domain/share/shareCommentsOpenGuards";
+import { collabAwarenessProfileFromShareSession } from "@/domain/collab/collabAwarenessProfile";
 import type { ShareSession } from "@/domain/share/shareSession";
+import {
+  isCollabTabConflictGuardEnabled,
+} from "@/domain/collab/collabSessionUi";
+import { applyCollabOutlineExportBlock } from "@/domain/collab/applyCollabExportFormatBlock";
+import {
+  resolveCollabEntryBlocked,
+  resolveCollabInputBlocked,
+} from "@/domain/collab/collabGuards";
+import { resolveCollabAwarenessSelection } from "@/domain/collab/resolveCollabAwarenessSelection";
+import { parseMapDocumentJson } from "@/domain/persistence/mapDocumentCodec";
+import { nodeMapStateFromDocument } from "@/domain/persistence/mapDocumentState";
 import { useMapEditorLearn } from "@/hooks/useMapEditorLearn";
 import { useMapEditorComments } from "@/hooks/useMapEditorComments";
 import { useMapEditorCommentsDialog } from "@/hooks/useMapEditorCommentsDialog";
+import { useMapEditorCollab } from "@/hooks/useMapEditorCollab";
 import { useMapEditorShare } from "@/hooks/useMapEditorShare";
 import { useMapEditorVoice } from "@/hooks/useMapEditorVoice";
 import { useNarrowViewport } from "@/hooks/useNarrowViewport";
@@ -146,9 +173,14 @@ import {
 import { isRestorableFocusTarget } from "@/components/map/isRestorableFocusTarget";
 import { resolveOutlineInitialFocusTarget } from "@/components/map/resolveOutlineInitialFocusTarget";
 import { MapStage, type MapStageViewportHandle } from "@/components/map/MapStage";
+import { PresenceLayer } from "@/components/map/PresenceLayer";
 import { Minimap } from "@/components/map/Minimap";
 import { MapViewportZoomControls, ZOOM_FACTOR } from "@/components/map/MapViewportZoomControls";
-import { clampViewportScale, INITIAL_VIEWPORT, zoomViewportAt } from "@/components/map/mapViewport";
+import {
+  clampViewportScale,
+  INITIAL_VIEWPORT,
+  zoomViewportAt,
+} from "@/components/map/mapViewport";
 import type { ViewportFrame } from "@/components/map/useViewportFrameNotification";
 import { focusViewportOnWorldPoint } from "@/components/map/nodeViewportFocus";
 import { useCommandPaletteShortcut } from "@/components/map/useCommandPaletteShortcut";
@@ -235,6 +267,11 @@ type MapEditorProps = {
    */
   onShareRequest: () => void;
   onShareLogin: () => void;
+  /**
+   * `/collab/[token]` 参加モード。指定時は自動 join（所有者の開始 UI は出るが start は拒否されうる）。
+   * 省略時は所有者シェル（idle から開始）。
+   */
+  collabJoinToken?: string | null;
 };
 
 // 1つのマップの編集画面。マップを切り替えるときは親が key を変えて再マウントし、履歴と表示状態を破棄する。
@@ -266,6 +303,7 @@ export function MapEditor({
   onShareDialogOpenChange,
   onShareRequest,
   onShareLogin,
+  collabJoinToken = null,
 }: MapEditorProps) {
   const {
     nodes,
@@ -519,6 +557,24 @@ export function MapEditor({
   }, [captureBeforeNavigation, issueViewFocus, revealSearchTarget]);
   const navigateToArrival = useCallback((nodeId: number) => navigateToNode(nodeId, false), [navigateToNode]);
 
+  const [collabPublishConfirmOpen, setCollabPublishConfirmOpen] = useState(false);
+  /** マップ切替拒否を早期コールバックでも見る（collab 配線前の navigate 用） */
+  const collabMapSwitchBlockedRef = useRef<string | null>(null);
+  /**
+   * persistence より後段の collab 導出を、autosave／競合監視がイベント時に読む（render 中 setState ミラー禁止）。
+   */
+  const collabSavePolicyRef = useRef({ localSaveEnabled: true, conflictGuardEnabled: true });
+  const getCollabLocalSaveEnabled = useCallback(
+    () => collabSavePolicyRef.current.localSaveEnabled,
+    [],
+  );
+  const getCollabConflictGuardEnabled = useCallback(
+    () => collabSavePolicyRef.current.conflictGuardEnabled,
+    [],
+  );
+  /** share 配線前でも start 時に読めるよう後段で更新 */
+  const sharedMapIdRef = useRef<string | null>(null);
+
   const persistence = useMapPersistence({
     nodes,
     layoutMode,
@@ -534,6 +590,8 @@ export function MapEditor({
     storageMode,
     mapName,
     onSaveCurrentAsNewMap,
+    getConflictMonitorEnabled: getCollabConflictGuardEnabled,
+    getLocalSaveEnabled: getCollabLocalSaveEnabled,
   });
   const relationEditDisabled = !resolveRelationMeaningEditAvailability({
     viewMode,
@@ -689,6 +747,10 @@ export function MapEditor({
     storageMode,
     libraryMeta,
   });
+  const guardedOnSwitchToMapTarget = useCallback((targetMapId: string, targetNodeId?: number) => {
+    if (collabMapSwitchBlockedRef.current !== null) return;
+    onSwitchToMapTarget(targetMapId, targetNodeId);
+  }, [onSwitchToMapTarget]);
   const { navigationNotice, navigateToMapTarget } = useCrossMapNavigation({
     mapId,
     sessionNumber: storageSession.sessionNumber,
@@ -715,7 +777,7 @@ export function MapEditor({
     onValidOutlineTarget: clearFocusOutsideBranch,
     pendingNavigation,
     onConsumePendingNavigation,
-    onSwitchToMapTarget,
+    onSwitchToMapTarget: guardedOnSwitchToMapTarget,
   });
   const crossMapSearchButtonRef = useRef<HTMLButtonElement>(null);
   const crossMapDialogs = useCrossMapDialogs({
@@ -934,8 +996,127 @@ export function MapEditor({
     buttonRef: nodeMergeButtonRef,
     fallbackRefs: mergeFocusFallbacks,
   });
+  // 共同編集を AI／voice／share より先に配線し、導出フラグをそのまま下位へ渡す（render 中 setState ミラー禁止）。
+  const getCollabDocumentJson = useCallback(
+    () => persistence.currentSnapshot,
+    [persistence.currentSnapshot],
+  );
+  const getCollabSharedMapId = useCallback(() => sharedMapIdRef.current, []);
+  const getCollabStartGuard = useCallback(
+    () => ({
+      isProtectedMode,
+      learningActive,
+      playingPresentation,
+      voiceListening,
+      hasMapConflict,
+      isMapExternallyDeleted,
+    }),
+    [
+      hasMapConflict,
+      isMapExternallyDeleted,
+      isProtectedMode,
+      learningActive,
+      playingPresentation,
+      voiceListening,
+    ],
+  );
+  const handleCollabApplyEnded = useCallback((documentJson: string) => {
+    if (documentJson.length === 0) return;
+    const parsed = parseMapDocumentJson(documentJson);
+    if (!parsed.ok) return;
+    replaceMapAndReset(nodeMapStateFromDocument(parsed.value));
+    persistence.rebaseSnapshot(documentJson);
+  }, [persistence, replaceMapAndReset]);
+  /**
+   * Yjs → useNodes 投影由来の revision では push しない（Undo 自操作のみ契約）。
+   * 投影後の currentSnapshot を lastProjected に残し一致 skip（boolean 1回消費ではない）。
+   * Strict 二重 effect／deps 再走でも、スナップショットが投影のままなら push しない。
+   */
+  const captureProjectedSnapshotRef = useRef(false);
+  const lastProjectedSnapshotRef = useRef<string | null>(null);
+  const handleYjsDocument = useCallback((document: import("@/types/mapDocument").MapDocumentV3) => {
+    captureProjectedSnapshotRef.current = true;
+    replaceMapAndReset(nodeMapStateFromDocument(document));
+  }, [replaceMapAndReset]);
+  useLayoutEffect(() => {
+    if (!captureProjectedSnapshotRef.current) return;
+    captureProjectedSnapshotRef.current = false;
+    lastProjectedSnapshotRef.current = persistence.currentSnapshot;
+  }, [persistence.currentSnapshot, documentRevision]);
+  /** awareness 表示名は Google name（email フォールバックなし・設計 必達 100） */
+  const getCollabAwarenessProfile = useCallback(
+    () => collabAwarenessProfileFromShareSession(shareSession),
+    [shareSession],
+  );
+  const getCollabAwarenessSelection = useCallback(() => {
+    // viewport 未準備なら null（{0,0} 捏造禁止・L-002）
+    return resolveCollabAwarenessSelection({
+      selectedNodeIds,
+      screen: viewportFrame?.screen ?? null,
+      viewport: viewportFrame?.viewport ?? null,
+    });
+  }, [selectedNodeIds, viewportFrame]);
+  const awarenessRevision = [
+    selectedNodeIds.join(","),
+    viewportFrame?.viewport.offsetX ?? 0,
+    viewportFrame?.viewport.offsetY ?? 0,
+    viewportFrame?.viewport.scale ?? 0,
+    viewportFrame?.screen.width ?? 0,
+    viewportFrame?.screen.height ?? 0,
+  ].join(":");
+  const collab = useMapEditorCollab({
+    mapId,
+    shareSession,
+    getDocumentJson: getCollabDocumentJson,
+    getSharedMapId: getCollabSharedMapId,
+    getStartGuard: getCollabStartGuard,
+    onApplyEndedDocument: handleCollabApplyEnded,
+    onAskPublishAfterEnd: () => {
+      setCollabPublishConfirmOpen(true);
+    },
+    onYjsDocument: handleYjsDocument,
+    getAwarenessProfile: getCollabAwarenessProfile,
+    getAwarenessSelection: getCollabAwarenessSelection,
+    awarenessRevision,
+    joinToken: collabJoinToken,
+  });
+  const collabSaveBlocked = resolveCollabEntryBlocked("save", collab.collabSession);
+  const collabProtectBlocked = resolveCollabEntryBlocked("protect", collab.collabSession);
+  const collabMapSwitchBlocked = resolveCollabEntryBlocked("mapSwitch", collab.collabSession);
+  const collabOutlineExportBlocked = resolveCollabEntryBlocked("outlineExport", collab.collabSession);
+  const collabJsonImportBlocked = resolveCollabEntryBlocked("jsonImport", collab.collabSession);
+  const collabAiAssistBlocked = resolveCollabEntryBlocked("aiAssist", collab.collabSession);
+  const collabBulkBlocked = resolveCollabEntryBlocked("bulkEdit", collab.collabSession);
+  // persistence がイベント／effect 時に読む導出値（layoutEffect で同期 → 同コミットの passive effect 前に反映）
+  const collabLocalSaveEnabled = collabSaveBlocked === null;
+  const collabConflictGuardEnabled = isCollabTabConflictGuardEnabled(collab.collabSession);
+  useLayoutEffect(() => {
+    collabSavePolicyRef.current = {
+      localSaveEnabled: collabLocalSaveEnabled,
+      conflictGuardEnabled: collabConflictGuardEnabled,
+    };
+  }, [collabConflictGuardEnabled, collabLocalSaveEnabled]);
+  useLayoutEffect(() => {
+    collabMapSwitchBlockedRef.current = collabMapSwitchBlocked;
+  }, [collabMapSwitchBlocked]);
+  // active 中: ローカル編集 → Yjs 正本（投影スナップショットと一致する間は push しない）
+  useEffect(() => {
+    if (collab.collabSession.status !== "active") return;
+    if (persistence.currentSnapshot === lastProjectedSnapshotRef.current) return;
+    collab.pushLocalDocumentJson(persistence.currentSnapshot);
+    // pushLocalDocumentJson / collab 本体は安定したコールバック。revision と snapshot のみ追跡
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- active 中の文書 revision 同期
+  }, [collab.collabSession.status, documentRevision, persistence.currentSnapshot]);
+  const collabInputBlocked = resolveCollabInputBlocked(collab.collabSession);
+  const collabLearnBlocked = resolveCollabEntryBlocked("learn", collab.collabSession);
+  const collabPresentationBlocked = resolveCollabEntryBlocked("presentation", collab.collabSession);
+  const collabVoiceBlocked = resolveCollabEntryBlocked("voice", collab.collabSession);
+  const collabCommentsBlocked = resolveCollabEntryBlocked("comments", collab.collabSession);
+  const collabOutlineImportBlocked = resolveCollabEntryBlocked("outlineImport", collab.collabSession);
+  const collabShareDialogBlocked = resolveCollabEntryBlocked("shareDialogOpen", collab.collabSession);
+
   // AI 支援（Phase 32）。入口の可否は右パネルとコマンドパレットで同じ値を使う（L-057・L-061）。
-  // blockers はフック内の useMemo を効かせるため、値が変わったときだけ作り直す
+  // blockers はフック内の useMemo を効かせるため、値が変わったときだけ作り直す。
   const taskNodeId = selectedNode && importanceTargetIds.length === 1
     && (viewMode === "outline" || (!selectedRelation && !selectedGroup)) ? selectedNode.id : null;
   const aiAssistBlockers = useMemo(() => ({
@@ -945,7 +1126,16 @@ export function MapEditor({
     playingPresentation,
     learningActive,
     voiceListening,
-  }), [isProtectedMode, hasMapConflict, isMapExternallyDeleted, learningActive, playingPresentation, voiceListening]);
+    collabBlockedReason: collabAiAssistBlocked,
+  }), [
+    isProtectedMode,
+    hasMapConflict,
+    isMapExternallyDeleted,
+    learningActive,
+    playingPresentation,
+    voiceListening,
+    collabAiAssistBlocked,
+  ]);
   const aiAssist = useAiAssistDialog({
     mapId,
     documentRevision,
@@ -1092,6 +1282,19 @@ export function MapEditor({
     shareDialogOpen,
     getDocumentJson: getShareDocumentJson,
   });
+  const sharedMapId = share.localMeta.status === "present" ? share.localMeta.value.sharedMapId : null;
+  useLayoutEffect(() => {
+    sharedMapIdRef.current = sharedMapId;
+  }, [sharedMapId]);
+  const effectiveExportFormatControls = useMemo(
+    () => applyCollabOutlineExportBlock(exportFormatControls, collabOutlineExportBlocked),
+    [collabOutlineExportBlocked, exportFormatControls],
+  );
+  const effectiveMapControls = useMemo(() => {
+    const libraryBlocked = collabMapSwitchBlocked !== null || collabProtectBlocked !== null;
+    if (!libraryBlocked || !isValidElement(mapControls)) return mapControls;
+    return cloneElement(mapControls as ReactElement<{ disabled?: boolean }>, { disabled: true });
+  }, [collabMapSwitchBlocked, collabProtectBlocked, mapControls]);
   const shareOpenBlockedReasonCode = resolveShareOpenBlocked({
     hasMapConflict,
     isMapExternallyDeleted,
@@ -1100,7 +1303,7 @@ export function MapEditor({
   });
   const shareOpenBlockedReason =
     shareOpenBlockedReasonCode === null
-      ? null
+      ? collabShareDialogBlocked
       : shareOpenBlockedMessage(shareOpenBlockedReasonCode);
   const handleShareControlOpen = useCallback(() => {
     if (shareOpenBlockedReason !== null) return;
@@ -1115,7 +1318,20 @@ export function MapEditor({
     }
     shareWasOpenRef.current = shareDialogOpen;
   }, [exportButtonRef, shareDialogOpen]);
-  const sharedMapId = share.localMeta.status === "present" ? share.localMeta.value.sharedMapId : null;
+  const handleShareDialogClose = useCallback(() => {
+    collab.clearNotice();
+    onShareDialogOpenChange(false);
+  }, [collab, onShareDialogOpenChange]);
+  const handleCollabPublishDismiss = useCallback(() => {
+    collab.clearNotice();
+    setCollabPublishConfirmOpen(false);
+  }, [collab]);
+  const handleCollabPublishConfirm = useCallback(() => {
+    collab.clearNotice();
+    setCollabPublishConfirmOpen(false);
+    // 自動 publish しない。確認後に共有ダイアログの更新へ誘導
+    onShareDialogOpenChange(true);
+  }, [collab, onShareDialogOpenChange]);
   const commentNodeIds = useMemo(() => new Set(nodes.map((node) => node.id)), [nodes]);
   const commentNodeLabelById = useMemo(
     () => new Map(nodes.map((node) => [node.id, node.label] as const)),
@@ -1132,8 +1348,9 @@ export function MapEditor({
   // 未ログインでも未共有なら未共有の理由（設計 §7.2）
   const {
     blockedReason: commentsBlockedReason,
-    controlDisabledReason: commentsControlDisabledReason,
+    controlDisabledReason: commentsControlDisabledReasonBase,
   } = resolveCommentsEntry({ shared: sharedMapId !== null, learningActive, playingPresentation });
+  const commentsControlDisabledReason = commentsControlDisabledReasonBase ?? collabCommentsBlocked;
   // ヘッダーと右パネルの入口を 1 本にする（ガードも同じ。open→modal 束で listening を即停止）
   const { show: showCommentsDialog } = commentsDialog;
   const openComments = useCallback((initialFilter: MapCommentsDialogFilter) => {
@@ -1189,15 +1406,27 @@ export function MapEditor({
   );
   const presentationStartControlDisabled = presentationStartDisabledFromTour
     || crossFeatureLocks.presentationStartBlockedByLearn
-    || crossFeatureLocks.presentationStartBlockedByVoice;
+    || crossFeatureLocks.presentationStartBlockedByVoice
+    || collabPresentationBlocked !== null;
   // 入口をすべて同じ値で止める（L-061）。commandPalette.screen === "closed" を積に含める
   // 相手ピッカーは modal 束外（音声は専用 reason）だが inert／shortcuts は停止（設計 §10）
+  // reconnecting / connecting / error 中は共同編集の入力ブロック（キューしない）
   const editorShortcutsEnabled = shortcutsEnabled
     && !editorModalsBlockEditing
     && relationPartnerFromId === null
     && !learningActive
-    && !listening;
-  useMapHistoryShortcuts({ undo, redo, enabled: editorShortcutsEnabled || listening });
+    && !listening
+    && collabInputBlocked === null;
+  const collabActive = collab.collabSession.status === "active";
+  const effectiveCanUndo = collabActive ? collab.canYjsUndo : canUndo;
+  const effectiveCanRedo = collabActive ? collab.canYjsRedo : canRedo;
+  const effectiveUndo = collabActive ? collab.yjsUndo : undo;
+  const effectiveRedo = collabActive ? collab.yjsRedo : redo;
+  useMapHistoryShortcuts({
+    undo: effectiveUndo,
+    redo: effectiveRedo,
+    enabled: editorShortcutsEnabled || listening,
+  });
   useCrossMapSearchShortcut({
     enabled: editorShortcutsEnabled,
     onOpen: crossMapDialogs.openCrossMapSearch,
@@ -1333,8 +1562,8 @@ export function MapEditor({
         isProtectedMode: storageMode === "protected",
         hasConflict: persistence.conflictState === "conflict",
         isExternallyDeleted: persistence.conflictState === "externallyDeleted",
-        canUndo,
-        canRedo,
+        canUndo: effectiveCanUndo,
+        canRedo: effectiveCanRedo,
         canFitAll: displayState.fitNodes.length > 0,
         // §10: 関連線／グループ選択中はノード対象のパレット項目を無効
         canFitSelection: !nodeOpsBlockedByCanvasSelection && selectedFitNodes.length > 0,
@@ -1392,6 +1621,7 @@ export function MapEditor({
         canVoiceInputStart,
         canVoiceInputStop,
         voiceStartDisabledReason,
+        collabBulkBlockedReason: collabBulkBlocked,
         canLearnEnd: learningActive,
         canLearnReset: learningActive && learnResetBlockedReason === null,
         canLearnGenerateCards: learningActive && learnGenerateBlockedReason === null,
@@ -1404,8 +1634,9 @@ export function MapEditor({
       viewMode, selectedNodeId, focusRootId, storageMode, persistence.conflictState,
       learningActive, playingPresentation, listening, learnStartBlockedReason, learnResetBlockedReason,
       learnGenerateBlockedReason, canVoiceInputStart, canVoiceInputStop, voiceStartDisabledReason,
+      collabBulkBlocked,
       nodeOpsBlockedByCanvasSelection,
-      canUndo, canRedo, displayState.fitNodes.length, selectedFitNodes.length, selectedBranchIds,
+      effectiveCanUndo, effectiveCanRedo, displayState.fitNodes.length, selectedFitNodes.length, selectedBranchIds,
       canExpandSelectedBranch, canCollapseSelectedBranch, selectedNode, nodeOnlyDeletion.canDelete,
       nodeParentInsertion.canInsert, siblingReorder.canMoveUp, siblingReorder.canMoveDown,
       nodeIndent.canIndent, nodeIndent.canOutdent, outlineActions.structureCanDelete,
@@ -1451,8 +1682,8 @@ export function MapEditor({
         branchCollapse.setSubtreeCollapsed(selectedNodeId, true);
         return true;
       },
-      undo,
-      redo,
+      undo: effectiveUndo,
+      redo: effectiveRedo,
       duplicateBranch: () => {
         duplication.duplicateSelected();
       },
@@ -1498,17 +1729,29 @@ export function MapEditor({
     });
   }, [
     viewMode, selectedNodeId, displayState.fitNodes, selectedFitNodes, recordBeforeViewportChange,
-    setFocusRootId, branchCollapse, undo, redo, duplication, outlineActions, nodeOnlyDeletion,
+    setFocusRootId, branchCollapse, effectiveUndo, effectiveRedo, duplication, outlineActions, nodeOnlyDeletion,
     nodeParentInsertion, moveSelectedSiblingUp, moveSelectedSiblingDown, indentSelected, outdentSelected,
     applyViewMode, endLearnFromPalette, handleGenerateLearnReviewCards, startLearnFromPalette,
     startVoiceFromPalette, stopVoiceFromPalette,
   ]);
   const openDialogCommand = useCallback((id: CommandId) => {
     openCommandPaletteDialog(id, {
-      openLabelReplace: labelReplace.open,
-      openBranchMove: branchMove.open,
-      openNodeSplit: nodeSplit.open,
-      openNodeMerge: nodeMerge.open,
+      openLabelReplace: () => {
+        if (collabBulkBlocked !== null) return;
+        labelReplace.open();
+      },
+      openBranchMove: () => {
+        if (collabBulkBlocked !== null) return;
+        branchMove.open();
+      },
+      openNodeSplit: () => {
+        if (collabBulkBlocked !== null) return;
+        nodeSplit.open();
+      },
+      openNodeMerge: () => {
+        if (collabBulkBlocked !== null) return;
+        nodeMerge.open();
+      },
       openAiBranchSummary: () => openAiAssist("branch-summary", "palette"),
       openAiImportance: () => openAiAssist("importance", "palette"),
       openAiChildCandidates: () => openAiAssist("child-candidates", "palette"),
@@ -1535,7 +1778,7 @@ export function MapEditor({
         handleOpenLearnReviewCards();
       },
     });
-  }, [labelReplace, branchMove, handleOpenLearnReviewCards, learnMode, nodeSplit, nodeMerge, openAiAssist, crossMapDialogs, partsLibrary]);
+  }, [collabBulkBlocked, labelReplace, branchMove, handleOpenLearnReviewCards, learnMode, nodeSplit, nodeMerge, openAiAssist, crossMapDialogs, partsLibrary]);
   const handleExecutePaletteActive = useCallback(() => {
     const item = filteredPalette.items[commandPalette.activeIndex];
     if (!item) return;
@@ -1659,7 +1902,10 @@ export function MapEditor({
       voiceListening={listening}
       interimTranscript={interimTranscript}
       onVoiceToggle={handleVoiceToggle}
-      disabled={voiceStartDisabledReason !== null && !listening}
+      disabled={
+        (voiceStartDisabledReason !== null && !listening)
+        || (collabVoiceBlocked !== null && !listening)
+      }
       isNarrowViewport={isNarrowViewport}
       userChoseMapOnNarrow={userChoseMapOnNarrow}
       buttonRef={voiceInputButtonRef}
@@ -1680,7 +1926,7 @@ export function MapEditor({
           layoutDirectionControls={headerLayoutControls
             ? <MapHeaderLayoutControls {...headerLayoutControls} />
             : null}
-          mapControls={mapControls}
+          mapControls={effectiveMapControls}
           saveStatus={persistence.saveStatus}
           isNarrowViewport={isNarrowViewport}
           userChoseMapOnNarrow={userChoseMapOnNarrow}
@@ -1712,9 +1958,10 @@ export function MapEditor({
                 type="button"
                 aria-haspopup="dialog"
                 aria-expanded={crossMapDialogs.crossMapSearchOpen}
-                disabled={playingPresentation || listening}
+                disabled={playingPresentation || listening || collabMapSwitchBlocked !== null}
+                title={collabMapSwitchBlocked ?? undefined}
                 onClick={() => {
-                  if (playingPresentation || listening) return;
+                  if (playingPresentation || listening || collabMapSwitchBlocked !== null) return;
                   crossMapDialogs.openCrossMapSearch();
                 }}
                 className="shrink-0 rounded-md bg-zinc-100 px-3 py-1 text-sm text-zinc-700 transition-colors hover:bg-zinc-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-600"
@@ -1773,10 +2020,10 @@ export function MapEditor({
                 buttonRef={commandPaletteButtonRef}
               />
               <MapHistoryControls
-                canUndo={canUndo && (editorShortcutsEnabled || listening) && !playingPresentation}
-                canRedo={canRedo && (editorShortcutsEnabled || listening) && !playingPresentation}
-                onUndo={undo}
-                onRedo={redo}
+                canUndo={effectiveCanUndo && (editorShortcutsEnabled || listening) && !playingPresentation}
+                canRedo={effectiveCanRedo && (editorShortcutsEnabled || listening) && !playingPresentation}
+                onUndo={effectiveUndo}
+                onRedo={effectiveRedo}
               />
               <TourEditorControl
                 expanded={tourEditor.screen === "open"}
@@ -1795,6 +2042,7 @@ export function MapEditor({
                   playingPresentation
                   || hasMapConflict
                   || isMapExternallyDeleted
+                  || collabLearnBlocked !== null
                   || (!learningActive && (learnStartBlockedReason !== null || listening))
                 }
                 onToggle={handleToggleLearnMode}
@@ -1895,27 +2143,27 @@ export function MapEditor({
                   />
                   <BranchMoveControl
                     expanded={branchMove.screen !== "closed"}
-                    disabled={selectedNode === null || !editorShortcutsEnabled}
+                    disabled={selectedNode === null || !editorShortcutsEnabled || collabBulkBlocked !== null}
                     onOpen={branchMove.open}
                     buttonRef={branchMoveButtonRef}
                   />
                   <LabelReplaceControl
                     expanded={labelReplace.screen !== "closed"}
-                    disabled={nodes.length === 0 || !editorShortcutsEnabled}
+                    disabled={nodes.length === 0 || !editorShortcutsEnabled || collabBulkBlocked !== null}
                     onOpen={labelReplace.open}
                     buttonRef={labelReplaceButtonRef}
                   />
                   <NodeSplitControl
                     expanded={nodeSplit.screen !== "closed"}
-                    disabled={!nodeSplit.canOpen || !editorShortcutsEnabled}
-                    disabledReason={nodeSplit.disabledReason}
+                    disabled={!nodeSplit.canOpen || !editorShortcutsEnabled || collabBulkBlocked !== null}
+                    disabledReason={collabBulkBlocked ?? nodeSplit.disabledReason}
                     onOpen={nodeSplit.open}
                     buttonRef={nodeSplitButtonRef}
                   />
                   <NodeMergeControl
                     expanded={nodeMerge.screen !== "closed"}
-                    disabled={!nodeMerge.canOpen || !editorShortcutsEnabled}
-                    disabledReason={nodeMerge.disabledReason}
+                    disabled={!nodeMerge.canOpen || !editorShortcutsEnabled || collabBulkBlocked !== null}
+                    disabledReason={collabBulkBlocked ?? nodeMerge.disabledReason}
                     onOpen={nodeMerge.open}
                     buttonRef={nodeMergeButtonRef}
                   />
@@ -1946,14 +2194,14 @@ export function MapEditor({
               )}
               <OutlineImportControl
                 expanded={outlineImport.screen !== "closed"}
-                disabled={!editorShortcutsEnabled}
+                disabled={!editorShortcutsEnabled || collabOutlineImportBlocked !== null}
                 onOpen={outlineImport.open}
                 buttonRef={outlineImportButtonRef}
               />
               <ExchangeImportControl
                 opmlExpanded={exchangeImport.screen !== "closed" && exchangeImport.entry === "opml"}
                 csvExpanded={exchangeImport.screen !== "closed" && exchangeImport.entry === "csv-tsv"}
-                disabled={!editorShortcutsEnabled}
+                disabled={!editorShortcutsEnabled || collabOutlineImportBlocked !== null}
                 onOpen={exchangeImport.open}
                 opmlButtonRef={exchangeOpmlButtonRef}
                 csvButtonRef={exchangeCsvButtonRef}
@@ -1967,9 +2215,20 @@ export function MapEditor({
                 onExport={handleExportJson}
                 onImport={persistence.importJsonFile}
                 exportButtonRef={exportButtonRef}
-                jsonExportEnabled={exportFormatControls.json.enabled}
-                jsonExportDisabledReason={exportFormatControls.json.disabledReason}
-                jsonImportEnabled={editorShortcutsEnabled}
+                jsonExportEnabled={effectiveExportFormatControls.json.enabled}
+                jsonExportDisabledReason={effectiveExportFormatControls.json.disabledReason}
+                jsonImportEnabled={editorShortcutsEnabled && collabJsonImportBlocked === null}
+              />
+              <CollabControl
+                collabSession={collab.collabSession}
+                participants={collab.participants}
+                participantsState={collab.participantsState}
+                onStartCollab={collab.onStartCollab}
+                onLeaveCollab={collab.onLeaveCollab}
+                onEndCollab={collab.onEndCollab}
+                onRetryCollab={collab.onRetryCollab}
+                shareSession={shareSession}
+                startDisabledReason={collab.startDisabledReason}
               />
               <ShareControl
                 expanded={shareDialogOpen}
@@ -1989,15 +2248,15 @@ export function MapEditor({
                 onExportPng={imageExport.exportPng}
                 onExportSvg={imageExport.exportSvg}
                 isExportingPng={imageExport.isExportingPng}
-                pngEnabled={exportFormatControls.png.enabled}
-                svgEnabled={exportFormatControls.svg.enabled}
-                pngDisabledReason={exportFormatControls.png.disabledReason}
-                svgDisabledReason={exportFormatControls.svg.disabledReason}
+                pngEnabled={effectiveExportFormatControls.png.enabled}
+                svgEnabled={effectiveExportFormatControls.svg.enabled}
+                pngDisabledReason={effectiveExportFormatControls.png.disabledReason}
+                svgDisabledReason={effectiveExportFormatControls.svg.disabledReason}
               />
               <MapPrintControls
                 nodes={exportNodes}
-                {...exportFormatControls.print}
-                canOpen={editorShortcutsEnabled}
+                {...effectiveExportFormatControls.print}
+                canOpen={editorShortcutsEnabled && effectiveExportFormatControls.print.enabled}
                 open={printSettingsOpen}
                 onOpen={() => setPrintSettingsOpen(true)}
                 onClose={() => setPrintSettingsOpen(false)}
@@ -2009,21 +2268,21 @@ export function MapEditor({
               <OutlineExportControls
                 onExportMarkdown={outlineExport.exportMarkdown}
                 onExportPlainText={outlineExport.exportPlainText}
-                markdownEnabled={exportFormatControls.markdown.enabled}
-                plainTextEnabled={exportFormatControls.bullets.enabled}
-                markdownDisabledReason={exportFormatControls.markdown.disabledReason}
-                plainTextDisabledReason={exportFormatControls.bullets.disabledReason}
+                markdownEnabled={effectiveExportFormatControls.markdown.enabled}
+                plainTextEnabled={effectiveExportFormatControls.bullets.enabled}
+                markdownDisabledReason={effectiveExportFormatControls.markdown.disabledReason}
+                plainTextDisabledReason={effectiveExportFormatControls.bullets.disabledReason}
               />
               <ExchangeExportControls
                 onExportOpml={exchangeExport.exportOpml}
                 onExportCsv={exchangeExport.exportCsv}
                 onExportTsv={exchangeExport.exportTsv}
-                opmlEnabled={exportFormatControls.opml.enabled}
-                csvEnabled={exportFormatControls.csv.enabled}
-                tsvEnabled={exportFormatControls.tsv.enabled}
-                opmlDisabledReason={exportFormatControls.opml.disabledReason}
-                csvDisabledReason={exportFormatControls.csv.disabledReason}
-                tsvDisabledReason={exportFormatControls.tsv.disabledReason}
+                opmlEnabled={effectiveExportFormatControls.opml.enabled}
+                csvEnabled={effectiveExportFormatControls.csv.enabled}
+                tsvEnabled={effectiveExportFormatControls.tsv.enabled}
+                opmlDisabledReason={effectiveExportFormatControls.opml.disabledReason}
+                csvDisabledReason={effectiveExportFormatControls.csv.disabledReason}
+                tsvDisabledReason={effectiveExportFormatControls.tsv.disabledReason}
               />
             </>
           )}
@@ -2036,7 +2295,11 @@ export function MapEditor({
           inert={listening}
         >
         <MapConflictNotice
-          conflictState={persistence.conflictState}
+          conflictState={
+            isCollabTabConflictGuardEnabled(collab.collabSession)
+              ? persistence.conflictState
+              : "none"
+          }
           onSaveAsCopy={persistence.handleSaveAsCopy}
           onReloadExternal={persistence.handleReloadExternal}
           onExportJson={persistence.exportJson}
@@ -2055,6 +2318,13 @@ export function MapEditor({
                   <DepthLimitEmptyHint onResetToUnlimited={() => setMaxDepth(null)} />
                 </div>
               )}
+              <PresenceLayer
+                remoteSelections={collab.remoteSelections}
+                remoteViewports={collab.remoteViewports}
+                participants={collab.participants}
+                nodes={displayState.displayNodes}
+                viewport={viewportFrame?.viewport ?? INITIAL_VIEWPORT}
+              />
               <MapStage
                 learnDisplay={learnDisplay}
                 taskProgress={taskProgress}
@@ -2581,14 +2851,21 @@ export function MapEditor({
           noticeSequence={share.noticeSequence}
           busy={share.busy}
           onCreateShare={share.onCreateShare}
-          onPublish={share.onPublish}
+          onPublish={async () => {
+            const blocked = resolveCollabEntryBlocked("publish", collab.collabSession);
+            if (blocked !== null) {
+              return { ok: false as const, reason: "collab-active" };
+            }
+            return share.onPublish();
+          }}
           onCreateLink={share.onCreateLink}
           onCreateCommentLink={share.onCreateCommentLink}
+          onCreateEditLink={share.onCreateEditLink}
           onRevokeLink={share.onRevokeLink}
           onReissueLink={share.onReissueLink}
           onDeleteShare={share.onDeleteShare}
           onLogin={onShareLogin}
-          onClose={() => onShareDialogOpenChange(false)}
+          onClose={handleShareDialogClose}
           dialogMouseClickedAtRef={dialogMouseClickedAtRef}
         />
       )}
@@ -2605,6 +2882,23 @@ export function MapEditor({
           dialogMouseClickedAtRef={dialogMouseClickedAtRef}
         />
       )}
+      <CollabPublishConfirmDialog
+        open={collabPublishConfirmOpen}
+        onDismiss={handleCollabPublishDismiss}
+        onConfirm={handleCollabPublishConfirm}
+        dialogMouseClickedAtRef={dialogMouseClickedAtRef}
+      />
+      {collab.notice ? (
+        <div
+          role="status"
+          data-testid="collab-notice"
+          data-notice-kind={collab.notice.kind}
+          data-notice-sequence={collab.noticeSequence}
+          className="sr-only"
+        >
+          {collab.notice.message}
+        </div>
+      ) : null}
     </>
   );
 }
