@@ -181,6 +181,23 @@ export async function handleCollabEvacuate(
   return collabResultResponse(result);
 }
 
+/**
+ * Worker grace 脱落 → D1 参加者削除。Authorization: Bearer CF_COLLAB_SERVICE_SECRET。
+ * Headers: x-collab-session-id, x-collab-user-id。
+ */
+export async function handleCollabDropParticipant(
+  request: Request,
+  deps: CollabApiDeps & { serviceSecret: string },
+): Promise<Response> {
+  if (!authorizeCollabServiceSecret(request.headers.get("Authorization"), deps.serviceSecret)) {
+    return collabResultResponse({ ok: false, reason: "unauthenticated" });
+  }
+  const sessionId = request.headers.get("x-collab-session-id") ?? "";
+  const userId = request.headers.get("x-collab-user-id") ?? "";
+  const result = await resolveService(deps).dropParticipant(sessionId, userId);
+  return collabResultResponse(result);
+}
+
 export async function handleGetCollabSession(
   _request: Request,
   sessionId: string,

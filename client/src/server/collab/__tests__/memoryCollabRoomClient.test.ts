@@ -190,6 +190,24 @@ describe("memoryCollabRoomClient（Task 3 契約）", () => {
     expect(again).toEqual({ ok: true, userId: "u1" });
   });
 
+  it("grace 脱落時に onParticipantDrop を呼ぶ（クライアント leave 不要）", async () => {
+    let nowMs = Date.parse("2026-11-27T12:00:00.000Z");
+    const dropped: Array<{ sessionId: string; userId: string }> = [];
+    const room = createMemoryCollabRoomClient({
+      ticketSecret: SECRET,
+      nowMs: () => nowMs,
+      onParticipantDrop: (sessionId, userId) => {
+        dropped.push({ sessionId, userId });
+      },
+    });
+    await room.seed(SESSION, yUpdate());
+    await room.connect(SESSION, ticketFor("u1", nowMs));
+    room.disconnect(SESSION, "u1");
+    nowMs += COLLAB_RECONNECT_GRACE_MS + 1;
+    await room.tick();
+    expect(dropped).toEqual([{ sessionId: SESSION, userId: "u1" }]);
+  });
+
   it("全員切断後 TTL 5 分で成果物退避する", async () => {
     let nowMs = Date.parse("2026-11-27T12:00:00.000Z");
     const evacuated: Array<{ sessionId: string; bytes: number }> = [];

@@ -25,6 +25,8 @@ export class RoomConnectionCore {
   private readonly participants = new Map<string, Participant>();
   private emptySince: number | null = null;
   private destroyed = false;
+  /** dropExpiredGrace で新たに脱落した userId（takeGraceDrops で排出） */
+  private pendingGraceDrops: string[] = [];
 
   constructor(private readonly nowMs: () => number = () => Date.now()) {}
 
@@ -127,6 +129,41 @@ export class RoomConnectionCore {
   }
 
   /**
+   * grace 超過で新たに脱落した userId を返す（D1 参加者削除通知用）。
+   * 一度返したらキューから消える。
+   */
+  takeGraceDrops(): string[] {
+    this.dropExpiredGrace();
+    const out = this.pendingGraceDrops;
+    this.pendingGraceDrops = [];
+    return out;
+  }
+
+  /**
+   * 次の alarm 期限（grace 脱落 or 空室 TTL）。無ければ null。
+   */
+  nextDeadlineMs(): number | null {
+    if (this.destroyed) return null;
+    let next: number | null = null;
+    for (const p of this.participants.values()) {
+      if (
+        p.liveSockets === 0 &&
+        p.disconnectedAt !== null &&
+        !p.droppedForGrace
+      ) {
+        const at = p.disconnectedAt + COLLAB_RECONNECT_GRACE_MS;
+        if (next === null || at < next) next = at;
+      }
+    }
+    if (this.activeCount() === 0) {
+      const emptySince = this.emptySince ?? this.nowMs();
+      const at = emptySince + COLLAB_EMPTY_ROOM_TTL_MS;
+      if (next === null || at < next) next = at;
+    }
+    return next;
+  }
+
+  /**
    * 空室 TTL 超過なら true（呼び出し側が成果物退避して destroy）。
    */
   shouldEvacuate(): boolean {
@@ -145,6 +182,7 @@ export class RoomConnectionCore {
   markDestroyed(): void {
     this.destroyed = true;
     this.participants.clear();
+    this.pendingGraceDrops = [];
   }
 
   private dropExpiredGrace(): void {
@@ -157,6 +195,7 @@ export class RoomConnectionCore {
         now - p.disconnectedAt >= COLLAB_RECONNECT_GRACE_MS
       ) {
         p.droppedForGrace = true;
+        this.pendingGraceDrops.push(p.userId);
       }
     }
   }

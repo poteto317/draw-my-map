@@ -8,6 +8,7 @@ import {
 import type { ShareSession } from "@/domain/share/shareSession";
 import { tokenHash } from "@/domain/share/tokenHash";
 import {
+  handleCollabDropParticipant,
   handleCollabEvacuate,
   handleCollabJoin,
   handleCreateCollabSession,
@@ -1156,6 +1157,64 @@ describe("Collab API 契約", () => {
         body: updateBody,
       }),
       { ...d, serviceSecret: "svc-secret" },
+    );
+    expect(unauth.status).toBe(401);
+  });
+
+  it("grace 脱落通知で D1 参加者を削除する（クライアント leave 不要）", async () => {
+    const shareStore = createMemoryShareStore();
+    const { sharedMapId } = await seedShareWithEditLink(shareStore);
+    const room = createMemoryRoom();
+    const store = createMemoryCollabStore();
+    const ownerDeps = deps({ shareStore, store, room, session: OWNER });
+    expect(
+      (
+        await handleCreateCollabSession(
+          jsonRequest("http://localhost/api/collab/sessions", "POST", {
+            localMapId: "local-1",
+            sharedMapId,
+            documentJson: validDocumentJson(),
+          }),
+          ownerDeps,
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await handleCollabJoin(
+          jsonRequest("http://localhost/api/collab/join", "POST", { token: "edit-token-1" }),
+          deps({ shareStore, store, room, session: EDITOR }),
+        )
+      ).status,
+    ).toBe(200);
+    expect(await store.hasParticipant("id-1", EDITOR!.userId)).toBe(true);
+
+    const dropped = await handleCollabDropParticipant(
+      new Request("http://localhost/api/collab/drop-participant", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer svc-secret",
+          "x-collab-session-id": "id-1",
+          "x-collab-user-id": EDITOR!.userId,
+        },
+      }),
+      { ...ownerDeps, serviceSecret: "svc-secret" },
+    );
+    expect(dropped.status).toBe(200);
+    expect(await store.hasParticipant("id-1", EDITOR!.userId)).toBe(false);
+    // 所有者行は残る
+    expect(await store.hasParticipant("id-1", OWNER!.userId)).toBe(true);
+
+    const unauth = await handleCollabDropParticipant(
+      new Request("http://localhost/api/collab/drop-participant", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer wrong",
+          "x-collab-session-id": "id-1",
+          "x-collab-user-id": EDITOR!.userId,
+        },
+      }),
+      { ...ownerDeps, serviceSecret: "svc-secret" },
     );
     expect(unauth.status).toBe(401);
   });

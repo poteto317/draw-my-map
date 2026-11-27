@@ -186,6 +186,7 @@ Yjs の常時接続はリポジトリルートの `collab-worker/`（Cloudflare 
    | Worker 変数 | Next | 意味 |
    |-------------|------|------|
    | `ARTIFACT_EVACUATE_URL` | `https://<app>/api/collab/evacuate` | TTL 退避 POST 先。`Authorization: Bearer SERVICE_SECRET` と `x-collab-session-id`。空 body は拒否（空文書で上書きしない） |
+   | `PARTICIPANT_DROP_URL` | `https://<app>/api/collab/drop-participant` | 再接続猶予（120 秒）脱落時の D1 参加者削除。`Authorization: Bearer SERVICE_SECRET` と `x-collab-session-id` / `x-collab-user-id`。クライアント `leave` に依存しない |
 
    `CF_COLLAB_TICKET_SECRET` が空のときの `AUTH_SECRET` フォールバックは共有トークン（`CF_SHARE_TOKEN_SECRET`）と同型。ローカル開発用。本番では `CF_COLLAB_TICKET_SECRET` を明示し、Worker の `TICKET_SECRET` と同一値にすること。
 
