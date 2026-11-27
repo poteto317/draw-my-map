@@ -2,7 +2,10 @@ import {
   COLLAB_AWARENESS_UPDATE_LIMIT,
   COLLAB_DOC_UPDATE_LIMIT,
 } from "./constants.js";
-import { postParticipantDrop } from "./participantDrop.js";
+import {
+  postParticipantDrop,
+  resolveParticipantDropTarget,
+} from "./participantDrop.js";
 import { createSlidingWindowLimiter } from "./rateLimit.js";
 import { RoomConnectionCore } from "./roomCore.js";
 import { verifyCollabTicket } from "./ticket.js";
@@ -321,12 +324,19 @@ export class CollabRoom implements DurableObject {
   }
 
   private async notifyParticipantDrop(userId: string): Promise<void> {
-    const url = this.env.PARTICIPANT_DROP_URL;
-    if (!url || !this.sessionId) return;
-    const ok = await postParticipantDrop({
-      url,
-      serviceSecret: this.env.SERVICE_SECRET,
+    const target = resolveParticipantDropTarget({
+      url: this.env.PARTICIPANT_DROP_URL,
       sessionId: this.sessionId,
+    });
+    if (!target.ok) {
+      // 設定欠落でも無言スキップしない（枠解放だけして D1 が残る経路を検知できるようにする）
+      logSafe(target.reason);
+      return;
+    }
+    const ok = await postParticipantDrop({
+      url: target.url,
+      serviceSecret: this.env.SERVICE_SECRET,
+      sessionId: target.sessionId,
       userId,
     });
     logSafe(ok ? "participant-drop-ok" : "participant-drop-failed");

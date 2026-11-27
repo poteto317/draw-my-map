@@ -1,4 +1,46 @@
-import { postParticipantDrop } from "../src/participantDrop";
+import {
+  postParticipantDrop,
+  resolveParticipantDropTarget,
+} from "../src/participantDrop";
+
+describe("resolveParticipantDropTarget", () => {
+  it("URL と sessionId があれば ok", () => {
+    expect(
+      resolveParticipantDropTarget({
+        url: "https://app.example/api/collab/drop-participant",
+        sessionId: "s1",
+      }),
+    ).toEqual({
+      ok: true,
+      url: "https://app.example/api/collab/drop-participant",
+      sessionId: "s1",
+    });
+  });
+
+  it("URL 欠落は participant-drop-misconfigured", () => {
+    expect(
+      resolveParticipantDropTarget({
+        url: undefined,
+        sessionId: "s1",
+      }),
+    ).toEqual({ ok: false, reason: "participant-drop-misconfigured" });
+    expect(
+      resolveParticipantDropTarget({
+        url: "",
+        sessionId: "s1",
+      }),
+    ).toEqual({ ok: false, reason: "participant-drop-misconfigured" });
+  });
+
+  it("sessionId 欠落も participant-drop-misconfigured", () => {
+    expect(
+      resolveParticipantDropTarget({
+        url: "https://app.example/drop",
+        sessionId: null,
+      }),
+    ).toEqual({ ok: false, reason: "participant-drop-misconfigured" });
+  });
+});
 
 describe("postParticipantDrop", () => {
   it("service secret と session/user ヘッダで POST する", async () => {
