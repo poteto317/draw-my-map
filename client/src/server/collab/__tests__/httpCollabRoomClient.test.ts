@@ -135,10 +135,44 @@ describe("httpCollabRoomClient", () => {
         return new Response(null, { status: 204 });
       },
     });
-    await client.destroy("s1");
+    expect(await client.destroy("s1")).toEqual({ ok: true });
     expect(calls).toEqual([
       { url: "https://collab.example.test/rooms/s1/destroy", method: "POST" },
     ]);
+  });
+
+  it("destroy 非2xx と例外は destroy-failed", async () => {
+    const httpFail = createHttpCollabRoomClient({
+      origin: "https://collab.example.test",
+      serviceSecret: "svc",
+      fetchImpl: async () => new Response(null, { status: 500 }),
+    });
+    expect(await httpFail.destroy("s1")).toEqual({
+      ok: false,
+      reason: "destroy-failed",
+    });
+
+    const unauthorized = createHttpCollabRoomClient({
+      origin: "https://collab.example.test",
+      serviceSecret: "svc",
+      fetchImpl: async () => new Response("Unauthorized", { status: 401 }),
+    });
+    expect(await unauthorized.destroy("s1")).toEqual({
+      ok: false,
+      reason: "destroy-failed",
+    });
+
+    const networkFail = createHttpCollabRoomClient({
+      origin: "https://collab.example.test",
+      serviceSecret: "svc",
+      fetchImpl: async () => {
+        throw new Error("network");
+      },
+    });
+    expect(await networkFail.destroy("s1")).toEqual({
+      ok: false,
+      reason: "destroy-failed",
+    });
   });
 
   it("Authorization ヘッダに ticket 平文を載せない（service secret のみ）", async () => {

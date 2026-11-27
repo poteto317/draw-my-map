@@ -68,17 +68,20 @@ function createMemoryRoom(options?: {
   seedFail?: boolean;
   exportFail?: boolean;
   exportEmpty?: boolean;
+  destroyFail?: boolean;
   connectionCount?: number;
 }): CollabRoomClient & {
   seeded: Map<string, Uint8Array>;
   destroyed: Set<string>;
   setConnectionCount(n: number): void;
   setConnectionCountFail(fail: boolean): void;
+  setDestroyFail(fail: boolean): void;
 } {
   const seeded = new Map<string, Uint8Array>();
   const destroyed = new Set<string>();
   let connectionCount = options?.connectionCount ?? 0;
   let connectionCountFail = false;
+  let destroyFail = options?.destroyFail ?? false;
   return {
     seeded,
     destroyed,
@@ -87,6 +90,9 @@ function createMemoryRoom(options?: {
     },
     setConnectionCountFail(fail) {
       connectionCountFail = fail;
+    },
+    setDestroyFail(fail) {
+      destroyFail = fail;
     },
     async seed(sessionId, update) {
       if (options?.seedFail) return { ok: false, reason: "seed-failed" };
@@ -113,7 +119,11 @@ function createMemoryRoom(options?: {
       return { ok: true, value: connectionCount };
     },
     async destroy(sessionId) {
+      if (destroyFail) {
+        return { ok: false, reason: "destroy-failed" };
+      }
       destroyed.add(sessionId);
+      return { ok: true };
     },
   };
 }
@@ -971,6 +981,44 @@ describe("Collab API 契約", () => {
       ok: false,
       reason: "export-failed",
     });
+  });
+
+  it("destroy 失敗時は end 全体が失敗し status は active に戻る", async () => {
+    const room = createMemoryRoom({ destroyFail: true });
+    const store = createMemoryCollabStore();
+    const d = deps({ store, room });
+    expect(
+      (
+        await handleCreateCollabSession(
+          jsonRequest("http://localhost/api/collab/sessions", "POST", {
+            localMapId: "local-1",
+            documentJson: validDocumentJson(),
+          }),
+          d,
+        )
+      ).status,
+    ).toBe(200);
+
+    const ended = await handleEndCollabSession(
+      jsonRequest("http://localhost/api/collab/sessions/id-1/end", "POST"),
+      "id-1",
+      d,
+    );
+    expect(ended.status).toBe(502);
+    expect(await ended.json()).toEqual({ ok: false, reason: "destroy-failed" });
+    expect(room.destroyed.has("id-1")).toBe(false);
+    expect((await store.getSession("id-1"))?.status).toBe("active");
+
+    // destroy 成功に切り替えれば end を再試行できる
+    room.setDestroyFail(false);
+    const retried = await handleEndCollabSession(
+      jsonRequest("http://localhost/api/collab/sessions/id-1/end", "POST"),
+      "id-1",
+      d,
+    );
+    expect(retried.status).toBe(200);
+    expect(room.destroyed.has("id-1")).toBe(true);
+    expect((await store.getSession("id-1"))?.status).toBe("ended");
   });
 
   it("getConnectionCount 失敗時の join は fail-closed（429）", async () => {

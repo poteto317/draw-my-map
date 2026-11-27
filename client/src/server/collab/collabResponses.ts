@@ -19,6 +19,7 @@ const STATUS_BY_REASON: Readonly<Record<string, number>> = {
   "seed-failed": 502,
   "export-failed": 502,
   "export-empty": 502,
+  "destroy-failed": 502,
 };
 
 /** 認可付き Collab 応答。成否とも中間キャッシュに残さない（L-1232） */

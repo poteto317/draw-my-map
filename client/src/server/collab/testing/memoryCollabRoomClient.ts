@@ -204,10 +204,11 @@ export function createMemoryCollabRoomClient(
 
     async destroy(sessionId) {
       const room = rooms.get(sessionId);
-      if (!room || room.destroyed) return;
+      if (!room || room.destroyed) return { ok: true };
       room.destroyed = true;
       room.participants.clear();
       log?.("room-destroyed");
+      return { ok: true };
     },
 
     async connect(sessionId, ticket) {
