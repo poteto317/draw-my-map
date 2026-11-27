@@ -246,6 +246,17 @@ describe("ShareViewerPage", () => {
       expect(within(panel).getByRole("button", { name: SHARE_COMMENT_MESSAGES.loginButton })).toBeInTheDocument();
     });
 
+    it("未ログインでログイン導線を押すと、現在のパスへ戻る signIn を呼ぶ", async () => {
+      const user = userEvent.setup();
+      window.history.pushState({}, "", "/share/tok-c");
+      mockFetch("comment", false);
+      render(<ShareViewerPage token="tok-c" />);
+      const panel = await screen.findByTestId("share-comments-panel");
+      await user.click(await within(panel).findByRole("button", { name: SHARE_COMMENT_MESSAGES.loginButton }));
+      expect(signInMock).toHaveBeenCalledWith("google", { redirectTo: "/share/tok-c" });
+      window.history.pushState({}, "", "/");
+    });
+
     it("セッション loading 中は一覧を取りに行かず、投稿系もログイン導線も出さない", async () => {
       useSessionMock.mockReturnValue({ data: undefined, status: "loading" });
       const calls = mockFetch("comment", false);

@@ -1,5 +1,6 @@
 "use client";
 
+import { signIn } from "next-auth/react";
 import { useEffect, useMemo, useState } from "react";
 import { useShareViewerComments } from "@/app/share/[token]/useShareViewerComments";
 import { ShareCommentsPanel } from "@/components/share/ShareCommentsPanel";
@@ -101,6 +102,7 @@ function ShareViewerPageInner({ token }: ShareViewerPageProps) {
       nodeLabelById={nodeLabelById}
       selectedNodeId={selectedCommentNodeId}
       onSelectNode={setSelectedCommentNodeId}
+      onLogin={() => void signIn("google", { redirectTo: window.location.pathname })}
     />
   ) : null;
 
