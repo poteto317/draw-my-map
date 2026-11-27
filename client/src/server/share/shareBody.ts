@@ -1,3 +1,5 @@
+import { shareResultResponse } from "@/server/share/shareResponses";
+
 /** AI 支援 API と同じ JSON 上限（既存に合わせる） */
 export const SHARE_MAX_BODY_BYTES = 256 * 1024;
 
@@ -50,4 +52,23 @@ export function parseShareJson(text: string): unknown {
   } catch {
     return undefined;
   }
+}
+
+/** 上限内で読み、JSON として解釈する。超過は 413、読取失敗・不正 JSON は 400 の応答を返す */
+export async function readJsonBody(
+  request: Request,
+  maxBodyBytes: number,
+): Promise<{ ok: true; value: unknown } | { ok: false; response: Response }> {
+  const read = await readShareBodyWithinLimit(request, maxBodyBytes);
+  if (read.kind === "too-large") {
+    return { ok: false, response: shareResultResponse({ ok: false, reason: "too-large" }) };
+  }
+  if (read.kind === "error") {
+    return { ok: false, response: shareResultResponse({ ok: false, reason: "invalid-request" }) };
+  }
+  const parsed = parseShareJson(read.text);
+  if (parsed === undefined) {
+    return { ok: false, response: shareResultResponse({ ok: false, reason: "invalid-request" }) };
+  }
+  return { ok: true, value: parsed };
 }

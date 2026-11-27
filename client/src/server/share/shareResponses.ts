@@ -35,3 +35,12 @@ export function shareResultResponse<T>(result: ShareResult<T>): Response {
   const status = STATUS_BY_REASON[result.reason] ?? 400;
   return Response.json(result, { status });
 }
+
+/** トークン経路の応答ヘッダー */
+export function withViewResponseHeaders(response: Response): Response {
+  // トークン付き閲覧は成否ともキャッシュさせない（失効後の CDN 残存を防ぐ）
+  response.headers.set("Cache-Control", SHARE_VIEW_CACHE_CONTROL);
+  // 平文トークンを Referer 経由で外部・ログへ出さない
+  response.headers.set("Referrer-Policy", SHARE_VIEW_REFERRER_POLICY);
+  return response;
+}
