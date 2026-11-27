@@ -21,6 +21,7 @@ const allClosed: MapEditorModalBlockingInput = {
   brokenLinksDialogOpen: false,
   persistenceConfirmOpen: false,
   shareDialogOpen: false,
+  commentsDialogOpen: false,
 };
 
 describe("resolveMapEditorModalsBlockEditing", () => {
@@ -33,6 +34,7 @@ describe("resolveMapEditorModalsBlockEditing", () => {
     ["printSettingsOpen", "printSettingsOpen"],
     ["aiAssistOpen", "aiAssistOpen"],
     ["persistenceConfirmOpen", "persistenceConfirmOpen"],
+    ["commentsDialogOpen", "commentsDialogOpen"],
   ] as const)("%s だけ真なら true", (_label, key) => {
     expect(resolveMapEditorModalsBlockEditing({ ...allClosed, [key]: true })).toBe(true);
   });

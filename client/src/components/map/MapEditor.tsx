@@ -104,6 +104,8 @@ import { MapConflictNotice } from "@/components/layout/MapConflictNotice";
 import { MapConflictConfirmDialog } from "@/components/layout/MapConflictConfirmDialog";
 import { OutlineImportControl } from "@/components/layout/OutlineImportControl";
 import { OutlineImportDialog } from "@/components/layout/OutlineImportDialog";
+import { CommentsControl } from "@/components/layout/CommentsControl";
+import { MapCommentsDialog, type MapCommentsDialogFilter } from "@/components/layout/MapCommentsDialog";
 import { ShareControl } from "@/components/layout/ShareControl";
 import { ShareDialog } from "@/components/layout/ShareDialog";
 import { TourEditorControl } from "@/components/layout/TourEditorControl";
@@ -120,8 +122,11 @@ import {
   resolveShareOpenBlocked,
   shareOpenBlockedMessage,
 } from "@/domain/share/shareOpenGuards";
+import { resolveCommentsEntry } from "@/domain/share/shareCommentsOpenGuards";
 import type { ShareSession } from "@/domain/share/shareSession";
 import { useMapEditorLearn } from "@/hooks/useMapEditorLearn";
+import { useMapEditorComments } from "@/hooks/useMapEditorComments";
+import { useMapEditorCommentsDialog } from "@/hooks/useMapEditorCommentsDialog";
 import { useMapEditorShare } from "@/hooks/useMapEditorShare";
 import { useMapEditorVoice } from "@/hooks/useMapEditorVoice";
 import { useNarrowViewport } from "@/hooks/useNarrowViewport";
@@ -142,7 +147,6 @@ import { isRestorableFocusTarget } from "@/components/map/isRestorableFocusTarge
 import { resolveOutlineInitialFocusTarget } from "@/components/map/resolveOutlineInitialFocusTarget";
 import { MapStage, type MapStageViewportHandle } from "@/components/map/MapStage";
 import { Minimap } from "@/components/map/Minimap";
-import { EMPTY_COMMENT_NODE_COUNTS } from "@/components/map/pixi/renderMapNodes";
 import { MapViewportZoomControls, ZOOM_FACTOR } from "@/components/map/MapViewportZoomControls";
 import { clampViewportScale, INITIAL_VIEWPORT, zoomViewportAt } from "@/components/map/mapViewport";
 import type { ViewportFrame } from "@/components/map/useViewportFrameNotification";
@@ -1005,6 +1009,7 @@ export function MapEditor({
     publishNotice: publishCommandPaletteNotice,
   } = useRevisionScopedNotice(documentRevision);
   const viewModeRef = useLatestRef(viewMode);
+  const commentsDialog = useMapEditorCommentsDialog({ mapId, fallbackFocusRef: exportButtonRef });
   const editorModalsBlockEditing = resolveMapEditorModalsBlockEditing({
     commandPaletteOpen: commandPalette.screen !== "closed",
     printSettingsOpen,
@@ -1023,6 +1028,7 @@ export function MapEditor({
     brokenLinksDialogOpen: crossMapDialogs.brokenLinksDialogOpen,
     persistenceConfirmOpen: persistence.isConfirmOpen,
     shareDialogOpen,
+    commentsDialogOpen: commentsDialog.open,
   });
   const voiceExclusiveStopRequested = resolveVoiceExclusiveStopRequested({
     modalBlockingVoiceStart: editorModalsBlockEditing,
@@ -1109,6 +1115,32 @@ export function MapEditor({
     }
     shareWasOpenRef.current = shareDialogOpen;
   }, [exportButtonRef, shareDialogOpen]);
+  const sharedMapId = share.localMeta.status === "present" ? share.localMeta.value.sharedMapId : null;
+  const commentNodeIds = useMemo(() => new Set(nodes.map((node) => node.id)), [nodes]);
+  const commentNodeLabelById = useMemo(
+    () => new Map(nodes.map((node) => [node.id, node.label] as const)),
+    [nodes],
+  );
+  const comments = useMapEditorComments({
+    mapId,
+    sharedMapId,
+    shareSession,
+    shareSessionStatus,
+    dialogOpen: commentsDialog.open,
+    nodeIds: commentNodeIds,
+  });
+  // 未ログインでも未共有なら未共有の理由（設計 §7.2）
+  const {
+    blockedReason: commentsBlockedReason,
+    controlDisabledReason: commentsControlDisabledReason,
+  } = resolveCommentsEntry({ shared: sharedMapId !== null, learningActive, playingPresentation });
+  // ヘッダーと右パネルの入口を 1 本にする（ガードも同じ。open→modal 束で listening を即停止）
+  const { show: showCommentsDialog } = commentsDialog;
+  const openComments = useCallback((initialFilter: MapCommentsDialogFilter) => {
+    if (commentsControlDisabledReason !== null) return;
+    showCommentsDialog(initialFilter);
+  }, [commentsControlDisabledReason, showCommentsDialog]);
+  const openNodeComments = useCallback(() => openComments("selected"), [openComments]);
   const crossFeatureLocks = useMemo(
     () => resolveMapEditorCrossFeatureLocks({
       learningActive,
@@ -1946,6 +1978,13 @@ export function MapEditor({
                 onOpen={handleShareControlOpen}
                 buttonRef={shareButtonRef}
               />
+              <CommentsControl
+                expanded={commentsDialog.open}
+                disabled={commentsControlDisabledReason !== null}
+                disabledReason={commentsControlDisabledReason ?? undefined}
+                onOpen={() => openComments("all")}
+                buttonRef={commentsDialog.buttonRef}
+              />
               <MapImageExportControls
                 onExportPng={imageExport.exportPng}
                 onExportSvg={imageExport.exportSvg}
@@ -2025,7 +2064,7 @@ export function MapEditor({
                 focusRequest={canvasFocus.request}
                 highlightNodeIds={highlightNodeIds}
                 pinnedNodeIds={nodePins.pinnedNodeIds}
-                commentNodeCounts={EMPTY_COMMENT_NODE_COUNTS}
+                commentNodeCounts={comments.openCountByNode}
                 isCurrentFocusRequest={canvasFocus.isCurrentRequest}
                 onFocusRequestApplied={viewNavigation.onFocusRequestApplied}
                 onFocusRequestDiscarded={viewNavigation.onFocusRequestDiscarded}
@@ -2205,6 +2244,9 @@ export function MapEditor({
                 if (attachIllustration(nodeId, dataUrl)) dismissGeneration();
               }}
               onRemove={removeIllustration}
+              commentSummary={selectedNodeId === null ? null : comments.summaryForNode(selectedNodeId)}
+              onOpenNodeComments={sharedMapId === null ? null : openNodeComments}
+              openNodeCommentsDisabledReason={commentsBlockedReason}
             />
           )}
         />
@@ -2547,6 +2589,19 @@ export function MapEditor({
           onDeleteShare={share.onDeleteShare}
           onLogin={onShareLogin}
           onClose={() => onShareDialogOpenChange(false)}
+          dialogMouseClickedAtRef={dialogMouseClickedAtRef}
+        />
+      )}
+      {commentsDialog.open && (
+        <MapCommentsDialog
+          comments={comments}
+          nodeLabelById={commentNodeLabelById}
+          selectedNodeId={selectedNodeId}
+          initialFilter={commentsDialog.initialFilter}
+          shareSession={shareSession}
+          shareSessionStatus={shareSessionStatus}
+          onLogin={onShareLogin}
+          onClose={commentsDialog.close}
           dialogMouseClickedAtRef={dialogMouseClickedAtRef}
         />
       )}
