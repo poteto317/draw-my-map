@@ -257,6 +257,14 @@ export const SHARE_COMMENT_MESSAGES = {
   statusOpen: "未解決",
   statusResolved: "解決済み",
   selectThreadNode: "このノードを選択",
+  failureUnauthenticated: "ログインが必要です。",
+  failureNotFound: "コメントが見つかりません。削除されたか、リンクが無効になった可能性があります。",
+  failureThreadResolved: "解決済みのスレッドです。再開してから返信してください。",
+  failureCommentLimit: "コメント数の上限に達しました。",
+  failureInvalidNode: "公開中のマップにこのノードがありません。共有を更新してから投稿してください。",
+  failureInvalidComment: "コメントは 1〜2,000 文字で入力してください。",
+  failureRateLimited: "操作が多すぎます。しばらく待ってからやり直してください。",
+  operationFailed: "コメントの操作に失敗しました。",
 } as const; // このオブジェクトのキーと文言が正本
 export type ShareCommentMessageKey = keyof typeof SHARE_COMMENT_MESSAGES;
 // shareCommentOperationMessages.ts
