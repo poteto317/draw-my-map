@@ -87,8 +87,8 @@ Draw My Map の設計・仕様・環境構築・テスト・開発運用に関�
   - Phase 32 の AI 支援（枝の要約・重要度の提案）で外部へ送る内容と送らない内容。
   - Claude API・OpenAI API のキーの取得と `client/.env.local` の書き方、提供元とモデルの選び方（上書きできるモデルの条件）、止め方。
   - 誤りの種類ごとの原因と対処、課金の目安、公開時の注意。
-- **[共有（閲覧専用リンク）の設定ガイド](setup/share-setup.md)** (`docs/setup/share-setup.md`)
-  - Phase 37 の Google OAuth（Auth.js）と Cloudflare D1／R2（`CF_SHARE_*`）の用意。
+- **[共有・コメント・共同編集の設定ガイド](setup/share-setup.md)** (`docs/setup/share-setup.md`)
+  - Phase 37 の Google OAuth（Auth.js）と Cloudflare D1／R2（`CF_SHARE_*`）、Phase 38 のコメント用 DDL、Phase 39 の共同編集 DDL・Durable Object 鍵共有（`CF_COLLAB_*`）の用意。
   - `client/.env.example` と整合する環境変数、イラスト用 `CLOUDFLARE_*` との分離。
   - ログイン・リンク発行・失効・再発行の動作確認の目安と見送り（#64–#69）。
 
@@ -101,7 +101,7 @@ Draw My Map の設計・仕様・環境構築・テスト・開発運用に関�
 ### 5. プロジェクト管理・開発履歴
 
 - **[開発ロードマップ](../ROADMAP.md)** (`ROADMAP.md`)
-  - プロジェクトのビジョン、差別化ポイント、各フェーズの実装完了状況。Phase 37（共有の基盤と閲覧公開）まで完了した項目あり。次の未完了の全体項目は Phase 20 の「名前付きスナップショット」。Phase 38 は進行中（096・097 完了）。
+  - プロジェクトのビジョン、差別化ポイント、各フェーズの実装完了状況。Phase 39（リアルタイム共同編集 099・100）まで完了した項目あり。次の未完了の全体項目は Phase 20 の「名前付きスナップショット」。Phase 38 は進行中（096・097 完了、次は 098）。
 - **[エージェント・開発ルール](../AGENTS.md)** (`AGENTS.md`)
   - サブエージェント駆動開発（Subagent-Driven Development）、二段階レビュー運用、PR運用ルール。
 - **[レビュー指摘の記録](review-findings/)** (`docs/review-findings/`)
@@ -129,7 +129,7 @@ docs/
 ├── setup/                              # 環境構築ガイド
 │   ├── illustration-generation-setup.md # イラスト生成設定
 │   ├── ai-assist-setup.md              # AI 支援（Claude API・OpenAI API）の設定
-│   └── share-setup.md                  # 共有（Google OAuth・CF_SHARE_*）の設定
+│   └── share-setup.md                  # 共有・コメント・共同編集（CF_SHARE_* / CF_COLLAB_*）の設定
 ├── testing/                            # テスト関連
 │   └── browser-test-cases.md           # 実ブラウザテストケース
 ├── review-findings/                    # 過去のレビュー指摘記録

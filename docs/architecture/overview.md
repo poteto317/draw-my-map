@@ -10,8 +10,8 @@ Draw My Map のシステム全体アーキテクチャ、レイヤード設計�
 
 Draw My Map は、思考の整理・アイデア発想を直感的に支援する**ブラウザ完結型シングルページ・マインドマップアプリケーション**（SPA）です。
 
-- **ローカルファースト & クライアント完結**: マップデータ（ノードツリー、配置座標、重要度、レイアウトモード）はすべてブラウザ上の React 状態および `localStorage` で安全に保持・管理され（Phase 12 から、名前を付けた複数のマップを一覧のインデックスとマップごとの本体に分けて保存）、外部データベースへの認証や接続なしにオフラインでも動作します。JSON ファイルとしてのエクスポート/インポート、SVG/PNG 形式の画像書き出し、OPML/CSV/TSV による他ツールとのデータ交換もすべてクライアントサイドで処理されます。共有（Phase 37）でも編集の正本はローカルのままです。
-- **軽量サーバーサイド連携（BFF / Route Handler）**: Next.js App Router の Route Handler 経由で、(1) AI イラスト生成（`POST /api/illustrations` → Cloudflare Workers AI）、(2) AI 支援（`/api/ai-assist/*`）、(3) 共有（Auth.js Google・`/api/share/*` → Cloudflare D1／R2）を扱います。API キー・OAuth 秘密・共有用資格情報はサーバーサイドでのみ保持されます。
+- **ローカルファースト & クライアント完結**: マップデータ（ノードツリー、配置座標、重要度、レイアウトモード）はすべてブラウザ上の React 状態および `localStorage` で安全に保持・管理され（Phase 12 から、名前を付けた複数のマップを一覧のインデックスとマップごとの本体に分けて保存）、外部データベースへの認証や接続なしにオフラインでも動作します。JSON ファイルとしてのエクスポート/インポート、SVG/PNG 形式の画像書き出し、OPML/CSV/TSV による他ツールとのデータ交換もすべてクライアントサイドで処理されます。共有（Phase 37）でも編集の正本はローカルのままです。共同編集（Phase 39）は**セッション中だけ** Durable Object 上の Yjs を正本にし、終了後は再び localStorage へ戻します。
+- **軽量サーバーサイド連携（BFF / Route Handler）**: Next.js App Router の Route Handler 経由で、(1) AI イラスト生成（`POST /api/illustrations` → Cloudflare Workers AI）、(2) AI 支援（`/api/ai-assist/*`）、(3) 共有（Auth.js Google・`/api/share/*` → Cloudflare D1／R2）、(4) 共同編集（`/api/collab/*` → 短命チケット発行・セッション管理、Yjs 同期は Durable Object）を扱います。API キー・OAuth 秘密・共有／共同編集用資格情報はサーバーサイドでのみ保持されます。
 
 ```mermaid
 graph TD
@@ -24,21 +24,25 @@ graph TD
             Domain["Domain Layer (Layout / Tree / Search / Math / Codec)"]
             PixiApp["Pixi.js 8 (2D WebGL / Canvas Stage)"]
             ShareViewer["Share Viewer (/share/token)"]
+            CollabEditor["Collab Editor (/collab/token)"]
         end
         LocalStorage[("localStorage<br/>(maps / library-meta /<br/>share-local-meta.v1)")]
         FileIO["File System<br/>(JSON / PNG / SVG / OPML / CSV / TSV)"]
+        YjsClient["Yjs doc + awareness"]
     end
 
     subgraph Server ["Next.js Server (Route Handler)"]
         Illustrations["POST /api/illustrations"]
         ShareAPI["/api/share/* + Auth.js"]
+        CollabAPI["/api/collab/* + Auth.js"]
         ServerDomain["Server Logic"]
     end
 
     subgraph Cloudflare ["Cloudflare"]
         TranslationModel["Workers AI 翻訳・画像"]
-        D1[("D1 共有メタ")]
+        D1[("D1 共有・セッション メタ")]
         R2[("R2 スナップショット")]
+        CollabDO["Durable Object Collab Room"]
     end
 
     UI --> State
@@ -49,13 +53,19 @@ graph TD
     Services --> FileIO
     Services -->|HTTP| Illustrations
     Services -->|HTTP| ShareAPI
+    Services -->|HTTP| CollabAPI
     ShareViewer -->|token| ShareAPI
+    CollabEditor --> YjsClient
+    UI --> YjsClient
+    YjsClient -->|WebSocket + ticket| CollabDO
 
     Illustrations --> ServerDomain
     ShareAPI --> ServerDomain
+    CollabAPI --> ServerDomain
     ServerDomain -->|REST| TranslationModel
     ServerDomain -->|HTTP| D1
     ServerDomain -->|S3 互換| R2
+    ServerDomain -->|seed / export| CollabDO
 ```
 
 ### 1.2 レイヤードアーキテクチャの採用理由と単一責任原則（SRP）
@@ -77,8 +87,9 @@ Draw My Map では**単一責任原則（Single Responsibility Principle: SRP）
 
 | カテゴリ | 採用技術・バージョン | 設定・構成の特徴 |
 | :--- | :--- | :--- |
-| **アプリケーション基盤** | **Next.js 16.1.6** (App Router) | クライアント SPA + Route Handler（イラスト・AI 支援・共有） |
-| **所有者認証** | **Auth.js / next-auth ^5**（Google） | 共有操作の所有者識別。未ログインでもローカル編集可 |
+| **アプリケーション基盤** | **Next.js 16.1.6** (App Router) | クライアント SPA + Route Handler（イラスト・AI 支援・共有・共同編集） |
+| **所有者認証** | **Auth.js / next-auth ^5**（Google） | 共有・共同編集の所有者／参加者識別。未ログインでもローカル編集可 |
+| **共同編集同期** | **Yjs** + **Cloudflare Durable Objects**（`collab-worker/`） | セッション中のみ DO 上の Yjs 正本。WS は短命チケット検証後 |
 | **UI ランタイム** | **React 19.2.3** (`react`, `react-dom`) | 宣言的 DOM レンダリング、カスタムフックによる状態管理 |
 | **Markdown 表示** | **`react-markdown` ^10.1.0** + **`remark-gfm` ^4.0.1** | 詳細メモの安全な Markdown（CommonMark + GFM）プレビュー描画（`rehype-raw` 不使用） |
 | **React Compiler** | **`babel-plugin-react-compiler` 1.0.0** | `client/next.config.ts` にて **`reactCompiler: true`** を有効化。ビルド時の自動メモ化により不要な再レンダリングを最適化 |
@@ -111,9 +122,11 @@ client/src/
 │   ├── outlineExport/ # Markdown/テキスト等のアウトライン書き出し
 │   ├── exchange/      # OPML・CSV/TSV のテキストダウンロード
 │   ├── persistence/   # ストレージ・ファイル永続化・バックアップ復元・共有ローカルメタ
-│   └── share/         # D1/R2 HTTP クライアント・共有 API クライアント
+│   ├── share/         # D1/R2 HTTP クライアント・共有 API クライアント
+│   └── collab/        # Yjs 接続・ドキュメントセッション・presence 橋渡し
 ├── domain/          # 5. Domain Layer (純粋ビジネスロジック・幾何演算・スキーマ検証)
-├── server/          # 6. Server Layer (イラスト / AI 支援 / 共有 API)
+│   └── collab/        # MapDocument ↔ Yjs codec・共同編集ガード・文言
+├── server/          # 6. Server Layer (イラスト / AI 支援 / 共有 / 共同編集 API)
 ├── config/          # 7. Config & Constants Layer (アプリケーション共通定数)
 ├── types/           # 8. Shared Types & Interfaces (TypeScript 型定義)
 └── testing/         # 共通テストヘルパー・フィクスチャ (createTestNode, createTestMapHistoryLease, jpegFixture, createTestStorageSession, mapLibraryTestStorage)
@@ -1198,7 +1211,7 @@ AI（Claude API・OpenAI API）に枝の要約と重要度を提案させ、利�
 - **サーバー**（`server/share/`）: `readShareEnvConfig`（`CF_SHARE_*`、トークン秘密は `CF_SHARE_TOKEN_SECRET` または `AUTH_SECRET`）、D1／R2 クライアント配線、`handleShareApi`／`shareService`、レート制限、404 統一。
 - **API**: `GET/POST /api/share/maps`、`POST .../publish`・`.../links`、`POST /api/share/links/:id/revoke|reissue`、`DELETE /api/share/maps/:id`、`GET /api/share/view/:token`（失効・不明は 404）。
 - **UI**: ヘッダー `ShareControl`／`ShareDialog`（必須 props・Result。一覧は `loading`／`ready`／`error`）。ローカルキャッシュは `draw-my-map.share-local-meta.v1`。閲覧は `/share/[token]` の `ShareViewer`（読み取り専用 Pixi＋折りたたみアウトライン）。`MapEditor`・書き出し・共有操作はマウントしない。
-- **非目標**: Magic Link／パスワード（#64）、他クラウド（#65）、クラウド正本化（#66）、招待限定・パスワード付きリンク（#67）、自動公開・ポーリング（#68）、comment（#69／Phase 38。Phase 38 で実装）。
+- **非目標**: Magic Link／パスワード（#64）、他クラウド（#65）、クラウド正本化（#66）、招待限定・パスワード付きリンク（#67）、自動公開・ポーリング（#68）、comment（#69／Phase 38 で実装）、複数人のリアルタイム edit（Phase 39 で実装）。
 
 ## ノードコメントと解決管理（Phase 38・候補096・097）
 
@@ -1209,6 +1222,19 @@ AI（Claude API・OpenAI API）に枝の要約と重要度を提案させ、利�
 - **API**: トークン経路 `GET/POST /api/share/view/:token/comment-threads`、`POST .../comment-threads/:threadId/replies|resolve|reopen`、`DELETE /api/share/view/:token/comments/:commentId`。所有者経路は同じ形で `/api/share/maps/:id/...`。成否とも `private, no-store`、トークン経路は `Referrer-Policy: no-referrer` も付けます。
 - **クライアント**: API クライアント `services/share/shareCommentsApiClient`。一覧の世代・要求番号と通知は `hooks/useShareCommentsController` が持ち、閲覧ページの `useShareViewerComments` と編集画面の `useMapEditorComments`（ダイアログの開閉は `useMapEditorCommentsDialog`）がそれを使います。
 - **UI**: 共用部品は `components/share/`（`ShareCommentThreadList`・`ShareCommentComposer`・`shareCommentThreadSections` など）。閲覧ページは `ShareCommentsPanel`（ログイン導線は `onLogin` prop で受け取り、`ShareViewerPage` が `signIn` を渡す）とアウトラインの件数バッジ、編集画面はヘッダー／右パネルの入口から `components/layout/MapCommentsDialog` を開きます。学習・プレゼン再生中は開けません。
+- **非目標**: コメントのリアルタイム同期（#83）。文書の同時編集は Phase 39。
+
+## リアルタイム共同編集（Phase 39・候補099・100）
+
+単独編集の正本は従来どおり `localStorage`。**共同編集セッション中だけ** Cloudflare Durable Object（`collab-worker/` の `CollabRoom`）上の Yjs 文書を正本にします。Next の CollabAPI はセッション・短命チケット・seed/export を扱い、Yjs バイナリ同期の常時接続は DO の WebSocket に寄せます。
+
+- **ドメイン**（`domain/collab/`）: MapDocument ↔ Yjs codec（`nodes` は `Y.Map`、`meta.nextId` の atomic increment）、UndoManager（自操作 origin のみ）、入力／開始ガード、固定文言。
+- **サーバー**（`server/collab/`）: `readCollabEnvConfig`（`CF_COLLAB_*`＋共有の `CF_SHARE_*`。チケット秘密は `CF_COLLAB_TICKET_SECRET` または `AUTH_SECRET`）、D1 `collab_sessions`／`collab_participants`、`handleCollabApi`／`collabService`、レート制限シングルトン、`wsUrl` origin は env 正本（`x-forwarded-host` 不使用）、認可応答は `private, no-store`。
+- **API**: `POST /api/collab/sessions`（所有者開始）、`POST /api/collab/join`（edit トークン・ログイン必須。view/comment は 404）、`POST .../sessions/:id/end`（export 後 DO destroy）、`POST .../sessions/:id/leave`（参加者行削除）、`POST .../sessions/:id/ticket`（再発行。参加後の edit リンク revoke は新規 join のみに効き、既存参加者の reissue は session 終了まで可）、`GET .../sessions/:id`、`POST /api/collab/evacuate`（Worker TTL 退避 ingest・service secret。空 body 拒否）。同時接続上限 8 → 429（`getConnectionCount` 失敗は fail-closed）。切断 2 分以内は再接続、超過は脱落。全員切断後 TTL 5 分で成果物退避。
+- **クライアント**（`services/collab/`・`hooks/useMapEditorCollab`）: WS 接続、awareness、セッション終了後の localStorage 反映。共有中なら任意の publish 確認（自動 publish しない）。
+- **UI**: ヘッダー `CollabControl`（接続状態・参加者名・色・開始／退出／終了）。所有者は `/`、参加者は `/collab/[token]`（Referrer-Policy: no-referrer）。presence は他者選択の輪郭色とビューポート枠（ポインタ軌跡なし）。`/share/[token]` には共同編集 UI を載せない。
+- **共有リンク**: `POST .../links` で `permission=edit` を許可（URL `/collab/[token]`）。
+- **非目標**: #66 / #68 / #78–#83（クラウド正本・ポーリング・長時間オフライン完全マージ・音声・モバイル専用 UI・監査ログ・E2E・コメント RT）。
 
 ## 学習と復習（Phase 35・候補088・089）
 
