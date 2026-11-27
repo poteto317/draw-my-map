@@ -36,6 +36,7 @@ export function useRenderedMapScene({
   const {
     learnDisplay,
     taskProgress,
+    commentNodeCounts,
     nodes,
     selectedNodeIds,
     editingNodeId,
@@ -101,6 +102,7 @@ export function useRenderedMapScene({
       learnDisplay,
       nodes: renderNodes,
       taskProgress,
+      commentNodeCounts,
       selectedNodeIds,
       editingNodeId,
       connectionTargetNodeId,
@@ -139,6 +141,7 @@ export function useRenderedMapScene({
     learnDisplay,
     renderNodes,
     taskProgress,
+    commentNodeCounts,
     selectedNodeIds,
     editingNodeId,
     connectionTargetNodeId,

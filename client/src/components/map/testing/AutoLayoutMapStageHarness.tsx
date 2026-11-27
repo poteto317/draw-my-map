@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { MapStage } from "@/components/map/MapStage";
+import { EMPTY_COMMENT_NODE_COUNTS } from "@/components/map/pixi/renderMapNodes";
 import { useNodes } from "@/hooks/useNodes";
 
 type AutoLayoutMapStageHarnessProps = { shortcutsEnabled?: boolean };
@@ -45,6 +46,7 @@ export function AutoLayoutMapStageHarness({ shortcutsEnabled = true }: AutoLayou
         nodes={nodes}
         highlightNodeIds={new Set<number>()}
         pinnedNodeIds={new Set<number>()}
+        commentNodeCounts={EMPTY_COMMENT_NODE_COUNTS}
         focusRequest={null}
         dialogMouseClickedAtRef={{ current: null }}
         selectedNodeId={selectedNodeId}

@@ -48,6 +48,7 @@ const defaultProps = {
   labelEditRequest: null,
   highlightNodeIds: new Set<number>(),
   pinnedNodeIds: new Set<number>(),
+  commentNodeCounts: new Map<number, number>(),
   layoutSnapPrefs: {
     enabled: false,
     showGrid: false,

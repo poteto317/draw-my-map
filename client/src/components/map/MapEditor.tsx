@@ -142,6 +142,7 @@ import { isRestorableFocusTarget } from "@/components/map/isRestorableFocusTarge
 import { resolveOutlineInitialFocusTarget } from "@/components/map/resolveOutlineInitialFocusTarget";
 import { MapStage, type MapStageViewportHandle } from "@/components/map/MapStage";
 import { Minimap } from "@/components/map/Minimap";
+import { EMPTY_COMMENT_NODE_COUNTS } from "@/components/map/pixi/renderMapNodes";
 import { MapViewportZoomControls, ZOOM_FACTOR } from "@/components/map/MapViewportZoomControls";
 import { clampViewportScale, INITIAL_VIEWPORT, zoomViewportAt } from "@/components/map/mapViewport";
 import type { ViewportFrame } from "@/components/map/useViewportFrameNotification";
@@ -2024,6 +2025,7 @@ export function MapEditor({
                 focusRequest={canvasFocus.request}
                 highlightNodeIds={highlightNodeIds}
                 pinnedNodeIds={nodePins.pinnedNodeIds}
+                commentNodeCounts={EMPTY_COMMENT_NODE_COUNTS}
                 isCurrentFocusRequest={canvasFocus.isCurrentRequest}
                 onFocusRequestApplied={viewNavigation.onFocusRequestApplied}
                 onFocusRequestDiscarded={viewNavigation.onFocusRequestDiscarded}
