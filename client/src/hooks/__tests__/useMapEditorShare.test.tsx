@@ -22,18 +22,18 @@ function createApi(overrides: Partial<ShareApiClient> = {}): ShareApiClient {
       ok: true,
       value: {
         sharedMapId: "sm-new",
-        link: { linkId: "l1", url: "https://example.com/share/t", token: "t" },
+        link: { linkId: "l1", url: "https://example.com/share/t", token: "t", permission: "view" },
       },
     }),
     publish: async () => ({ ok: true, value: { revisionId: "r1" } }),
     createLink: async () => ({
       ok: true,
-      value: { linkId: "l2", url: "https://example.com/share/t2", token: "t2" },
+      value: { linkId: "l2", url: "https://example.com/share/t2", token: "t2", permission: "view" },
     }),
     revokeLink: async () => ({ ok: true, value: undefined }),
     reissueLink: async () => ({
       ok: true,
-      value: { linkId: "l3", url: "https://example.com/share/t3", token: "t3" },
+      value: { linkId: "l3", url: "https://example.com/share/t3", token: "t3", permission: "view" },
     }),
     deleteShare: async () => ({ ok: true, value: undefined }),
     viewByToken: async () => ({
@@ -134,7 +134,7 @@ describe("useMapEditorShare", () => {
         ok: true as const,
         value: {
           sharedMapId: "sm-new",
-          link: { linkId: "l1", url: "https://example.com/share/t", token: "t" },
+          link: { linkId: "l1", url: "https://example.com/share/t", token: "t", permission: "view" },
         },
       });
     const api = createApi({
@@ -269,7 +269,7 @@ describe("useMapEditorShare", () => {
         ok: true as const,
         value: {
           sharedMapId: "sm-new",
-          link: { linkId: "l1", url: issuedUrl, token: issuedToken },
+          link: { linkId: "l1", url: issuedUrl, token: issuedToken, permission: "view" as const },
         },
       })),
     });

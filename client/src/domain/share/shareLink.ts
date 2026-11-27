@@ -1,3 +1,5 @@
+import type { ShareLinkPermission } from "@/domain/share/shareLinkPermission";
+
 /** 発行直後だけ返る共有リンク（平文 token は再表示 API なし） */
 export type ShareLinkIssued = {
   linkId: string;
@@ -5,6 +7,7 @@ export type ShareLinkIssued = {
   url: string;
   /** 一度きり。再表示 API なし */
   token: string;
+  permission: ShareLinkPermission;
 };
 
 /** 初回共有（create + publish + link）成功時の値 */

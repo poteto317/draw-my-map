@@ -11,7 +11,7 @@ describe("shareLocalMetaFromCreate", () => {
     expect(shareLocalMetaFromCreate(
       {
         sharedMapId: "sm-1",
-        link: { linkId: "l1", url: "https://example.com/share/t", token: "t" },
+        link: { linkId: "l1", url: "https://example.com/share/t", token: "t", permission: "view" },
       },
       "2026-11-26T00:00:00.000Z",
     )).toEqual({
