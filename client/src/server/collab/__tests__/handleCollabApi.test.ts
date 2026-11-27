@@ -1159,4 +1159,37 @@ describe("Collab API 契約", () => {
     );
     expect(unauth.status).toBe(401);
   });
+
+  it("evacuate の Authorization は長さ一致の偽 Bearer も拒否する", async () => {
+    const store = createMemoryCollabStore();
+    const room = createMemoryRoom();
+    const d = deps({ store, room });
+    expect(
+      (
+        await handleCreateCollabSession(
+          jsonRequest("http://localhost/api/collab/sessions", "POST", {
+            localMapId: "local-1",
+            documentJson: validDocumentJson(),
+          }),
+          d,
+        )
+      ).status,
+    ).toBe(200);
+    const update = room.seeded.get("id-1")!;
+    // "Bearer svc-secret" と同長だが内容が違う
+    const forged = "Bearer svc-secreX";
+    expect(forged.length).toBe(`Bearer ${"svc-secret"}`.length);
+    const unauth = await handleCollabEvacuate(
+      new Request("http://localhost/api/collab/evacuate", {
+        method: "POST",
+        headers: {
+          Authorization: forged,
+          "x-collab-session-id": "id-1",
+        },
+        body: Buffer.from(update),
+      }),
+      { ...d, serviceSecret: "svc-secret" },
+    );
+    expect(unauth.status).toBe(401);
+  });
 });

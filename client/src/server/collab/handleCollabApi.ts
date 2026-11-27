@@ -11,6 +11,7 @@ import {
   type CollabRoomClient,
 } from "@/server/collab/collabRoomClient";
 import { createCollabService, type CollabService } from "@/server/collab/collabService";
+import { authorizeCollabServiceSecret } from "@/server/collab/collabServiceAuth";
 import {
   createCloudflareCollabStore,
   type CollabStore,
@@ -171,9 +172,7 @@ export async function handleCollabEvacuate(
   request: Request,
   deps: CollabApiDeps & { serviceSecret: string },
 ): Promise<Response> {
-  const header = request.headers.get("Authorization") ?? "";
-  const expected = `Bearer ${deps.serviceSecret}`;
-  if (header.length !== expected.length || header !== expected) {
+  if (!authorizeCollabServiceSecret(request.headers.get("Authorization"), deps.serviceSecret)) {
     return collabResultResponse({ ok: false, reason: "unauthenticated" });
   }
   const sessionId = request.headers.get("x-collab-session-id") ?? "";
