@@ -19,6 +19,10 @@ type UseMapStorageAutoSaveOptions = {
   conflictState?: ConflictState;
   onWriteConflict?: () => void;
   onSaveSuccess?: (snapshot: string) => void;
+  /** false のとき autosave／flush を拒否（共同編集中・L-061 E1） */
+  localSaveEnabled?: boolean;
+  /** 後段導出の上書き。指定時は effect／flush 時にこれを読む */
+  getLocalSaveEnabled?: () => boolean;
 };
 
 type UseMapStorageAutoSaveResult = {
@@ -42,8 +46,14 @@ export function useMapStorageAutoSave({
   conflictState,
   onWriteConflict,
   onSaveSuccess,
+  localSaveEnabled = true,
+  getLocalSaveEnabled,
 }: UseMapStorageAutoSaveOptions): UseMapStorageAutoSaveResult {
   const [saveRequestRevision, setSaveRequestRevision] = useState(0);
+  const resolveLocalSaveEnabled = useCallback(
+    () => getLocalSaveEnabled?.() ?? localSaveEnabled,
+    [getLocalSaveEnabled, localSaveEnabled],
+  );
   const [statusEvidence, setStatusEvidence] = useState<{
     confirmedSnapshot: string | null;
     forcedSnapshot: string | null;
@@ -66,6 +76,7 @@ export function useMapStorageAutoSave({
   const conflictStateRef = useRef(conflictState);
   const onWriteConflictRef = useRef(onWriteConflict);
   const onSaveSuccessRef = useRef(onSaveSuccess);
+  const localSaveEnabledRef = useRef(localSaveEnabled);
   const handleWriteResultRef = useRef<(snapshot: string, written: MapBodyWriteResult, forceGeneration: number) => MapFlushResult>(() => ({ status: "unchanged" }));
 
   const confirmedSnapshot = statusEvidence.confirmedSnapshot
@@ -105,6 +116,7 @@ export function useMapStorageAutoSave({
     conflictStateRef.current = conflictState;
     onWriteConflictRef.current = onWriteConflict;
     onSaveSuccessRef.current = onSaveSuccess;
+    localSaveEnabledRef.current = resolveLocalSaveEnabled();
     handleWriteResultRef.current = (snapshot, written, forceGeneration) => {
       if (written.status === "conflict") {
         onWriteConflictRef.current?.();
@@ -157,13 +169,14 @@ export function useMapStorageAutoSave({
     onWriteConflict,
     onSaveSuccess,
     publishNotice,
+    resolveLocalSaveEnabled,
     restoreOrigin,
     writeBody,
   ]);
 
   useEffect(() => {
     if (!hydrated) return;
-    if (conflictState && conflictState !== "none") {
+    if (!resolveLocalSaveEnabled() || (conflictState && conflictState !== "none")) {
       if (pendingTimerRef.current !== null) {
         window.clearTimeout(pendingTimerRef.current);
         pendingTimerRef.current = null;
@@ -179,6 +192,8 @@ export function useMapStorageAutoSave({
 
     const timer = window.setTimeout(() => {
       pendingTimerRef.current = null;
+      // getter は MapEditor 後段で更新されるため、発火時に再評価（L-061）
+      if (!resolveLocalSaveEnabled()) return;
       if (conflictStateRef.current && conflictStateRef.current !== "none") {
         return;
       }
@@ -197,18 +212,27 @@ export function useMapStorageAutoSave({
     currentSnapshot,
     hydrated,
     initialPersistedSnapshot,
+    resolveLocalSaveEnabled,
     saveRequestRevision,
     writeBody,
   ]);
 
   const requestSnapshotSave = useCallback((snapshot: string) => {
+    if (!resolveLocalSaveEnabled()) return;
     forceGenerationRef.current += 1;
     forcedSnapshotRef.current = snapshot;
     setStatusEvidence((previous) => ({ ...previous, forcedSnapshot: snapshot }));
     setSaveRequestRevision((revision) => revision + 1);
-  }, []);
+  }, [resolveLocalSaveEnabled]);
 
   const flushPendingSave = useCallback((): MapFlushResult => {
+    if (!resolveLocalSaveEnabled()) {
+      if (pendingTimerRef.current !== null) {
+        window.clearTimeout(pendingTimerRef.current);
+        pendingTimerRef.current = null;
+      }
+      return { status: "unchanged" };
+    }
     if (conflictStateRef.current === "conflict" || conflictStateRef.current === "externallyDeleted") {
       if (pendingTimerRef.current !== null) {
         window.clearTimeout(pendingTimerRef.current);
@@ -241,7 +265,7 @@ export function useMapStorageAutoSave({
     const forceGeneration = forceGenerationRef.current;
     const written = writeBodyRef.current(snapshot);
     return handleWriteResultRef.current(snapshot, written, forceGeneration);
-  }, []);
+  }, [resolveLocalSaveEnabled]);
 
   const hasSavedBodyThisMount = useCallback(() => hasSavedBodyThisMountRef.current, []);
 

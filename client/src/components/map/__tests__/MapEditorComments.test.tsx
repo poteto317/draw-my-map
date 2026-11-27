@@ -54,7 +54,7 @@ jest.mock("@/domain/voice/speechRecognitionAdapter", () => {
 });
 
 const SHARED_MAP_ID = "sm-1";
-const OWNER: ShareSession = { userId: "u1", email: "a@example.com" };
+const OWNER: ShareSession = { userId: "u1", email: "a@example.com", displayName: null };
 const COMMENTS_URL = `/api/share/maps/${SHARED_MAP_ID}/comment-threads`;
 
 const baseNodesJson = JSON.stringify({

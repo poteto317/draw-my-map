@@ -39,6 +39,10 @@ export interface UseMapConflictControllerOptions {
   replaceMapAndReset: (state: NodeMapState) => void;
   onSaveCurrentAsNewMap?: (name: string, snapshotJson: string) => MapLibraryOperationResult;
   rebaseSnapshot?: (snapshotJson: string) => void;
+  /** false のときタブ競合監視を止める（共同編集中・L-061） */
+  conflictMonitorEnabled?: boolean;
+  /** 後段導出の上書き。指定時はイベント時にこれを読む */
+  getConflictMonitorEnabled?: () => boolean;
 }
 
 export interface UseMapConflictControllerResult {
@@ -68,6 +72,8 @@ export function useMapConflictController({
   replaceMapAndReset,
   onSaveCurrentAsNewMap,
   rebaseSnapshot,
+  conflictMonitorEnabled = true,
+  getConflictMonitorEnabled,
 }: UseMapConflictControllerOptions): UseMapConflictControllerResult {
   const [conflictState, setConflictState] = useState<ConflictState>("none");
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
@@ -78,6 +84,8 @@ export function useMapConflictController({
     sessionNumber: storageSession.sessionNumber,
     getHasPendingEdits,
     storage: storageSession.storage,
+    enabled: conflictMonitorEnabled,
+    getEnabled: getConflictMonitorEnabled,
     onExternalChange: (kind) => {
       setConflictState(kind);
     },

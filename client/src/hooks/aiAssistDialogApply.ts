@@ -14,7 +14,9 @@ export function aiApplyBlockedMessage(blockers: AiAssistEntryBlockers): string |
   const reason = blockers.isExternallyDeleted ? AI_ASSIST_ENTRY_MESSAGES.externallyDeleted
     : blockers.hasConflict ? AI_ASSIST_ENTRY_MESSAGES.conflict
       : blockers.isProtectedMode ? AI_ASSIST_ENTRY_MESSAGES.protected
-        : null;
+        : (typeof blockers.collabBlockedReason === "string" && blockers.collabBlockedReason.length > 0
+          ? blockers.collabBlockedReason
+          : null);
   return reason === null ? null : `適用できませんでした（${reason}）。`;
 }
 

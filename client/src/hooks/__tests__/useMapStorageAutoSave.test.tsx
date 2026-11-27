@@ -713,6 +713,35 @@ describe("useMapStorageAutoSave", () => {
       expect(result.current.hasSavedBodyThisMount()).toBe(false);
     });
 
+    it("localSaveEnabled=false のとき autosave／flush を拒否する（共同編集 E1）", () => {
+      const storage = createTestStorageSession();
+      const { result, rerender } = renderHook(
+        ({ snapshot, localSaveEnabled }) =>
+          useMapStorageAutoSave({
+            currentSnapshot: snapshot,
+            hydrated: true,
+            initialPersistedSnapshot: emptyMapJson,
+            restoreOrigin: "restored",
+            storageMode: "persistent",
+            publishNotice: jest.fn(),
+            writeBody: storage.session.writeBody,
+            clearSaveFailureNotice: jest.fn(),
+            localSaveEnabled,
+          }),
+        { initialProps: { snapshot: emptyMapJson, localSaveEnabled: false } },
+      );
+
+      rerender({ snapshot: changedMapJson, localSaveEnabled: false });
+      act(() => jest.advanceTimersByTime(300));
+      expect(storage.writes).toEqual([]);
+      expect(flushInAct(result.current.flushPendingSave)).toEqual({ status: "unchanged" });
+      expect(storage.writes).toEqual([]);
+
+      act(() => result.current.requestSnapshotSave(changedMapJson));
+      expect(flushInAct(result.current.flushPendingSave)).toEqual({ status: "unchanged" });
+      expect(storage.writes).toEqual([]);
+    });
+
     it("conflictState が conflict または externallyDeleted のとき、新たな自動保存タイマーを発行せず flush も拒否する", () => {
       const storage = createTestStorageSession();
       const { result, rerender } = renderHook(

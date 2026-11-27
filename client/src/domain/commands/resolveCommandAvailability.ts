@@ -56,6 +56,14 @@ const MUTATING_IDS = new Set<CommandId>([
   "outline.begin-edit",
 ]);
 
+/** P36-E18b: 一括／全文置換系。共同編集中は拒否（単発 MUTATING は Yjs経由で残す） */
+const COLLAB_BULK_MUTATING_IDS = new Set<CommandId>([
+  "edit.open-label-replace",
+  "edit.open-branch-move",
+  "edit.open-node-split",
+  "edit.open-node-merge",
+]);
+
 function disabled(reason: string, modeMismatch = false): CommandAvailability {
   return { enabled: false, modeMismatch, disabledReason: reason };
 }
@@ -121,6 +129,15 @@ function resolveVoiceListeningBlockers(
     return disabled(MAP_VOICE_MESSAGES.listeningBlock);
   }
   return null;
+}
+
+function resolveCollabBulkBlockers(
+  id: CommandId,
+  context: CommandAvailabilityContext,
+): CommandAvailability | null {
+  if (context.collabBulkBlockedReason === null) return null;
+  if (!COLLAB_BULK_MUTATING_IDS.has(id)) return null;
+  return disabled(context.collabBulkBlockedReason);
 }
 
 function resolveOperationAvailability(
@@ -282,6 +299,9 @@ export function resolveCommandAvailability(
 
   const voiceBlock = resolveVoiceListeningBlockers(id, context);
   if (voiceBlock !== null) return voiceBlock;
+
+  const collabBulkBlock = resolveCollabBulkBlockers(id, context);
+  if (collabBulkBlock !== null) return collabBulkBlock;
 
   return resolveOperationAvailability(id, context);
 }

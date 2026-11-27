@@ -85,6 +85,8 @@ export type CommandAvailabilityContext = {
   readonly canVoiceInputStart: boolean;
   readonly canVoiceInputStop: boolean;
   readonly voiceStartDisabledReason: string | null;
+  /** P36-E18b パレット MUTATING 一括。非 null なら一括系コマンドを拒否 */
+  readonly collabBulkBlockedReason: string | null;
 };
 
 export type FilteredCommand = {

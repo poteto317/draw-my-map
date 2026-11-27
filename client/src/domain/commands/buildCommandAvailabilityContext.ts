@@ -62,6 +62,7 @@ export type CommandAvailabilityContextInput = {
   readonly canVoiceInputStart: boolean;
   readonly canVoiceInputStop: boolean;
   readonly voiceStartDisabledReason: string | null;
+  readonly collabBulkBlockedReason: string | null;
 };
 
 export function buildCommandAvailabilityContext(
@@ -132,5 +133,6 @@ export function buildCommandAvailabilityContext(
     canVoiceInputStart: input.canVoiceInputStart,
     canVoiceInputStop: input.canVoiceInputStop,
     voiceStartDisabledReason: input.voiceStartDisabledReason,
+    collabBulkBlockedReason: input.collabBulkBlockedReason,
   };
 }

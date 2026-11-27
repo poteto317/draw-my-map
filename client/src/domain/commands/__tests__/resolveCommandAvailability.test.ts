@@ -63,6 +63,7 @@ function baseContext(overrides: Partial<CommandAvailabilityContext> = {}): Comma
     canVoiceInputStart: true,
     canVoiceInputStop: false,
     voiceStartDisabledReason: null,
+    collabBulkBlockedReason: null,
     ...overrides,
   };
 }
@@ -162,6 +163,26 @@ describe("resolveCommandAvailability", () => {
       modeMismatch: false,
       disabledReason: "これ以上上へ移動できません",
     });
+  });
+
+  it("P36-E18b: 共同編集中はパレット MUTATING 一括を拒否し、単発は塞がない", () => {
+    const reason = "共同編集中はこの操作をできません。";
+    const ctx = baseContext({ collabBulkBlockedReason: reason });
+    for (const id of [
+      "edit.open-label-replace",
+      "edit.open-branch-move",
+      "edit.open-node-split",
+      "edit.open-node-merge",
+    ] as const) {
+      expect(resolveCommandAvailability(id, ctx)).toEqual({
+        enabled: false,
+        modeMismatch: false,
+        disabledReason: reason,
+      });
+    }
+    expect(resolveCommandAvailability("edit.duplicate-branch", ctx).enabled).toBe(true);
+    expect(resolveCommandAvailability("edit.delete-node-only", ctx).enabled).toBe(true);
+    expect(resolveCommandAvailability("edit.insert-parent", ctx).enabled).toBe(true);
   });
 
   it("分割・統合は context の専用 disabledReason を使う", () => {

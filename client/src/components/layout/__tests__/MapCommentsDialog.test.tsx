@@ -46,7 +46,7 @@ function thread(overrides: Partial<ShareCommentThreadView> = {}): ShareCommentTh
 }
 
 const NODE_LABELS: ReadonlyMap<number, string> = new Map([[1, "根ノード"], [2, "子ノード"]]);
-const OWNER: ShareSession = { userId: "user-1", email: "owner@example.com" };
+const OWNER: ShareSession = { userId: "user-1", email: "owner@example.com", displayName: null };
 
 /** L-060: 必須 props が型上省略不可であることをコンパイル時に担保する参照 */
 const REQUIRED_MAP_COMMENTS_DIALOG_PROP_KEYS = [
