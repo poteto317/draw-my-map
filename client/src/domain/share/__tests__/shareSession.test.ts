@@ -1,4 +1,9 @@
-import { requireOwner, toShareSession } from "@/domain/share/shareSession";
+import {
+  requireCommenter,
+  requireOwner,
+  toShareCommenter,
+  toShareSession,
+} from "@/domain/share/shareSession";
 import type { ShareSession } from "@/domain/share/shareSession";
 
 describe("toShareSession", () => {
@@ -47,5 +52,39 @@ describe("requireOwner", () => {
       ok: true,
       value: { userId: "google-sub-1", email: "owner@example.com" },
     });
+  });
+});
+
+describe("toShareCommenter", () => {
+  it("id と name があるとき ShareCommenter を返す", () => {
+    expect(toShareCommenter({ id: "google-sub-1", name: "山田" })).toEqual({
+      userId: "google-sub-1",
+      displayName: "山田",
+    });
+  });
+
+  it("user 無し・id 欠落・空は null", () => {
+    expect(toShareCommenter(undefined)).toBeNull();
+    expect(toShareCommenter(null)).toBeNull();
+    expect(toShareCommenter({ name: "山田" })).toBeNull();
+    expect(toShareCommenter({ id: null, name: "山田" })).toBeNull();
+    expect(toShareCommenter({ id: "", name: "山田" })).toBeNull();
+  });
+
+  it("name 欠落・null・空は displayName: null", () => {
+    expect(toShareCommenter({ id: "u1" })).toEqual({ userId: "u1", displayName: null });
+    expect(toShareCommenter({ id: "u1", name: null })).toEqual({ userId: "u1", displayName: null });
+    expect(toShareCommenter({ id: "u1", name: "" })).toEqual({ userId: "u1", displayName: null });
+  });
+});
+
+describe("requireCommenter", () => {
+  it("null は unauthenticated で失敗する", () => {
+    expect(requireCommenter(null)).toEqual({ ok: false, reason: "unauthenticated" });
+  });
+
+  it("投稿者があれば成功する", () => {
+    const commenter = { userId: "u1", displayName: null };
+    expect(requireCommenter(commenter)).toEqual({ ok: true, value: commenter });
   });
 });
