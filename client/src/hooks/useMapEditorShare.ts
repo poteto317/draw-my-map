@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CreateShareValue, ShareLinkIssued } from "@/domain/share/shareLink";
+import type { ShareLinkPermission } from "@/domain/share/shareLinkPermission";
 import type { ShareLocalMetaRead, ShareLocalMetaValue } from "@/domain/share/shareLocalMeta";
 import {
   planShareLocalMetaClear,
@@ -317,14 +318,18 @@ export function useMapEditorShare({
     );
   }, [localMeta, mapId, resolveApi, runOperation, sharedMapId]);
 
-  const onCreateLink = useCallback(async () => {
+  /** 閲覧・コメントリンクの発行を 1 経路にまとめる（権限と成功文言だけが違う） */
+  const createLinkWithPermission = useCallback(async (
+    permission: ShareLinkPermission,
+    successMessage: string,
+  ): Promise<ShareResult<ShareLinkIssued>> => {
     if (sharedMapId === null) {
       const failed = { ok: false as const, reason: "not-shared" };
       setNoticeState((prev) => publishShareError(prev, SHARE_MESSAGES.notShared));
       return failed;
     }
     return runOperation(
-      () => resolveApi().createLink(sharedMapId, "view"),
+      () => resolveApi().createLink(sharedMapId, permission),
       (link) => {
         const next = shareLocalMetaWithActiveLink(sharedMapId, presentMetaValue(localMeta));
         const plan = planShareLocalMetaPersist(writeMeta(getStorageRef.current, mapId, next), next);
@@ -332,9 +337,19 @@ export function useMapEditorShare({
         setLastIssuedLink(link);
         return applied;
       },
-      SHARE_MESSAGES.createLinkSuccess,
+      successMessage,
     );
   }, [localMeta, mapId, resolveApi, runOperation, sharedMapId]);
+
+  const onCreateLink = useCallback(
+    () => createLinkWithPermission("view", SHARE_MESSAGES.createLinkSuccess),
+    [createLinkWithPermission],
+  );
+
+  const onCreateCommentLink = useCallback(
+    () => createLinkWithPermission("comment", SHARE_MESSAGES.createCommentLinkSuccess),
+    [createLinkWithPermission],
+  );
 
   const onRevokeLink = useCallback(async (linkId: string) => {
     return runOperation(
@@ -430,6 +445,7 @@ export function useMapEditorShare({
     onCreateShare,
     onPublish,
     onCreateLink,
+    onCreateCommentLink,
     onRevokeLink,
     onReissueLink,
     onDeleteShare,
