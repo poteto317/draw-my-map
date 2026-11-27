@@ -324,7 +324,7 @@ export function useMapEditorShare({
       return failed;
     }
     return runOperation(
-      () => resolveApi().createLink(sharedMapId),
+      () => resolveApi().createLink(sharedMapId, "view"),
       (link) => {
         const next = shareLocalMetaWithActiveLink(sharedMapId, presentMetaValue(localMeta));
         const plan = planShareLocalMetaPersist(writeMeta(getStorageRef.current, mapId, next), next);
@@ -370,7 +370,8 @@ export function useMapEditorShare({
             linkId,
             {
               id: link.linkId,
-              permission: "view",
+              // 旧リンクの値から推測せず、再発行 API の確定値を使う
+              permission: link.permission,
               createdAt,
               revokedAt: null,
               expiresAt: null,

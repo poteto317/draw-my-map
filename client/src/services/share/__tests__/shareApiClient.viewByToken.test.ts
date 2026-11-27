@@ -11,15 +11,18 @@ describe("createShareApiClient.viewByToken", () => {
     });
   });
 
-  it("成功応答をそのまま返す", async () => {
+  it.each(["view", "comment", "edit"])("成功応答（permission: %s）を生値のまま返す", async (permission) => {
     const client = createShareApiClient(async () => ({
       ok: true,
       status: 200,
-      json: async () => ({ ok: true, value: { documentJson: "{\"version\":3,\"layoutMode\":\"manual\",\"nodes\":[]}" } }),
+      json: async () => ({
+        ok: true,
+        value: { documentJson: "{\"version\":3,\"layoutMode\":\"manual\",\"nodes\":[]}", permission },
+      }),
     } as Response));
     await expect(client.viewByToken("tok")).resolves.toEqual({
       ok: true,
-      value: { documentJson: "{\"version\":3,\"layoutMode\":\"manual\",\"nodes\":[]}" },
+      value: { documentJson: "{\"version\":3,\"layoutMode\":\"manual\",\"nodes\":[]}", permission },
     });
   });
 });
