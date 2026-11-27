@@ -1194,11 +1194,21 @@ AI（Claude API・OpenAI API）に枝の要約と重要度を提案させ、利�
 
 編集の正本は従来どおり `localStorage`（MapLibrary）。公開の正本は Cloudflare D1（メタ）＋ R2（MapDocument V3 スナップショット）です。所有者は Auth.js Google（`src/auth.ts`・`/api/auth/[...nextauth]`）で識別し、未ログインでもローカル編集は可能です。共有操作だけログイン必須です。
 
-- **ドメイン**（`domain/share/`）: `tokenHash`・`assertViewPermission`・publish／リンク計画・`shareLocalMeta`（未共有／present／read-error を分離）・固定文言 `shareMessages`・`ShareResult`。
+- **ドメイン**（`domain/share/`）: `tokenHash`・`shareLinkPermission`・publish／リンク計画・`shareLocalMeta`（未共有／present／read-error を分離）・固定文言 `shareMessages`・`ShareResult`。
 - **サーバー**（`server/share/`）: `readShareEnvConfig`（`CF_SHARE_*`、トークン秘密は `CF_SHARE_TOKEN_SECRET` または `AUTH_SECRET`）、D1／R2 クライアント配線、`handleShareApi`／`shareService`、レート制限、404 統一。
 - **API**: `GET/POST /api/share/maps`、`POST .../publish`・`.../links`、`POST /api/share/links/:id/revoke|reissue`、`DELETE /api/share/maps/:id`、`GET /api/share/view/:token`（失効・不明は 404）。
 - **UI**: ヘッダー `ShareControl`／`ShareDialog`（必須 props・Result。一覧は `loading`／`ready`／`error`）。ローカルキャッシュは `draw-my-map.share-local-meta.v1`。閲覧は `/share/[token]` の `ShareViewer`（読み取り専用 Pixi＋折りたたみアウトライン）。`MapEditor`・書き出し・共有操作はマウントしない。
-- **非目標**: Magic Link／パスワード（#64）、他クラウド（#65）、クラウド正本化（#66）、招待限定・パスワード付きリンク（#67）、自動公開・ポーリング（#68）、comment（#69／Phase 38）。
+- **非目標**: Magic Link／パスワード（#64）、他クラウド（#65）、クラウド正本化（#66）、招待限定・パスワード付きリンク（#67）、自動公開・ポーリング（#68）、comment（#69／Phase 38。Phase 38 で実装）。
+
+## ノードコメントと解決管理（Phase 38・候補096・097）
+
+コメントの正本は Cloudflare D1 です（公開スナップショットの R2 とローカルの MapDocument には載せません）。閲覧側は `comment` 権限のリンク（`/share/[token]`）からだけ書け、所有者は編集画面から同じスレッドを読み書き・解決します。投稿者は Auth.js Google で識別し、表示名は Google アカウントの名前をサーバーで確定します（リクエストの表示名は受け取りません）。
+
+- **ドメイン**（`domain/share/`）: リンク権限 `shareLinkPermission`、コメントの型 `shareComment`・上限 `shareCommentLimits`・本文／表示名の正規化、可否 `shareCommentCapabilities`、公開スナップショットのノードでの振り分け `classifyShareCommentThreads`（未解決／解決済み／削除されたノード）、一覧の差し替え `shareCommentListMutations`、固定文言 `shareCommentMessages`（`SHARE_COMMENT_MESSAGES` が文言の正本）と reason → 文言キーの対応 `shareCommentOperationMessages`、開く可否 `shareCommentsOpenGuards`。
+- **サーバー**（`server/share/`）: D1 のスレッド・コメント `shareCommentStore`、アクセス解決（トークン経路／所有者経路）と操作 `shareCommentService`、HTTP 層 `handleShareCommentsApi`（判定順は経路のレート制限 → アクセス解決の 404／401 → 書込みの枠 → 本文の検証 → 操作）。レート制限のキーは `shareRateLimit` の `shareViewRateKeys`（IP キーが先、トークンは keyed hash）・`shareOwnerRateKey` を閲覧 API・所有者 API と共用し、トークン経路の応答ヘッダーは `shareResponses` の `withViewResponseHeaders`、JSON 本文の読取は `shareBody` の `readJsonBody` を使います（`handleShareApi` から受け取るのは `ShareApiDeps` と `clientIpFromRequest` だけです）。
+- **API**: トークン経路 `GET/POST /api/share/view/:token/comment-threads`、`POST .../comment-threads/:threadId/replies|resolve|reopen`、`DELETE /api/share/view/:token/comments/:commentId`。所有者経路は同じ形で `/api/share/maps/:id/...`。成否とも `private, no-store`、トークン経路は `Referrer-Policy: no-referrer` も付けます。
+- **クライアント**: API クライアント `services/share/shareCommentsApiClient`。一覧の世代・要求番号と通知は `hooks/useShareCommentsController` が持ち、閲覧ページの `useShareViewerComments` と編集画面の `useMapEditorComments`（ダイアログの開閉は `useMapEditorCommentsDialog`）がそれを使います。
+- **UI**: 共用部品は `components/share/`（`ShareCommentThreadList`・`ShareCommentComposer`・`shareCommentThreadSections` など）。閲覧ページは `ShareCommentsPanel`（ログイン導線は `onLogin` prop で受け取り、`ShareViewerPage` が `signIn` を渡す）とアウトラインの件数バッジ、編集画面はヘッダー／右パネルの入口から `components/layout/MapCommentsDialog` を開きます。学習・プレゼン再生中は開けません。
 
 ## 学習と復習（Phase 35・候補088・089）
 
