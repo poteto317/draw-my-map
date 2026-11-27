@@ -26,9 +26,9 @@ function createApi(overrides: Partial<ShareApiClient> = {}): ShareApiClient {
       },
     }),
     publish: async () => ({ ok: true, value: { revisionId: "r1" } }),
-    createLink: async () => ({
+    createLink: async (_sharedMapId, permission) => ({
       ok: true,
-      value: { linkId: "l2", url: "https://example.com/share/t2", token: "t2", permission: "view" },
+      value: { linkId: "l2", url: "https://example.com/share/t2", token: "t2", permission },
     }),
     revokeLink: async () => ({ ok: true, value: undefined }),
     reissueLink: async () => ({
@@ -38,7 +38,7 @@ function createApi(overrides: Partial<ShareApiClient> = {}): ShareApiClient {
     deleteShare: async () => ({ ok: true, value: undefined }),
     viewByToken: async () => ({
       ok: true,
-      value: { documentJson: "{\"version\":3,\"layoutMode\":\"manual\",\"nodes\":[]}" },
+      value: { documentJson: "{\"version\":3,\"layoutMode\":\"manual\",\"nodes\":[]}", permission: "view" },
     }),
   };
   return {

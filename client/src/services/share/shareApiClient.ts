@@ -1,4 +1,5 @@
 import type { CreateShareValue, ShareLinkIssued } from "@/domain/share/shareLink";
+import type { ShareLinkPermission } from "@/domain/share/shareLinkPermission";
 import type { ShareListItem } from "@/domain/share/shareLocalMetaProjection";
 import type { ShareResult } from "@/domain/share/shareResult";
 
@@ -7,7 +8,8 @@ export type ShareListItemClient = ShareListItem;
 
 type FetchLike = typeof fetch;
 
-async function parseShareResult<T>(response: Response): Promise<ShareResult<T>> {
+/** API 応答本文を ShareResult へ正規化する（JSON でない・ok が無い応答は invalid-response） */
+export async function parseShareResult<T>(response: Response): Promise<ShareResult<T>> {
   let body: unknown;
   try {
     body = await response.json();
@@ -43,14 +45,21 @@ export type ShareApiClient = {
     sharedMapId: string,
     input: { documentJson: string },
   ) => Promise<ShareResult<{ revisionId: string }>>;
-  createLink: (sharedMapId: string) => Promise<ShareResult<ShareLinkIssued>>;
+  createLink: (
+    sharedMapId: string,
+    permission: ShareLinkPermission,
+  ) => Promise<ShareResult<ShareLinkIssued>>;
   revokeLink: (linkId: string) => Promise<ShareResult<void>>;
   reissueLink: (linkId: string) => Promise<ShareResult<ShareLinkIssued>>;
   deleteShare: (sharedMapId: string) => Promise<ShareResult<void>>;
-  viewByToken: (token: string) => Promise<ShareResult<{ documentJson: string }>>;
+  /** permission はサーバーの生値（planShareViewLoad で parse する） */
+  viewByToken: (
+    token: string,
+  ) => Promise<ShareResult<{ documentJson: string; permission: string }>>;
 };
 
-function resolveFetch(fetchImpl: FetchLike | undefined): FetchLike {
+/** 注入された fetch、無ければ globalThis.fetch を返す */
+export function resolveFetch(fetchImpl: FetchLike | undefined): FetchLike {
   if (fetchImpl) return fetchImpl;
   const globalFetch = globalThis.fetch;
   if (typeof globalFetch !== "function") {
@@ -82,11 +91,11 @@ export function createShareApiClient(fetchImpl?: FetchLike): ShareApiClient {
       });
       return parseShareResult<{ revisionId: string }>(response);
     },
-    async createLink(sharedMapId) {
+    async createLink(sharedMapId, permission) {
       const response = await doFetch(`/api/share/maps/${encodeURIComponent(sharedMapId)}/links`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ permission: "view" }),
+        body: JSON.stringify({ permission }),
       });
       return parseShareResult<ShareLinkIssued>(response);
     },
@@ -113,7 +122,7 @@ export function createShareApiClient(fetchImpl?: FetchLike): ShareApiClient {
         const response = await doFetch(`/api/share/view/${encodeURIComponent(token)}`, {
           method: "GET",
         });
-        return await parseShareResult<{ documentJson: string }>(response);
+        return await parseShareResult<{ documentJson: string; permission: string }>(response);
       } catch {
         return { ok: false, reason: "network-error" };
       }

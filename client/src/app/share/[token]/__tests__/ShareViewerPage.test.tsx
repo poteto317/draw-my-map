@@ -49,7 +49,7 @@ describe("ShareViewerPage", () => {
   it("GET /api/share/view/[token] 成功で document を表示する", async () => {
     global.fetch = jest.fn(async (input: RequestInfo | URL) => {
       expect(String(input)).toBe("/api/share/view/tok-abc");
-      return jsonResponse({ ok: true, value: { documentJson: documentJson() } });
+      return jsonResponse({ ok: true, value: { documentJson: documentJson(), permission: "view" } });
     }) as typeof fetch;
 
     render(<ShareViewerPage token="tok-abc" />);
@@ -79,7 +79,7 @@ describe("ShareViewerPage", () => {
     global.fetch = jest.fn(async () =>
       jsonResponse({
         ok: true,
-        value: { documentJson: serializeMapDocument(createMapDocument([], "manual")) },
+        value: { documentJson: serializeMapDocument(createMapDocument([], "manual")), permission: "view" },
       }),
     ) as typeof fetch;
 
@@ -104,7 +104,7 @@ describe("ShareViewerPage", () => {
 
   it("壊れた documentJson は viewLoadFailed", async () => {
     global.fetch = jest.fn(async () =>
-      jsonResponse({ ok: true, value: { documentJson: "{" } }),
+      jsonResponse({ ok: true, value: { documentJson: "{", permission: "view" } }),
     ) as typeof fetch;
 
     render(<ShareViewerPage token="tok-bad-json" />);
@@ -117,7 +117,7 @@ describe("ShareViewerPage", () => {
   it("map / outline をページ内 state で切替える", async () => {
     const user = userEvent.setup();
     global.fetch = jest.fn(async () =>
-      jsonResponse({ ok: true, value: { documentJson: documentJson() } }),
+      jsonResponse({ ok: true, value: { documentJson: documentJson(), permission: "view" } }),
     ) as typeof fetch;
 
     render(<ShareViewerPage token="tok-mode" />);
