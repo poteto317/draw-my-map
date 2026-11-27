@@ -6,6 +6,10 @@ import {
   SHARE_MAX_BODY_BYTES,
 } from "@/server/share/shareBody";
 import {
+  createCloudflareShareCommentStore,
+  type ShareCommentStore,
+} from "@/server/share/shareCommentStore";
+import {
   processShareOwnerRateLimiter,
   processShareViewRateLimiter,
   type ShareRateLimiter,
@@ -31,6 +35,8 @@ export type ShareApiDeps = {
   publicOrigin: string;
   /** テスト用。省略時は d1+r2 から生成 */
   store?: ShareStore;
+  /** テスト用。省略時は d1 から生成 */
+  commentStore?: ShareCommentStore;
   service?: ShareService;
   ownerRateLimiter?: ShareRateLimiter;
   viewRateLimiter?: ShareRateLimiter;
@@ -45,6 +51,7 @@ function resolveService(deps: ShareApiDeps): ShareService {
   const store = deps.store ?? createCloudflareShareStore(deps.d1, deps.r2);
   return createShareService({
     store,
+    commentStore: deps.commentStore ?? createCloudflareShareCommentStore(deps.d1),
     tokenSecret: deps.tokenSecret,
     publicOrigin: deps.publicOrigin,
     nowIso: deps.nowIso,
@@ -176,8 +183,11 @@ export async function handleCreateShareLink(
     if ("expiresAt" in record || "expires_at" in record) {
       return shareResultResponse({ ok: false, reason: "invalid-request" });
     }
-    const permission =
-      record.permission === undefined ? undefined : String(record.permission);
+    const permission = record.permission;
+    // 省略時は view 既定。文字列以外（配列・数値・null など）は変換せず拒否する
+    if (permission !== undefined && typeof permission !== "string") {
+      return shareResultResponse({ ok: false, reason: "invalid-permission" });
+    }
     const result = await resolveService(deps).createLink(session, mapId, { permission });
     return shareResultResponse(result);
   });

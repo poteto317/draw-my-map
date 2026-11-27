@@ -1,22 +1,31 @@
 import { createHash, randomBytes } from "node:crypto";
-import { assertViewPermission } from "@/domain/share/assertViewPermission";
 import { parseMapDocumentJson } from "@/domain/persistence/mapDocumentCodec";
 import { planPublishTransition } from "@/domain/share/planPublishTransition";
 import { planShareLinkCreate } from "@/domain/share/planShareLinkCreate";
 import type { CreateShareValue, ShareLinkIssued } from "@/domain/share/shareLink";
+import {
+  assertIssuableLinkPermission,
+  parseShareLinkPermission,
+  type ShareLinkPermission,
+} from "@/domain/share/shareLinkPermission";
 import type { ShareListItem } from "@/domain/share/shareLocalMetaProjection";
 import type { ShareResult } from "@/domain/share/shareResult";
 import { requireOwner, type ShareSession } from "@/domain/share/shareSession";
+import { loadCurrentShareDocument } from "@/server/share/loadCurrentShareDocument";
+import { resolveShareLinkByToken } from "@/server/share/resolveShareLinkByToken";
+import type { ShareCommentStore } from "@/server/share/shareCommentStore";
 import type {
   ShareLinkRecord,
   SharedMapRecord,
   ShareStore,
 } from "@/server/share/shareStore";
+import { isD1MissingTableError } from "@/services/share/d1Client";
 
 export type { ShareListItem };
 
 export type ShareServiceDeps = {
   store: ShareStore;
+  commentStore: ShareCommentStore;
   tokenSecret: string;
   publicOrigin: string;
   nowIso?: () => string;
@@ -48,15 +57,17 @@ function toIssued(
   linkId: string,
   token: string,
   origin: string,
+  permission: ShareLinkPermission,
 ): ShareLinkIssued {
   return {
     linkId,
     url: buildViewUrl(origin, token),
     token,
+    permission,
   };
 }
 
-async function requireOwnedMap(
+export async function requireOwnedMap(
   store: ShareStore,
   session: ShareSession,
   mapId: string,
@@ -86,6 +97,15 @@ async function requireOwnedLink(
   return { ok: true, value: { link, map } };
 }
 
+/** Phase 38 の DDL 未実行（コメントの表が無い）だけは許容し、それ以外の失敗は投げ直す */
+async function ignoreMissingCommentTables(run: () => Promise<void>): Promise<void> {
+  try {
+    await run();
+  } catch (error) {
+    if (!isD1MissingTableError(error)) throw error;
+  }
+}
+
 function validateDocumentJson(documentJson: string): ShareResult<string> {
   const parsed = parseMapDocumentJson(documentJson);
   if (!parsed.ok) return { ok: false, reason: "invalid-document" };
@@ -96,7 +116,7 @@ export function createShareService(deps: ShareServiceDeps) {
   const nowIso = deps.nowIso ?? (() => new Date().toISOString());
   const createId = deps.createId ?? defaultId;
   const createToken = deps.createToken ?? defaultToken;
-  const { store, tokenSecret, publicOrigin } = deps;
+  const { store, commentStore, tokenSecret, publicOrigin } = deps;
 
   return {
     async listMaps(session: ShareSession): Promise<ShareResult<ShareListItem[]>> {
@@ -167,6 +187,7 @@ export function createShareService(deps: ShareServiceDeps) {
         sharedMapId,
         token,
         secret: tokenSecret,
+        permission: "view",
       });
 
       try {
@@ -226,7 +247,7 @@ export function createShareService(deps: ShareServiceDeps) {
           ok: true,
           value: {
             sharedMapId,
-            link: toIssued(linkId, token, publicOrigin),
+            link: toIssued(linkId, token, publicOrigin, linkPlan.permission),
           },
         };
       } catch {
@@ -287,8 +308,7 @@ export function createShareService(deps: ShareServiceDeps) {
       if (owned.value.currentRevisionId === null) {
         return { ok: false, reason: "not-published" };
       }
-      const permission = input.permission ?? "view";
-      const permitted = assertViewPermission(permission);
+      const permitted = assertIssuableLinkPermission(input.permission ?? "view");
       if (!permitted.ok) return permitted;
 
       const linkId = createId();
@@ -299,6 +319,7 @@ export function createShareService(deps: ShareServiceDeps) {
         sharedMapId: mapId,
         token,
         secret: tokenSecret,
+        permission: permitted.value,
       });
 
       try {
@@ -311,7 +332,7 @@ export function createShareService(deps: ShareServiceDeps) {
           revokedAt: null,
           expiresAt: plan.expiresAt,
         });
-        return { ok: true, value: toIssued(linkId, token, publicOrigin) };
+        return { ok: true, value: toIssued(linkId, token, publicOrigin, plan.permission) };
       } catch {
         return { ok: false, reason: "storage-error" };
       }
@@ -343,6 +364,11 @@ export function createShareService(deps: ShareServiceDeps) {
       if (owned.value.link.revokedAt !== null) {
         return { ok: false, reason: "not-found" };
       }
+      // 旧リンクの権限を引き継ぐ。解釈できない権限のリンクは存在しないものとして扱う
+      const permission = parseShareLinkPermission(owned.value.link.permission);
+      if (permission === null) {
+        return { ok: false, reason: "not-found" };
+      }
 
       const newLinkId = createId();
       const token = createToken();
@@ -352,6 +378,7 @@ export function createShareService(deps: ShareServiceDeps) {
         sharedMapId: owned.value.map.id,
         token,
         secret: tokenSecret,
+        permission,
       });
 
       try {
@@ -381,7 +408,7 @@ export function createShareService(deps: ShareServiceDeps) {
         return { ok: false, reason: "storage-error" };
       }
 
-      return { ok: true, value: toIssued(newLinkId, token, publicOrigin) };
+      return { ok: true, value: toIssued(newLinkId, token, publicOrigin, plan.permission) };
     },
 
     async deleteShare(
@@ -393,7 +420,7 @@ export function createShareService(deps: ShareServiceDeps) {
       const revokedAt = nowIso();
 
       try {
-        // 順序固定: 全リンク失効 → current null → 全 R2 削除 → DB 削除
+        // 順序固定: 全リンク失効 → current null → 全 R2 削除 → DB 削除（リンク・リビジョン・コメント・スレッド・マップ）
         await store.revokeAllLinksByMap(mapId, revokedAt);
         await store.setCurrentRevision(mapId, null, revokedAt);
         const revisions = await store.listRevisionsByMap(mapId);
@@ -402,6 +429,8 @@ export function createShareService(deps: ShareServiceDeps) {
         }
         await store.deleteLinksByMap(mapId);
         await store.deleteRevisionsByMap(mapId);
+        await ignoreMissingCommentTables(() => commentStore.deleteCommentsByMap(mapId));
+        await ignoreMissingCommentTables(() => commentStore.deleteThreadsByMap(mapId));
         await store.deleteMap(mapId);
         return { ok: true, value: { sharedMapId: mapId } };
       } catch {
@@ -411,43 +440,18 @@ export function createShareService(deps: ShareServiceDeps) {
 
     async viewByToken(
       token: string,
-    ): Promise<ShareResult<{ documentJson: string }>> {
-      if (!isNonEmptyString(token)) {
-        return { ok: false, reason: "not-found" };
-      }
-      try {
-        const hash = planShareLinkCreate({
-          id: "probe",
-          sharedMapId: "probe",
-          token,
-          secret: tokenSecret,
-        }).tokenHash;
-        const link = await store.findLinkByTokenHash(hash);
-        if (!link || link.revokedAt !== null) {
-          return { ok: false, reason: "not-found" };
-        }
-        const permitted = assertViewPermission(link.permission);
-        if (!permitted.ok) return { ok: false, reason: "not-found" };
-
-        const map = await store.getMap(link.sharedMapId);
-        if (!map || map.currentRevisionId === null) {
-          return { ok: false, reason: "not-found" };
-        }
-        const revision = await store.getRevision(map.currentRevisionId);
-        if (!revision) return { ok: false, reason: "not-found" };
-        const bytes = await store.getDocument(revision.r2Key);
-        if (!bytes) return { ok: false, reason: "not-found" };
-        // publish 時に保存した contentSha256 があれば取得バイト列と照合（改ざん・破損・取り違え）
-        if (isNonEmptyString(revision.contentSha256)) {
-          const actualSha256 = createHash("sha256").update(bytes).digest("hex");
-          if (actualSha256 !== revision.contentSha256) {
-            return { ok: false, reason: "storage-error" };
-          }
-        }
-        return { ok: true, value: { documentJson: new TextDecoder().decode(bytes) } };
-      } catch {
-        return { ok: false, reason: "storage-error" };
-      }
+    ): Promise<ShareResult<{ documentJson: string; permission: ShareLinkPermission }>> {
+      const resolved = await resolveShareLinkByToken(store, token, tokenSecret);
+      if (!resolved.ok) return resolved;
+      const loaded = await loadCurrentShareDocument(store, resolved.value.map);
+      if (!loaded.ok) return loaded;
+      return {
+        ok: true,
+        value: {
+          documentJson: loaded.value.documentJson,
+          permission: resolved.value.permission,
+        },
+      };
     },
   };
 }

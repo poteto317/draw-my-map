@@ -22,17 +22,17 @@ function createProps(overrides: Partial<ShareDialogProps> = {}): ShareDialogProp
     busy: false,
     onCreateShare: jest.fn(async () => ({ ok: true as const, value: {
       sharedMapId: "sm-1",
-      link: { linkId: "l1", url: "https://example.com/share/t", token: "t" },
+      link: { linkId: "l1", url: "https://example.com/share/t", token: "t", permission: "view" as const },
     } })),
     onPublish: jest.fn(async () => ({ ok: true as const, value: { revisionId: "r1" } })),
     onCreateLink: jest.fn(async () => ({
       ok: true as const,
-      value: { linkId: "l2", url: "https://example.com/share/t2", token: "t2" },
+      value: { linkId: "l2", url: "https://example.com/share/t2", token: "t2", permission: "view" as const },
     })),
     onRevokeLink: jest.fn(async () => ({ ok: true as const, value: undefined })),
     onReissueLink: jest.fn(async () => ({
       ok: true as const,
-      value: { linkId: "l3", url: "https://example.com/share/t3", token: "t3" },
+      value: { linkId: "l3", url: "https://example.com/share/t3", token: "t3", permission: "view" as const },
     })),
     onDeleteShare: jest.fn(async () => ({ ok: true as const, value: undefined })),
     onLogin: jest.fn(),
@@ -123,7 +123,7 @@ describe("ShareDialog", () => {
       ok: true as const,
       value: {
         sharedMapId: "sm-1",
-        link: { linkId: "l1", url: "https://example.com/share/t", token: "t" },
+        link: { linkId: "l1", url: "https://example.com/share/t", token: "t", permission: "view" as const },
       },
     }));
 
