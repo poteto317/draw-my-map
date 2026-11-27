@@ -1,5 +1,10 @@
 import { LEARN_LABEL_PLACEHOLDER } from "@/domain/map/mapLearnMode";
-import { renderMapNodes } from "@/components/map/pixi/renderMapNodes";
+import {
+  COMMENT_BADGE_RADIUS,
+  EMPTY_COMMENT_NODE_COUNTS,
+  formatCommentBadgeText,
+  renderMapNodes,
+} from "@/components/map/pixi/renderMapNodes";
 import { createPixiTestHarness } from "../testing/pixiTestHarness";
 import type { Node } from "@/types/node";
 import { createTestNode } from "@/testing/createTestNode";
@@ -26,6 +31,7 @@ function render(overrides: Partial<{
   const harness = createPixiTestHarness();
   const onNodePointerDown = overrides.onNodePointerDown ?? jest.fn();
   renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+    commentNodeCounts: new Map(),
     nodes: [node],
     learnDisplay: inactiveLearnDisplay,
     taskProgress: emptyTaskProgress,
@@ -46,6 +52,7 @@ describe("renderMapNodes", () => {
     const labeled = createTestNode({ id: 1, label: "とても長いラベル" });
     const harness = createPixiTestHarness();
     renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+      commentNodeCounts: new Map(),
       nodes: [labeled],
       learnDisplay: { learningActive: true, revealedNodeIds: new Set<number>() },
       taskProgress: emptyTaskProgress,
@@ -69,6 +76,7 @@ describe("renderMapNodes", () => {
     const labeled = createTestNode({ id: 1, label: "秘密" });
     const harness = createPixiTestHarness();
     renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+      commentNodeCounts: new Map(),
       nodes: [labeled],
       learnDisplay: { learningActive: false, revealedNodeIds: new Set([1]) },
       taskProgress: emptyTaskProgress,
@@ -89,6 +97,7 @@ describe("renderMapNodes", () => {
     const draw = (editingNodeId: number | null) => {
       const harness = createPixiTestHarness();
       renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+        commentNodeCounts: new Map(),
         nodes: [node, createTestNode({ id: 2, x: 200 })],
         learnDisplay: inactiveLearnDisplay,
         taskProgress: new Map([[1, { percent: 33, remaining: 2 }], [2, { percent: 100, remaining: 0 }]]),
@@ -145,6 +154,7 @@ describe("renderMapNodes", () => {
     });
     const harness = createPixiTestHarness();
     renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+      commentNodeCounts: new Map(),
       nodes: [styled],
       learnDisplay: inactiveLearnDisplay,
       taskProgress: emptyTaskProgress,
@@ -206,6 +216,7 @@ describe("renderMapNodes", () => {
     });
     const harness = createPixiTestHarness();
     renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+      commentNodeCounts: new Map(),
       nodes: [emptyStyled],
       learnDisplay: inactiveLearnDisplay,
       taskProgress: emptyTaskProgress,
@@ -239,6 +250,7 @@ describe("renderMapNodes", () => {
     });
     const harness = createPixiTestHarness();
     renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+      commentNodeCounts: new Map(),
       nodes: [node, second, third],
       learnDisplay: inactiveLearnDisplay,
       taskProgress: emptyTaskProgress,
@@ -331,6 +343,7 @@ describe("renderMapNodes", () => {
     });
     const harness = createPixiTestHarness();
     renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+      commentNodeCounts: new Map(),
       nodes: [node, second],
       learnDisplay: inactiveLearnDisplay,
       taskProgress: emptyTaskProgress,
@@ -358,6 +371,7 @@ describe("renderMapNodes", () => {
   it("node keyのvisibility targetでPixi表示とinteractionを制御する", () => {
     const harness = createPixiTestHarness();
     const targets = renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+      commentNodeCounts: new Map(),
       learnDisplay: inactiveLearnDisplay,
       nodes: [node], taskProgress: emptyTaskProgress, selectedNodeIds: [], editingNodeId: null, connectionTargetNodeId: null,
       siblingReorderSourceNodeId: null, onNodePointerDown: jest.fn(), visibleKeys: new Set(["node:1"]),
@@ -393,6 +407,7 @@ describe("renderMapNodes", () => {
     function renderIllustrated(illustrationTextures?: ReadonlyMap<string, Texture>) {
       const harness = createPixiTestHarness();
       renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+        commentNodeCounts: new Map(),
         learnDisplay: inactiveLearnDisplay,
         nodes: [illustratedNode], taskProgress: emptyTaskProgress, selectedNodeIds: [], editingNodeId: null, connectionTargetNodeId: null,
         siblingReorderSourceNodeId: null, onNodePointerDown: jest.fn(), illustrationTextures,
@@ -435,6 +450,7 @@ describe("renderMapNodes", () => {
     function renderReorder(siblingReorderSourceNodeId: number | null) {
       const harness = createPixiTestHarness();
       renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+        commentNodeCounts: new Map(),
         learnDisplay: inactiveLearnDisplay,
         nodes: [firstNode, draggedNode], taskProgress: emptyTaskProgress, selectedNodeIds: [2], editingNodeId: null,
         connectionTargetNodeId: null, siblingReorderSourceNodeId, onNodePointerDown: jest.fn(),
@@ -485,6 +501,7 @@ describe("renderMapNodes", () => {
     function renderWithLinks(siblingReorderSourceNodeId: number | null = null) {
       const harness = createPixiTestHarness();
       renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+        commentNodeCounts: new Map(),
         learnDisplay: inactiveLearnDisplay,
         nodes: [node, linkedNode], taskProgress: emptyTaskProgress, selectedNodeIds: [], editingNodeId: null, connectionTargetNodeId: null,
         siblingReorderSourceNodeId, onNodePointerDown: jest.fn(),
@@ -523,6 +540,7 @@ describe("renderMapNodes", () => {
     it("ラベルの編集中も印は描く（クリックはノードの Container が受ける）", () => {
       const harness = createPixiTestHarness();
       renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+        commentNodeCounts: new Map(),
         learnDisplay: inactiveLearnDisplay,
         nodes: [linkedNode], taskProgress: emptyTaskProgress, selectedNodeIds: [2], editingNodeId: 2, connectionTargetNodeId: null,
         siblingReorderSourceNodeId: null, onNodePointerDown: jest.fn(), visibleKeys: new Set(["node:2"]),
@@ -549,6 +567,7 @@ describe("renderMapNodes", () => {
       });
       const harness = createPixiTestHarness();
       renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+        commentNodeCounts: new Map(),
         nodes: [node, locked],
         learnDisplay: inactiveLearnDisplay,
         taskProgress: emptyTaskProgress,
@@ -584,6 +603,7 @@ describe("renderMapNodes", () => {
       });
       const harness = createPixiTestHarness();
       renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+        commentNodeCounts: new Map(),
         nodes: [node, pinned],
         learnDisplay: inactiveLearnDisplay,
         taskProgress: emptyTaskProgress,
@@ -613,6 +633,7 @@ describe("renderMapNodes", () => {
       });
       const harness = createPixiTestHarness();
       renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+        commentNodeCounts: new Map(),
         nodes: [withKind],
         learnDisplay: inactiveLearnDisplay,
         taskProgress: emptyTaskProgress,
@@ -639,6 +660,7 @@ describe("renderMapNodes", () => {
       });
       const harness = createPixiTestHarness();
       renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+        commentNodeCounts: new Map(),
         nodes: [withIcon],
         learnDisplay: inactiveLearnDisplay,
         taskProgress: emptyTaskProgress,
@@ -694,6 +716,7 @@ describe("renderMapNodes", () => {
     });
     const harness = createPixiTestHarness();
     renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+      commentNodeCounts: new Map(),
       nodes: [decorated],
       learnDisplay: inactiveLearnDisplay,
       taskProgress: new Map([[1, { percent: 33, remaining: 2 }]]),
@@ -724,5 +747,195 @@ describe("renderMapNodes", () => {
     const upperCenterY = upper!.position.set.mock.calls[0][1] as number;
     const scaledBottom = upperCenterY + ratio * (label.y + label.height / 2);
     expect(scaledBottom).toBeLessThan(badge.y);
+  });
+});
+
+describe("コメント件数バッジ", () => {
+  type MockText = { options: { text: string }; x: number; y: number; width: number; height: number; alpha?: number; anchor: { set: jest.Mock } };
+  type MockGraphics = { circle: jest.Mock; fill: jest.Mock; alpha?: number };
+
+  function renderWithComments(options: {
+    nodes: readonly Node[];
+    commentNodeCounts: ReadonlyMap<number, number>;
+    taskProgress?: ReadonlyMap<number, { percent: number; remaining: number }>;
+    visibleKeys?: ReadonlySet<string>;
+    highlightNodeIds?: ReadonlySet<number>;
+    illustrationTextures?: ReadonlyMap<string, Texture>;
+  }) {
+    const harness = createPixiTestHarness();
+    renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+      nodes: options.nodes,
+      learnDisplay: inactiveLearnDisplay,
+      taskProgress: options.taskProgress ?? emptyTaskProgress,
+      selectedNodeIds: [],
+      editingNodeId: null,
+      connectionTargetNodeId: null,
+      siblingReorderSourceNodeId: null,
+      onNodePointerDown: jest.fn(),
+      visibleKeys: options.visibleKeys ?? new Set(options.nodes.map((n) => `node:${n.id}`)),
+      highlightNodeIds: options.highlightNodeIds ?? new Set<number>(),
+      pinnedNodeIds: new Set<number>(),
+      illustrationTextures: options.illustrationTextures,
+      commentNodeCounts: options.commentNodeCounts,
+    });
+    const texts = harness.Text.mock.results.map((result) => result.value as MockText);
+    const graphics = harness.Graphics.mock.results.map((result) => result.value as MockGraphics);
+    const commentTexts = (text: string) => texts.filter((t) => t.options.text === text);
+    const badgeCircles = graphics.filter((g) => g.circle.mock.calls.some(
+      ([, , radius]: [number, number, number]) => radius === COMMENT_BADGE_RADIUS,
+    ));
+    const containers = harness.stage.addChild.mock.calls.map(
+      ([container]: [unknown]) => container as { addChild: jest.Mock },
+    );
+    const childrenOf = (index: number) => containers[index].addChild.mock.calls.map(([child]: [unknown]) => child);
+    return { ...harness, texts, commentTexts, badgeCircles, childrenOf };
+  }
+
+  it("formatCommentBadgeText は 1–9 をそのまま、10 以上を 9+ にする", () => {
+    expect(formatCommentBadgeText(1)).toBe("1");
+    expect(formatCommentBadgeText(9)).toBe("9");
+    expect(formatCommentBadgeText(10)).toBe("9+");
+    expect(formatCommentBadgeText(123)).toBe("9+");
+  });
+
+  it("EMPTY_COMMENT_NODE_COUNTS は空で、渡すとバッジを描かない", () => {
+    expect(EMPTY_COMMENT_NODE_COUNTS.size).toBe(0);
+    const { badgeCircles, Text } = renderWithComments({
+      nodes: [createTestNode({ id: 1 })],
+      commentNodeCounts: EMPTY_COMMENT_NODE_COUNTS,
+    });
+    expect(badgeCircles).toHaveLength(0);
+    expect(Text).toHaveBeenCalledTimes(1);
+  });
+
+  it("件数があるノードにだけ、左下の角を中心に円と件数の Text を 1 組足す", () => {
+    const first = createTestNode({ id: 1, x: 50, y: 30, width: 100, height: 60 });
+    const second = createTestNode({ id: 2, x: 200, y: 40, width: 140, height: 60 });
+    const { badgeCircles, commentTexts, childrenOf } = renderWithComments({
+      nodes: [first, second],
+      commentNodeCounts: new Map([[2, 3]]),
+    });
+
+    expect(badgeCircles).toHaveLength(1);
+    expect(badgeCircles[0].circle).toHaveBeenCalledWith(200, 100, COMMENT_BADGE_RADIUS);
+    expect(badgeCircles[0].fill).toHaveBeenCalledWith({ color: 0x2563eb });
+    const [count] = commentTexts("3");
+    expect(count).toBeDefined();
+    expect(count.anchor.set).toHaveBeenCalledWith(0.5);
+    expect(count).toMatchObject({ x: 200, y: 100 });
+    expect(count.options).toMatchObject({ style: { fontSize: 9, fill: 0xffffff } });
+    expect(childrenOf(0)).not.toContain(badgeCircles[0]);
+    expect(childrenOf(1)).toEqual(expect.arrayContaining([badgeCircles[0], count]));
+  });
+
+  it("0 や負の件数・キー無しのノードには描かない", () => {
+    const nodes = [1, 2, 3].map((id) => createTestNode({ id, x: id * 200 }));
+    const { badgeCircles, Text } = renderWithComments({
+      nodes,
+      commentNodeCounts: new Map([[1, 0], [2, -1]]),
+    });
+    expect(badgeCircles).toHaveLength(0);
+    expect(Text).toHaveBeenCalledTimes(3);
+  });
+
+  it("10 以上は 9+ と描く", () => {
+    const { commentTexts } = renderWithComments({
+      nodes: [createTestNode({ id: 1 })],
+      commentNodeCounts: new Map([[1, 12]]),
+    });
+    expect(commentTexts("9+")).toHaveLength(1);
+    expect(commentTexts("12")).toHaveLength(0);
+  });
+
+  it("表示されていないノードには描かない", () => {
+    const { badgeCircles } = renderWithComments({
+      nodes: [createTestNode({ id: 1 })],
+      commentNodeCounts: new Map([[1, 2]]),
+      visibleKeys: new Set<string>(),
+    });
+    expect(badgeCircles).toHaveLength(0);
+  });
+
+  it("円と件数の alpha はノード内容の alpha に揃える", () => {
+    const { badgeCircles, commentTexts } = renderWithComments({
+      nodes: [createTestNode({ id: 1 }), createTestNode({ id: 2, x: 200 })],
+      commentNodeCounts: new Map([[1, 2]]),
+      highlightNodeIds: new Set([2]),
+    });
+    expect(badgeCircles[0].alpha).toBeLessThan(1);
+    expect(commentTexts("2")[0].alpha).toBe(badgeCircles[0].alpha);
+  });
+
+  it("リンク・ピン・ロックの角印と中心が一致せず、円同士も交差しない", () => {
+    const decorated = createTestNode({
+      id: 1, x: 50, y: 30, width: 100, height: 60, label: "角印", links: ["https://example.com/"], locked: true,
+    });
+    const harness = createPixiTestHarness();
+    renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+      nodes: [decorated],
+      learnDisplay: inactiveLearnDisplay,
+      taskProgress: emptyTaskProgress,
+      selectedNodeIds: [],
+      editingNodeId: null,
+      connectionTargetNodeId: null,
+      siblingReorderSourceNodeId: null,
+      onNodePointerDown: jest.fn(),
+      visibleKeys: new Set(["node:1"]),
+      highlightNodeIds: new Set<number>(),
+      pinnedNodeIds: new Set([1]),
+      commentNodeCounts: new Map([[1, 2]]),
+    });
+    const circles = harness.Graphics.mock.results
+      .map(({ value }) => value as { circle: jest.Mock })
+      .flatMap((graphics) => graphics.circle.mock.calls as Array<[number, number, number]>);
+    const badge = circles.filter(([, , radius]) => radius === COMMENT_BADGE_RADIUS);
+    const cornerMarkers = circles.filter(([, , radius]) => radius !== COMMENT_BADGE_RADIUS);
+    expect(badge).toHaveLength(1);
+    expect(cornerMarkers).toHaveLength(3);
+    const [bx, by, br] = badge[0];
+    for (const [mx, my, mr] of cornerMarkers) {
+      expect([mx, my]).not.toEqual([bx, by]);
+      expect(Math.hypot(bx - mx, by - my)).toBeGreaterThan(br + mr);
+    }
+  });
+
+  it.each([
+    { label: "標準", node: createTestNode({ id: 1, x: 50, y: 30, width: 100, height: 60, label: "親" }) },
+    { label: "幅広・高い", node: createTestNode({ id: 1, x: -40, y: 10, width: 260, height: 120, label: "幅の広い親" }) },
+    { label: "細い", node: createTestNode({ id: 1, x: 0, y: 0, width: 60, height: 40, label: "細" }) },
+    {
+      label: "イラストあり",
+      node: createTestNode({
+        id: 1, x: 20, y: 30, width: 120, height: ILLUSTRATED_NODE_HEIGHT, label: "絵", illustration: "data:image/jpeg;base64,AAAA",
+      }),
+    },
+  ])("進捗バッジと同時に出ても両方あり、互いに重ならない（$label）", ({ node: target }) => {
+    const textures = target.illustration === undefined
+      ? undefined
+      : new Map([[target.illustration, {} as Texture]]);
+    const { badgeCircles, commentTexts } = renderWithComments({
+      nodes: [target],
+      commentNodeCounts: new Map([[1, 4]]),
+      taskProgress: new Map([[1, { percent: 50, remaining: 1 }]]),
+      illustrationTextures: textures,
+    });
+    const [progress] = commentTexts("50% 残1");
+    expect(progress).toBeDefined();
+    expect(badgeCircles).toHaveLength(1);
+    expect(commentTexts("4")).toHaveLength(1);
+
+    const [cx, cy, radius] = badgeCircles[0].circle.mock.calls[0] as [number, number, number];
+    expect([cx, cy]).toEqual([target.x, target.y + target.height]);
+    // 描画は進捗バッジを内側の幅（width - 16）まで縮小する。テスト用 Text には scale が無いので、その上限を幅に反映する
+    const progressWidth = Math.min(progress.width, target.width - 16);
+    const rect = {
+      left: progress.x - progressWidth / 2,
+      right: progress.x + progressWidth / 2,
+      top: progress.y - progress.height / 2,
+      bottom: progress.y + progress.height / 2,
+    };
+    const nearestX = Math.min(Math.max(cx, rect.left), rect.right);
+    const nearestY = Math.min(Math.max(cy, rect.top), rect.bottom);
+    expect(Math.hypot(cx - nearestX, cy - nearestY)).toBeGreaterThan(radius);
   });
 });

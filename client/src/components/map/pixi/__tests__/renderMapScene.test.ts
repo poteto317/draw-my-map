@@ -1,5 +1,6 @@
 import { INITIAL_VIEWPORT } from "@/components/map/mapViewport";
 import { collectVisibleMapKeys } from "@/components/map/pixi/mapVisibilityKeys";
+import { COMMENT_BADGE_RADIUS } from "@/components/map/pixi/renderMapNodes";
 import { renderMapScene } from "@/components/map/pixi/renderMapScene";
 import { createPixiTestHarness } from "../testing/pixiTestHarness";
 import type { Node } from "@/types/node";
@@ -26,6 +27,7 @@ describe("renderMapScene", () => {
     harness.children.push(previousChild);
 
     const scene = renderMapScene(harness.app as never, harness.constructors as never, {
+      commentNodeCounts: new Map(),
       learnDisplay: inactiveLearnDisplay,
       nodes,
       taskProgress: emptyTaskProgress,
@@ -57,6 +59,7 @@ describe("renderMapScene", () => {
     const viewport = { offsetX: 30, offsetY: -10, scale: 2 };
 
     renderMapScene(harness.app as never, harness.constructors as never, {
+      commentNodeCounts: new Map(),
       learnDisplay: inactiveLearnDisplay,
       nodes,
       taskProgress: emptyTaskProgress,
@@ -81,6 +84,7 @@ describe("renderMapScene", () => {
     const harness = createPixiTestHarness();
 
     renderMapScene(harness.app as never, harness.constructors as never, {
+      commentNodeCounts: new Map(),
       learnDisplay: inactiveLearnDisplay,
       nodes: [],
       taskProgress: emptyTaskProgress,
@@ -103,6 +107,7 @@ describe("renderMapScene", () => {
   it("visibleNodeIdsをノードとエッジの描画へ反映する", () => {
     const harness = createPixiTestHarness();
     renderMapScene(harness.app as never, harness.constructors as never, {
+      commentNodeCounts: new Map(),
       learnDisplay: inactiveLearnDisplay,
       nodes, taskProgress: emptyTaskProgress, selectedNodeIds: [], editingNodeId: null, connectionTargetNodeId: null,
       siblingReorderSourceNodeId: null, siblingReorderIndicator: null, onNodePointerDown: jest.fn(), viewport: INITIAL_VIEWPORT, visibleNodeIds: new Set([2]),
@@ -121,6 +126,7 @@ describe("renderMapScene", () => {
     const visibleNodeIds = new Set([1, 2]);
 
     const scene = renderMapScene(harness.app as never, harness.constructors as never, {
+      commentNodeCounts: new Map(),
       learnDisplay: inactiveLearnDisplay,
       nodes: sceneNodes,
       taskProgress: emptyTaskProgress,
@@ -159,6 +165,7 @@ describe("renderMapScene", () => {
     const harness = createPixiTestHarness();
 
     const scene = renderMapScene(harness.app as never, harness.constructors as never, {
+      commentNodeCounts: new Map(),
       learnDisplay: inactiveLearnDisplay,
       nodes,
       taskProgress: emptyTaskProgress,
@@ -189,6 +196,7 @@ describe("renderMapScene", () => {
     const harness = createPixiTestHarness();
 
     renderMapScene(harness.app as never, harness.constructors as never, {
+      commentNodeCounts: new Map(),
       learnDisplay: inactiveLearnDisplay,
       nodes,
       taskProgress: emptyTaskProgress,
@@ -212,6 +220,7 @@ describe("renderMapScene", () => {
     const harness = createPixiTestHarness();
 
     renderMapScene(harness.app as never, harness.constructors as never, {
+      commentNodeCounts: new Map(),
       learnDisplay: inactiveLearnDisplay,
       nodes,
       taskProgress: emptyTaskProgress,
@@ -231,5 +240,33 @@ describe("renderMapScene", () => {
     const band = harness.Graphics.mock.results.at(-1)!.value;
     expect(band.rect).toHaveBeenCalledWith(10, 20, 100, 40);
     expect(world.addChild.mock.calls.at(-1)?.[0]).toBe(band);
+  });
+
+  it("commentNodeCounts をノードの描画へ渡し、件数のあるノードにだけバッジを描く", () => {
+    const harness = createPixiTestHarness();
+
+    renderMapScene(harness.app as never, harness.constructors as never, {
+      commentNodeCounts: new Map([[2, 5]]),
+      learnDisplay: inactiveLearnDisplay,
+      nodes,
+      taskProgress: emptyTaskProgress,
+      selectedNodeIds: [],
+      editingNodeId: null,
+      connectionTargetNodeId: null,
+      siblingReorderSourceNodeId: null,
+      siblingReorderIndicator: null,
+      highlightNodeIds: new Set<number>(),
+      pinnedNodeIds: new Set<number>(),
+      onNodePointerDown: jest.fn(),
+      viewport: INITIAL_VIEWPORT,
+    });
+
+    const circles = harness.Graphics.mock.results
+      .map((result) => result.value as { circle: jest.Mock })
+      .filter((graphics) => graphics.circle.mock.calls.length > 0);
+    expect(circles).toHaveLength(1);
+    expect(circles[0].circle).toHaveBeenCalledWith(270, 90, COMMENT_BADGE_RADIUS);
+    const texts = harness.Text.mock.calls.map(([options]: [{ text: string }]) => options.text);
+    expect(texts).toContain("5");
   });
 });

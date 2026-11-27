@@ -45,6 +45,7 @@ function createOptions(
     highlightNodeIds: new Set<number>(),
     pinnedNodeIds: new Set<number>(),
     taskProgress: new Map<number, { percent: number; remaining: number }>(),
+    commentNodeCounts: new Map<number, number>(),
   };
 }
 
@@ -91,6 +92,7 @@ describe("useRenderedMapScene", () => {
         highlightNodeIds: options.highlightNodeIds,
         pinnedNodeIds: options.pinnedNodeIds ?? new Set<number>(),
         taskProgress: options.taskProgress,
+        commentNodeCounts: options.commentNodeCounts,
         illustrationTextures: undefined,
         relations: undefined,
         selectedRelationId: null,
@@ -198,6 +200,29 @@ describe("useRenderedMapScene", () => {
     }));
 
     expect(mockedRenderMapScene.mock.calls[0][2].nodes.map((n: { id: number }) => n.id)).toEqual([1, 2]);
+  });
+
+  it("commentNodeCounts の変更でsceneを差し替え、新しい件数を渡す", () => {
+    const viewportRef = { current: INITIAL_VIEWPORT };
+    const initialOptions = createOptions();
+    const nextCounts = new Map([[1, 2]]);
+    const nextOptions = { ...initialOptions, commentNodeCounts: nextCounts };
+    const { result, rerender } = renderHook(
+      ({ options }) => useRenderedMapScene({
+        runtime,
+        options,
+        viewport: INITIAL_VIEWPORT,
+        viewportRef,
+        screenSize,
+      }),
+      { initialProps: { options: initialOptions } },
+    );
+
+    rerender({ options: nextOptions });
+
+    expect(mockedRenderMapScene).toHaveBeenCalledTimes(2);
+    expect(mockedRenderMapScene.mock.calls[1][2].commentNodeCounts).toBe(nextCounts);
+    expect(result.current).toBe(mockedRenderMapScene.mock.results[1].value);
   });
 
   it("古いeffect cleanupが新しいsceneを解除しない", () => {

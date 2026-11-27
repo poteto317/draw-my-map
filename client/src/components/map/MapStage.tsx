@@ -101,6 +101,8 @@ type MapStageProps = {
   highlightNodeIds: ReadonlySet<number>;
   /** ピン済みノード。空集合 = 印なし */
   pinnedNodeIds: ReadonlySet<number>;
+  /** 未解決コメントスレッド数。0 のノードはキーを持たない。空 Map = 印なし。省略不可（L-060） */
+  commentNodeCounts: ReadonlyMap<number, number>;
   onViewportScaleChange?: (scale: number) => void;
   /** ミニマップ等へ viewport + 画面サイズを伝える（L-060） */
   onViewportFrameChange?: (frame: ViewportFrame) => void;
@@ -187,6 +189,7 @@ export function MapStage({
   visibleNodeIds,
   highlightNodeIds,
   pinnedNodeIds,
+  commentNodeCounts,
   onViewportScaleChange,
   onViewportFrameChange,
   resetRevision = 0,
@@ -386,6 +389,7 @@ export function MapStage({
       visibleNodeIds: effectiveVisibleNodeIds,
       highlightNodeIds,
       pinnedNodeIds,
+      commentNodeCounts,
       illustrationTextures,
       relations,
       selectedRelationId,

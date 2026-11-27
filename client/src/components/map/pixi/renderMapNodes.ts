@@ -58,6 +58,8 @@ export type RenderMapNodesOptions = {
   pinnedNodeIds: ReadonlySet<number>;
   // キーは data URL
   illustrationTextures?: ReadonlyMap<string, Texture>;
+  /** 未解決コメントスレッド数。0 のノードはキーを持たない。空 Map = 印なし。省略不可（L-060） */
+  commentNodeCounts: ReadonlyMap<number, number>;
 };
 
 const DRAGGED_NODE_ALPHA = 0.5;
@@ -169,6 +171,41 @@ function createNodeLockMarker(constructors: PixiConstructors, node: Node): Graph
     .fill({ color: LOCK_MARKER_COLOR })
     .stroke({ width: LOCK_MARKER_BORDER_WIDTH, color: LOCK_MARKER_BORDER_COLOR });
   return marker;
+}
+
+// コメント件数バッジ。左下の角を中心にした青い円と白い件数。左上=ピン・右上=リンク・右下=ロックの角印と
+// 進捗バッジ（下段中央）に重ならない位置にする。表示専用
+export const COMMENT_BADGE_RADIUS = 7;
+const COMMENT_BADGE_COLOR = 0x2563eb;
+const COMMENT_BADGE_TEXT_COLOR = 0xffffff;
+const COMMENT_BADGE_FONT_SIZE = 9;
+const COMMENT_BADGE_MAX_EXACT_COUNT = 9;
+
+/** 印なしの共有定数。印を出さない描画元（ShareMapView の view リンク・テスト用ハーネス）がここから import する */
+export const EMPTY_COMMENT_NODE_COUNTS: ReadonlyMap<number, number> = new Map();
+
+export function formatCommentBadgeText(count: number): string {
+  return count > COMMENT_BADGE_MAX_EXACT_COUNT ? `${COMMENT_BADGE_MAX_EXACT_COUNT}+` : String(count);
+}
+
+function createNodeCommentBadge(
+  constructors: PixiConstructors,
+  node: Node,
+  count: number | undefined,
+): { circle: Graphics; text: Text } | null {
+  if (count === undefined || count <= 0) return null;
+  const cx = node.x;
+  const cy = node.y + node.height;
+  const circle = new constructors.Graphics();
+  circle.circle(cx, cy, COMMENT_BADGE_RADIUS).fill({ color: COMMENT_BADGE_COLOR });
+  const text = new constructors.Text({
+    text: formatCommentBadgeText(count),
+    style: { fontSize: COMMENT_BADGE_FONT_SIZE, fill: COMMENT_BADGE_TEXT_COLOR },
+  });
+  text.anchor.set(0.5);
+  text.x = cx;
+  text.y = cy;
+  return { circle, text };
 }
 
 function createNodeLabelText(
@@ -350,6 +387,17 @@ export function renderMapNodes(
     if (lockMarker !== null) {
       lockMarker.alpha = contentAlpha;
       container.addChild(lockMarker);
+    }
+
+    // 件数を読めるよう角印より手前に描く
+    const commentBadge = isVisible
+      ? createNodeCommentBadge(constructors, node, options.commentNodeCounts.get(node.id))
+      : null;
+    if (commentBadge !== null) {
+      commentBadge.circle.alpha = contentAlpha;
+      commentBadge.text.alpha = contentAlpha;
+      container.addChild(commentBadge.circle);
+      container.addChild(commentBadge.text);
     }
 
     stage.addChild(container);

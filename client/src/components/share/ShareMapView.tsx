@@ -5,6 +5,7 @@ import {
   fitViewportToNodes,
   type ScreenSize,
 } from "@/components/map/mapViewport";
+import { EMPTY_COMMENT_NODE_COUNTS } from "@/components/map/pixi/renderMapNodes";
 import { usePixiApplication } from "@/components/map/pixi/usePixiApplication";
 import { useMapViewport } from "@/components/map/useMapViewport";
 import { useMapWheelZoom } from "@/components/map/useMapWheelZoom";
@@ -101,6 +102,7 @@ export function ShareMapView({ nodes, relations, groups }: ShareMapViewProps) {
       visibleNodeIds: derived.visibleNodeIds,
       highlightNodeIds: EMPTY_HIGHLIGHT_NODE_IDS,
       pinnedNodeIds: EMPTY_PINNED_NODE_IDS,
+      commentNodeCounts: EMPTY_COMMENT_NODE_COUNTS,
       relations,
       groups,
     },

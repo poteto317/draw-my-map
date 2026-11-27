@@ -66,6 +66,7 @@ const defaultProps = {
   labelEditRequest: null,
   highlightNodeIds: new Set<number>(),
   pinnedNodeIds: new Set<number>(),
+  commentNodeCounts: new Map<number, number>(),
   layoutSnapPrefs: {
     enabled: false,
     showGrid: false,
@@ -111,6 +112,7 @@ function KeyboardCreationHarness({ initiallySelected = true }: { initiallySelect
         nodes={nodes}
         highlightNodeIds={new Set<number>()}
         pinnedNodeIds={new Set<number>()}
+        commentNodeCounts={new Map<number, number>()}
         focusRequest={null}
         selectedNodeId={selectedNodeId}
         onDoubleClick={addNode}
@@ -173,6 +175,7 @@ function MouseConnectionHarness() {
         nodes={nodes}
         highlightNodeIds={new Set<number>()}
         pinnedNodeIds={new Set<number>()}
+        commentNodeCounts={new Map<number, number>()}
         focusRequest={null}
         selectedNodeId={selectedNodeId}
         onDoubleClick={addNode}
@@ -236,6 +239,7 @@ function SubtreeMoveHarness() {
         nodes={nodes}
         highlightNodeIds={new Set<number>()}
         pinnedNodeIds={new Set<number>()}
+        commentNodeCounts={new Map<number, number>()}
         focusRequest={null}
         selectedNodeId={selectedNodeId}
         onDoubleClick={addNode}
@@ -349,6 +353,22 @@ afterEach(() => {
 });
 
 describe("MapStage boundary", () => {
+  it("commentNodeCounts を描画へ渡し、件数のあるノードの左下にバッジを描く", async () => {
+    const target = createTestNode({ id: 7, x: 40, y: 20, width: 120, height: 60, label: "対象" });
+    await renderReady(<MapStage
+        learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps}
+      nodes={[target]}
+      commentNodeCounts={new Map([[7, 3]])}
+    />);
+
+    const badgeCircles = jest.mocked(Graphics).mock.results
+      .map(({ value }) => value as { circle: jest.Mock })
+      .filter((graphics) => graphics.circle.mock.calls.some(
+        ([x, y, radius]: [number, number, number]) => x === 40 && y === 80 && radius === 7,
+      ));
+    expect(badgeCircles.length).toBeGreaterThan(0);
+  });
+
   it("renders the map container", async () => {
     await renderReady(<MapStage
         learnDisplay={inactiveLearnDisplay} taskProgress={new Map()} {...defaultProps} />);

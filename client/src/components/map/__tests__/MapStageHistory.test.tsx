@@ -55,6 +55,7 @@ function HistoryHarness({ apiRef, setup, visibleNodeIds }: HistoryHarnessProps) 
       nodes={api.nodes}
       highlightNodeIds={new Set<number>()}
       pinnedNodeIds={new Set<number>()}
+      commentNodeCounts={new Map<number, number>()}
       focusRequest={null}
       visibleNodeIds={visibleNodeIds}
       selectedNodeId={api.selectedNodeId}
