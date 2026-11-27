@@ -64,6 +64,7 @@ function context(overrides: Partial<CommandAvailabilityContext> = {}): CommandAv
     canVoiceInputStart: true,
     canVoiceInputStop: false,
     voiceStartDisabledReason: null,
+    collabBulkBlockedReason: null,
     ...overrides,
   };
 }

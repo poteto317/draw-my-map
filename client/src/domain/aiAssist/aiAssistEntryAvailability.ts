@@ -18,6 +18,8 @@ export type AiAssistEntryBlockers = {
   readonly playingPresentation: boolean;
   readonly learningActive: boolean;
   readonly voiceListening: boolean;
+  /** 共同編集中の拒否理由（null / 省略 = 塞がない・inventory P36-AI） */
+  readonly collabBlockedReason?: string | null;
 };
 
 export type AiAssistEntryAvailability = { enabled: true; rootId: number } | { enabled: false; reason: string };
@@ -52,6 +54,9 @@ export function resolveAiAssistEntryAvailability(
   if (blockers.hasConflict) return disabled(AI_ASSIST_ENTRY_MESSAGES.conflict);
   if (blockers.isProtectedMode) return disabled(AI_ASSIST_ENTRY_MESSAGES.protected);
   if (blockers.playingPresentation) return disabled(AI_ASSIST_ENTRY_MESSAGES.presentation);
+  if (typeof blockers.collabBlockedReason === "string" && blockers.collabBlockedReason.length > 0) {
+    return disabled(blockers.collabBlockedReason);
+  }
   if (isVoiceStructureEditBlocked(blockers.voiceListening)) {
     return disabled(MAP_VOICE_MESSAGES.listeningBlock);
   }

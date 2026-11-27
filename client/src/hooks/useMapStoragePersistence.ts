@@ -18,6 +18,8 @@ type UseMapStoragePersistenceOptions = {
   conflictState?: ConflictState;
   onWriteConflict?: () => void;
   onSaveSuccess?: (snapshot: string) => void;
+  localSaveEnabled?: boolean;
+  getLocalSaveEnabled?: () => boolean;
 };
 
 export function useMapStoragePersistence({
@@ -30,6 +32,8 @@ export function useMapStoragePersistence({
   conflictState,
   onWriteConflict,
   onSaveSuccess,
+  localSaveEnabled = true,
+  getLocalSaveEnabled,
 }: UseMapStoragePersistenceOptions) {
   const restoration = useMapStorageRestoration({
     currentSnapshot,
@@ -50,6 +54,8 @@ export function useMapStoragePersistence({
     conflictState,
     onWriteConflict,
     onSaveSuccess,
+    localSaveEnabled,
+    getLocalSaveEnabled,
   });
   const { flushPendingSave, rebaseConfirmedSnapshot } = autoSave;
 

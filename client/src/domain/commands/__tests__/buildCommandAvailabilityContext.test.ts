@@ -63,6 +63,7 @@ function base(overrides: Partial<CommandAvailabilityContextInput> = {}): Command
     canVoiceInputStart: true,
     canVoiceInputStop: false,
     voiceStartDisabledReason: null,
+    collabBulkBlockedReason: null,
     ...overrides,
   };
 }

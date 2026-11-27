@@ -88,7 +88,7 @@ function createApi(overrides: Partial<ShareCommentsApiClient> = {}): jest.Mocked
   } as jest.Mocked<ShareCommentsApiClient>;
 }
 
-const OWNER = { userId: "user-1", email: "owner@example.com" };
+const OWNER = { userId: "user-1", email: "owner@example.com", displayName: null };
 const NODE_IDS: ReadonlySet<number> = new Set([1, 2]);
 const OWNER_SCOPE = { kind: "owner", sharedMapId: "shared-1" } as const;
 
@@ -337,7 +337,7 @@ describe("useMapEditorComments", () => {
       const forB = deferred<ShareResult<ShareCommentListValue>>();
       const secondA = deferred<ShareResult<ShareCommentListValue>>();
       api.list.mockImplementationOnce(() => forB.promise).mockImplementationOnce(() => secondA.promise);
-      update({ shareSession: { userId: "user-2", email: "other@example.com" } });
+      update({ shareSession: { userId: "user-2", email: "other@example.com", displayName: null } });
       await waitFor(() => expect(api.list).toHaveBeenCalledTimes(2));
       update({ shareSession: OWNER });
       await waitFor(() => expect(api.list).toHaveBeenCalledTimes(3));
@@ -363,7 +363,7 @@ describe("useMapEditorComments", () => {
         oldWrite = result.current.resolve("t1");
       });
       expect(result.current.busy).toBe(true);
-      update({ shareSession: { userId: "user-2", email: "other@example.com" } });
+      update({ shareSession: { userId: "user-2", email: "other@example.com", displayName: null } });
       update({ shareSession: OWNER });
       expect(result.current.busy).toBe(false);
       await waitFor(() => expect(result.current.listState).toBe("ready"));
@@ -686,7 +686,7 @@ describe("useMapEditorComments", () => {
     it.each([
       ["mapId", { mapId: "map-2" }],
       ["sharedMapId", { sharedMapId: "shared-2" }],
-      ["userId", { shareSession: { userId: "user-2", email: "other@example.com" } }],
+      ["userId", { shareSession: { userId: "user-2", email: "other@example.com", displayName: null } }],
     ] as const)("%s の変更で通知をクリアする", async (_label, patch) => {
       const api = createApi();
       const { result, update } = renderComments({ api });

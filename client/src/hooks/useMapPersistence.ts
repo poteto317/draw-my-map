@@ -40,6 +40,18 @@ export interface UseMapPersistenceOptions {
   conflictState?: ConflictState;
   onWriteConflict?: () => void;
   onSaveCurrentAsNewMap?: (name: string, snapshotJson: string) => MapLibraryOperationResult;
+  /** false のときタブ競合監視を止める（共同編集中・L-061） */
+  conflictMonitorEnabled?: boolean;
+  /**
+   * 後段で導出した競合監視可否。指定時はイベント時にこれを読む（render 中 setState ミラー不要）。
+   */
+  getConflictMonitorEnabled?: () => boolean;
+  /** false のとき localStorage autosave／flush を拒否（共同編集中・L-061 E1） */
+  localSaveEnabled?: boolean;
+  /**
+   * 後段で導出した localSave 可否。指定時は effect／flush 時にこれを読む。
+   */
+  getLocalSaveEnabled?: () => boolean;
 }
 
 export interface UseMapPersistenceResult {
@@ -80,6 +92,10 @@ export function useMapPersistence({
   conflictState: externalConflictState,
   onWriteConflict: externalOnWriteConflict,
   onSaveCurrentAsNewMap,
+  conflictMonitorEnabled = true,
+  getConflictMonitorEnabled,
+  localSaveEnabled = true,
+  getLocalSaveEnabled,
 }: UseMapPersistenceOptions): UseMapPersistenceResult {
   const [notice, setNotice] = useState<OperationNotice | null>(null);
   const documentOptions = useMemo(
@@ -132,6 +148,8 @@ export function useMapPersistence({
     ),
     replaceMapAndReset: replaceMap,
     onSaveCurrentAsNewMap,
+    conflictMonitorEnabled,
+    getConflictMonitorEnabled,
     rebaseSnapshot: (json) => {
       setConfirmedSnapshot(json);
       rebaseSnapshotRef.current(json);
@@ -165,6 +183,8 @@ export function useMapPersistence({
     onSaveSuccess: (snapshot) => {
       setConfirmedSnapshot(snapshot);
     },
+    localSaveEnabled,
+    getLocalSaveEnabled,
   });
 
   useLayoutEffect(() => {

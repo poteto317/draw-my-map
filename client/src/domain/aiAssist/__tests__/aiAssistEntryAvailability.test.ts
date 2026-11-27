@@ -48,6 +48,7 @@ describe("resolveAiAssistEntryAvailability", () => {
     ["競合中", "importance", [1], { hasConflict: true }, AI_ASSIST_ENTRY_MESSAGES.conflict],
     ["保護モード", "branch-summary", [1], { isProtectedMode: true }, AI_ASSIST_ENTRY_MESSAGES.protected],
     ["プレゼン再生中", "importance", [1], { playingPresentation: true }, AI_ASSIST_ENTRY_MESSAGES.presentation],
+    ["共同編集中", "branch-summary", [1], { collabBlockedReason: "共同編集中はこの操作をできません。" }, "共同編集中はこの操作をできません。"],
     ["選択なし（関連線・グループの選択中を含む）", "branch-summary", [], {}, AI_ASSIST_ENTRY_MESSAGES.selectOne],
     ["複数選択", "importance", [1, 2], {}, AI_ASSIST_ENTRY_MESSAGES.selectOne],
     ["選択が配列に無い", "importance", [99], {}, AI_ASSIST_ENTRY_MESSAGES.selectOne],

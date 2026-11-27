@@ -64,6 +64,7 @@ function baseContext(overrides: Partial<CommandAvailabilityContext> = {}): Comma
     canVoiceInputStart: true,
     canVoiceInputStop: false,
     voiceStartDisabledReason: null,
+    collabBulkBlockedReason: null,
     ...overrides,
   };
 }
