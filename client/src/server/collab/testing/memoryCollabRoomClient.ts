@@ -55,6 +55,8 @@ export type MemoryCollabRoomOptions = {
   nowMs?: () => number;
   ownerUserId?: string;
   onEvacuate?: (sessionId: string, update: Uint8Array) => void | Promise<void>;
+  /** grace 脱落時（Worker→Next drop-participant 相当） */
+  onParticipantDrop?: (sessionId: string, userId: string) => void | Promise<void>;
   /** 診断用。ticket 平文を渡さないこと */
   log?: (message: string) => void;
 };
@@ -128,7 +130,8 @@ export function createMemoryCollabRoomClient(
     return n;
   }
 
-  function dropExpiredGrace(room: RoomState, now: number): void {
+  function dropExpiredGrace(room: RoomState, sessionId: string, now: number): string[] {
+    const dropped: string[] = [];
     for (const p of room.participants.values()) {
       if (
         p.liveSockets === 0 &&
@@ -137,7 +140,20 @@ export function createMemoryCollabRoomClient(
         now - p.disconnectedAt >= COLLAB_RECONNECT_GRACE_MS
       ) {
         p.droppedForGrace = true;
+        dropped.push(p.userId);
         log?.(`participant-dropped session=${"***"} user=${p.userId}`);
+      }
+    }
+    return dropped;
+  }
+
+  async function flushGraceDrops(sessionId: string, room: RoomState): Promise<void> {
+    const dropped = dropExpiredGrace(room, sessionId, nowMs());
+    for (const userId of dropped) {
+      try {
+        await options.onParticipantDrop?.(sessionId, userId);
+      } catch {
+        log?.("participant-drop-failed");
       }
     }
   }
@@ -198,7 +214,7 @@ export function createMemoryCollabRoomClient(
       if (!room || room.destroyed) {
         return { ok: true, value: 0 };
       }
-      dropExpiredGrace(room, nowMs());
+      await flushGraceDrops(sessionId, room);
       return { ok: true, value: occupiedSlots(room, nowMs()) };
     },
 
@@ -223,7 +239,7 @@ export function createMemoryCollabRoomClient(
       if (room.destroyed) {
         return { ok: false, reason: "room-gone" };
       }
-      dropExpiredGrace(room, now);
+      await flushGraceDrops(sessionId, room);
 
       let participant = room.participants.get(claims.userId);
       if (participant && participant.liveSockets > 0) {
@@ -291,7 +307,13 @@ export function createMemoryCollabRoomClient(
     wasDroppedForGrace(sessionId, userId) {
       const room = rooms.get(sessionId);
       if (!room) return false;
-      dropExpiredGrace(room, nowMs());
+      // 同期 API: 脱落を即マークし、通知は best-effort で発火
+      const newly = dropExpiredGrace(room, sessionId, nowMs());
+      for (const id of newly) {
+        void Promise.resolve(options.onParticipantDrop?.(sessionId, id)).catch(() => {
+          log?.("participant-drop-failed");
+        });
+      }
       return room.participants.get(userId)?.droppedForGrace === true;
     },
 
@@ -331,7 +353,7 @@ export function createMemoryCollabRoomClient(
 
     async tick() {
       for (const [sessionId, room] of rooms) {
-        dropExpiredGrace(room, nowMs());
+        await flushGraceDrops(sessionId, room);
         await maybeEvacuate(sessionId, room);
       }
     },

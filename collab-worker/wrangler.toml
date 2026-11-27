@@ -14,3 +14,4 @@ new_classes = ["CollabRoom"]
 # 秘密はダッシュボード / `wrangler secret put` で設定（リポジトリに書かない）:
 # TICKET_SECRET, SERVICE_SECRET
 # 任意: ARTIFACT_EVACUATE_URL（全員切断 TTL 後の成果物 POST 先）
+# 任意: PARTICIPANT_DROP_URL（grace 脱落時の参加者削除 POST 先）

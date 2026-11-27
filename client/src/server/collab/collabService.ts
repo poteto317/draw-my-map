@@ -348,6 +348,33 @@ export function createCollabService(deps: CollabServiceDeps) {
     },
 
     /**
+     * Worker grace 脱落通知（service secret）。クライアント leave に依存しない。
+     * 冪等: 既に参加者でなくても成功。
+     */
+    async dropParticipant(
+      sessionId: string,
+      userId: string,
+    ): Promise<ShareResult<void>> {
+      if (typeof sessionId !== "string" || sessionId.length === 0) {
+        return { ok: false, reason: "invalid-request" };
+      }
+      if (typeof userId !== "string" || userId.length === 0) {
+        return { ok: false, reason: "invalid-request" };
+      }
+
+      try {
+        const row = await store.getSession(sessionId);
+        if (!row || row.status !== "active") {
+          return { ok: false, reason: "not-found" };
+        }
+        await store.removeParticipant(sessionId, userId);
+        return { ok: true, value: undefined };
+      } catch {
+        return { ok: false, reason: "storage-error" };
+      }
+    },
+
+    /**
      * TTL 退避 ingest（Worker → Next、service secret）。
      * 空 body は拒否（空文書で上書きしない）。既に ended+artifact なら冪等成功。
      */

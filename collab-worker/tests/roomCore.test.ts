@@ -44,6 +44,32 @@ describe("RoomConnectionCore", () => {
     expect(core.wasDroppedForGrace("u1")).toBe(true);
   });
 
+  it("grace 超過で takeGraceDrops が userId を返し再取得は空", () => {
+    const now = { t: 10_000 };
+    const core = new RoomConnectionCore(() => now.t);
+    core.connect("u1");
+    core.connect("u2");
+    core.disconnect("u1");
+    core.disconnect("u2");
+    expect(core.takeGraceDrops()).toEqual([]);
+    now.t += COLLAB_RECONNECT_GRACE_MS + 1;
+    expect(core.takeGraceDrops().sort()).toEqual(["u1", "u2"]);
+    expect(core.takeGraceDrops()).toEqual([]);
+    expect(core.wasDroppedForGrace("u1")).toBe(true);
+  });
+
+  it("nextDeadlineMs は grace 期限と空室 TTL の早い方", () => {
+    const now = { t: 1_000 };
+    const core = new RoomConnectionCore(() => now.t);
+    core.connect("u1");
+    core.disconnect("u1");
+    expect(core.nextDeadlineMs()).toBe(1_000 + COLLAB_RECONNECT_GRACE_MS);
+    now.t += COLLAB_RECONNECT_GRACE_MS + 1;
+    expect(core.takeGraceDrops()).toEqual(["u1"]);
+    // 空室 TTL（disconnect 時点の emptySince=1000）
+    expect(core.nextDeadlineMs()).toBe(1_000 + COLLAB_EMPTY_ROOM_TTL_MS);
+  });
+
   it("全員切断後 TTL で shouldEvacuate", () => {
     const now = { t: 0 };
     const core = new RoomConnectionCore(() => now.t);

@@ -16,6 +16,7 @@ Phase 39 共同編集用 Cloudflare Worker + Durable Object。
 | `TICKET_SECRET` | Next の `CF_COLLAB_TICKET_SECRET`（または `AUTH_SECRET`）と同一 |
 | `SERVICE_SECRET` | Next の `CF_COLLAB_SERVICE_SECRET` と同一 |
 | `ARTIFACT_EVACUATE_URL` | 任意。全員切断 TTL（5 分）後の成果物 POST 先 |
+| `PARTICIPANT_DROP_URL` | 任意。grace 脱落時の参加者削除 POST 先（`/api/collab/drop-participant`） |
 
 ```bash
 npx wrangler secret put TICKET_SECRET

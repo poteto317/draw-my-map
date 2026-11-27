@@ -1,8 +1,8 @@
 import {
   COLLAB_AWARENESS_UPDATE_LIMIT,
   COLLAB_DOC_UPDATE_LIMIT,
-  COLLAB_EMPTY_ROOM_TTL_MS,
 } from "./constants.js";
+import { postParticipantDrop } from "./participantDrop.js";
 import { createSlidingWindowLimiter } from "./rateLimit.js";
 import { RoomConnectionCore } from "./roomCore.js";
 import { verifyCollabTicket } from "./ticket.js";
@@ -26,6 +26,8 @@ export type CollabEnv = {
   SERVICE_SECRET: string;
   /** 任意。TTL 退避時に POST（body: yjs update, header Authorization） */
   ARTIFACT_EVACUATE_URL?: string;
+  /** 任意。grace 脱落時に参加者削除 POST（x-collab-session-id / x-collab-user-id） */
+  PARTICIPANT_DROP_URL?: string;
 };
 
 type SessionSocket = {
@@ -65,7 +67,6 @@ export class CollabRoom implements DurableObject {
   private readonly awarenessLimiter = createSlidingWindowLimiter(
     COLLAB_AWARENESS_UPDATE_LIMIT,
   );
-  private evacuateAlarmSet = false;
   private evacuated = false;
   private sessionId: string | null = null;
 
@@ -117,7 +118,9 @@ export class CollabRoom implements DurableObject {
       }
       if (action === "connections" && request.method === "GET") {
         // API 上限判定用: 接続中 + reconnect grace 枠
-        return Response.json({ count: this.connections.occupiedSlots() });
+        const count = this.connections.occupiedSlots();
+        void this.flushGraceDrops();
+        return Response.json({ count });
       }
       if (action === "destroy" && request.method === "POST") {
         // end 成功後: 成果物は既に R2。退避せず kick + markDestroyed
@@ -140,9 +143,12 @@ export class CollabRoom implements DurableObject {
   }
 
   async alarm(): Promise<void> {
-    this.evacuateAlarmSet = false;
-    if (!this.connections.shouldEvacuate()) return;
-    await this.evacuateAndDestroy();
+    await this.flushGraceDrops();
+    if (this.connections.shouldEvacuate()) {
+      await this.evacuateAndDestroy();
+      return;
+    }
+    await this.scheduleNextAlarm();
   }
 
   private async handleSeed(request: Request): Promise<Response> {
@@ -243,7 +249,8 @@ export class CollabRoom implements DurableObject {
       }
       session.userId = claims.userId;
       session.authed = true;
-      this.evacuateAlarmSet = false;
+      await this.flushGraceDrops();
+      void this.scheduleNextAlarm();
       try {
         session.socket.send(encodeSyncStep1(this.doc));
       } catch {
@@ -278,19 +285,44 @@ export class CollabRoom implements DurableObject {
       // 参照カウント: 同一 userId の別 WS が残っていれば空室 TTL に入らない
       this.connections.disconnect(session.userId);
     }
-    if (this.connections.activeCount() === 0) {
-      void this.scheduleEvacuateAlarm();
-    }
+    void this.scheduleNextAlarm();
   }
 
-  private async scheduleEvacuateAlarm(): Promise<void> {
-    if (this.evacuateAlarmSet) return;
-    this.evacuateAlarmSet = true;
+  /** grace 脱落と空室 TTL の早い方へ 1 本の alarm を張る（DO は同時に 1 alarm） */
+  private async scheduleNextAlarm(): Promise<void> {
+    const deadline = this.connections.nextDeadlineMs();
+    if (deadline === null) {
+      try {
+        await this.state.storage.deleteAlarm();
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
     try {
-      await this.state.storage.setAlarm(Date.now() + COLLAB_EMPTY_ROOM_TTL_MS);
+      await this.state.storage.setAlarm(deadline);
     } catch {
       logSafe("alarm-schedule-failed");
     }
+  }
+
+  private async flushGraceDrops(): Promise<void> {
+    const drops = this.connections.takeGraceDrops();
+    for (const userId of drops) {
+      await this.notifyParticipantDrop(userId);
+    }
+  }
+
+  private async notifyParticipantDrop(userId: string): Promise<void> {
+    const url = this.env.PARTICIPANT_DROP_URL;
+    if (!url || !this.sessionId) return;
+    const ok = await postParticipantDrop({
+      url,
+      serviceSecret: this.env.SERVICE_SECRET,
+      sessionId: this.sessionId,
+      userId,
+    });
+    logSafe(ok ? "participant-drop-ok" : "participant-drop-failed");
   }
 
   private async evacuateAndDestroy(): Promise<void> {
