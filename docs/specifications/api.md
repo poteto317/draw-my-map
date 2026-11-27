@@ -1,6 +1,6 @@
 # Draw My Map API 仕様書
 
-本書は、**Draw My Map** におけるノードアイコン・イラスト生成エンドポイント（`POST /api/illustrations`）の詳細な API 仕様、内部アーキテクチャ、処理パイプライン、クライアント側画像処理、および本番公開に向けた運用・セキュリティ考慮事項をまとめた技術仕様書です。9〜19章ではクライアントAPIを、20章では AI 支援のエンドポイント（`/api/ai-assist/*`）、21章では学習と復習（Phase 35）のクライアント API を扱います。
+本書は、**Draw My Map** におけるノードアイコン・イラスト生成エンドポイント（`POST /api/illustrations`）の詳細な API 仕様、内部アーキテクチャ、処理パイプライン、クライアント側画像処理、および本番公開に向けた運用・セキュリティ考慮事項をまとめた技術仕様書です。9〜19章ではクライアントAPIを、20章では AI 支援のエンドポイント（`/api/ai-assist/*`）、21章では学習と復習（Phase 35）のクライアント API、22章では共有コメント（Phase 38）の API を扱います。
 
 ---
 
@@ -27,6 +27,7 @@
 19. [プレゼンテーションと案内のクライアントAPI](#19-プレゼンテーションと案内のクライアントapi)
 20. [AI 支援の API（`/api/ai-assist/*`）](#20-ai-支援の-apiapiai-assist)
 21. [学習と復習のクライアント API](#21-学習と復習のクライアントapi)
+22. [共有コメントの API（Phase 38）](#22-共有コメントの-apiphase-38)
 
 ---
 
@@ -1221,3 +1222,167 @@ export function resolveLearnLabelDisplay(
 - ヘッダー: `LearnModeControl.tsx`（学習トグル）。
 - 復習カード: `LearnReviewCardsPanel.tsx`（`useLearnReviewCardsKeyboard.ts` で Space / ← / →）。
 - 投影: `mapDocumentState.ts` の `mapDocumentOptionsForNewMap` / `omitLearnFromMapDocument` が §3.2「含めない」経路を実装。
+
+## 22. 共有コメントの API（Phase 38）
+
+Phase 38（候補096・097）。Phase 37 の共有 API（`/api/share/*`）の上に、ノードコメントの Route Handlers を足します。機能仕様は `features.md` の 40 章、設計は `docs/superpowers/specs/2026-11-27-phase38-comments-design.md`（§8）、D1 の準備は `docs/setup/share-setup.md` の 4.1・4.2 節です。新しい環境変数はありません。
+
+### 22.1 既存の共有 API の変更
+
+| メソッド | パス | 変更 |
+|---|---|---|
+| POST | `/api/share/maps/:id/links` | 本文の `permission` に `"comment"` を許す（省略時は `"view"`。それ以外は 400 `invalid-permission`）。成功値 `ShareLinkIssued` に `permission` |
+| POST | `/api/share/links/:id/reissue` | 旧リンクの権限を引き継ぐ（未知の権限の旧リンクは 404）。成功値に `permission`（クライアントはこの値を正とする） |
+| GET | `/api/share/maps` | 変更なし（各リンクの `permission` は既に返している） |
+| DELETE | `/api/share/maps/:id` | マップ削除の直前に `share_comments` → `share_comment_threads` を `shared_map_id` で削除。D1 のエラーが `no such table` のときだけ削除済みとみなして進む。それ以外は 502 `storage-error` |
+| GET | `/api/share/view/:token` | 成功値を `{ documentJson, permission }` にする（comment リンクでも文書の取得は同じ） |
+
+クライアント: `ShareApiClient.createLink(sharedMapId, permission)`（既存の呼び出しは `"view"` を明示）、`viewByToken` の成功値は `{ documentJson; permission }`。`planShareViewLoad` は `ready` に `permission` を持たせ、未知の値は読み込み失敗にします。
+
+### 22.2 エンドポイント
+
+トークン経路（閲覧シェル）と所有者経路（編集シェル）は同じ形です。`{base}` はトークン経路が `/api/share/view/:token`、所有者経路が `/api/share/maps/:id`（`:id` は `sharedMapId`）。
+
+| メソッド | パス | 本文 | 成功値 |
+|---|---|---|---|
+| GET | `{base}/comment-threads` | — | `ShareCommentListValue` |
+| POST | `{base}/comment-threads` | `{ nodeId: number, body: string }` | `ShareCommentThreadView` |
+| POST | `{base}/comment-threads/:threadId/replies` | `{ body: string }` | `ShareCommentThreadView` |
+| POST | `{base}/comment-threads/:threadId/resolve` | — | `ShareCommentThreadView` |
+| POST | `{base}/comment-threads/:threadId/reopen` | — | `ShareCommentThreadView` |
+| DELETE | `{base}/comments/:commentId` | — | `{ commentId, threadDeleted }` |
+
+- 本文の検証: JSON オブジェクトで、許すキーは作成が `nodeId`・`body`、返信が `body` だけ。余計なキー（`authorName`・`displayName` などの表示名系を含む）は 400 `invalid-request`。表示名はサーバーがセッションから設定する。
+- `nodeId` は数値型の安全な正整数だけ（文字列の数字・0・小数は `invalid-request`）。`body` は文字列で、`normalizeShareCommentBody` を通らなければ 400 `invalid-comment`。
+- スレッド作成は現行の公開スナップショット（`loadCurrentShareDocument`）を読み、`nodes` に `nodeId` が無ければ 400 `invalid-node`。ラベルのスナップショットはここで読んだ `node.label` から作る（クライアントの値は使わない）。所有者経路で未公開なら 400 `not-published`。
+- 本文を持つ書込み（作成・返信）は `Content-Type` が `application/json`（`;` 以降と大文字小文字は無視）でなければ `invalid-request`。解決・再開・DELETE は本文を読まず、`Content-Type` も検査しない。
+- `threadId` / `commentId` が空なら 404。形式の検査はせず、`shared_map_id` で絞った検索の結果で決める（別のマップのスレッド ID は 404）。
+
+### 22.3 応答の型（`domain/share/shareComment.ts`）
+
+```typescript
+export type ShareCommentsScope =
+  | { kind: "token"; token: string }
+  | { kind: "owner"; sharedMapId: string };
+
+export type ShareCommentView = {
+  readonly id: string;
+  readonly authorName: string;
+  readonly body: string;
+  readonly createdAt: string;
+  readonly canDelete: boolean;
+};
+
+export type ShareCommentThreadView = {
+  readonly id: string;
+  readonly nodeId: number;
+  readonly nodeLabelSnapshot: string;
+  readonly status: "open" | "resolved";
+  readonly resolvedByName: string | null;
+  readonly resolvedAt: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly canResolve: boolean; // 解決・再開とも
+  readonly comments: readonly ShareCommentView[];
+};
+
+export type ShareCommentViewer = {
+  readonly signedIn: boolean;
+  readonly canPost: boolean; // signedIn かつ comment 権限（所有者経路では常に true）
+  readonly isOwner: boolean;
+};
+
+export type ShareCommentListValue = {
+  readonly threads: readonly ShareCommentThreadView[];
+  readonly viewer: ShareCommentViewer;
+};
+
+export type ShareCommentDeleteValue = {
+  readonly commentId: string;
+  readonly threadDeleted: boolean;
+};
+```
+
+- Google の `sub`（`author_user_id`・`created_by_user_id`・`resolved_by_user_id`）とメールアドレスはどの応答にも含めない。
+- 一覧は作成日時の昇順。コメント 0 件のスレッドとスレッドに属さないコメントは返さない。ページングはしない。
+- 解決・再開は冪等（既に同じ状態なら成功。解決者は上書きしない）。最後のコメントを消すとスレッドも消え、`threadDeleted: true`。スレッドの後始末に失敗してもコメントの削除は成功として返す（`threadDeleted: false`。空スレッドは一覧に出ない）。
+
+### 22.4 権限と判定順
+
+| 操作 | 所有者（どちらの経路でも） | comment＋ログイン | comment・未ログイン | view リンク | その他 |
+|---|---|---|---|---|---|
+| 一覧 | 可 | 可 | 可（`signedIn=false`・`canPost=false`） | 404 | 404 |
+| スレッド作成 | 可（要: 公開中） | 可 | 401 | 404 | 404 |
+| 返信（open のみ） | 可 | 可 | 401 | 404 | 404 |
+| 解決・再開 | 可（全スレッド） | 作成者のみ。他人のスレッドは 404 | 401 | 404 | 404 |
+| コメント削除 | 可（全コメント） | 投稿者のみ。他人のコメントは 404 | 401 | 404 | 404 |
+
+「その他」はトークン不明・失効・未公開・未知の permission・他人のマップの `sharedMapId`。view リンクのトークンでは、所有者がログインしていても 404 です（所有者の判定まで進まない）。所有者経路は `requireOwnedMap` に加え、`getCommenter()` が null か所有者セッションと `userId` が食い違うと 401。
+
+`handleShareCommentsApi.ts` の判定順（全ルート共通）:
+
+1. 経路のレート制限（429）
+2. `ShareCommentService.resolveAccess`（404 → 401。一覧は `requireActor: false`、書込みは `true`）
+3. 書込みだけ: 書込みのレート制限（429）
+4. 本文を持つ書込みだけ: `Content-Type`（400）→ 本文サイズ（413）→ JSON・キー・値（400）
+5. 操作（対象の存在・能力の 404、409、502）
+
+view リンクや未ログインの書込みは 2 で止まるので、書込みの枠を消費しません。
+
+### 22.5 reason と HTTP
+
+| reason | HTTP | 主な場面 | 画面の文言（`shareCommentOperationFailureMessage`） |
+|---|---|---|---|
+| `invalid-request` | 400 | キー・型・`Content-Type` の違反 | 「コメントの操作に失敗しました。」 |
+| `invalid-comment` | 400 | 本文が空・長すぎ | 「コメントは 1〜2,000 文字で入力してください。」 |
+| `invalid-node` | 400 | 公開スナップショットに無いノード | 「公開中のマップにこのノードがありません。共有を更新してから投稿してください。」 |
+| `not-published` | 400 | 所有者経路で未公開 | 「コメントの操作に失敗しました。」 |
+| `unauthenticated` | 401 | 未ログインの書込み | 「ログインが必要です。」 |
+| `not-found` | 404 | 権限なし・不明・他人のリソース | 「コメントが見つかりません。削除されたか、リンクが無効になった可能性があります。」 |
+| `thread-resolved` | 409 | 解決済みへの返信 | 「解決済みのスレッドです。再開してから返信してください。」 |
+| `comment-limit` | 409 | 上限（マップ: スレッド 200・コメント 1,000、スレッド: コメント 50） | 「コメント数の上限に達しました。」 |
+| `too-large` | 413 | 本文が 16 KiB 超 | 「コメントの操作に失敗しました。」 |
+| `rate-limited` | 429 | レート制限 | 「操作が多すぎます。しばらく待ってからやり直してください。」 |
+| `storage-error` | 502 | D1 / R2 の失敗（コメント用テーブル未作成を含む） | 「コメントの操作に失敗しました。」（一覧は「コメントを読み込めませんでした。」） |
+| `not-configured` | 503 | 環境変数の未設定 | 「コメントの操作に失敗しました。」 |
+
+`invalid-comment`・`invalid-node`・`thread-resolved`・`comment-limit` は `shareResponses.ts` の `STATUS_BY_REASON` に追加しました。D1 の生エラーは応答にも画面にも出しません（`d1Client.ts` は `D1QueryError` の `kind: "no-such-table" | "failed"` だけを持ち、`message` は `d1-query-failed`）。
+
+### 22.6 ヘッダー・レート制限・本文サイズ
+
+- トークン経路の応答には、成否とも `Cache-Control: private, no-store` と `Referrer-Policy: no-referrer`（`withViewResponseHeaders`）。所有者経路の応答にも成否とも `Cache-Control: private, no-store`。
+
+| 経路 | キー | 上限 |
+|---|---|---|
+| トークン経路（読み・書き） | `view:ip:<ip>` と `view:<tokenHash>`（`processShareViewRateLimiter`） | `SHARE_VIEW_RATE_LIMIT`（1 分 120 回。マップ閲覧と同じ枠） |
+| 所有者経路（読み・書き） | `owner:<userId>`（`processShareOwnerRateLimiter`） | `SHARE_OWNER_RATE_LIMIT`（1 分 60 回） |
+| 書込み（両経路に追加） | `comment-write:user:<userId>` と `comment-write:ip:<ip>`（`processShareCommentWriteRateLimiter`） | `SHARE_COMMENT_WRITE_RATE_LIMIT`（1 分 20 回） |
+
+- 平文トークンをレートキー・ログ・エラー文言に載せない（`tokenHash` を使う）。
+- 本文サイズは `readShareBodyWithinLimit(request, SHARE_COMMENT_MAX_BODY_BYTES)`（16 KiB）。
+
+### 22.7 クライアント
+
+```typescript
+// services/share/shareCommentsApiClient.ts
+export type ShareCommentsApiClient = {
+  list(scope: ShareCommentsScope): Promise<ShareResult<ShareCommentListValue>>;
+  createThread(scope: ShareCommentsScope, input: { nodeId: number; body: string }): Promise<ShareResult<ShareCommentThreadView>>;
+  reply(scope: ShareCommentsScope, threadId: string, input: { body: string }): Promise<ShareResult<ShareCommentThreadView>>;
+  resolve(scope: ShareCommentsScope, threadId: string): Promise<ShareResult<ShareCommentThreadView>>;
+  reopen(scope: ShareCommentsScope, threadId: string): Promise<ShareResult<ShareCommentThreadView>>;
+  deleteComment(scope: ShareCommentsScope, commentId: string): Promise<ShareResult<ShareCommentDeleteValue>>;
+};
+export function createShareCommentsApiClient(fetchImpl?: typeof fetch): ShareCommentsApiClient;
+```
+
+- 成否は既存の `parseShareResult` で読み、`fetch` の例外は `network-error`、Result の形でない本文は `invalid-response`。経路パラメータは `encodeURIComponent` する。
+- 一覧と書込みの状態は共通 hook `hooks/useShareCommentsController.ts`（`generationKey`・`scope`）が持ち、所有者は `hooks/useMapEditorComments.ts`（世代キー: `mapId`・`sharedMapId`・`userId`）、閲覧シェルは `app/share/[token]/useShareViewerComments.ts`（世代キー: `token`・投稿者の `userId`）から使う。世代番号と要求番号で古い一覧の応答を捨て、書込み成功時は応答のスレッドだけを差し替える（`shareCommentListMutations.ts`）。成功値の形（一覧は `threads` が配列で `viewer` があるか、スレッドの書込みは `id`・`nodeId`・`status`・`comments` があるか、削除は `commentId`・`threadDeleted` があるか）が違えば失敗（`invalid-response`）として扱う。
+- 一覧の節分け（未解決 / 解決済み / 削除されたノード）は `components/share/shareCommentThreadSections.ts` の `toShareCommentThreadSections`・`toShareCommentThreadSectionsForNode`、新規スレッドの下書きは `components/share/useNodeKeyedDrafts.ts` を閲覧パネルと所有者のダイアログで共用する。
+
+### 22.8 関連ソース
+
+- `client/src/server/share/`（`shareCommentStore.ts`・`shareCommentService.ts`・`handleShareCommentsApi.ts`・`resolveShareLinkByToken.ts`・`loadCurrentShareDocument.ts`・`testing/memoryShareCommentStore.ts`、変更 `shareService.ts`・`handleShareApi.ts`・`shareResponses.ts`・`shareRateLimit.ts`・`createShareApiDeps.ts`）
+- `client/src/app/api/share/view/[token]/comment-threads/**`・`view/[token]/comments/[commentId]/route.ts`・`maps/[id]/comment-threads/**`・`maps/[id]/comments/[commentId]/route.ts`
+- `client/src/services/share/shareCommentsApiClient.ts`、変更 `shareApiClient.ts`・`d1Client.ts`
+- `client/src/domain/share/`（`shareLinkPermission.ts`・`shareComment.ts`・`shareCommentLimits.ts`・`normalizeShareCommentBody.ts`・`normalizeShareCommentAuthorName.ts`・`shareCommentCapabilities.ts`・`classifyShareCommentThreads.ts`・`shareCommentListMutations.ts`・`shareCommentMessages.ts`・`shareCommentOperationMessages.ts`・`shareCommentsOpenGuards.ts`）
