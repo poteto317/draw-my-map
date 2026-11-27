@@ -1,22 +1,40 @@
 /**
- * collab-worker/src/constants.ts と domain 正本の値一致。
- * worker 側を変えたらここ（と domain/collab/collabRoomPolicy.ts）も同じ値に更新する。
+ * collab-worker/src/constants.ts の実値と domain / server 正本の一致。
+ * コピー照合はしない。worker 側を変えたら対応する正本も同じ値に更新する。
  */
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { COLLAB_RECONNECT_GRACE_MS } from "@/domain/collab/collabConnectionTypes";
 import {
   COLLAB_AWARENESS_UPDATE_LIMIT,
   COLLAB_DOC_UPDATE_LIMIT,
   COLLAB_EMPTY_ROOM_TTL_MS,
 } from "@/domain/collab/collabRoomPolicy";
+import { COLLAB_MAX_CONNECTIONS } from "@/server/collab/collabRoomClient";
 
-/** collab-worker/src/constants.ts の現行値（同期手順の検査用コピー） */
-const WORKER_COLLAB_EMPTY_ROOM_TTL_MS = 5 * 60 * 1000;
-const WORKER_COLLAB_DOC_UPDATE_LIMIT = { limit: 40, windowMs: 1_000 } as const;
-const WORKER_COLLAB_AWARENESS_UPDATE_LIMIT = { limit: 20, windowMs: 1_000 } as const;
+const WORKER_CONSTANTS_PATH = path.resolve(
+  __dirname,
+  "../../../../../collab-worker/src/constants.ts",
+);
+
+function readWorkerExport(name: string): unknown {
+  const source = readFileSync(WORKER_CONSTANTS_PATH, "utf8");
+  const match = source.match(new RegExp(`export const ${name}\\s*=\\s*([^;]+);`));
+  if (!match?.[1]) {
+    throw new Error(`collab-worker constants に ${name} が無い: ${WORKER_CONSTANTS_PATH}`);
+  }
+  const expression = match[1].replace(/\s+as\s+const\s*$/, "").trim();
+  return new Function(`"use strict"; return (${expression});`)();
+}
 
 describe("collabRoomPolicy sync with collab-worker", () => {
-  it("EMPTY TTL / DOC・AWARENESS rate が worker constants と一致する", () => {
-    expect(COLLAB_EMPTY_ROOM_TTL_MS).toBe(WORKER_COLLAB_EMPTY_ROOM_TTL_MS);
-    expect(COLLAB_DOC_UPDATE_LIMIT).toEqual(WORKER_COLLAB_DOC_UPDATE_LIMIT);
-    expect(COLLAB_AWARENESS_UPDATE_LIMIT).toEqual(WORKER_COLLAB_AWARENESS_UPDATE_LIMIT);
+  it("EMPTY TTL / DOC・AWARENESS rate / grace / maxConnections が worker constants と一致する", () => {
+    expect(COLLAB_EMPTY_ROOM_TTL_MS).toBe(readWorkerExport("COLLAB_EMPTY_ROOM_TTL_MS"));
+    expect(COLLAB_DOC_UPDATE_LIMIT).toEqual(readWorkerExport("COLLAB_DOC_UPDATE_LIMIT"));
+    expect(COLLAB_AWARENESS_UPDATE_LIMIT).toEqual(
+      readWorkerExport("COLLAB_AWARENESS_UPDATE_LIMIT"),
+    );
+    expect(COLLAB_RECONNECT_GRACE_MS).toBe(readWorkerExport("COLLAB_RECONNECT_GRACE_MS"));
+    expect(COLLAB_MAX_CONNECTIONS).toBe(readWorkerExport("COLLAB_MAX_CONNECTIONS"));
   });
 });

@@ -2,7 +2,8 @@
  * 共同編集ルームの接続ポリシー正本（client / collab-worker で値を一致させる）。
  *
  * collab-worker 側: `collab-worker/src/constants.ts`
- * 変更時は両方を同じ値にし、`collabRoomPolicy.sync.test.ts` が通ることを確認する。
+ * grace は `collabConnectionTypes.ts`、max は `server/collab/collabRoomClient.ts`。
+ * 変更時は対応する正本も同じ値にし、`collabRoomPolicy.sync.test.ts` が通ることを確認する。
  */
 
 /** 全員切断後、成果物退避してルーム破棄するまでの TTL */

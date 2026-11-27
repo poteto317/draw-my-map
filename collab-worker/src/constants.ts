@@ -2,6 +2,7 @@
  * 接続ポリシー定数。
  * client 正本: `client/src/domain/collab/collabRoomPolicy.ts`（EMPTY TTL / DOC・AWARENESS rate）
  * 再接続猶予正本: `client/src/domain/collab/collabConnectionTypes.ts`
+ * 同時接続上限正本: `client/src/server/collab/collabRoomClient.ts`
  * 変更時は client 側も同じ値にし、`collabRoomPolicy.sync.test.ts` が通ることを確認する。
  */
 
