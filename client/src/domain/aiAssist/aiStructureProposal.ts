@@ -15,6 +15,7 @@ import {
 } from "@/domain/nodes/nodeAutoLayout";
 import { assertNodesEditable } from "@/domain/nodes/nodeEditLock";
 import { insertSiblingAfter } from "@/domain/nodes/insertSiblingAfter";
+import { layoutNodesIfHeightsChanged } from "@/domain/nodes/layoutNodesIfHeightsChanged";
 import { moveNodeBranch } from "@/domain/nodes/nodeBranchMove";
 import {
   isSameNodeMergePlan,
@@ -26,7 +27,6 @@ import {
   resolveLayoutSpacing,
 } from "@/domain/nodes/nodeMapLayoutContext";
 import {
-  anyNodeHeightsChanged,
   fitNodeHeightToLabel,
   fitNodeHeightToLabelIfContentChanged,
 } from "@/domain/nodes/nodeLabelLayout";
@@ -383,15 +383,14 @@ export function applyAiStructureProposals(args: {
     fitNodeHeightToLabelIfContentChanged(previousById.get(node.id), node, "commit"),
   );
   // merge 等で高さだけ伸びたあと、auto なら兄弟間隔も layout で閉じる
-  if (
-    working.layoutMode === "auto"
-    && anyNodeHeightsChanged(working.nodes, fittedNodes)
-  ) {
-    const laid = layoutNodeForest(fittedNodes, layoutOptions);
-    if (laid === null) return { ok: false, reason: "placement-failed" };
-    return { ok: true, state: { ...working, nodes: laid }, appliedCount };
-  }
-  return { ok: true, state: { ...working, nodes: fittedNodes }, appliedCount };
+  const laid = layoutNodesIfHeightsChanged(
+    working.nodes,
+    fittedNodes,
+    working.layoutMode,
+    layoutOptions,
+  );
+  if (laid === null) return { ok: false, reason: "placement-failed" };
+  return { ok: true, state: { ...working, nodes: laid }, appliedCount };
 }
 
 export function structureInputFingerprintOf(
