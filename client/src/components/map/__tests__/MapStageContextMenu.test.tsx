@@ -31,7 +31,7 @@ const defaultProps = {
   onAddChildNode: jest.fn(() => null),
   onAddSiblingNode: jest.fn(() => null),
   onSelectNode: jest.fn(),
-  onUpdateLabel: jest.fn(),
+  onUpdateLabel: jest.fn(() => true),
   onMoveNode: jest.fn(),
   onBeginNodeMove: createTestMapHistoryLease,
   documentRevision: 0,

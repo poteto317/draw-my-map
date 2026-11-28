@@ -10,7 +10,8 @@ type NodeLabelEditorProps = {
   viewport: Viewport;
   value: string;
   onChange: (value: string) => void;
-  onCommit: () => void;
+  /** 成功時 true。失敗時は actionHandled を立てず Enter/blur で再確定可能 */
+  onCommit: () => boolean;
   onCancel: () => void;
 };
 
@@ -19,8 +20,8 @@ export function NodeLabelEditor({ node, viewport, value, onChange, onCommit, onC
 
   const handleBlur = () => {
     if (actionHandledRef.current) return;
+    if (!onCommit()) return;
     actionHandledRef.current = true;
-    onCommit();
   };
 
   const layout = getNodeLabelEditorLayout(node, viewport);

@@ -10,7 +10,7 @@ const nodes: Node[] = [
 
 function useEditingStartedInLayout(
   currentNodes: Node[],
-  onUpdateLabel: (id: number, label: string) => void,
+  onUpdateLabel: (id: number, label: string) => boolean,
 ) {
   const editing = useNodeEditing(currentNodes, onUpdateLabel);
   const { startEditing } = editing;
@@ -51,16 +51,33 @@ describe("useNodeEditing", () => {
   });
 
   it("commits the edited label and clears the editing state", () => {
-    const onUpdateLabel = jest.fn();
+    const onUpdateLabel = jest.fn(() => true);
     const { result } = renderHook(() => useNodeEditing(nodes, onUpdateLabel));
 
     act(() => result.current.startEditing(1));
     act(() => result.current.setEditingText("更新"));
-    act(() => result.current.commitEditing());
+    let committed = false;
+    act(() => { committed = result.current.commitEditing(); });
 
+    expect(committed).toBe(true);
     expect(onUpdateLabel).toHaveBeenCalledWith(1, "更新");
     expect(result.current.editingNodeId).toBeNull();
     expect(result.current.editingText).toBe("");
+  });
+
+  it("updateNodeLabel が false のときは編集状態を成功クリアしない", () => {
+    const onUpdateLabel = jest.fn(() => false);
+    const { result } = renderHook(() => useNodeEditing(nodes, onUpdateLabel));
+
+    act(() => result.current.startEditing(1));
+    act(() => result.current.setEditingText("更新"));
+    let committed = true;
+    act(() => { committed = result.current.commitEditing(); });
+
+    expect(committed).toBe(false);
+    expect(onUpdateLabel).toHaveBeenCalledWith(1, "更新");
+    expect(result.current.editingNodeId).toBe(1);
+    expect(result.current.editingText).toBe("更新");
   });
 
   it("cancels an edit without updating the node label", () => {

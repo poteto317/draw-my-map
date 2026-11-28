@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { exportedMap, headerButton, renderPage, selectNode, stageContainer, storedMap, undoButton, v3Json } from "@/app/testing/pageTestHelpers";
 import { resetMapStageTestRuntime } from "@/components/map/testing/mapStageTestRuntime";
+import { ILLUSTRATED_NODE_HEIGHT, RECT_HEIGHT } from "@/config/shapes";
 import { seedMapLibrary } from "@/testing/mapLibraryTestStorage";
 import { MAP_STORAGE_KEY } from "@/services/persistence/mapStorage";
 import { mapBodyKey } from "@/services/persistence/mapLibraryStorage";
@@ -98,7 +99,15 @@ it("collapse/highで隠れた全件を編集してもラベル以外の属性と
   for (const [label, depth] of [["G", 3], ["L", 2]] as const) {
     await user.dblClick(row(label, depth)); await user.type(textarea(), "編集{Enter}");
   }
-  const expected = { ...before, nodes: before.nodes.map(node => ({ ...node, label: [3,4].includes(node.id) ? `${node.label}編集` : node.label })) };
+  // ラベル確定で高さ commit fit（短いラベルは下限へ縮小。他属性・座標は保持）
+  const expected = {
+    ...before,
+    nodes: before.nodes.map((node) => {
+      if (node.id === 3) return { ...node, label: "G編集", height: ILLUSTRATED_NODE_HEIGHT };
+      if (node.id === 4) return { ...node, label: "L編集", height: RECT_HEIGHT };
+      return node;
+    }),
+  };
   expect(exported()).toEqual(expected);
   await user.click(button("マップ")); expect(exported()).toEqual(expected);
   await waitFor(() => expect(storedMap()).toEqual(expected));

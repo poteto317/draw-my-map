@@ -14,9 +14,8 @@ const node: Node = createTestNode({
   label: "既存ラベル",
 });
 
-function renderEditor() {
+function renderEditor(onCommit: jest.Mock = jest.fn(() => true)) {
   const onChange = jest.fn();
-  const onCommit = jest.fn();
   const onCancel = jest.fn();
   const result = render(
     <NodeLabelEditor
@@ -103,7 +102,7 @@ describe("NodeLabelEditor", () => {
           viewport={INITIAL_VIEWPORT}
           value="下書き"
           onChange={jest.fn()}
-          onCommit={jest.fn()}
+          onCommit={jest.fn(() => true)}
           onCancel={jest.fn()}
         />
       </div>,
@@ -128,7 +127,7 @@ describe("NodeLabelEditor", () => {
         viewport={{ offsetX: 20, offsetY: -10, scale: 2 }}
         value="下書き"
         onChange={jest.fn()}
-        onCommit={jest.fn()}
+        onCommit={jest.fn(() => true)}
         onCancel={jest.fn()}
       />,
     );
@@ -158,7 +157,7 @@ describe("NodeLabelEditor", () => {
         viewport={{ offsetX: 0, offsetY: 0, scale: 1 }}
         value="下書き"
         onChange={jest.fn()}
-        onCommit={jest.fn()}
+        onCommit={jest.fn(() => true)}
         onCancel={jest.fn()}
       />,
     );
@@ -168,6 +167,35 @@ describe("NodeLabelEditor", () => {
       fontWeight: "bold",
       textDecoration: "underline",
     });
+  });
+
+  it("onCommit が false なら flag を立てず、再 focus 後の blur で再確定できる", () => {
+    const onCommit = jest.fn()
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
+    const { input } = renderEditor(onCommit);
+
+    fireEvent.blur(input);
+    expect(onCommit).toHaveBeenCalledTimes(1);
+
+    fireEvent.focus(input);
+    fireEvent.blur(input);
+    expect(onCommit).toHaveBeenCalledTimes(2);
+  });
+
+  it("onCommit が false なら Enter 後も再 focus して Enter で再確定できる", () => {
+    const onCommit = jest.fn()
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
+    const { input } = renderEditor(onCommit);
+
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onCommit).toHaveBeenCalledTimes(1);
+
+    // jsdom では fireEvent.focus だけでは activeElement にならないことがある
+    input.focus();
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onCommit).toHaveBeenCalledTimes(2);
   });
 
   it("リピートの Enter は確定せず、続く通常の Enter で一度だけ確定する", () => {
