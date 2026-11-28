@@ -75,6 +75,7 @@ import { resolveBranchExtractContextMenu } from "@/domain/nodes/nodeBranchExtrac
 import type { MapCanvasSelection } from "@/types/mapCanvasSelection";
 import type { MapGroup } from "@/types/mapGroup";
 import type { MapRelation } from "@/types/mapRelation";
+import type { ResolutionFilterMode } from "@/types/nodeResolution";
 
 const EMPTY_SELECTED_NODE_IDS: readonly number[] = [];
 
@@ -97,6 +98,14 @@ type MapStageProps = {
   onFocusRequestApplied?: (request: NodeFocusRequest) => void;
   onFocusRequestDiscarded?: (request: NodeFocusRequest) => void;
   visibleNodeIds?: ReadonlySet<number>;
+  /**
+   * 存在マーカー用。省略時はマーカー層スキップ（L-002）。
+   * display 集合は visibleNodeIds を使う。
+   */
+  resolutionMode?: ResolutionFilterMode | null;
+  collapseVisibleNodeIds?: ReadonlySet<number> | null;
+  focusVisibleNodeIds?: ReadonlySet<number> | null;
+  depthVisibleNodeIds?: ReadonlySet<number> | null;
   /** 一時強調対象。空集合 = 強調オフ。省略不可（L-060） */
   highlightNodeIds: ReadonlySet<number>;
   /** ピン済みノード。空集合 = 印なし */
@@ -187,6 +196,10 @@ export function MapStage({
   onFocusRequestApplied,
   onFocusRequestDiscarded,
   visibleNodeIds,
+  resolutionMode,
+  collapseVisibleNodeIds,
+  focusVisibleNodeIds,
+  depthVisibleNodeIds,
   highlightNodeIds,
   pinnedNodeIds,
   commentNodeCounts,
@@ -398,6 +411,10 @@ export function MapStage({
       selectedGroupId,
       onGroupPointerDown: handleGroupPointerDown,
     },
+    resolutionMode,
+    collapseVisibleNodeIds,
+    focusVisibleNodeIds,
+    depthVisibleNodeIds,
     viewport,
     viewportRef,
     screenSize,

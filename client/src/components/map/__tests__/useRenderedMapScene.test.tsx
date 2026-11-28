@@ -1,12 +1,17 @@
 const inactiveLearnDisplay = { learningActive: false, revealedNodeIds: new Set<number>() };
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { renderHook } from "@testing-library/react";
 import { INITIAL_VIEWPORT, type Viewport } from "@/components/map/mapViewport";
 import { applyViewportTransform } from "@/components/map/pixi/applyViewportTransform";
+import { collectVisibleMapKeys } from "@/components/map/pixi/mapVisibilityKeys";
 import { renderMapScene, type RenderMapSceneOptions } from "@/components/map/pixi/renderMapScene";
 import type { PixiRuntime } from "@/components/map/pixi/pixiTypes";
 import type { SiblingReorderIndicator } from "@/components/map/siblingReorderDropSlot";
+import { setViewportCullingEnabled } from "@/components/map/viewportCullingPolicy";
 import { useRenderedMapScene } from "@/components/map/useRenderedMapScene";
 import { createTestNode } from "@/testing/createTestNode";
+import type { ResolutionFilterMode } from "@/types/nodeResolution";
 import type { Texture } from "pixi.js";
 
 jest.mock("@/components/map/pixi/applyViewportTransform", () => ({
@@ -27,11 +32,21 @@ const onNodePointerDown = jest.fn();
 const createNodePointerDownHandler = jest.fn(() => onNodePointerDown);
 const screenSize = { width: 800, height: 600 };
 
-function createOptions(
-  nodes = [node],
-): Omit<RenderMapSceneOptions, "viewport" | "onNodePointerDown"> & {
+type SceneHookOptions = Omit<
+  RenderMapSceneOptions,
+  "viewport" | "onNodePointerDown" | "presenceNodeIds" | "presenceEdgeChildIds" | "presenceNodes"
+> & {
   createNodePointerDownHandler: () => RenderMapSceneOptions["onNodePointerDown"];
-} {
+};
+
+type PresenceHookInputs = {
+  resolutionMode?: ResolutionFilterMode | null;
+  collapseVisibleNodeIds?: ReadonlySet<number> | null;
+  focusVisibleNodeIds?: ReadonlySet<number> | null;
+  depthVisibleNodeIds?: ReadonlySet<number> | null;
+};
+
+function createOptions(nodes = [node]): SceneHookOptions {
   return {
     learnDisplay: inactiveLearnDisplay,
     nodes,
@@ -48,6 +63,31 @@ function createOptions(
     commentNodeCounts: new Map<number, number>(),
   };
 }
+
+/** auto ズームアウト相当: structural に medium、display は祖先のみ */
+function createPresenceAutoOptions() {
+  const root = createTestNode({ id: 1, parentId: null, x: 0, y: 0, width: 40, height: 40 });
+  const medium = createTestNode({ id: 2, parentId: 1, x: 80, y: 0, width: 40, height: 40 });
+  const far = createTestNode({ id: 3, parentId: 1, x: 5000, y: 0, width: 40, height: 40 });
+  const nodes = [root, medium, far];
+  const allIds = new Set([1, 2, 3]);
+  const presence: PresenceHookInputs = {
+    resolutionMode: "auto",
+    collapseVisibleNodeIds: allIds,
+    focusVisibleNodeIds: null,
+    depthVisibleNodeIds: allIds,
+  };
+  return {
+    nodes,
+    options: {
+      ...createOptions(nodes),
+      visibleNodeIds: new Set([1]), // display = 祖先のみ
+    },
+    presence,
+  };
+}
+
+const compactScreen = { width: 200, height: 200 };
 
 describe("useRenderedMapScene", () => {
   beforeEach(() => {
@@ -375,5 +415,272 @@ describe("useRenderedMapScene", () => {
       runtime.constructors,
       expect.objectContaining({ siblingReorderSourceNodeId: 1 }),
     );
+  });
+
+  describe("presence 配線", () => {
+    afterEach(() => {
+      setViewportCullingEnabled(true);
+    });
+
+    it("入力非完備時は presence オプションを渡さない（空 Set で成功ゼロに見せない）", () => {
+      const viewportRef = { current: INITIAL_VIEWPORT };
+      const options = createOptions(); // resolutionMode 等なし → 非完備
+      renderHook(() => useRenderedMapScene({
+        runtime,
+        options,
+        viewport: INITIAL_VIEWPORT,
+        viewportRef,
+        screenSize,
+      }));
+
+      const passed = mockedRenderMapScene.mock.calls[0][2];
+      expect(passed).not.toHaveProperty("presenceNodeIds");
+      expect(passed).not.toHaveProperty("presenceEdgeChildIds");
+      expect(passed).not.toHaveProperty("presenceNodes");
+    });
+
+    it("auto で structural−display が非空なら presence を渡し、visibleKeys 系には混入しない", () => {
+      const viewportRef = { current: INITIAL_VIEWPORT };
+      const { nodes, options, presence } = createPresenceAutoOptions();
+      renderHook(() => useRenderedMapScene({
+        runtime,
+        options,
+        ...presence,
+        viewport: INITIAL_VIEWPORT,
+        viewportRef,
+        screenSize: compactScreen,
+      }));
+
+      const passed = mockedRenderMapScene.mock.calls[0][2];
+      // ノード 3 は画面外で cull。枝 3 は親が画面内のため線分×AABB で残る
+      expect(passed.presenceNodeIds).toEqual(new Set([2]));
+      expect(passed.presenceEdgeChildIds).toEqual([2, 3]);
+      expect(passed.presenceNodes).toBe(nodes);
+      expect(passed.visibleNodeIds).toEqual(new Set([1]));
+      // フル描画 nodes に presence 枝端点（画面外 3）をマージしない
+      expect(passed.nodes.map((n: { id: number }) => n.id)).not.toContain(3);
+
+      const visibleKeys = collectVisibleMapKeys(nodes, passed.visibleNodeIds!);
+      expect(visibleKeys.has("node:2")).toBe(false);
+      expect(visibleKeys.has("edge:2")).toBe(false);
+      expect([...visibleKeys]).toEqual(["node:1"]);
+    });
+
+    it("手動モードでは presence が空（成功のゼロ）", () => {
+      const viewportRef = { current: INITIAL_VIEWPORT };
+      const { options, presence } = createPresenceAutoOptions();
+      renderHook(() => useRenderedMapScene({
+        runtime,
+        options,
+        ...presence,
+        resolutionMode: "high",
+        viewport: INITIAL_VIEWPORT,
+        viewportRef,
+        screenSize,
+      }));
+
+      const passed = mockedRenderMapScene.mock.calls[0][2];
+      expect(passed.presenceNodeIds).toEqual(new Set());
+      expect(passed.presenceEdgeChildIds).toEqual([]);
+      expect(passed.presenceNodes).toBe(options.nodes);
+    });
+
+    it("viewport 外の presence ノードを cull する（enabled 時）", () => {
+      const viewportRef = { current: INITIAL_VIEWPORT };
+      const { options, presence } = createPresenceAutoOptions();
+      renderHook(() => useRenderedMapScene({
+        runtime,
+        options,
+        ...presence,
+        viewport: INITIAL_VIEWPORT,
+        viewportRef,
+        screenSize: compactScreen,
+      }));
+
+      const passed = mockedRenderMapScene.mock.calls[0][2];
+      expect(passed.presenceNodeIds).toEqual(new Set([2]));
+      expect(passed.presenceNodeIds!.has(3)).toBe(false);
+    });
+
+    it("enabled 時、枝は一端のみ画面内でも残り完全外は落ちる", () => {
+      const viewportRef = { current: INITIAL_VIEWPORT };
+      const root = createTestNode({ id: 1, parentId: null, x: 50, y: 50, width: 40, height: 40 });
+      const nearChild = createTestNode({ id: 2, parentId: 1, x: 100, y: 50, width: 40, height: 40 });
+      const farChild = createTestNode({ id: 3, parentId: 1, x: 5000, y: 50, width: 40, height: 40 });
+      // 親子とも画面外
+      const farRoot = createTestNode({ id: 10, parentId: null, x: 5000, y: 5000, width: 40, height: 40 });
+      const farOnly = createTestNode({ id: 11, parentId: 10, x: 5100, y: 5000, width: 40, height: 40 });
+      const nodes = [root, nearChild, farChild, farRoot, farOnly];
+      const structural = new Set([1, 2, 3, 10, 11]);
+      // options / presence は render 外で固定（effect deps の identity churn 回避）
+      const options: SceneHookOptions = {
+        ...createOptions(nodes),
+        visibleNodeIds: new Set([1]),
+      };
+      const presence: PresenceHookInputs = {
+        resolutionMode: "auto",
+        collapseVisibleNodeIds: structural,
+        focusVisibleNodeIds: null,
+        depthVisibleNodeIds: structural,
+      };
+
+      renderHook(() => useRenderedMapScene({
+        runtime,
+        options,
+        ...presence,
+        viewport: INITIAL_VIEWPORT,
+        viewportRef,
+        screenSize: compactScreen,
+      }));
+
+      const passed = mockedRenderMapScene.mock.calls[0][2];
+      // 2: 両端内、3: 親内・子外 → 残る、11: 完全外 → 落ちる
+      expect(passed.presenceEdgeChildIds).toEqual([2, 3]);
+      expect(passed.presenceEdgeChildIds).not.toContain(11);
+      // フル描画 nodes に画面外 presence 端点をマージしない（座標は presenceNodes）
+      expect(passed.nodes.map((n: { id: number }) => n.id)).not.toContain(3);
+      expect(passed.nodes.map((n: { id: number }) => n.id)).not.toContain(11);
+      expect(passed.presenceNodes).toBe(nodes);
+    });
+
+    it("culling disabled または screenSize 不正なら presence 全候補を残す", () => {
+      const viewportRef = { current: INITIAL_VIEWPORT };
+      const { options, presence } = createPresenceAutoOptions();
+
+      setViewportCullingEnabled(false);
+      renderHook(() => useRenderedMapScene({
+        runtime,
+        options,
+        ...presence,
+        viewport: INITIAL_VIEWPORT,
+        viewportRef,
+        screenSize: compactScreen,
+      }));
+      expect(mockedRenderMapScene.mock.calls[0][2].presenceNodeIds).toEqual(new Set([2, 3]));
+      expect(mockedRenderMapScene.mock.calls[0][2].presenceEdgeChildIds).toEqual([2, 3]);
+
+      setViewportCullingEnabled(true);
+      mockedRenderMapScene.mockClear();
+      renderHook(() => useRenderedMapScene({
+        runtime,
+        options,
+        ...presence,
+        viewport: INITIAL_VIEWPORT,
+        viewportRef,
+        screenSize: null,
+      }));
+      expect(mockedRenderMapScene.mock.calls[0][2].presenceNodeIds).toEqual(new Set([2, 3]));
+      expect(mockedRenderMapScene.mock.calls[0][2].presenceEdgeChildIds).toEqual([2, 3]);
+    });
+
+    it("選択中 ID が presence のみでも required マージで presence 描画集合が膨らまない", () => {
+      const viewportRef = { current: INITIAL_VIEWPORT };
+      const { options: base, presence } = createPresenceAutoOptions();
+      // id:3 は画面外 presence。選択しても presence cull の required は空なので残らない
+      const options = { ...base, selectedNodeIds: [3] as const };
+      renderHook(() => useRenderedMapScene({
+        runtime,
+        options,
+        ...presence,
+        viewport: INITIAL_VIEWPORT,
+        viewportRef,
+        screenSize: compactScreen,
+      }));
+
+      const passed = mockedRenderMapScene.mock.calls[0][2];
+      expect(passed.presenceNodeIds!.has(3)).toBe(false);
+      expect(passed.presenceNodeIds).toEqual(new Set([2]));
+    });
+
+    it("presence ID 固定のまま scale だけ変わると scene を再生成し新 scale（半径用）を渡す", () => {
+      const viewportRef = { current: INITIAL_VIEWPORT };
+      const { options, presence } = createPresenceAutoOptions();
+      // cull 無し → presence 集合が scale で変わらず、半径用 scale 連動だけを検証できる
+      const { rerender } = renderHook(
+        ({ viewport }: { viewport: Viewport }) => useRenderedMapScene({
+          runtime,
+          options,
+          ...presence,
+          viewport,
+          viewportRef,
+          screenSize: null,
+        }),
+        { initialProps: { viewport: INITIAL_VIEWPORT } },
+      );
+
+      expect(mockedRenderMapScene).toHaveBeenCalledTimes(1);
+      const first = mockedRenderMapScene.mock.calls[0][2];
+      expect(first.presenceNodeIds).toEqual(new Set([2, 3]));
+      expect(first.viewport.scale).toBe(1);
+
+      const nextViewport = { offsetX: 0, offsetY: 0, scale: 0.5 };
+      viewportRef.current = nextViewport;
+      rerender({ viewport: nextViewport });
+
+      expect(mockedRenderMapScene).toHaveBeenCalledTimes(2);
+      const second = mockedRenderMapScene.mock.calls[1][2];
+      expect(second.presenceNodeIds).toEqual(new Set([2, 3]));
+      expect(second.viewport.scale).toBe(0.5);
+      // renderMapScene は viewport.scale から CONST/scale 半径を取る
+    });
+
+    it("presence が空のとき scale 変更では scene を再生成しない", () => {
+      const viewportRef = { current: INITIAL_VIEWPORT };
+      const { options, presence } = createPresenceAutoOptions();
+      const { rerender } = renderHook(
+        ({ viewport }: { viewport: Viewport }) => useRenderedMapScene({
+          runtime,
+          options,
+          ...presence,
+          resolutionMode: "high",
+          viewport,
+          viewportRef,
+          screenSize: null,
+        }),
+        { initialProps: { viewport: INITIAL_VIEWPORT } },
+      );
+
+      expect(mockedRenderMapScene).toHaveBeenCalledTimes(1);
+      const first = mockedRenderMapScene.mock.calls[0][2];
+      expect(first.presenceNodeIds).toEqual(new Set());
+      expect(first.presenceEdgeChildIds).toEqual([]);
+
+      const nextViewport = { offsetX: 0, offsetY: 0, scale: 0.5 };
+      viewportRef.current = nextViewport;
+      rerender({ viewport: nextViewport });
+
+      // transform のみ更新。空 presence では scale を identity に載せない
+      expect(mockedRenderMapScene).toHaveBeenCalledTimes(1);
+    });
+
+    it("L-467: presence 導出は隣接 hook の useMemo であり render 本体で setState しない", () => {
+      const sceneSource = readFileSync(
+        join(__dirname, "..", "useRenderedMapScene.ts"),
+        "utf8",
+      );
+      const presenceHookSource = readFileSync(
+        join(__dirname, "..", "useMapPresenceRenderOptions.ts"),
+        "utf8",
+      );
+      const planSource = readFileSync(
+        join(__dirname, "..", "..", "..", "domain", "nodes", "planPresenceMarkers.ts"),
+        "utf8",
+      );
+
+      // 合流 hook は presence 算出を持たず、隣接 hook に委譲する
+      expect(sceneSource).toMatch(/useMapPresenceRenderOptions/);
+      expect(sceneSource).not.toMatch(/planPresenceMarkers|arePresenceInputsComplete|collectPresenceNodeIds/);
+
+      // 純関数＋useMemo 導出。render 中 setState 禁止（viewport cull hook の import も禁止）
+      expect(planSource).toMatch(/export function planPresenceMarkers/);
+      expect(planSource).not.toMatch(/@\/components\/map\/pixi\//);
+      expect(presenceHookSource).toMatch(/useMemo\(\s*\(\)\s*=>\s*planPresenceMarkers/);
+      expect(presenceHookSource).toMatch(/cullNodesInViewport/);
+      expect(presenceHookSource).not.toMatch(
+        /from ["']@\/hooks\/useViewportCulledRenderNodes["']/,
+      );
+      expect(presenceHookSource).not.toMatch(/\buseState\b/);
+      expect(presenceHookSource).not.toMatch(/\bset[A-Z]\w*\(/);
+    });
   });
 });
