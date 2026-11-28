@@ -660,7 +660,14 @@ describe("移行と保護モード", () => {
     expect(currentMapName()).toHaveTextContent("マップ: 無題のマップ");
     expect(exportedLabels()).toEqual([largeLabel]);
     expect(window.localStorage.getItem(MAP_STORAGE_KEY)).toBeNull();
-    expect(readActiveMapJson(window.localStorage)).toBe(largeJson);
+    // hydrate の growOnly で不足高さだけ増高される（履歴なし・保存には反映）
+    const stored = readActiveMapJson(window.localStorage);
+    expect(stored).not.toBeNull();
+    const storedDoc = JSON.parse(stored!) as {
+      nodes: Array<{ label: string; height: number }>;
+    };
+    expect(storedDoc.nodes[0]?.label).toBe(largeLabel);
+    expect(storedDoc.nodes[0]?.height).toBe(240);
     expect(readMapIndex(window.localStorage)?.legacyCleanupPending).toBe(false);
     expect(headerButton("マップ一覧")).toBeEnabled();
     expect(screen.getByTestId("map-library-notices").textContent).toBe("");

@@ -127,7 +127,7 @@ type MapStageProps = {
   onSetSelectionFromMarquee?: (args: { mode: "replace" | "add"; ids: readonly number[] }) => void;
   onClearSelection?: () => void;
   pruneSelectionToVisible?: (visibleNodeIds: ReadonlySet<number>) => void;
-  onUpdateLabel: (id: number, label: string) => void;
+  onUpdateLabel: (id: number, label: string) => boolean;
   onMoveNode: (id: number, x: number, y: number) => void;
   // ドラッグの最初の有効な移動の直前に呼び、終了までの移動を1操作にまとめる
   onBeginNodeMove: () => MapHistoryGroupLease;

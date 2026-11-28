@@ -3,7 +3,10 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import type { Node } from "@/types/node";
 
-export function useNodeEditing(nodes: readonly Node[], onUpdateLabel: (id: number, label: string) => void) {
+export function useNodeEditing(
+  nodes: readonly Node[],
+  onUpdateLabel: (id: number, label: string) => boolean,
+) {
   const [editingNodeId, setEditingNodeId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState("");
   const nodesRef = useRef<readonly Node[]>(nodes);
@@ -19,12 +22,13 @@ export function useNodeEditing(nodes: readonly Node[], onUpdateLabel: (id: numbe
     setEditingText(initialText ?? node!.label);
   }, []);
 
-  const commitEditing = useCallback(() => {
+  const commitEditing = useCallback((): boolean => {
     if (editingNodeId !== null) {
-      onUpdateLabel(editingNodeId, editingText);
+      if (!onUpdateLabel(editingNodeId, editingText)) return false;
     }
     setEditingNodeId(null);
     setEditingText("");
+    return true;
   }, [editingNodeId, editingText, onUpdateLabel]);
 
   const cancelEditing = useCallback(() => {
