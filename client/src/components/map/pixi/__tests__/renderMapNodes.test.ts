@@ -153,7 +153,6 @@ describe("renderMapNodes", () => {
         fontWeight: "normal",
         fill: 0x27272a,
         wordWrap: false,
-        wordWrapWidth: 84,
         align: "center",
       },
     });
@@ -199,7 +198,6 @@ describe("renderMapNodes", () => {
         fontWeight: "bold",
         fill: 0x27272a,
         wordWrap: false,
-        wordWrapWidth: 84,
         align: "center",
       },
     });
