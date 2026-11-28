@@ -1226,6 +1226,7 @@ export function MapEditor({
     persistenceConfirmOpen: persistence.isConfirmOpen,
     shareDialogOpen,
     commentsDialogOpen: commentsDialog.open,
+    dockCustomizeOpen: dockCustomize.open,
   });
   const voiceExclusiveStopRequested = resolveVoiceExclusiveStopRequested({
     modalBlockingVoiceStart: editorModalsBlockEditing,
