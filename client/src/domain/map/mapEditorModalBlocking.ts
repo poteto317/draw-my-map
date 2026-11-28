@@ -18,6 +18,7 @@ export type MapEditorModalBlockingInput = {
   readonly persistenceConfirmOpen: boolean;
   readonly shareDialogOpen: boolean;
   readonly commentsDialogOpen: boolean;
+  readonly dockCustomizeOpen: boolean;
 };
 
 /** モーダル／パレットが1つでも開いていれば編集入口を止める（L-061 と音声 dialog-open ガードの正本） */
@@ -39,5 +40,6 @@ export function resolveMapEditorModalsBlockEditing(input: MapEditorModalBlocking
     || input.brokenLinksDialogOpen
     || input.persistenceConfirmOpen
     || input.shareDialogOpen
-    || input.commentsDialogOpen;
+    || input.commentsDialogOpen
+    || input.dockCustomizeOpen;
 }

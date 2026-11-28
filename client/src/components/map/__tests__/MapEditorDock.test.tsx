@@ -160,6 +160,8 @@ beforeEach(() => {
   resetMapStageTestRuntime();
   window.localStorage.clear();
   jest.restoreAllMocks();
+  // 狭幅テストの matchMedia モックが後続へ残らないように戻す
+  installNarrowViewportMatchMedia(false);
 });
 
 afterEach(() => {
@@ -193,6 +195,42 @@ describe("MapEditor Dock 配線", () => {
     expect(screen.queryByRole("button", { name: "音声入力" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "ツアー" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "JSON書き出し" })).not.toBeInTheDocument();
+  });
+
+  it("カスタマイズ open 中は根を inert にして Ctrl+Z・Delete・Ctrl+K がマップを変えない", async () => {
+    installNarrowViewportMatchMedia(false);
+    seedUiPrefsDockDefault();
+    const user = userEvent.setup();
+    await renderEditor();
+
+    const search = screen.getByRole("combobox", { name: "ノードを検索" });
+    fireEvent.change(search, { target: { value: "子" } });
+    fireEvent.focus(search);
+    fireEvent.keyDown(search, { key: "Enter" });
+    await user.click(screen.getByRole("button", { name: "重要度 高" }));
+    expect(screen.getByRole("button", { name: "重要度 高" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "元に戻す" })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "カスタマイズ" }));
+    const dialog = screen.getByTestId("dock-customize-dialog");
+    const root = document.querySelector<HTMLElement>("[data-map-id]")!;
+    // jsdom は inert でイベントを止めないため、属性とショートカット停止を分けて確かめる
+    expect(root).toHaveAttribute("inert");
+    expect(root.contains(dialog)).toBe(false);
+
+    fireEvent.keyDown(window, { key: "z", ctrlKey: true });
+    fireEvent.keyDown(window, { key: "z", metaKey: true });
+    fireEvent.keyDown(window, { key: "Delete" });
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+
+    expect(screen.getByTestId("dock-customize-dialog")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "コマンドパレット" })).not.toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "キャンセル" }));
+    expect(root).not.toHaveAttribute("inert");
+    // open 中の Undo／Delete が効いていない（重要度は高のまま・履歴も消費されていない）
+    expect(screen.getByRole("button", { name: "重要度 高" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "元に戻す" })).toBeEnabled();
   });
 
   it("アウトラインではマップ専用（wheelZoom 等）を非マウント", async () => {
