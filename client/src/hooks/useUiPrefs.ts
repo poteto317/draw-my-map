@@ -1,6 +1,10 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, type MutableRefObject } from "react";
+import {
+  normalizeDockLayout,
+  type DockLayoutPrefs,
+} from "@/domain/dock/defaultDockLayout";
 import {
   clampWheelZoomSensitivity,
   type UiPrefsV1,
@@ -8,6 +12,7 @@ import {
 import {
   readUiPrefs,
   writeUiPrefs,
+  type UiPrefsWriteResult,
 } from "@/services/persistence/uiPrefsStorage";
 import type { MapLibraryStorage } from "@/services/persistence/mapLibraryStorage";
 
@@ -36,10 +41,52 @@ function resolveUiPrefsStorage(): MapLibraryStorage {
   }
 }
 
+export type SetDockLayoutResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly message: string };
+
 type UseUiPrefsResult = {
   readonly prefs: UiPrefsV1;
   readonly setWheelZoomSensitivity: (value: number) => void;
+  readonly setDockLayout: (layout: DockLayoutPrefs) => SetDockLayoutResult;
 };
+
+function writeResultToDockResult(result: UiPrefsWriteResult): SetDockLayoutResult {
+  if (result.ok) return { ok: true };
+  return {
+    ok: false,
+    message: "Dock の設定を保存できませんでした。",
+  };
+}
+
+/**
+ * prefs / document の組み立てとストレージ反映を一箇所に寄せる。
+ * 感度更新と dockLayout 更新が同じ形の差分を書けるようにする。
+ */
+function commitUiPrefsPatch(input: {
+  readonly documentRef: MutableRefObject<Record<string, unknown>>;
+  readonly storage: MapLibraryStorage;
+  readonly setPrefs: (prefs: UiPrefsV1) => void;
+  readonly wheelZoomSensitivity: number;
+  readonly dockLayout: DockLayoutPrefs;
+}): UiPrefsWriteResult {
+  const nextPrefs: UiPrefsV1 = {
+    version: 1,
+    wheelZoomSensitivity: input.wheelZoomSensitivity,
+    dockLayout: input.dockLayout,
+  };
+  const nextDocument: Record<string, unknown> = {
+    ...input.documentRef.current,
+    version: 1,
+    wheelZoomSensitivity: input.wheelZoomSensitivity,
+    dockLayout: {
+      visibleSlotIds: [...input.dockLayout.visibleSlotIds],
+    },
+  };
+  input.documentRef.current = nextDocument;
+  input.setPrefs(nextPrefs);
+  return writeUiPrefs(input.storage, nextDocument);
+}
 
 export function useUiPrefs(
   storage: MapLibraryStorage = resolveUiPrefsStorage(),
@@ -50,19 +97,33 @@ export function useUiPrefs(
 
   const setWheelZoomSensitivity = useCallback((value: number) => {
     const sensitivity = clampWheelZoomSensitivity(value);
-    const nextPrefs: UiPrefsV1 = {
-      version: 1,
+    const dockLayout = normalizeDockLayout(documentRef.current.dockLayout);
+    commitUiPrefsPatch({
+      documentRef,
+      storage,
+      setPrefs,
       wheelZoomSensitivity: sensitivity,
-    };
-    const nextDocument: Record<string, unknown> = {
-      ...documentRef.current,
-      version: 1,
-      wheelZoomSensitivity: sensitivity,
-    };
-    documentRef.current = nextDocument;
-    setPrefs(nextPrefs);
-    writeUiPrefs(storage, nextDocument);
+      dockLayout,
+    });
   }, [storage]);
 
-  return { prefs, setWheelZoomSensitivity };
+  const setDockLayout = useCallback((layout: DockLayoutPrefs): SetDockLayoutResult => {
+    const dockLayout = normalizeDockLayout(layout);
+    const sensitivity = clampWheelZoomSensitivity(
+      typeof documentRef.current.wheelZoomSensitivity === "number"
+        ? documentRef.current.wheelZoomSensitivity
+        : prefs.wheelZoomSensitivity,
+    );
+    return writeResultToDockResult(
+      commitUiPrefsPatch({
+        documentRef,
+        storage,
+        setPrefs,
+        wheelZoomSensitivity: sensitivity,
+        dockLayout,
+      }),
+    );
+  }, [prefs.wheelZoomSensitivity, storage]);
+
+  return { prefs, setWheelZoomSensitivity, setDockLayout };
 }

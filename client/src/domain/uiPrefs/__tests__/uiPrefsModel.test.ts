@@ -1,3 +1,4 @@
+import { createDefaultDockLayout } from "@/domain/dock/defaultDockLayout";
 import {
   clampWheelZoomSensitivity,
   createDefaultUiPrefs,
@@ -36,6 +37,7 @@ describe("createDefaultUiPrefs", () => {
     expect(createDefaultUiPrefs()).toEqual({
       version: 1,
       wheelZoomSensitivity: DEFAULT_WHEEL_ZOOM_SENSITIVITY,
+      dockLayout: createDefaultDockLayout(),
     });
   });
 });

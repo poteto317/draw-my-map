@@ -1,4 +1,5 @@
 import { isPlainRecord } from "@/domain/shared/unknownRecord";
+import { normalizeDockLayout } from "@/domain/dock/defaultDockLayout";
 import {
   clampWheelZoomSensitivity,
   createDefaultUiPrefs,
@@ -34,6 +35,7 @@ function prefsFromDocument(document: Record<string, unknown>): UiPrefsV1 {
   return {
     version: 1,
     wheelZoomSensitivity: sensitivity,
+    dockLayout: normalizeDockLayout(document.dockLayout),
   };
 }
 
@@ -72,6 +74,16 @@ export function decodeUiPrefs(raw: string | null): DecodeUiPrefsResult {
     }
   }
 
+  const hadDockLayout = Object.prototype.hasOwnProperty.call(document, "dockLayout");
+  const rawDockLayout = document.dockLayout;
+  const normalizedDock = normalizeDockLayout(rawDockLayout);
+  document.dockLayout = {
+    visibleSlotIds: [...normalizedDock.visibleSlotIds],
+  };
+  if (hadDockLayout && JSON.stringify(rawDockLayout) !== JSON.stringify(document.dockLayout)) {
+    repaired = true;
+  }
+
   return {
     prefs: prefsFromDocument(document),
     repaired,
@@ -81,9 +93,13 @@ export function decodeUiPrefs(raw: string | null): DecodeUiPrefsResult {
 
 export function encodeUiPrefs(document: Record<string, unknown>): string {
   const prefs = prefsFromDocument(document);
+  // prefs.dockLayout は prefsFromDocument 経由で常に normalize 済み（空配列は既定へ）
   return JSON.stringify({
     ...document,
     version: prefs.version,
     wheelZoomSensitivity: prefs.wheelZoomSensitivity,
+    dockLayout: {
+      visibleSlotIds: [...prefs.dockLayout.visibleSlotIds],
+    },
   });
 }

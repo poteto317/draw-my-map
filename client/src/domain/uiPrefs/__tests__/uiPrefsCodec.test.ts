@@ -1,3 +1,4 @@
+import { createDefaultDockLayout } from "@/domain/dock/defaultDockLayout";
 import {
   createDefaultUiPrefs,
   DEFAULT_WHEEL_ZOOM_SENSITIVITY,
@@ -18,10 +19,11 @@ describe("decodeUiPrefs", () => {
       version: 1,
       wheelZoomSensitivity: 0.004,
     });
+    const dockLayout = createDefaultDockLayout();
     expect(decodeUiPrefs(raw)).toEqual({
-      prefs: { version: 1, wheelZoomSensitivity: 0.004 },
+      prefs: { version: 1, wheelZoomSensitivity: 0.004, dockLayout },
       repaired: false,
-      document: { version: 1, wheelZoomSensitivity: 0.004 },
+      document: { version: 1, wheelZoomSensitivity: 0.004, dockLayout },
     });
   });
 
@@ -34,6 +36,7 @@ describe("decodeUiPrefs", () => {
   });
 
   it("未知のキーを保持する", () => {
+    const dockLayout = createDefaultDockLayout();
     const raw = JSON.stringify({
       version: 1,
       wheelZoomSensitivity: 0.003,
@@ -44,8 +47,14 @@ describe("decodeUiPrefs", () => {
       version: 1,
       wheelZoomSensitivity: 0.003,
       futureFlag: true,
+      dockLayout,
     });
-    expect(encodeUiPrefs(result.document)).toBe(raw);
+    expect(encodeUiPrefs(result.document)).toBe(JSON.stringify({
+      version: 1,
+      wheelZoomSensitivity: 0.003,
+      futureFlag: true,
+      dockLayout,
+    }));
   });
 
   it("不正な感度は修復する", () => {
