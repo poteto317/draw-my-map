@@ -61,15 +61,14 @@ function writeResultToDockResult(result: UiPrefsWriteResult): SetDockLayoutResul
 
 /**
  * prefs / document の組み立てとストレージ反映を一箇所に寄せる。
- * 感度更新と dockLayout 更新が同じ形の差分を書けるようにする。
+ * 感度更新は書き込み失敗でもメモリ上 prefs を進める（既存契約）。
+ * dockLayout 更新は成功時のみ state を進める。
  */
-function commitUiPrefsPatch(input: {
+function buildUiPrefsDocument(input: {
   readonly documentRef: MutableRefObject<Record<string, unknown>>;
-  readonly storage: MapLibraryStorage;
-  readonly setPrefs: (prefs: UiPrefsV1) => void;
   readonly wheelZoomSensitivity: number;
   readonly dockLayout: DockLayoutPrefs;
-}): UiPrefsWriteResult {
+}): { readonly nextPrefs: UiPrefsV1; readonly nextDocument: Record<string, unknown> } {
   const nextPrefs: UiPrefsV1 = {
     version: 1,
     wheelZoomSensitivity: input.wheelZoomSensitivity,
@@ -83,9 +82,36 @@ function commitUiPrefsPatch(input: {
       visibleSlotIds: [...input.dockLayout.visibleSlotIds],
     },
   };
+  return { nextPrefs, nextDocument };
+}
+
+function commitWheelZoomSensitivity(input: {
+  readonly documentRef: MutableRefObject<Record<string, unknown>>;
+  readonly storage: MapLibraryStorage;
+  readonly setPrefs: (prefs: UiPrefsV1) => void;
+  readonly wheelZoomSensitivity: number;
+  readonly dockLayout: DockLayoutPrefs;
+}): void {
+  const { nextPrefs, nextDocument } = buildUiPrefsDocument(input);
+  // 感度は書き込み成否に関わらず UI へ即反映する
   input.documentRef.current = nextDocument;
   input.setPrefs(nextPrefs);
-  return writeUiPrefs(input.storage, nextDocument);
+  writeUiPrefs(input.storage, nextDocument);
+}
+
+function commitDockLayout(input: {
+  readonly documentRef: MutableRefObject<Record<string, unknown>>;
+  readonly storage: MapLibraryStorage;
+  readonly setPrefs: (prefs: UiPrefsV1) => void;
+  readonly wheelZoomSensitivity: number;
+  readonly dockLayout: DockLayoutPrefs;
+}): UiPrefsWriteResult {
+  const { nextPrefs, nextDocument } = buildUiPrefsDocument(input);
+  const result = writeUiPrefs(input.storage, nextDocument);
+  if (!result.ok) return result;
+  input.documentRef.current = nextDocument;
+  input.setPrefs(nextPrefs);
+  return result;
 }
 
 export function useUiPrefs(
@@ -98,7 +124,7 @@ export function useUiPrefs(
   const setWheelZoomSensitivity = useCallback((value: number) => {
     const sensitivity = clampWheelZoomSensitivity(value);
     const dockLayout = normalizeDockLayout(documentRef.current.dockLayout);
-    commitUiPrefsPatch({
+    commitWheelZoomSensitivity({
       documentRef,
       storage,
       setPrefs,
@@ -115,7 +141,7 @@ export function useUiPrefs(
         : prefs.wheelZoomSensitivity,
     );
     return writeResultToDockResult(
-      commitUiPrefsPatch({
+      commitDockLayout({
         documentRef,
         storage,
         setPrefs,

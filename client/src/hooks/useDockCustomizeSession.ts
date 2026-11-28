@@ -22,7 +22,8 @@ export type UseDockCustomizeSessionResult = {
 /**
  * Dock カスタマイズダイアログの下書き・開閉・適用だけを担う。
  * スロット node の組み立てや EditorDock 計測とは分離する。
- * 適用失敗／キャンセルは open 時点の visible スナップショットへ戻す。
+ * 適用失敗時の prefs ロールバックは setDockLayout 側（失敗で state を進めない）。
+ * キャンセルは open 時点の visible スナップショットへ戻す。
  */
 export function useDockCustomizeSession(input: {
   readonly visibleSlotIds: readonly DockSlotId[];
@@ -59,11 +60,9 @@ export function useDockCustomizeSession(input: {
     const result = setDockLayout({ visibleSlotIds: draftVisibleSlotIds });
     if (result.ok) {
       setOpen(false);
-    } else {
-      restoreBaseline();
     }
     return result;
-  }, [draftVisibleSlotIds, restoreBaseline, setDockLayout]);
+  }, [draftVisibleSlotIds, setDockLayout]);
 
   return {
     open,

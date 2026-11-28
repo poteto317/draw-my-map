@@ -89,11 +89,12 @@ describe("useUiPrefs", () => {
     });
   });
 
-  it("setDockLayout の書き込み失敗でもメモリ上の dockLayout は更新する", () => {
+  it("setDockLayout の書き込み失敗ではメモリ上の dockLayout を進めない", () => {
     const { storage } = createRecordingStorage({
       failSetItem: () => true,
     });
     const { result } = renderHook(() => useUiPrefs(storage));
+    const before = result.current.prefs.dockLayout;
 
     act(() => {
       const write = result.current.setDockLayout({
@@ -102,8 +103,6 @@ describe("useUiPrefs", () => {
       expect(write.ok).toBe(false);
     });
 
-    expect(result.current.prefs.dockLayout).toEqual({
-      visibleSlotIds: ["commandPalette"],
-    });
+    expect(result.current.prefs.dockLayout).toEqual(before);
   });
 });
