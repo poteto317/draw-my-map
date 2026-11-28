@@ -1,8 +1,8 @@
 import { act, renderHook } from "@testing-library/react";
 import { useOutlineLabelDraft } from "@/hooks/useOutlineLabelDraft";
 import { createTestNode } from "@/testing/createTestNode";
-function setup() {
-    const props = { nodes: [createTestNode({ id: 1, label: "元" })], documentRevision: 0, enabled: true, duplicateIds: false, updateNodeLabel: jest.fn(), publishNotice: jest.fn() };
+function setup(updateNodeLabel: jest.Mock = jest.fn(() => true)) {
+    const props = { nodes: [createTestNode({ id: 1, label: "元" })], documentRevision: 0, enabled: true, duplicateIds: false, updateNodeLabel, publishNotice: jest.fn() };
     return { props, ...renderHook(useOutlineLabelDraft, { initialProps: props }) };
 }
 it("生文字列を保持し同期commit二回でも保存は一回", () => {
@@ -80,4 +80,15 @@ it("retainWhileDisabled なしで enabled=false になると draft を消す", (
     h.rerender({ ...h.props, enabled: false });
     expect(h.result.current.draft).toBeNull();
     expect(h.props.publishNotice).not.toHaveBeenCalled();
+});
+it("updateNodeLabel が false のときは draft を確定成功にしない", () => {
+    const updateNodeLabel = jest.fn(() => false);
+    const h = setup(updateNodeLabel);
+    act(() => { h.result.current.begin(1); h.result.current.setText("変更"); });
+    let committed: number | null = 1;
+    act(() => { committed = h.result.current.commit(); });
+    expect(updateNodeLabel).toHaveBeenCalledWith(1, "変更");
+    expect(committed).toBeNull();
+    expect(h.result.current.draft?.text).toBe("変更");
+    expect(h.result.current.draft?.nodeId).toBe(1);
 });

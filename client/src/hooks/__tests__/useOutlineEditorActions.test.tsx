@@ -6,7 +6,7 @@ import { createTestNode } from "@/testing/createTestNode";
 function setup(overrides: Partial<UseOutlineEditorActionsOptions> = {}) {
     const nodes = [createTestNode({ id: 1 }), createTestNode({ id: 2 })];
     const props: UseOutlineEditorActionsOptions = { nodes, model: buildOutlineRows(nodes), selectedNodeId: 2, enabled: true, documentRevision: 0,
-        api: { selectNode: jest.fn(), updateNodeLabel: jest.fn(), insertForest: jest.fn(() => ({ ok: true, rootId: 3, count: 1 })), addChildNode: jest.fn(() => 3), addSiblingNode: jest.fn(() => 3), reorderSibling: jest.fn(), changeNodeIndent: jest.fn(), deleteNodeOnly: jest.fn(() => ({ ok: true, deletedId: 2 })) }, expandNodes: jest.fn(), publishNotice: jest.fn(), ...overrides };
+        api: { selectNode: jest.fn(), updateNodeLabel: jest.fn(() => true), insertForest: jest.fn(() => ({ ok: true, rootId: 3, count: 1 })), addChildNode: jest.fn(() => 3), addSiblingNode: jest.fn(() => 3), reorderSibling: jest.fn(), changeNodeIndent: jest.fn(), deleteNodeOnly: jest.fn(() => ({ ok: true, deletedId: 2 })) }, expandNodes: jest.fn(), publishNotice: jest.fn(), ...overrides };
     return { props, ...renderHook(useOutlineEditorActions, { initialProps: props }) };
 }
 it("空マップではルート追加だけが可能", () => { const h = setup({ nodes: [], model: buildOutlineRows([]), selectedNodeId: null }); expect(h.result.current.canAddRoot).toBe(true); expect(h.result.current.canAddRelated).toBe(false); expect(h.result.current.canDelete).toBe(false); });
