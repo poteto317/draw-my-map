@@ -1,3 +1,4 @@
+import { createDefaultDockLayout } from "@/domain/dock/defaultDockLayout";
 import { encodeUiPrefs } from "@/domain/uiPrefs/uiPrefs";
 import { createDefaultUiPrefs } from "@/domain/uiPrefs/uiPrefsModel";
 import { createRecordingStorage } from "@/testing/mapLibraryTestStorage";
@@ -20,10 +21,12 @@ describe("uiPrefsStorage", () => {
   it("保存と読み取りが往復できる", () => {
     const { storage, operations } = createRecordingStorage();
     const document = { version: 1, wheelZoomSensitivity: 0.004 };
+    const dockLayout = createDefaultDockLayout();
     expect(writeUiPrefs(storage, document)).toEqual({ ok: true });
     expect(readUiPrefs(storage).prefs).toEqual({
       version: 1,
       wheelZoomSensitivity: 0.004,
+      dockLayout,
     });
     expect(operations).toEqual([
       {
