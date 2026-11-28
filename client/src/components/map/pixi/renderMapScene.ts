@@ -8,12 +8,14 @@ import type { PixiConstructors } from "@/components/map/pixi/pixiTypes";
 import { renderMapEdges } from "@/components/map/pixi/renderMapEdges";
 import { renderMapGroups } from "@/components/map/pixi/renderMapGroups";
 import { renderMapNodes, type RenderMapNodesOptions } from "@/components/map/pixi/renderMapNodes";
+import { renderMapPresenceMarkers } from "@/components/map/pixi/renderMapPresenceMarkers";
 import { renderMapRelations } from "@/components/map/pixi/renderMapRelations";
 import { renderMarquee } from "@/components/map/pixi/renderMarquee";
 import { renderSiblingReorderIndicator } from "@/components/map/pixi/renderSiblingReorderIndicator";
 import type { SiblingReorderIndicator } from "@/components/map/siblingReorderDropSlot";
 import type { MapGroup } from "@/types/mapGroup";
 import type { MapRelation } from "@/types/mapRelation";
+import type { Node } from "@/types/node";
 import type { Application, Container, FederatedPointerEvent } from "pixi.js";
 
 export type RenderMapSceneOptions = Omit<RenderMapNodesOptions, "visibleKeys"> & {
@@ -27,6 +29,15 @@ export type RenderMapSceneOptions = Omit<RenderMapNodesOptions, "visibleKeys"> &
   groups?: readonly MapGroup[];
   selectedGroupId?: number | null;
   onGroupPointerDown?: (groupId: number, event: FederatedPointerEvent) => void;
+  /** 非完備時は省略＝描かない（L-002）。両方揃ったときだけマーカー層を追加 */
+  presenceNodeIds?: ReadonlySet<number>;
+  /** child id 配列のみ（keys 文字列は作らない） */
+  presenceEdgeChildIds?: readonly number[];
+  /**
+   * presence 座標用の表示座標全体。省略時は `nodes`（後方互換）。
+   * フル描画の `nodes` は cull 済みのままにし、presence 端点を混ぜない。
+   */
+  presenceNodes?: readonly Node[];
 };
 
 export type RenderedMapScene = {
@@ -70,7 +81,24 @@ export function renderMapScene(
     visibleKeys,
     options.highlightNodeIds,
   );
+  // presence: 線は通常 nodes の前、点は通常 nodes の後（可視性ターゲットには入れない）
+  // 座標は presenceNodes（表示座標全体）。フル描画用 nodes には端点をマージしない
+  const presenceLayers = options.presenceNodeIds !== undefined
+      && options.presenceEdgeChildIds !== undefined
+    ? renderMapPresenceMarkers(constructors, {
+      nodes: options.presenceNodes ?? options.nodes,
+      presenceNodeIds: options.presenceNodeIds,
+      presenceEdgeChildIds: options.presenceEdgeChildIds,
+      scale: options.viewport.scale,
+    })
+    : null;
+  if (presenceLayers) {
+    worldContainer.addChild(presenceLayers.edges);
+  }
   const nodeTargets = renderMapNodes(worldContainer, constructors, { ...options, visibleKeys });
+  if (presenceLayers) {
+    worldContainer.addChild(presenceLayers.markers);
+  }
   // ノードと接続線の上に重ねる。可視性のターゲットには入れない
   renderSiblingReorderIndicator(worldContainer, constructors, options.siblingReorderIndicator);
   renderMarquee(worldContainer, constructors, options.marqueeRect ?? null);
