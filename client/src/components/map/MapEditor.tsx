@@ -2408,10 +2408,12 @@ export function MapEditor({
                   if (request === null) recordBeforeViewportChange();
                 }}
                 visibleNodeIds={displayState.visibleNodeIds}
-                resolutionMode={resolutionFilter.mode}
-                collapseVisibleNodeIds={branchCollapse.collapseVisibleNodeIds}
-                focusVisibleNodeIds={focusVisibleNodeIds}
-                depthVisibleNodeIds={depthVisibleNodeIds}
+                presenceVisibility={{
+                  resolutionMode: resolutionFilter.mode,
+                  collapseVisibleNodeIds: branchCollapse.collapseVisibleNodeIds,
+                  focusVisibleNodeIds,
+                  depthVisibleNodeIds,
+                }}
                 onViewportScaleChange={setViewportScale}
                 onViewportFrameChange={handleViewportFrameChange}
                 selectedNodeId={selectedNodeId}
