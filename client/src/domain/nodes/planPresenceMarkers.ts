@@ -40,6 +40,12 @@ export function planPresenceMarkers({
     depthVisibleNodeIds,
     displayVisibleNodeIds,
   })) {
+    // L-002: 欠落≠候補ゼロ。黙殺せず開発時に分かるようにする（設計 §4.1）
+    if (process.env.NODE_ENV !== "production") {
+      console.warn(
+        "[presence] inputs incomplete; skipping presence markers (L-002)",
+      );
+    }
     return null;
   }
 
