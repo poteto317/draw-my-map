@@ -13,6 +13,9 @@ import {
   structureInputFingerprintOf,
   type AcceptedAiStructureProposal,
 } from "@/domain/aiAssist/aiStructureProposal";
+import { RECT_HEIGHT, RECT_WIDTH } from "@/config/shapes";
+import { layoutNodeForest } from "@/domain/nodes/nodeAutoLayout";
+import { fitNodeHeightToLabel } from "@/domain/nodes/nodeLabelLayout";
 import { collectSubtreeIds } from "@/domain/nodes/nodeTree";
 import type { AiProposal } from "@/domain/aiAssist/aiProposal";
 import { MERGE_DEFAULT_SEPARATOR } from "@/domain/nodes/nodeSeparator";
@@ -246,6 +249,71 @@ describe("applyAiStructureProposals", () => {
     const proposal = reparentProposal(nodes, 2, 99);
     const result = apply(baseState(nodes), [{ proposal }]);
     expect(result).toEqual({ ok: false, reason: "placement-failed" });
+  });
+
+  it("auto で merge 後の一括 fit が高さ変化したら layout で兄弟間隔を閉じる", () => {
+    const labelA = "あいうえおかきくけこ";
+    const labelB = "さしすせそたちつてとなにぬねのはひふへほ";
+    const laidOut = layoutNodeForest([
+      createTestNode({
+        id: 1, label: "根", x: 40, y: 40, width: RECT_WIDTH, height: RECT_HEIGHT,
+      }),
+      createTestNode({
+        id: 2, parentId: 1, label: labelA, x: 260, y: 40, width: RECT_WIDTH, height: RECT_HEIGHT,
+      }),
+      createTestNode({
+        id: 3, parentId: 1, label: labelB, x: 260, y: 140, width: RECT_WIDTH, height: RECT_HEIGHT,
+      }),
+      createTestNode({
+        id: 4, parentId: 1, label: "下の兄弟", x: 260, y: 240, width: RECT_WIDTH, height: RECT_HEIGHT,
+      }),
+    ]);
+    if (laidOut === null) throw new Error("layout 前提");
+    const mergedLabel = `${labelA}${MERGE_DEFAULT_SEPARATOR}${labelB}`;
+    const expectedHeight = fitNodeHeightToLabel(
+      createTestNode({ label: mergedLabel, width: RECT_WIDTH, height: RECT_HEIGHT }),
+      "commit",
+    ).height;
+    expect(expectedHeight).toBeGreaterThan(RECT_HEIGHT);
+
+    const proposal = mergeProposal(laidOut, 2, 3);
+    const applyArgs = {
+      accepted: [{ proposal }] as AcceptedAiStructureProposal[],
+      rebuildInputFingerprint: (rootId: number, kind: Parameters<typeof structureInputFingerprintOf>[2]) =>
+        structureInputFingerprintOf(laidOut, rootId, kind),
+      allocateNodeIds: () => [99],
+      mergeJoiner: MERGE_DEFAULT_SEPARATOR,
+      visibleNodeIds: ALL,
+      currentMapId: MAP_ID,
+    };
+    const manual = applyAiStructureProposals({
+      ...applyArgs,
+      state: { layoutMode: "manual", nodes: laidOut },
+    });
+    const auto = applyAiStructureProposals({
+      ...applyArgs,
+      state: { layoutMode: "auto", nodes: laidOut },
+    });
+    if (!manual.ok || !auto.ok) throw new Error(JSON.stringify({ manual, auto }));
+
+    const manualSurvivor = manual.state.nodes.find((node) => node.id === 2)!;
+    const autoSurvivor = auto.state.nodes.find((node) => node.id === 2)!;
+    const manualSibling = manual.state.nodes.find((node) => node.id === 4)!;
+    const autoSibling = auto.state.nodes.find((node) => node.id === 4)!;
+    expect(manualSurvivor.height).toBe(expectedHeight);
+    expect(autoSurvivor.height).toBe(expectedHeight);
+    // manual は高さだけ伸び座標据え置き。auto は末尾 layout で間隔を閉じて座標が変わる
+    expect(manualSibling.y).toBe(laidOut.find((node) => node.id === 4)!.y);
+    expect(autoSibling.y).not.toBe(manualSibling.y);
+    expect(autoSibling.y).toBeGreaterThanOrEqual(autoSurvivor.y + autoSurvivor.height);
+
+    const expectedAuto = layoutNodeForest(manual.state.nodes);
+    if (expectedAuto === null) throw new Error("layout 期待値");
+    expect(
+      auto.state.nodes.map((node) => ({ id: node.id, x: node.x, y: node.y, height: node.height })),
+    ).toEqual(
+      expectedAuto.map((node) => ({ id: node.id, x: node.x, y: node.y, height: node.height })),
+    );
   });
 
   it("079 検証済みの reparent+reorder を一括適用できる", () => {
