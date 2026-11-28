@@ -57,11 +57,13 @@ export function EditorDock({
   const overflowSlots = slots.slice(primaryCount);
 
   // overflow が消えたら開閉状態も捨てる（再出現時にメニューが開いたままにしない）
+  /* eslint-disable react-hooks/set-state-in-effect -- overflow スロット消滅の外部同期 */
   useEffect(() => {
     if (overflowSlots.length === 0) {
       setOverflowOpen(false);
     }
   }, [overflowSlots.length]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   return (
     <div
