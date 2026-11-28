@@ -65,7 +65,7 @@ describe("NodeCollapseControl", () => {
     expect(screen.getByText("折りたたみで非表示: 17件")).toBeInTheDocument();
   });
 
-  it("非表示件数と補足をボタンの説明として結び付ける", () => {
+  it("非表示件数をボタンの説明として結び付ける（常時補足文は出さない）", () => {
     render(
       <NodeCollapseControl
         selectedNodeId={24}
@@ -77,8 +77,14 @@ describe("NodeCollapseControl", () => {
     );
 
     expect(screen.getByRole("button", { name: "枝を展開" })).toHaveAccessibleDescription(
-      "折りたたみで非表示: 17件 折りたたみは保存・画像出力に反映されません。 手動配置へ戻すと元の座標に戻ります。",
+      "折りたたみで非表示: 17件",
     );
+    expect(
+      screen.queryByText("折りたたみは保存・画像出力に反映されません。"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("手動配置へ戻すと元の座標に戻ります。"),
+    ).not.toBeInTheDocument();
   });
 
   it("props更新後は最新の選択IDでtoggleする", async () => {
@@ -107,23 +113,6 @@ describe("NodeCollapseControl", () => {
 
     expect(onToggle).toHaveBeenCalledTimes(1);
     expect(onToggle).toHaveBeenCalledWith(36);
-  });
-
-  it("保存・画像出力と手動配置へ戻す場合の補足を示す", () => {
-    render(
-      <NodeCollapseControl
-        selectedNodeId={null}
-        canToggle={false}
-        collapsed={false}
-        hiddenCount={0}
-        onToggle={jest.fn()}
-      />,
-    );
-
-    expect(screen.getByText("折りたたみは保存・画像出力に反映されません。"))
-      .toBeInTheDocument();
-    expect(screen.getByText("手動配置へ戻すと元の座標に戻ります。"))
-      .toBeInTheDocument();
   });
 
   it("Enterの押し続けのリピートを止める", () => {
