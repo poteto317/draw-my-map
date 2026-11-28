@@ -1,12 +1,18 @@
+import { RECT_HEIGHT, RECT_WIDTH, SIBLING_VERTICAL_GAP } from "@/config/shapes";
 import { createNodeIdAllocator } from "@/domain/nodes/nodeIdAllocator";
 import {
   insertNodeForest,
   type ForestInsertionResult,
   type ForestItem,
 } from "@/domain/nodes/nodeForestInsertion";
+import { fitNodeHeightToLabel } from "@/domain/nodes/nodeLabelLayout";
 import { createChildNode } from "@/domain/nodes/nodePlacement";
 import { createTestNode } from "@/testing/createTestNode";
 import type { Node } from "@/types/node";
+
+/** 折り返しで複数行になる十分な長さ（CJK・空白なし） */
+const LONG_WRAPPING_LABEL =
+  "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん";
 
 function idsFrom(start: number) {
   return jest.fn<number[], [readonly Node[], number]>((_occupied, count) => (
@@ -92,6 +98,36 @@ describe("insertNodeForest: 新しいルートとして追加", () => {
     }
   });
 
+  it("manual・長いラベルの兄弟は layout 前の commit fit 高さで間隔を取り重ならない", () => {
+    const tallHeight = fitNodeHeightToLabel(
+      createTestNode({
+        label: LONG_WRAPPING_LABEL,
+        width: RECT_WIDTH,
+        height: RECT_HEIGHT,
+      }),
+      "commit",
+    ).height;
+    expect(tallHeight).toBeGreaterThan(RECT_HEIGHT);
+
+    const result = expectSuccess(
+      insertNodeForest(
+        [],
+        [
+          item(LONG_WRAPPING_LABEL, null),
+          item(`${LONG_WRAPPING_LABEL}二`, null),
+        ],
+        { kind: "root" },
+        "manual",
+        idsFrom(1),
+      ),
+    );
+    const [first, second] = result.nodes;
+    expect(first!.height).toBe(tallHeight);
+    expect(second!.height).toBe(tallHeight);
+    expect(second!.y).toBe(first!.y + first!.height + SIBLING_VERTICAL_GAP * 2);
+    expect(second!.y).toBeGreaterThan(first!.y + RECT_HEIGHT + SIBLING_VERTICAL_GAP * 2);
+  });
+
   it("3本の木で rootIds が入力の順になり、子が正しい根につながる", () => {
     const items = [item("A", null), item("A1", 0), item("B", null), item("C", null), item("C1", 3)];
     for (const mode of ["manual", "auto"] as const) {
@@ -169,6 +205,37 @@ describe("insertNodeForest: 選択中のノードの子として追加", () => {
     for (const node of added) expect({ x: node.x, y: node.y }).toEqual({ x: 40, y: 40 });
     expect(added.map((node) => node.parentId)).toEqual([1, 10, 10, 1]);
     expect(result.rootIds).toEqual([10, 13]);
+  });
+
+  it("manual・長いラベルの子兄弟も commit fit 高さで間隔を取り重ならない", () => {
+    const parent = createTestNode({ id: 1, x: 100, y: 50, width: 100, height: 60 });
+    const tallHeight = fitNodeHeightToLabel(
+      createTestNode({
+        label: LONG_WRAPPING_LABEL,
+        width: RECT_WIDTH,
+        height: RECT_HEIGHT,
+      }),
+      "commit",
+    ).height;
+
+    const result = expectSuccess(
+      insertNodeForest(
+        [parent],
+        [
+          item(LONG_WRAPPING_LABEL, null),
+          item(`${LONG_WRAPPING_LABEL}二`, null),
+        ],
+        { kind: "child", parentId: 1 },
+        "manual",
+        idsFrom(10),
+      ),
+    );
+    const a = findByLabel(result.nodes, LONG_WRAPPING_LABEL);
+    const b = findByLabel(result.nodes, `${LONG_WRAPPING_LABEL}二`);
+    expect(a.height).toBe(tallHeight);
+    expect(b.height).toBe(tallHeight);
+    expect(b.y).toBe(a.y + a.height + SIBLING_VERTICAL_GAP);
+    expect(b.y).toBeGreaterThan(a.y + RECT_HEIGHT + SIBLING_VERTICAL_GAP);
   });
 });
 

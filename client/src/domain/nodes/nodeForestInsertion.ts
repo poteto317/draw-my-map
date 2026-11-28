@@ -5,6 +5,10 @@ import {
   type LayoutNodeForestOptions,
 } from "@/domain/nodes/nodeAutoLayout";
 import { DEFAULT_NODE_IMPORTANCE } from "@/domain/nodes/nodeImportance";
+import {
+  fittedHeightForLabel,
+  fitNodeHeightToLabel,
+} from "@/domain/nodes/nodeLabelLayout";
 import { checkedAdd, checkedSubtract } from "@/domain/nodes/nodeLayoutArithmetic";
 import {
   calculateChildPlacement,
@@ -93,8 +97,15 @@ function placeRootForest(
 
   const placeholders: Node[] = [];
   for (let index = 0; index < items.length; index += 1) {
+    const item = items[index]!;
     placeholders.push(createPlacementNode(
-      index, items[index].parentIndex, x0, EMPTY_MAP_ORIGIN, RECT_WIDTH, RECT_HEIGHT,
+      index,
+      item.parentIndex,
+      x0,
+      EMPTY_MAP_ORIGIN,
+      RECT_WIDTH,
+      // layout 入力は高さのみ。最終 fit は実ノード生成時に1回
+      fittedHeightForLabel(item.label),
     ));
   }
   const laidOut = layoutNodeForest(placeholders, layoutOptions);
@@ -121,14 +132,15 @@ function placeChildForest(
     placeholderParentId, null, parent.x, parent.y, parent.width, parent.height,
   )];
   for (let index = 0; index < items.length; index += 1) {
-    const { parentIndex } = items[index];
+    const item = items[index]!;
     placeholders.push(createPlacementNode(
       index,
-      parentIndex === null ? placeholderParentId : parentIndex,
+      item.parentIndex === null ? placeholderParentId : item.parentIndex,
       parent.x,
       parent.y,
       RECT_WIDTH,
-      RECT_HEIGHT,
+      // layout 入力は高さのみ。最終 fit は実ノード生成時に1回
+      fittedHeightForLabel(item.label),
     ));
   }
   const laidOut = layoutNodeForest(placeholders, layoutOptions);
@@ -251,12 +263,17 @@ export function insertNodeForest(
     const { parentIndex } = items[index];
     const id = ids[index];
     if (parentIndex === null) rootIds.push(id);
-    nodes.push(createInsertedNode(
-      id,
-      parentIndex === null ? rootParentId : ids[parentIndex],
-      positions[index],
-      items[index],
-    ));
+    nodes.push(
+      fitNodeHeightToLabel(
+        createInsertedNode(
+          id,
+          parentIndex === null ? rootParentId : ids[parentIndex],
+          positions[index],
+          items[index],
+        ),
+        "commit",
+      ),
+    );
   }
   return { ok: true, nodes, rootIds };
 }

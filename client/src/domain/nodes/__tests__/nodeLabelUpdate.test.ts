@@ -22,6 +22,18 @@ describe("replaceNodeLabels", () => {
     expect(result?.[1]).toEqual({ ...nodes[1], label: "y" });
   });
 
+  it("同じラベルなら高さ超過でも fit せず参照を保つ", () => {
+    const oversized = [
+      createTestNode({ id: 1, label: "a", height: 200 }),
+      createTestNode({ id: 2, label: "b", height: 60 }),
+    ];
+    const result = replaceNodeLabels(oversized, new Map([[1, "a"], [2, "新しい"]]));
+
+    expect(result?.[0]).toBe(oversized[0]);
+    expect(result?.[0]?.height).toBe(200);
+    expect(result?.[1]?.label).toBe("新しい");
+  });
+
   it("存在しない ID は無視する", () => {
     const result = replaceNodeLabels(nodes, new Map([[1, "x"], [99, "z"]]));
 

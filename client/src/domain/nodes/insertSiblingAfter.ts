@@ -3,6 +3,7 @@ import {
   type LayoutNodeForestOptions,
 } from "@/domain/nodes/nodeAutoLayout";
 import { assertNodesEditable } from "@/domain/nodes/nodeEditLock";
+import { fitNodeHeightToLabel } from "@/domain/nodes/nodeLabelLayout";
 import { createSiblingNode } from "@/domain/nodes/nodePlacement";
 import { collectSubtreeIds } from "@/domain/nodes/nodeTree";
 import { DEFAULT_LAYOUT_SPACING } from "@/domain/persistence/mapDocumentLayoutSpacing";
@@ -39,7 +40,8 @@ export function insertSiblingAfter(
 
   const created = createSiblingNode(nodes, anchorId, newId, spacing);
   if (created === null) return { ok: false, reason: "placement-failed" };
-  const newNode: Node = { ...created, label };
+  // layout の入力は高さなので、配置前に commit fit する（forest 挿入と同型）
+  const newNode: Node = fitNodeHeightToLabel({ ...created, label }, "commit");
 
   const subtreeIds = collectSubtreeIds(nodes, anchorId);
   let lastIndex = -1;
