@@ -33,6 +33,7 @@ export function planPresenceMarkers({
   depthVisibleNodeIds,
   displayVisibleNodeIds,
 }: PlanPresenceMarkersInput): PresencePlan | null {
+  // L-002: 欠落≠候補ゼロ。非完備は null（DEV warn は呼び出し hook 側）。
   if (!arePresenceInputsComplete({
     mode: resolutionMode,
     collapseVisibleNodeIds,
@@ -40,12 +41,6 @@ export function planPresenceMarkers({
     depthVisibleNodeIds,
     displayVisibleNodeIds,
   })) {
-    // L-002: 欠落≠候補ゼロ。黙殺せず開発時に分かるようにする（設計 §4.1）
-    if (process.env.NODE_ENV !== "production") {
-      console.warn(
-        "[presence] inputs incomplete; skipping presence markers (L-002)",
-      );
-    }
     return null;
   }
 
