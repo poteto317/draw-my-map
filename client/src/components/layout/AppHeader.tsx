@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import type { NodeLayoutMode } from "@/types/nodeLayout";
-import { LayoutModeOperationHint } from "@/components/layout/LayoutModeOperationHint";
 import { LayoutModeSelector } from "@/components/layout/LayoutModeSelector";
 import { MapSaveStatus as MapSaveStatusDisplay } from "@/components/layout/MapSaveStatus";
 import type { MapSaveStatus } from "@/domain/persistence/mapSaveStatus";
@@ -13,14 +12,9 @@ type AppHeaderProps = {
   mapControls: ReactNode;
   saveStatus: MapSaveStatus;
   viewControls: ReactNode;
-  showCanvasHints: boolean;
   searchControls: ReactNode;
   isNarrowViewport: boolean;
   userChoseMapOnNarrow: boolean;
-  voiceControls?: ReactNode;
-  importanceControls?: ReactNode;
-  resolutionControls?: ReactNode;
-  operationControls?: ReactNode;
   operationNotices?: ReactNode;
 };
 
@@ -32,25 +26,14 @@ export function AppHeader({
   mapControls,
   saveStatus,
   viewControls,
-  showCanvasHints,
   searchControls,
   isNarrowViewport,
   userChoseMapOnNarrow,
-  voiceControls,
-  importanceControls,
-  resolutionControls,
-  operationControls,
   operationNotices,
 }: AppHeaderProps) {
-  const hasOperationsSection =
-    Boolean(importanceControls) ||
-    Boolean(resolutionControls) ||
-    Boolean(operationControls) ||
-    Boolean(operationNotices);
-
   return (
     <header
-      className="flex max-h-[40dvh] flex-col gap-4 bg-white px-6 py-3 shadow-sm dark:bg-zinc-800"
+      className="flex flex-col gap-2 bg-white px-6 py-3 shadow-sm dark:bg-zinc-800"
       data-narrow-viewport={isNarrowViewport}
       data-user-chose-map-on-narrow={userChoseMapOnNarrow}
     >
@@ -69,7 +52,6 @@ export function AppHeader({
         {isNarrowViewport ? (
           <>
             {viewControls}
-            {voiceControls}
             <MapSaveStatusDisplay status={saveStatus} />
           </>
         ) : (
@@ -85,21 +67,16 @@ export function AppHeader({
           disabled={layoutModeDisabled}
         />
         {layoutDirectionControls}
-        {showCanvasHints && <LayoutModeOperationHint layoutMode={layoutMode} />}
-      </div>
-      {hasOperationsSection && (
-        <div
-          data-testid="header-operations-scroll"
-          className="flex min-h-0 flex-1 flex-wrap items-center gap-4 overflow-y-auto overscroll-y-contain"
+        <a
+          href="/help"
+          className="shrink-0 text-sm text-zinc-600 underline-offset-2 hover:underline dark:text-zinc-300"
         >
-          {importanceControls}
-          {resolutionControls}
-          {operationControls}
-          {operationNotices != null && (
-            <div data-testid="operation-notices" className="w-full">
-              {operationNotices}
-            </div>
-          )}
+          使い方
+        </a>
+      </div>
+      {operationNotices != null && (
+        <div data-testid="operation-notices" className="w-full">
+          {operationNotices}
         </div>
       )}
     </header>

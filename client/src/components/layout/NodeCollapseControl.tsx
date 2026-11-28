@@ -25,8 +25,6 @@ export function NodeCollapseControl({
 }: NodeCollapseControlProps) {
   const idPrefix = useId();
   const hiddenCountId = `${idPrefix}-hidden-count`;
-  const persistenceNoteId = `${idPrefix}-persistence-note`;
-  const layoutNoteId = `${idPrefix}-layout-note`;
   const disabled = interactionDisabled || selectedNodeId === null || !canToggle;
 
   function handleToggle() {
@@ -42,15 +40,13 @@ export function NodeCollapseControl({
         className={buttonClassName}
         disabled={disabled}
         aria-expanded={disabled ? undefined : !collapsed}
-        aria-describedby={`${hiddenCountId} ${persistenceNoteId} ${layoutNoteId}`}
+        aria-describedby={hiddenCountId}
         onClick={handleToggle}
         onKeyDown={preventRepeatedEnterClick}
       >
         {collapsed ? "枝を展開" : "枝を折りたたむ"}
       </button>
       <span id={hiddenCountId}>折りたたみで非表示: {hiddenCount}件</span>
-      <span id={persistenceNoteId}>折りたたみは保存・画像出力に反映されません。</span>
-      <span id={layoutNoteId}>手動配置へ戻すと元の座標に戻ります。</span>
     </div>
   );
 }
