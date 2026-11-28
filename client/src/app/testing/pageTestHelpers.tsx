@@ -126,19 +126,6 @@ export function selectNode(index: number, nodeCount: number, x = 0, y = 0) {
   });
 }
 
-/** MapPersistenceControls の JSON 読み込み用 input（Dock 末尾のため document 先頭の file と取り違えない） */
-export function mapJsonFileInput(
-  root: ParentNode = document,
-): HTMLInputElement {
-  const input = root.querySelector<HTMLInputElement>(
-    'input[type="file"][accept="application/json,.json"]',
-  );
-  if (input === null) {
-    throw new Error("JSON読み込み用の file input が見つかりません");
-  }
-  return input;
-}
-
 // 「JSON書き出し」を押し、downloadMapJson のモックが最後に受け取った JSON を解析する
 export function exportedMap(downloadMapJson: jest.Mock): ExportedMap {
   fireEvent.click(screen.getByRole("button", { name: "JSON書き出し" }));
