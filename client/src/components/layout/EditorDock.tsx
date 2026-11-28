@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useEffect,
   useRef,
   useState,
   type ReactNode,
@@ -56,9 +57,11 @@ export function EditorDock({
   const overflowSlots = slots.slice(primaryCount);
 
   // overflow が消えたら開閉状態も捨てる（再出現時にメニューが開いたままにしない）
-  if (overflowSlots.length === 0 && overflowOpen) {
-    setOverflowOpen(false);
-  }
+  useEffect(() => {
+    if (overflowSlots.length === 0) {
+      setOverflowOpen(false);
+    }
+  }, [overflowSlots.length]);
 
   return (
     <div
