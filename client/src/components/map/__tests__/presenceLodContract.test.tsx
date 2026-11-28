@@ -51,11 +51,14 @@ describe("presence LOD 契約", () => {
     expect(plan!.presenceEdgeChildIds).toEqual([2, 3]);
   });
 
-  it("MapEditor は presence 用の4入力を MapStage へ配線する", () => {
+  it("MapEditor は presenceVisibility 1 オブジェクトで MapStage へ配線する", () => {
     const source = readFileSync(join(__dirname, "..", "MapEditor.tsx"), "utf8");
-    expect(source).toMatch(/resolutionMode=\{resolutionFilter\.mode\}/);
-    expect(source).toMatch(/collapseVisibleNodeIds=\{branchCollapse\.collapseVisibleNodeIds\}/);
-    expect(source).toMatch(/focusVisibleNodeIds=\{focusVisibleNodeIds\}/);
-    expect(source).toMatch(/depthVisibleNodeIds=\{depthVisibleNodeIds\}/);
+    expect(source).toMatch(/presenceVisibility=\{\{/);
+    expect(source).toMatch(/resolutionMode:\s*resolutionFilter\.mode/);
+    expect(source).toMatch(/collapseVisibleNodeIds:\s*branchCollapse\.collapseVisibleNodeIds/);
+    expect(source).toMatch(/focusVisibleNodeIds,/);
+    expect(source).toMatch(/depthVisibleNodeIds,/);
+    expect(source).not.toMatch(/resolutionMode=\{resolutionFilter\.mode\}/);
+    expect(source).not.toMatch(/collapseVisibleNodeIds=\{branchCollapse\.collapseVisibleNodeIds\}/);
   });
 });

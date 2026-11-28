@@ -40,10 +40,12 @@ type SceneHookOptions = Omit<
 };
 
 type PresenceHookInputs = {
-  resolutionMode?: ResolutionFilterMode | null;
-  collapseVisibleNodeIds?: ReadonlySet<number> | null;
-  focusVisibleNodeIds?: ReadonlySet<number> | null;
-  depthVisibleNodeIds?: ReadonlySet<number> | null;
+  presenceVisibility?: {
+    resolutionMode?: ResolutionFilterMode | null;
+    collapseVisibleNodeIds?: ReadonlySet<number> | null;
+    focusVisibleNodeIds?: ReadonlySet<number> | null;
+    depthVisibleNodeIds?: ReadonlySet<number> | null;
+  } | null;
 };
 
 function createOptions(nodes = [node]): SceneHookOptions {
@@ -72,10 +74,12 @@ function createPresenceAutoOptions() {
   const nodes = [root, medium, far];
   const allIds = new Set([1, 2, 3]);
   const presence: PresenceHookInputs = {
-    resolutionMode: "auto",
-    collapseVisibleNodeIds: allIds,
-    focusVisibleNodeIds: null,
-    depthVisibleNodeIds: allIds,
+    presenceVisibility: {
+      resolutionMode: "auto",
+      collapseVisibleNodeIds: allIds,
+      focusVisibleNodeIds: null,
+      depthVisibleNodeIds: allIds,
+    },
   };
   return {
     nodes,
@@ -422,21 +426,29 @@ describe("useRenderedMapScene", () => {
       setViewportCullingEnabled(true);
     });
 
-    it("入力非完備時は presence オプションを渡さない（空 Set で成功ゼロに見せない）", () => {
-      const viewportRef = { current: INITIAL_VIEWPORT };
-      const options = createOptions(); // resolutionMode 等なし → 非完備
-      renderHook(() => useRenderedMapScene({
-        runtime,
-        options,
-        viewport: INITIAL_VIEWPORT,
-        viewportRef,
-        screenSize,
-      }));
+    it("入力非完備時は presence オプションを渡さない（空 Set で成功ゼロに見せない）し、DEV で warn する", () => {
+      const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        const viewportRef = { current: INITIAL_VIEWPORT };
+        const options = createOptions(); // presenceVisibility なし → 非完備
+        renderHook(() => useRenderedMapScene({
+          runtime,
+          options,
+          viewport: INITIAL_VIEWPORT,
+          viewportRef,
+          screenSize,
+        }));
 
-      const passed = mockedRenderMapScene.mock.calls[0][2];
-      expect(passed).not.toHaveProperty("presenceNodeIds");
-      expect(passed).not.toHaveProperty("presenceEdgeChildIds");
-      expect(passed).not.toHaveProperty("presenceNodes");
+        const passed = mockedRenderMapScene.mock.calls[0][2];
+        expect(passed).not.toHaveProperty("presenceNodeIds");
+        expect(passed).not.toHaveProperty("presenceEdgeChildIds");
+        expect(passed).not.toHaveProperty("presenceNodes");
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringMatching(/presence.*incomplete|L-002/i),
+        );
+      } finally {
+        warn.mockRestore();
+      }
     });
 
     it("auto で structural−display が非空なら presence を渡し、visibleKeys 系には混入しない", () => {
@@ -472,8 +484,10 @@ describe("useRenderedMapScene", () => {
       renderHook(() => useRenderedMapScene({
         runtime,
         options,
-        ...presence,
-        resolutionMode: "high",
+        presenceVisibility: {
+          ...presence.presenceVisibility!,
+          resolutionMode: "high",
+        },
         viewport: INITIAL_VIEWPORT,
         viewportRef,
         screenSize,
@@ -518,10 +532,12 @@ describe("useRenderedMapScene", () => {
         visibleNodeIds: new Set([1]),
       };
       const presence: PresenceHookInputs = {
-        resolutionMode: "auto",
-        collapseVisibleNodeIds: structural,
-        focusVisibleNodeIds: null,
-        depthVisibleNodeIds: structural,
+        presenceVisibility: {
+          resolutionMode: "auto",
+          collapseVisibleNodeIds: structural,
+          focusVisibleNodeIds: null,
+          depthVisibleNodeIds: structural,
+        },
       };
 
       renderHook(() => useRenderedMapScene({
@@ -631,8 +647,10 @@ describe("useRenderedMapScene", () => {
         ({ viewport }: { viewport: Viewport }) => useRenderedMapScene({
           runtime,
           options,
-          ...presence,
-          resolutionMode: "high",
+          presenceVisibility: {
+            ...presence.presenceVisibility!,
+            resolutionMode: "high",
+          },
           viewport,
           viewportRef,
           screenSize: null,

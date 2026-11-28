@@ -15,7 +15,7 @@ import type { PixiRuntime } from "@/components/map/pixi/pixiTypes";
 import { useMapPresenceRenderOptions } from "@/components/map/useMapPresenceRenderOptions";
 import { useLatestRef } from "@/hooks/useLatestRef";
 import { useViewportCulledRenderNodes } from "@/hooks/useViewportCulledRenderNodes";
-import type { ResolutionFilterMode } from "@/types/nodeResolution";
+import type { PresenceVisibilityInput } from "@/domain/nodes/mapPresenceVisibility";
 
 export type UseRenderedMapSceneOptions = {
   runtime: PixiRuntime | null;
@@ -29,11 +29,8 @@ export type UseRenderedMapSceneOptions = {
   > & {
     createNodePointerDownHandler: () => RenderMapSceneOptions["onNodePointerDown"];
   };
-  /** presence 算出入力（RenderMapSceneOptions には混ぜない） */
-  resolutionMode?: ResolutionFilterMode | null;
-  collapseVisibleNodeIds?: ReadonlySet<number> | null;
-  focusVisibleNodeIds?: ReadonlySet<number> | null;
-  depthVisibleNodeIds?: ReadonlySet<number> | null;
+  /** presence 算出入力（RenderMapSceneOptions には混ぜない）。省略時は非完備扱い。 */
+  presenceVisibility?: PresenceVisibilityInput | null;
   viewport: Viewport;
   viewportRef: RefObject<Viewport>;
   /** 未計測時は null。必須（L-060: 省略でカリング配線漏れを隠さない） */
@@ -43,10 +40,7 @@ export type UseRenderedMapSceneOptions = {
 export function useRenderedMapScene({
   runtime,
   options,
-  resolutionMode,
-  collapseVisibleNodeIds,
-  focusVisibleNodeIds,
-  depthVisibleNodeIds,
+  presenceVisibility = null,
   viewport,
   viewportRef,
   screenSize,
@@ -114,10 +108,10 @@ export function useRenderedMapScene({
 
   const presenceOptions = useMapPresenceRenderOptions({
     nodes,
-    resolutionMode,
-    collapseVisibleNodeIds,
-    focusVisibleNodeIds,
-    depthVisibleNodeIds,
+    resolutionMode: presenceVisibility?.resolutionMode,
+    collapseVisibleNodeIds: presenceVisibility?.collapseVisibleNodeIds,
+    focusVisibleNodeIds: presenceVisibility?.focusVisibleNodeIds,
+    depthVisibleNodeIds: presenceVisibility?.depthVisibleNodeIds,
     displayVisibleNodeIds: visibleNodeIds,
     viewport,
     screenSize,

@@ -358,15 +358,20 @@ describe("MapStage visibility boundary", () => {
       ...defaultProps,
       nodes: mediumTree,
       visibleNodeIds: displayEmpty,
-      collapseVisibleNodeIds: null as ReadonlySet<number> | null,
-      focusVisibleNodeIds: null as ReadonlySet<number> | null,
-      depthVisibleNodeIds: structuralIds,
+      presenceVisibility: {
+        collapseVisibleNodeIds: null as ReadonlySet<number> | null,
+        focusVisibleNodeIds: null as ReadonlySet<number> | null,
+        depthVisibleNodeIds: structuralIds,
+      },
       onSelectNode,
       onDoubleClick,
     };
 
     const rendered = await renderReady(
-      <MapStage {...presenceBase} resolutionMode="auto" />,
+      <MapStage
+        {...presenceBase}
+        presenceVisibility={{ ...presenceBase.presenceVisibility, resolutionMode: "auto" }}
+      />,
     );
 
     const pixi = jest.requireMock("pixi.js") as { Graphics: jest.Mock };
@@ -387,7 +392,10 @@ describe("MapStage visibility boundary", () => {
 
     const graphicsBeforeManual = pixi.Graphics.mock.results.length;
     rendered.rerender(
-      <MapStage {...presenceBase} resolutionMode="high" />,
+      <MapStage
+        {...presenceBase}
+        presenceVisibility={{ ...presenceBase.presenceVisibility, resolutionMode: "high" }}
+      />,
     );
 
     const manualCircles = pixi.Graphics.mock.results
