@@ -242,6 +242,68 @@ describe("renderMapScene", () => {
     expect(world.addChild.mock.calls.at(-1)?.[0]).toBe(band);
   });
 
+  it("presence 線は通常 nodes の前、点は通常 nodes の後に載せる", () => {
+    const harness = createPixiTestHarness();
+
+    renderMapScene(harness.app as never, harness.constructors as never, {
+      commentNodeCounts: new Map(),
+      learnDisplay: inactiveLearnDisplay,
+      nodes,
+      taskProgress: emptyTaskProgress,
+      selectedNodeIds: [],
+      editingNodeId: null,
+      connectionTargetNodeId: null,
+      siblingReorderSourceNodeId: null,
+      siblingReorderIndicator: null,
+      highlightNodeIds: new Set<number>(),
+      pinnedNodeIds: new Set<number>(),
+      onNodePointerDown: jest.fn(),
+      viewport: INITIAL_VIEWPORT,
+      presenceNodeIds: new Set([2]),
+      presenceEdgeChildIds: [2],
+    });
+
+    const world = harness.containers[0];
+    // world, presenceEdges, presenceMarkers, node1, node2 — Container 生成順
+    const presenceEdges = harness.containers[1];
+    const presenceMarkers = harness.containers[2];
+    const node1 = harness.containers[3];
+    const node2 = harness.containers[4];
+    expect(presenceEdges.eventMode).toBe("none");
+    expect(presenceMarkers.eventMode).toBe("none");
+
+    const added = world.addChild.mock.calls.map(([child]: [unknown]) => child);
+    // 通常 edge Graphics → presence edges → nodes → presence markers
+    const fullEdge = harness.Graphics.mock.results[0].value;
+    expect(added.indexOf(presenceEdges)).toBeGreaterThan(added.indexOf(fullEdge));
+    expect(added.indexOf(presenceEdges)).toBeLessThan(added.indexOf(node1));
+    expect(added.indexOf(node2)).toBeLessThan(added.indexOf(presenceMarkers));
+  });
+
+  it("presence オプション欠落時はマーカー層を描かない", () => {
+    const harness = createPixiTestHarness();
+
+    renderMapScene(harness.app as never, harness.constructors as never, {
+      commentNodeCounts: new Map(),
+      learnDisplay: inactiveLearnDisplay,
+      nodes,
+      taskProgress: emptyTaskProgress,
+      selectedNodeIds: [],
+      editingNodeId: null,
+      connectionTargetNodeId: null,
+      siblingReorderSourceNodeId: null,
+      siblingReorderIndicator: null,
+      highlightNodeIds: new Set<number>(),
+      pinnedNodeIds: new Set<number>(),
+      onNodePointerDown: jest.fn(),
+      viewport: INITIAL_VIEWPORT,
+    });
+
+    // world + 2 node containers only（presence Container 無し）
+    expect(harness.containers).toHaveLength(3);
+    expect(harness.containers[0].addChild).toHaveBeenCalledTimes(3);
+  });
+
   it("commentNodeCounts をノードの描画へ渡し、件数のあるノードにだけバッジを描く", () => {
     const harness = createPixiTestHarness();
 
