@@ -1,6 +1,6 @@
-import { ILLUSTRATED_NODE_HEIGHT, RECT_HEIGHT } from "@/config/shapes";
 import { assertNodesEditable } from "@/domain/nodes/nodeEditLock";
 import { isIllustrationDataUrl } from "@/domain/illustration/illustrationDataUrl";
+import { fitNodeHeightToLabel } from "@/domain/nodes/nodeLabelLayout";
 import type { Node } from "@/types/node";
 
 export function replaceNodeIllustration(
@@ -12,13 +12,13 @@ export function replaceNodeIllustration(
   if (!nodes.some((node) => node.id === id)) return null;
   if (!assertNodesEditable([id], nodes).ok) return null;
 
-  return nodes.map((node) => (
-    node.id === id ? { ...node, illustration: dataUrl, height: ILLUSTRATED_NODE_HEIGHT } : node
-  ));
+  return nodes.map((node) => {
+    if (node.id !== id) return node;
+    return fitNodeHeightToLabel({ ...node, illustration: dataUrl }, "commit");
+  });
 }
 
-// イラストを外し、高さをイラストなしのノードの高さ（RECT_HEIGHT）に戻す。
-// 設定時（ILLUSTRATED_NODE_HEIGHT に固定）と対になる。
+// イラストを外し、ラベルに合わせて commit fit する（下限は RECT_HEIGHT）。
 export function clearNodeIllustration(
   nodes: readonly Node[],
   id: number,
@@ -31,6 +31,6 @@ export function clearNodeIllustration(
     if (node.id !== id) return node;
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 分割代入で illustration を除外するため
     const { illustration: _removed, ...rest } = node;
-    return { ...rest, height: RECT_HEIGHT };
+    return fitNodeHeightToLabel(rest, "commit");
   });
 }

@@ -1,3 +1,4 @@
+import { fitNodeHeightToLabel } from "@/domain/nodes/nodeLabelLayout";
 import {
   toggleNodeLabelBold,
   toggleNodeLabelUnderline,
@@ -6,22 +7,25 @@ import {
 import { createTestNode } from "@/testing/createTestNode";
 
 describe("updateNodeLabelFontSize", () => {
-  it("対象ノードのサイズを変え、ほかは参照を保つ", () => {
+  it("対象ノードのサイズを変え fit し、ほかは参照を保つ", () => {
     const target = createTestNode({ id: 1 });
     const other = createTestNode({ id: 2, labelFontSize: 12 });
 
     const result = updateNodeLabelFontSize([target, other], 1, 18);
 
-    expect(result).toEqual([{ ...target, labelFontSize: 18 }, other]);
+    const expected = fitNodeHeightToLabel({ ...target, labelFontSize: 18 }, "commit");
+    expect(result).toEqual([expected, other]);
     expect(result?.[1]).toBe(other);
   });
 
-  it("14 に戻すと labelFontSize キーを削除する", () => {
+  it("14 に戻すと labelFontSize キーを削除し fit する", () => {
     const target = createTestNode({ id: 1, labelFontSize: 18, labelBold: true });
 
     const result = updateNodeLabelFontSize([target], 1, 14);
 
-    expect(result?.[0]).toEqual({ ...createTestNode({ id: 1, labelBold: true }) });
+    expect(result?.[0]).toEqual(
+      fitNodeHeightToLabel(createTestNode({ id: 1, labelBold: true }), "commit"),
+    );
     expect("labelFontSize" in (result?.[0] ?? {})).toBe(false);
   });
 
@@ -42,6 +46,18 @@ describe("updateNodeLabelFontSize", () => {
 });
 
 describe("toggleNodeLabelBold", () => {
+  it("書式だけ変え、fit しない（高さ不変）", () => {
+    const tall = createTestNode({
+      id: 1,
+      label: "短い",
+      height: 200,
+      labelFontSize: 18,
+    });
+    const result = toggleNodeLabelBold([tall], 1);
+    expect(result?.[0]?.height).toBe(200);
+    expect(result?.[0]?.labelBold).toBe(true);
+  });
+
   it("未設定なら true を付け、true ならキー削除する", () => {
     const plain = createTestNode({ id: 1, labelFontSize: 18 });
     const bold = createTestNode({ id: 2, labelBold: true, labelUnderline: true });

@@ -7,8 +7,10 @@ import {
   type LabelTextStyleFields,
 } from "@/domain/nodes/labelTextStyle";
 import { assertNodesEditable } from "@/domain/nodes/nodeEditLock";
+import { fitNodeHeightToLabel } from "@/domain/nodes/nodeLabelLayout";
 import type { Node } from "@/types/node";
 
+/** 書式フィールドだけを差し替える。高さ fit は呼ばない（bold/underline 用） */
 function updateNodeLabelTextStyle(
   nodes: readonly Node[],
   id: number,
@@ -31,7 +33,8 @@ export function updateNodeLabelFontSize(
   id: number,
   size: LabelFontSize,
 ): Node[] | null {
-  return updateNodeLabelTextStyle(nodes, id, (target) => {
+  // フォントサイズは行高に効くので、書式適用のあと commit fit を合成する
+  const styled = updateNodeLabelTextStyle(nodes, id, (target) => {
     if (resolveLabelFontSize(target) === size) return null;
     return {
       labelFontSize: size,
@@ -39,6 +42,10 @@ export function updateNodeLabelFontSize(
       labelUnderline: target.labelUnderline,
     };
   });
+  if (styled === null) return null;
+  return styled.map((node) => (
+    node.id === id ? fitNodeHeightToLabel(node, "commit") : node
+  ));
 }
 
 export function toggleNodeLabelBold(
