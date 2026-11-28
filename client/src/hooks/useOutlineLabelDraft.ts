@@ -111,8 +111,15 @@ export function useOutlineLabelDraft(options: Options) {
                 current.publishNotice(STALE_DRAFT);
             return null;
         }
-        if (pending.text !== pending.originalLabel)
-            current.updateNodeLabel(pending.nodeId, pending.text);
+        if (pending.text !== pending.originalLabel) {
+            if (!current.updateNodeLabel(pending.nodeId, pending.text)) {
+                // 失敗時は draft を戻し、確定成功にしない（L-001）
+                active.current = pending;
+                if (mounted.current)
+                    setDraft(pending);
+                return null;
+            }
+        }
         return pending.nodeId;
     }, [clear]);
     const cancel = useCallback((): number | null => {

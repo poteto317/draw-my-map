@@ -124,7 +124,14 @@ import {
   type NodeSplitPlan,
   type SplitNodeResult,
 } from "@/domain/nodes/nodeSplit";
-import { replaceNodeLabels } from "@/domain/nodes/nodeLabelUpdate";
+import {
+  replaceNodeLabels,
+  updateNodeLabel as computeUpdateNodeLabel,
+} from "@/domain/nodes/nodeLabelUpdate";
+import {
+  anyNodeHeightsChanged,
+  fitNodesHeightToLabels,
+} from "@/domain/nodes/nodeLabelLayout";
 import { replaceNodeNote } from "@/domain/nodes/nodeNote";
 import { MERGE_DEFAULT_SEPARATOR } from "@/domain/nodes/nodeSeparator";
 import {
@@ -275,7 +282,7 @@ type UseNodesReturn = {
   reorderTourStep: (fromIndex: number, toIndex: number) => TourMutationOutcome;
   overwriteTourStepSnapshot: (stepId: string, snapshot: MapViewSnapshot) => TourMutationOutcome;
   setTourStepCaption: (stepId: string, caption: string) => TourMutationOutcome;
-  updateNodeLabel: (id: number, label: string) => void;
+  updateNodeLabel: (id: number, label: string) => boolean;
   updateNodeLabels: (replacements: ReadonlyMap<number, string>) => boolean;
   setLabelFontSize: (id: number, size: LabelFontSize) => boolean;
   toggleLabelBold: (id: number) => boolean;
@@ -561,7 +568,10 @@ export function useNodes(): UseNodesReturn {
 
   const replaceMap = useCallback((state: NodeMapState) => {
     nodeIdAllocator.reset();
-    replaceLayoutState(state);
+    replaceLayoutState({
+      ...state,
+      nodes: fitNodesHeightToLabels(state.nodes, "growOnly"),
+    });
     markDocumentRestored();
   }, [nodeIdAllocator, replaceLayoutState, markDocumentRestored]);
 
@@ -680,23 +690,33 @@ export function useNodes(): UseNodesReturn {
     setSelection((prev) => pruneMissing(prev, visibleNodeIds, orderedNodeIds));
   }, [getCurrentState]);
 
-  const updateNodeLabel = useCallback((id: number, label: string) => {
-    applyNonStructuralChange((currentNodes) => {
-      if (!assertNodesEditable([id], currentNodes).ok) return null;
-      return currentNodes.map((node) => (
-        node.id === id ? { ...node, label } : node
-      ));
-    });
-  }, [applyNonStructuralChange]);
+  // 純計算（update / 高さ差分）を先に済ませ、副作用は apply* に閉じる。
+  // height 変化かつ auto のときだけ applyTreeChange（layoutNodeForest）と原子化。それ以外は非構造。
+  // update は1回だけ実行し、同じ candidate を適用する（probe と commit の二重適用を避ける）
+  const applyLabelHeightAwareChange = useCallback((
+    update: (currentNodes: readonly Node[]) => Node[] | null,
+  ): boolean => {
+    const current = getCurrentState();
+    const candidate = update(current.nodes);
+    if (!candidate) return false;
+    if (current.layoutMode === "auto" && anyNodeHeightsChanged(current.nodes, candidate)) {
+      return applyTreeChange(() => candidate);
+    }
+    return applyNonStructuralChange(() => candidate);
+  }, [applyNonStructuralChange, applyTreeChange, getCurrentState]);
+
+  const updateNodeLabel = useCallback((id: number, label: string): boolean => (
+    applyLabelHeightAwareChange((currentNodes) => computeUpdateNodeLabel(currentNodes, id, label))
+  ), [applyLabelHeightAwareChange]);
 
   // 複数ノードのラベルを1回の更新関数でまとめて変え、1操作として履歴に記録する
   const updateNodeLabels = useCallback((replacements: ReadonlyMap<number, string>) => (
-    applyNonStructuralChange((currentNodes) => replaceNodeLabels(currentNodes, replacements))
-  ), [applyNonStructuralChange]);
+    applyLabelHeightAwareChange((currentNodes) => replaceNodeLabels(currentNodes, replacements))
+  ), [applyLabelHeightAwareChange]);
 
   const setLabelFontSize = useCallback((id: number, size: LabelFontSize) => (
-    applyNonStructuralChange((currentNodes) => updateNodeLabelFontSize(currentNodes, id, size))
-  ), [applyNonStructuralChange]);
+    applyLabelHeightAwareChange((currentNodes) => updateNodeLabelFontSize(currentNodes, id, size))
+  ), [applyLabelHeightAwareChange]);
 
   const toggleLabelBold = useCallback((id: number) => (
     applyNonStructuralChange((currentNodes) => computeToggleNodeLabelBold(currentNodes, id))
