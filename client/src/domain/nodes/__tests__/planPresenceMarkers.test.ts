@@ -7,7 +7,7 @@ describe("planPresenceMarkers", () => {
   const nodes = [root, medium];
   const structural = new Set([1, 2]);
 
-  it("入力非完備なら null（成功の空に倒さない）し、開発時に warn する", () => {
+  it("入力非完備なら null（成功の空に倒さない）。warn は呼び出し hook 側", () => {
     const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
     try {
       expect(planPresenceMarkers({
@@ -17,9 +17,7 @@ describe("planPresenceMarkers", () => {
         focusVisibleNodeIds: null,
         // depth / display 欠落
       })).toBeNull();
-      expect(warn).toHaveBeenCalledWith(
-        expect.stringMatching(/presence.*incomplete|L-002/i),
-      );
+      expect(warn).not.toHaveBeenCalled();
     } finally {
       warn.mockRestore();
     }

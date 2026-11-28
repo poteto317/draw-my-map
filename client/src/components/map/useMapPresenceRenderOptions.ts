@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import {
   getViewportWorldRect,
   isValidScreenSize,
@@ -14,12 +14,12 @@ import {
   VIEWPORT_CULL_PADDING_PX,
 } from "@/domain/nodes/cullNodesInViewport";
 import { cullPresenceEdgeChildIds } from "@/domain/nodes/cullPresenceEdges";
+import type { PresenceVisibilityInput } from "@/domain/nodes/mapPresenceVisibility";
 import {
   planPresenceMarkers,
   type PresencePlan,
 } from "@/domain/nodes/planPresenceMarkers";
 import type { Node } from "@/types/node";
-import type { ResolutionFilterMode } from "@/types/nodeResolution";
 
 const EMPTY_NODES: readonly Node[] = [];
 const EMPTY_PRESENCE_EDGE_CHILD_IDS: readonly number[] = [];
@@ -35,12 +35,8 @@ function numberListStabilityKey(value: readonly number[] | null): string {
   return `\0list:${value.join(",")}`;
 }
 
-export type UseMapPresenceRenderOptionsInput = {
+export type UseMapPresenceRenderOptionsInput = PresenceVisibilityInput & {
   nodes: readonly Node[];
-  resolutionMode?: ResolutionFilterMode | null;
-  collapseVisibleNodeIds?: ReadonlySet<number> | null;
-  focusVisibleNodeIds?: ReadonlySet<number> | null;
-  depthVisibleNodeIds?: ReadonlySet<number> | null;
   displayVisibleNodeIds?: ReadonlySet<number> | null;
   viewport: Viewport;
   screenSize: ScreenSize | null;
@@ -83,6 +79,15 @@ export function useMapPresenceRenderOptions({
       displayVisibleNodeIds,
     ],
   );
+
+  // L-002: 非完備の黙殺を DEV で気付かせる（純関数 plan 側には副作用を置かない）
+  useEffect(() => {
+    if (presencePlan !== null) return;
+    if (process.env.NODE_ENV === "production") return;
+    console.warn(
+      "[presence] inputs incomplete; skipping presence markers (L-002)",
+    );
+  }, [presencePlan]);
 
   const presenceCandidateNodes = useMemo(() => {
     if (!presencePlan || presencePlan.presenceNodeIds.size === 0) return EMPTY_NODES;
