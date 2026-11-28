@@ -266,9 +266,9 @@ Pixi.js による高速な 2D キャンバス描画と、React 19 による宣�
   };
   ```
 - **ノード寸法定数**: `client/src/config/shapes.ts`
-  - 基本幅 `RECT_WIDTH`: **100px**
-  - 基本高さ `RECT_HEIGHT`: **60px**
-  - イラスト付きノード高さ `ILLUSTRATED_NODE_HEIGHT`: **116px**（`RECT_HEIGHT + ILLUSTRATION_AREA_HEIGHT`）
+  - 基本幅 `RECT_WIDTH`: **100px**（ラベル内容では幅を変えない。31.8 節）
+  - 基本高さ `RECT_HEIGHT`: **60px**（下限。長いラベルでは最大 240px まで伸びる。31.8 節）
+  - イラスト付きノード高さ `ILLUSTRATED_NODE_HEIGHT`: **116px**（`RECT_HEIGHT + ILLUSTRATION_AREA_HEIGHT`。イラスト時の下限。上限 296px）
     - イラスト表示サイズ `ILLUSTRATION_SIZE`: **48px × 48px**（上部余白 `ILLUSTRATION_TOP_PADDING = 8px`、イラスト領域高さ `ILLUSTRATION_AREA_HEIGHT = 56px`）
 - **形状とスタイリング** (`renderMapNodes.ts`, `mapSvgNodes.ts`):
   - **形状**: 角丸なしの**直角矩形**（Pixi.js の `graphics.rect(node.x, node.y, node.width, node.height)`、SVG エクスポートの `<rect>` ともに `rx`/`ry` なし）。
@@ -285,9 +285,10 @@ Pixi.js による高速な 2D キャンバス描画と、React 19 による宣�
   - X 座標: `node.x + (node.width - 48) / 2`（水平中央、幅 100px の場合は `node.x + 26`）
   - Y 座標: `node.y + 8`（ノード上端から `ILLUSTRATION_TOP_PADDING = 8px` 下）
 - **ラベル描画位置 (`getNodeLabelCenterOffset` in `nodeIllustration.ts`, `createNodeLabelText` in `renderMapNodes.ts`)**:
-  - フォントサイズ: `resolveLabelFontSize(node)`（欠落時 **14px**。許可値は 12 / 14 / 18 / 24）、太字: `resolveLabelBold`（`fontWeight`）、下線: `resolveLabelUnderline`（ラベル Text 直下の Graphics 水平線）、文字色: `#27272a`（`0x27272a`）、折り返し幅 (`wordWrapWidth`): `node.width - 16`（標準幅 100px のとき **84px**）、水平揃え (`align`): `"center"`、アンカー: `0.5`（中央基準）。
+  - フォントサイズ: `resolveLabelFontSize(node)`（欠落時 **14px**。許可値は 12 / 14 / 18 / 24）、太字: `resolveLabelBold`（`fontWeight`）、下線: `resolveLabelUnderline`（ラベル Text 直下の Graphics 水平線）、文字色: `#27272a`（`0x27272a`）、折り返し幅 (`wordWrapWidth`): `node.width - NODE_LABEL_HORIZONTAL_PADDING`（合計 **16px**。標準幅 100px のとき **84px**）、水平揃え (`align`): `"center"`、アンカー: `0.5`（中央基準）。
+  - 表示文字列: `ellipsizeWrappedLabel` でノード矩形内の本文高さ（`node.height - NODE_LABEL_VERTICAL_PADDING` − イラスト時はさらに `ILLUSTRATION_AREA_HEIGHT`）に収まるよう都度導出する。省略結果は **Node に保存しない**（詳細は 31.8 節）。
   - 中心 X 座標: `node.x + node.width / 2`
-  - 中心 Y 座標オフセット (`getNodeLabelCenterOffset`): `node.height / 2 + (node.illustration === undefined ? 0 : 28)`（`ILLUSTRATION_AREA_HEIGHT / 2 = 28`）。イラストなし（高さ 60px）では上端から **30px**、イラストあり（高さ 116px）では上端から **86px**（下部 60px のラベル領域の中央）。
+  - 中心 Y 座標オフセット (`getNodeLabelCenterOffset`): `node.height / 2 + (node.illustration === undefined ? 0 : 28)`（`ILLUSTRATION_AREA_HEIGHT / 2 = 28`）。イラストなし（高さ 60px）では上端から **30px**、イラストあり（高さ 116px）では上端から **86px**（下部 60px のラベル領域の中央）。高さはラベル内容にフィットして伸び縮みしうる（31.8 節）。
   - インライン編集中 (`isEditing: node.id === editingNodeId`) のノードでは、DOM `<input>` との二重描画を防ぐため Pixi.js 側の `Text` オブジェクトを描画しません（非表示）。
 
 ### 3.2 ノードの新規作成
@@ -3083,6 +3084,26 @@ Phase 25（候補046〜050）の仕様です。自動配置の方向と間隔を
 - ポリシー: いずれも `split: original-only`・`merge: survivor-else-first`・`parentInsert: none`（27.6 節の表）。
 - **UI**: マップ表示かつ主選択ちょうど 1 件・保護モードでないとき、ヘッダーの「文字」メニュー（`LabelTextStyleControl`）。サイズはセレクト（小／標準／大／特大 → 12／14／18／24）、太字・下線は `role="menuitem"` のトグル。選択 ID が `nodes` に無い・複数選択・アウトライン・保護モードでは非表示。`locked` では disabled（`assertNodesEditable` で無操作）。各変更は 1 Undo。
 - **描画**: キャンバス（Pixi Text の `fontSize` / `fontWeight`、下線は Graphics 水平線）、アウトラインのラベル行、インライン編集の HTML input、PNG / SVG 書き出しに反映。空ラベルの「新しいノード」にも適用。検索結果などのプレーン文字列一覧には書式を載せない。
+- **高さフィット**: `labelFontSize` 変更時は確定経路で高さフィットする。`labelBold` / `labelUnderline` のみの変更ではフィットしない（31.8 節）。
+
+### 31.8 ノードラベルの高さ自動フィットと省略（#51）
+
+ロードマップ外の改善。ノード幅は変えず、長いラベルが矩形からはみ出さないように高さを内容へフィットし、上限超過時は行単位で省略する。
+
+- **定数**（`domain/nodes/nodeLabelLayout.ts`）:
+  - 水平パディング合計 `NODE_LABEL_HORIZONTAL_PADDING` = **16**（`wordWrapWidth = width - 16`）
+  - 垂直パディング `NODE_LABEL_VERTICAL_PADDING` = **16**
+  - 本文領域上限 `NODE_LABEL_CONTENT_MAX_HEIGHT` = `RECT_HEIGHT * 4 - 16` = **224**
+  - イラスト無しのノード高さ上限 = **240**（`RECT_HEIGHT * 4`）。イラスト有り上限 = **296**（224 + 16 + `ILLUSTRATION_AREA_HEIGHT`）
+  - 下限: イラスト無し `RECT_HEIGHT`（60）、イラスト有り `ILLUSTRATED_NODE_HEIGHT`（116）
+- **フィット式**: `body = min(measured, 224)` → `needed = body + 16 + (illustration ? ILLUSTRATION_AREA_HEIGHT : 0)` → `height = max(needed, 下限)`。幅は不変。手動配置では左上 `(x, y)` を保ち下方向にだけ伸縮。
+- **モード**:
+  - **確定（`commit`）**: ラベル確定・一括置換・`labelFontSize`・イラスト着脱・forest／outline／OPML／CSV／AI 構造の生成後。短くすれば下限まで縮む。
+  - **読込補正（`growOnly`）**: hydrate／JSON 読込・共同編集 remote 適用後。不足時だけ増高し、既に十分な高さは縮めない。履歴エントリには載せない。
+  - **fit しない**: `labelBold` / `labelUnderline` のみの変更。編集中のライブリサイズもしない。
+- **原子性（L-001）**: `layoutMode === "auto"` かつ高さが変わったら、同じ更新で `applyTreeChange` / `layoutNodeForest` まで成功したときだけ commit。失敗時はラベルも高さももとに戻す。`updateNodeLabel` 系は成功を `boolean` で返し、呼出元は `false` のとき編集／draft を成功扱いにしない。
+- **省略**: 折り返し後に行数上限で切り、切った場合のみ末尾に `…`。`truncateLabelByCodePoints` の単独流用は禁止。**表示文字列は Node に保存せず**、キャンバス描画時に `ellipsizeWrappedLabel` で都度導出する。計測は domain 純関数（Pixi import 禁止。L-467）。
+- **空ラベル**: 計測・省略の入力はキャンバスと同じ `getNodeDisplayLabel`（空なら「新しいノード」）。
 
 ## 32. 枝の別マップ化とマップのアーカイブ（Phase 27 前半）
 
