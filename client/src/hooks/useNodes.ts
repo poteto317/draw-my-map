@@ -83,12 +83,15 @@ import {
 import { applyNodePositionUpdates } from "@/domain/nodes/selectionLayoutShared";
 import { applyManualPositionIfUnlocked } from "@/hooks/applyManualPositionIfUnlocked";
 import { deleteNodeOnly as computeNodeOnlyDeletion, type DeleteNodeOnlyResult } from "@/domain/nodes/nodeOnlyDeletion";
-import { layoutNodeForest } from "@/domain/nodes/nodeAutoLayout";
 import {
   layoutContextFromState,
   resolveLayoutNodeForestOptions,
   resolveLayoutSpacing,
 } from "@/domain/nodes/nodeMapLayoutContext";
+import {
+  layoutNodesIfHeightsChanged,
+  shouldLayoutAfterHeightFit,
+} from "@/domain/nodes/layoutNodesIfHeightsChanged";
 import {
   type CreateTourOutcome,
   type TourMutationOutcome,
@@ -130,10 +133,7 @@ import {
   replaceNodeLabels,
   updateNodeLabel as computeUpdateNodeLabel,
 } from "@/domain/nodes/nodeLabelUpdate";
-import {
-  anyNodeHeightsChanged,
-  fitNodesHeightToLabels,
-} from "@/domain/nodes/nodeLabelLayout";
+import { fitNodesHeightToLabels } from "@/domain/nodes/nodeLabelLayout";
 import { replaceNodeNote } from "@/domain/nodes/nodeNote";
 import { MERGE_DEFAULT_SEPARATOR } from "@/domain/nodes/nodeSeparator";
 import {
@@ -573,18 +573,13 @@ export function useNodes(): UseNodesReturn {
   const replaceMap = useCallback((state: NodeMapState) => {
     nodeIdAllocator.reset();
     const fittedNodes = fitNodesHeightToLabels(state.nodes, "growOnly");
-    let nodes = fittedNodes;
-    if (
-      state.layoutMode === "auto"
-      && anyNodeHeightsChanged(state.nodes, fittedNodes)
-    ) {
-      const laid = layoutNodeForest(
-        fittedNodes,
-        resolveLayoutNodeForestOptions(layoutContextFromState(state)),
-      );
-      nodes = laid ?? state.nodes;
-    }
-    replaceLayoutState({ ...state, nodes });
+    const laid = layoutNodesIfHeightsChanged(
+      state.nodes,
+      fittedNodes,
+      state.layoutMode,
+      resolveLayoutNodeForestOptions(layoutContextFromState(state)),
+    );
+    replaceLayoutState({ ...state, nodes: laid ?? state.nodes });
     markDocumentRestored();
   }, [nodeIdAllocator, replaceLayoutState, markDocumentRestored]);
 
@@ -704,7 +699,7 @@ export function useNodes(): UseNodesReturn {
   }, [getCurrentState]);
 
   // 純計算（update / 高さ差分）を先に済ませ、副作用は apply* に閉じる。
-  // height 変化かつ auto のときだけ applyTreeChange（layoutNodeForest）と原子化。それ以外は非構造。
+  // height 変化かつ auto のときだけ applyTreeChange（layout）と原子化。それ以外は非構造。
   // update は1回だけ実行し、同じ candidate を適用する（probe と commit の二重適用を避ける）
   const applyLabelHeightAwareChange = useCallback((
     update: (currentNodes: readonly Node[]) => Node[] | null,
@@ -712,7 +707,7 @@ export function useNodes(): UseNodesReturn {
     const current = getCurrentState();
     const candidate = update(current.nodes);
     if (!candidate) return false;
-    if (current.layoutMode === "auto" && anyNodeHeightsChanged(current.nodes, candidate)) {
+    if (shouldLayoutAfterHeightFit(current.nodes, candidate, current.layoutMode)) {
       return applyTreeChange(() => candidate);
     }
     return applyNonStructuralChange(() => candidate);
