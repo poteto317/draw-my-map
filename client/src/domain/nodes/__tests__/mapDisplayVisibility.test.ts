@@ -1,7 +1,57 @@
-import { collectDisplayVisibleNodeIds } from "@/domain/nodes/mapDisplayVisibility";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { collectVisibleMapKeys } from "@/components/map/pixi/mapVisibilityKeys";
 import { collectDepthVisibleNodeIds } from "@/domain/nodes/depthVisibility";
+import {
+  collectDisplayVisibleNodeIds,
+  isCollapseFocusDepthVisible,
+} from "@/domain/nodes/mapDisplayVisibility";
+import { collectStructuralVisibleNodeIds } from "@/domain/nodes/mapPresenceVisibility";
 import { createTestNode } from "@/testing/createTestNode";
+
+describe("isCollapseFocusDepthVisible / display·structural 共有", () => {
+  it("display と structural は同じ collapse∧focus∧depth predicate を共有する", () => {
+    const displaySource = readFileSync(
+      join(__dirname, "..", "mapDisplayVisibility.ts"),
+      "utf8",
+    );
+    const presenceSource = readFileSync(
+      join(__dirname, "..", "mapPresenceVisibility.ts"),
+      "utf8",
+    );
+    expect(displaySource).toMatch(/export function isCollapseFocusDepthVisible/);
+    expect(displaySource).toMatch(/isCollapseFocusDepthVisible\(id, structuralSets\)/);
+    expect(presenceSource).toMatch(/isCollapseFocusDepthVisible/);
+    expect(presenceSource).toMatch(
+      /from "@\/domain\/nodes\/mapDisplayVisibility"/,
+    );
+    // structural 側にインラインの collapse∧focus∧depth が再実装されていないこと
+    expect(presenceSource).not.toMatch(
+      /collapseVisibleNodeIds\?\.has\(id\)\s*\?\?\s*true/,
+    );
+  });
+
+  it("解像度が全通し・focusRoot 免除なしなら structural と display は一致する", () => {
+    const candidates = [1, 2, 3, 4, 5];
+    const sets = {
+      collapseVisibleNodeIds: new Set([1, 2, 3]),
+      focusVisibleNodeIds: new Set([2, 3, 4]),
+      depthVisibleNodeIds: new Set([1, 2, 3, 4, 5]),
+    };
+    const structural = collectStructuralVisibleNodeIds(candidates, sets);
+    const display = collectDisplayVisibleNodeIds(candidates, {
+      ...sets,
+      resolutionVisibleNodeIds: new Set(candidates),
+      focusRootId: null,
+    });
+    expect([...display].sort((a, b) => a - b)).toEqual(
+      [...structural].sort((a, b) => a - b),
+    );
+    for (const id of candidates) {
+      expect(isCollapseFocusDepthVisible(id, sets)).toBe(structural.has(id));
+    }
+  });
+});
 
 describe("collectDisplayVisibleNodeIds", () => {
   const candidates = [1, 2, 3, 4, 5];
