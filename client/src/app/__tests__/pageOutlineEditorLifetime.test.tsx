@@ -68,7 +68,7 @@ async function draft(user: ReturnType<typeof userEvent.setup>, label = "A") {
 function importJson(json: string) {
   const file = new File([json], "map.json", { type: "application/json" });
   Object.defineProperty(file, "text", { value: async () => json });
-  fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"]')!, { target: { files: [file] } });
+  fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"][accept="application/json,.json"]')!, { target: { files: [file] } });
 }
 // 通常clickとは分け、focus/blurを起こさないプログラムからの先行操作を再現する。
 it.each(["元に戻す", "やり直す"])("先行するプログラム%sでrevisionが進むと古いblurは書かない", async name => {

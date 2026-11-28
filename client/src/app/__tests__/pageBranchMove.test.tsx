@@ -362,7 +362,7 @@ it("開いている間にマップの読み込みで選択が外れたら、閉�
   seed();
   const { container } = await renderPage();
   openMove();
-  const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+  const input = container.querySelector<HTMLInputElement>('input[type="file"][accept="application/json,.json"]')!;
   const file = new File([v3Json([{ id: 1, label: "読み込み済み" }])], "map.json", { type: "application/json" });
   Object.defineProperty(file, "text", { value: () => Promise.resolve(v3Json([{ id: 1, label: "読み込み済み" }])) });
 

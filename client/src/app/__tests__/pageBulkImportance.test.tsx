@@ -71,6 +71,11 @@ async function setupThreeNodes(user: ReturnType<typeof userEvent.setup>) {
 describe("選択ノードの重要度の一括編集", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    // render(<Home />) は renderPage を通らないため、Dock 全スロットを明示 seed する
+    const { seedUiPrefsDockAllVisible } = jest.requireActual<
+      typeof import("@/testing/seedUiPrefsDockSlots")
+    >("@/testing/seedUiPrefsDockSlots");
+    seedUiPrefsDockAllVisible();
     mockNodes = [];
   });
 

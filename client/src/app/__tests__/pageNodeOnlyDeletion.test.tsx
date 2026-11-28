@@ -73,7 +73,9 @@ afterEach(() => jest.restoreAllMocks());
 it("親を挿入の直後に新ボタンがありTだけ消え子が残る、Undo/Redoは全属性を復元する", async () => {
   const user = userEvent.setup();
   seed(); await renderPage();
-  expect(headerButton("選択中のノードに親を挿入").nextElementSibling).toBe(button());
+  // Dock 移設後はスロットラッパー越しの隣接になる
+  const insert = headerButton("選択中のノードに親を挿入");
+  expect(insert.closest("[data-slot-id]")?.nextElementSibling?.querySelector("button")).toBe(button());
   expect(button()).toBeDisabled();
   selectT(); expect(button()).toBeEnabled();
   await user.click(button());

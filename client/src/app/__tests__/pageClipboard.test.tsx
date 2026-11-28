@@ -184,10 +184,10 @@ afterEach(() => {
 });
 
 describe("ページの枝のコピーと貼り付け", () => {
-  it("ヘッダーにキーボード操作の常設案内を表示する", async () => {
+  it("編集画面にコピー／貼り付けの常設案内テキストが無い（/help へ移設）", async () => {
     await renderPage();
 
-    expect(screen.getByText(HINT)).toBeInTheDocument();
+    expect(screen.queryByText(HINT)).not.toBeInTheDocument();
   });
 
   it("親子をコピーして新しいルートとして貼り付け、Undo／Redoで1操作として往復する", async () => {
@@ -394,7 +394,7 @@ describe("ページの枝のコピーと貼り付けの通知", () => {
     expect(screen.getByText(COPY_MESSAGE)).toBeInTheDocument();
 
     await user.upload(
-      container.querySelector<HTMLInputElement>('input[type="file"]')!,
+      container.querySelector<HTMLInputElement>('input[type="file"][accept="application/json,.json"]')!,
       jsonFile(v3Json([{ id: 5, label: "読み込み" }])),
     );
 
@@ -471,7 +471,7 @@ describe("ページの枝のコピーと貼り付けの境界", () => {
     await renderPage();
     selectNode(0, 2);
     const range = document.createRange();
-    range.selectNodeContents(screen.getByText(HINT));
+    range.selectNodeContents(screen.getByRole("heading", { name: "Draw My Map" }));
     window.getSelection()!.removeAllRanges();
     window.getSelection()!.addRange(range);
     expect(window.getSelection()?.isCollapsed).toBe(false);

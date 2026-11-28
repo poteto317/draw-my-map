@@ -336,7 +336,7 @@ describe("全マップ横断検索（ページ統合）", () => {
     const file = new File([importedJson], "map.json", { type: "application/json" });
     Object.defineProperty(file, "text", { value: () => Promise.resolve(importedJson) });
     await act(async () => {
-      fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files: [file] } });
+      fireEvent.change(document.querySelector('input[type="file"][accept="application/json,.json"]')!, { target: { files: [file] } });
     });
 
     await waitFor(() => {

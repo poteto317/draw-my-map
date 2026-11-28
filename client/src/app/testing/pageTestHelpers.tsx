@@ -111,8 +111,9 @@ export function dialog() {
   return within(screen.getByRole("dialog"));
 }
 
+/** 上部バー／Dock どちらの操作ボタンも取る（Task3 以降 Dock へ移った操作を含む） */
 export function headerButton(name: string): HTMLElement {
-  return within(screen.getByRole("banner")).getByRole("button", { name });
+  return screen.getByRole("button", { name });
 }
 
 // 直近の描画で登録されたノードの pointerdown で選択し、同じ座標で離す（index は nodes 配列の順）。
@@ -123,6 +124,19 @@ export function selectNode(index: number, nodeCount: number, x = 0, y = 0) {
     mockNodePointerHandlers.at(index - nodeCount)?.pointerdown?.(pointer(x, y));
     mockStageHandlers.pointerup?.(pointer(x, y));
   });
+}
+
+/** MapPersistenceControls の JSON 読み込み用 input（Dock 末尾のため document 先頭の file と取り違えない） */
+export function mapJsonFileInput(
+  root: ParentNode = document,
+): HTMLInputElement {
+  const input = root.querySelector<HTMLInputElement>(
+    'input[type="file"][accept="application/json,.json"]',
+  );
+  if (input === null) {
+    throw new Error("JSON読み込み用の file input が見つかりません");
+  }
+  return input;
 }
 
 // 「JSON書き出し」を押し、downloadMapJson のモックが最後に受け取った JSON を解析する

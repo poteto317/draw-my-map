@@ -433,7 +433,7 @@ describe("ページの枝の複製の境界", () => {
     resetMapStageTestRuntime();
     window.localStorage.clear();
     const { container } = await renderPage();
-    await user.upload(container.querySelector<HTMLInputElement>('input[type="file"]')!, jsonFile(json));
+    await user.upload(container.querySelector<HTMLInputElement>('input[type="file"][accept="application/json,.json"]')!, jsonFile(json));
 
     await waitFor(() => expect(screen.getByText("マップを読み込みました。")).toBeInTheDocument());
     expect(exportedMap(mockDownloadMapJson)).toEqual(exported);

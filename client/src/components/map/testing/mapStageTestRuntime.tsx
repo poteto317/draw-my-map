@@ -148,6 +148,17 @@ export function pointer(
 }
 
 export async function renderReady(ui: ReactElement) {
+  // 旧ヘッダー相当の全操作へ結合テストが到達できるよう、未設定時は全 Dock スロットを表示する
+  // window.localStorage へのアクセス自体が例外のケースもあるため、解決も try 内で行う
+  try {
+    const { ensureUiPrefsDockAllVisibleForTests } = jest.requireActual<
+      typeof import("@/testing/seedUiPrefsDockSlots")
+    >("@/testing/seedUiPrefsDockSlots");
+    ensureUiPrefsDockAllVisibleForTests();
+  } catch {
+    // 保護モード等: seed 不能でも描画は続行する
+  }
+
   let result!: ReturnType<typeof render>;
   await act(async () => {
     result = render(ui);

@@ -80,7 +80,7 @@ function jsonFile(contents: string): File {
 }
 
 function fileInput(): HTMLInputElement {
-  return document.querySelector<HTMLInputElement>('input[type="file"]')!;
+  return document.querySelector<HTMLInputElement>('input[type="file"][accept="application/json,.json"]')!;
 }
 
 function currentMapName(): HTMLElement {

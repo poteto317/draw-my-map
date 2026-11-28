@@ -240,7 +240,7 @@ it("同じmapのJSON全置換でもoutlineを維持し古いdraftを失効させ
   fireEvent.change(screen.getByRole("textbox", { name: "ラベル編集" }), { target: { value: "古いdraft" } });
   const file = new File([outlineJson.replace("子B", "新しい子")], "map.json", { type: "application/json" });
   Object.defineProperty(file, "text", { value: async () => outlineJson.replace("子B", "新しい子") });
-  fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"]')!, { target: { files: [file] } });
+  fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"][accept="application/json,.json"]')!, { target: { files: [file] } });
   await waitFor(() => expect(screen.getByRole("button", { name: "階層2・新しい子" })).toBeInTheDocument());
   expect(screen.getByRole("button", { name: "アウトライン" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.queryByRole("textbox", { name: "ラベル編集" })).not.toBeInTheDocument();
