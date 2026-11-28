@@ -25,6 +25,11 @@ import {
   resolveLayoutNodeForestOptions,
   resolveLayoutSpacing,
 } from "@/domain/nodes/nodeMapLayoutContext";
+import {
+  anyNodeHeightsChanged,
+  fitNodeHeightToLabel,
+  fitNodeHeightToLabelIfContentChanged,
+} from "@/domain/nodes/nodeLabelLayout";
 import { createChildNode } from "@/domain/nodes/nodePlacement";
 import { MERGE_DEFAULT_SEPARATOR } from "@/domain/nodes/nodeSeparator";
 import {
@@ -193,7 +198,8 @@ function insertChildNode(
   if (parent === undefined) return { ok: false };
   const created = createChildNode(nodes, parentId, newId, spacing);
   if (created === null) return { ok: false };
-  const newNode: Node = { ...created, label };
+  // layout の入力は高さなので、配置前に commit fit する
+  const newNode: Node = fitNodeHeightToLabel({ ...created, label }, "commit");
   const next = [...nodes, newNode];
   if (mode === "auto") {
     const laid = layoutNodeForest(next, layoutOptions);
@@ -371,7 +377,21 @@ export function applyAiStructureProposals(args: {
   ) {
     return { ok: false, reason: "nothing-to-apply" };
   }
-  return { ok: true, state: working, appliedCount };
+
+  const previousById = new Map(state.nodes.map((node) => [node.id, node]));
+  const fittedNodes = working.nodes.map((node) =>
+    fitNodeHeightToLabelIfContentChanged(previousById.get(node.id), node, "commit"),
+  );
+  // merge 等で高さだけ伸びたあと、auto なら兄弟間隔も layout で閉じる
+  if (
+    working.layoutMode === "auto"
+    && anyNodeHeightsChanged(working.nodes, fittedNodes)
+  ) {
+    const laid = layoutNodeForest(fittedNodes, layoutOptions);
+    if (laid === null) return { ok: false, reason: "placement-failed" };
+    return { ok: true, state: { ...working, nodes: laid }, appliedCount };
+  }
+  return { ok: true, state: { ...working, nodes: fittedNodes }, appliedCount };
 }
 
 export function structureInputFingerprintOf(
