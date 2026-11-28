@@ -334,4 +334,66 @@ describe("MapStage visibility boundary", () => {
     expect(firstCallback).toHaveBeenCalledTimes(1);
     expect(secondCallback).toHaveBeenCalledWith(Math.exp(0.25));
   });
+
+  it("auto ズームアウト相当では presence マーカーが残り、手動モードでは出ない", async () => {
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: jest.fn(() => ({ matches: true, addEventListener: jest.fn(), removeEventListener: jest.fn() })),
+    });
+    Object.defineProperty(window, "requestAnimationFrame", { configurable: true, value: jest.fn() });
+
+    // medium のみ・display 空 = auto で high までズームアウトした状態の契約
+    const mediumTree: Node[] = [
+      createTestNode({ id: 1, parentId: null, x: 50, y: 30, label: "親", importance: "medium" }),
+      createTestNode({ id: 2, parentId: 1, x: 200, y: 100, label: "子", importance: "medium" }),
+    ];
+    const structuralIds = new Set([1, 2]);
+    const displayEmpty = new Set<number>();
+    const onSelectNode = jest.fn();
+    const onDoubleClick = jest.fn();
+
+    const presenceBase = {
+      learnDisplay: inactiveLearnDisplay,
+      taskProgress: new Map(),
+      ...defaultProps,
+      nodes: mediumTree,
+      visibleNodeIds: displayEmpty,
+      collapseVisibleNodeIds: null as ReadonlySet<number> | null,
+      focusVisibleNodeIds: null as ReadonlySet<number> | null,
+      depthVisibleNodeIds: structuralIds,
+      onSelectNode,
+      onDoubleClick,
+    };
+
+    const rendered = await renderReady(
+      <MapStage {...presenceBase} resolutionMode="auto" />,
+    );
+
+    const pixi = jest.requireMock("pixi.js") as { Graphics: jest.Mock };
+    const circleGraphics = pixi.Graphics.mock.results
+      .map((result) => result.value as { circle: jest.Mock; eventMode: string })
+      .filter((graphic) => graphic.circle.mock.calls.length > 0);
+    expect(circleGraphics).toHaveLength(2);
+    for (const graphic of circleGraphics) {
+      expect(graphic.eventMode).toBe("none");
+    }
+
+    // presence は visibleNodeIds に混ざらない → マーカー位置のダブルクリックは背景追加扱い
+    const container = document.querySelector(".cursor-crosshair") as HTMLElement;
+    mockStageBounds(container);
+    fireEvent.doubleClick(container, { clientX: 100, clientY: 60 });
+    expect(onDoubleClick).toHaveBeenCalledWith(100, 60);
+    expect(onSelectNode).not.toHaveBeenCalled();
+
+    const graphicsBeforeManual = pixi.Graphics.mock.results.length;
+    rendered.rerender(
+      <MapStage {...presenceBase} resolutionMode="high" />,
+    );
+
+    const manualCircles = pixi.Graphics.mock.results
+      .slice(graphicsBeforeManual)
+      .map((result) => result.value as { circle: jest.Mock })
+      .filter((graphic) => graphic.circle.mock.calls.length > 0);
+    expect(manualCircles).toHaveLength(0);
+  });
 });
