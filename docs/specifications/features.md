@@ -630,6 +630,17 @@ flowchart TD
   - `useHiddenNodeInteractionReset.ts`: 選択集合（`selectedNodeIds`）またはインライン編集中のノード（`editingNodeId`）がフィルタ切り替え、ズームアウト、枝の折りたたみ、接続の付け替えなどの構造変更により `visibleNodeIds`（折りたたみとの積集合）から外れて非表示になった場合、`useLayoutEffect` で `pruneSelectionToVisible(visibleNodeIds)` を呼び、隠れた ID だけを選択集合から除きます。非主選択のみが隠れても全解除せず、主選択が残るか、消えた主選択は残存 ID のノード配列順先頭へ付け替えます。**主選択が隠れたとき**は、あわせて進行中ジェスチャーを強制キャンセル（`cancelActiveGesture()`）し、編集中ノードも隠れているときだけインライン編集を破棄（`cancelEditing()`）します。非主選択のみ隠れで主選択が残るときは、gesture / editing をキャンセルしません。編集中ノードだけが隠れ、選択集合に隠れが無いときは、編集破棄とジェスチャー中断のみ行います。
   - `useMapStageInteractions.ts`: ドラッグ移動や親子接続ジェスチャーの関与ノード（`interactions.activeNodeIds()`）のいずれかが非表示になった場合も、即座に `interactions.cancelActiveGesture()` を呼び出して操作を中断します。
 
+### 5.6 自動モード時の存在マーカー
+
+表示モードが **自動（`auto`）** のとき、ズームアウトで解像度レベルが下がってもマップが真っ白にならないよう、構造上は出すべきなのに **解像度だけ** でフル描画から外れたノード／親子枝を、ラベル無しの **存在マーカー**（点・細い線）として残します。LOD しきい値・ヒステリシス・祖先維持・手動固定の挙動は変えません。
+
+- **有効条件**: `mode === "auto"` のときだけ算出する。手動（`high` / `medium` / `all`）ではマーカーは出さない（成功の空）。
+- **集合**: `structuralVisible = collapse ∧ focus ∧ depth`（解像度は含めない）。`presenceNodeIds = structuralVisible − displayVisible`。折りたたみ・集中・深さで隠れるノードはマーカーにも出さない。
+- **枝マーカー**: 子が `presenceNodeIds` に入り、親が `structuralVisible` にいるとき細い線を描く。子・親がともに `displayVisible` に含まれる（フル描画の通常エッジ相当）場合は通常エッジを優先し、二重にしない。照合は display 集合であり、`visibleKeys` の `edge:*` 文字列には依存しない。
+- **操作不可**: マーカーは見た目のみ（`eventMode: "none"`）。クリック選択・ホバー・ズームイン誘導はしない。ヒットテスト・選択・コンテキストメニュー・編集・ショートカットの対象は従来どおり最終可視集合（`visibleNodeIds` / `visibleKeys`）のみ。存在マーカー用 ID はこれらの集合に混ぜない。
+- **カリング**: ノードはフル描画と同じ **layout AABB** 経路（`cullNodesInViewport`）。presence には選択維持の `requiredNodeIds` マージを適用しない。枝は線分とビューポート AABB（パッド込み）の交差で残す。
+- **見た目**: 座標正本はフル描画と同じ表示座標（折りたたみ投影後）。ノードはスケール非依存に近い小さな円、枝は細いストローク。ラベル・重要度バッジは出さない。presence が空のときはズーム（scale）変更で scene を全再生成しない。
+
 ---
 
 ## 6. データ永続化とエクスポート機能
