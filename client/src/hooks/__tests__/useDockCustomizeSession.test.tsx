@@ -53,14 +53,9 @@ describe("useDockCustomizeSession", () => {
     expect(result.current.open).toBe(false);
   });
 
-  it("apply 失敗では閉じず、適用前スナップショットへ prefs を復元する", () => {
+  it("apply 失敗では閉じず、setDockLayout のロールバックに委ねる", () => {
     const setDockLayout = jest.fn(
-      (layout: DockLayoutPrefs): SetDockLayoutResult => {
-        if (layout.visibleSlotIds.join(",") === "commandPalette") {
-          return { ok: false, message: "失敗" };
-        }
-        return { ok: true };
-      },
+      (): SetDockLayoutResult => ({ ok: false, message: "失敗" }),
     );
     const { result } = renderHook(() =>
       useDockCustomizeSession({
@@ -81,11 +76,9 @@ describe("useDockCustomizeSession", () => {
     });
 
     expect(result.current.open).toBe(true);
+    expect(setDockLayout).toHaveBeenCalledTimes(1);
     expect(setDockLayout).toHaveBeenCalledWith({
       visibleSlotIds: ["commandPalette"],
-    });
-    expect(setDockLayout).toHaveBeenLastCalledWith({
-      visibleSlotIds: ["undoRedo"],
     });
   });
 
@@ -112,7 +105,7 @@ describe("useDockCustomizeSession", () => {
     const setDockLayout = jest.fn(
       (layout: DockLayoutPrefs): SetDockLayoutResult => {
         liveVisible = [...layout.visibleSlotIds];
-        return { ok: false, message: "失敗" };
+        return { ok: true };
       },
     );
     const { result } = renderHook(() =>
@@ -126,12 +119,8 @@ describe("useDockCustomizeSession", () => {
       result.current.openCustomize();
       result.current.setDraftVisibleSlotIds(["commandPalette"]);
     });
-    act(() => {
-      result.current.applyCustomize();
-    });
-    expect(liveVisible).toEqual(["undoRedo"]);
 
-    // 失敗復元後に prefs が再び変わった場合でも、cancel は open 時スナップショットへ戻す
+    // prefs が open 後に変わっても、cancel は open 時スナップショットへ戻す
     act(() => {
       setDockLayout({ visibleSlotIds: ["commandPalette"] });
       result.current.cancelCustomize();
