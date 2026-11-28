@@ -8,8 +8,26 @@ import {
 import { createPixiTestHarness } from "../testing/pixiTestHarness";
 import type { Node } from "@/types/node";
 import { createTestNode } from "@/testing/createTestNode";
-import { ILLUSTRATION_AREA_HEIGHT, ILLUSTRATED_NODE_HEIGHT } from "@/config/shapes";
+import {
+  ILLUSTRATION_AREA_HEIGHT,
+  ILLUSTRATED_NODE_HEIGHT,
+  RECT_HEIGHT,
+} from "@/config/shapes";
+import {
+  NODE_LABEL_HORIZONTAL_PADDING,
+  NODE_LABEL_VERTICAL_PADDING,
+  ellipsizeWrappedLabel,
+  fitNodeHeightToLabel,
+  measureWrappedLabelBodyHeight,
+  nodeLabelContentHeightBudget,
+} from "@/domain/nodes/nodeLabelLayout";
 import type { Texture } from "pixi.js";
+
+/** 本文上限を超えて省略が必要な長さ（nodeLabelLayout 契約と同じ） */
+const OVERFLOW_LABEL =
+  "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん".repeat(
+    8,
+  );
 
 const emptyTaskProgress = new Map<number, { percent: number; remaining: number }>();
 const inactiveLearnDisplay = { learningActive: false, revealedNodeIds: new Set<number>() };
@@ -65,10 +83,16 @@ describe("renderMapNodes", () => {
       pinnedNodeIds: new Set<number>(),
     });
     const calls = harness.Text.mock.calls as Array<[{ text: string }]>;
+    const measureText = ellipsizeWrappedLabel({
+      text: "とても長いラベル",
+      fontSize: 14,
+      contentWidth: labeled.width - NODE_LABEL_HORIZONTAL_PADDING,
+      maxContentHeight: nodeLabelContentHeightBudget(labeled),
+    }).text;
     expect(calls.some(([arg]) => arg.text === LEARN_LABEL_PLACEHOLDER)).toBe(true);
-    expect(calls.some(([arg]) => arg.text === "とても長いラベル")).toBe(true);
+    expect(calls.some(([arg]) => arg.text === measureText)).toBe(true);
     const placeholder = harness.Text.mock.results[calls.findIndex(([arg]) => arg.text === LEARN_LABEL_PLACEHOLDER)].value as { width: number };
-    const real = harness.Text.mock.results[calls.findIndex(([arg]) => arg.text === "とても長いラベル")].value as { width: number };
+    const real = harness.Text.mock.results[calls.findIndex(([arg]) => arg.text === measureText)].value as { width: number };
     expect(placeholder.width).toBe(real.width);
   });
 
@@ -128,7 +152,7 @@ describe("renderMapNodes", () => {
         fontSize: 14,
         fontWeight: "normal",
         fill: 0x27272a,
-        wordWrap: true,
+        wordWrap: false,
         wordWrapWidth: 84,
         align: "center",
       },
@@ -174,7 +198,7 @@ describe("renderMapNodes", () => {
         fontSize: 18,
         fontWeight: "bold",
         fill: 0x27272a,
-        wordWrap: true,
+        wordWrap: false,
         wordWrapWidth: 84,
         align: "center",
       },
@@ -202,18 +226,22 @@ describe("renderMapNodes", () => {
   });
 
   it("空ラベルのフォールバックにも fontSize / Bold / Underline を適用する", () => {
-    const emptyStyled = createTestNode({
-      id: 1,
-      parentId: null,
-      x: 50,
-      y: 30,
-      width: 100,
-      height: 60,
-      label: "",
-      labelFontSize: 24,
-      labelBold: true,
-      labelUnderline: true,
-    });
+    // fontSize 24 では既定高さでは折り返し省略されるため、確定 fit 後の高さを使う
+    const emptyStyled = fitNodeHeightToLabel(
+      createTestNode({
+        id: 1,
+        parentId: null,
+        x: 50,
+        y: 30,
+        width: 100,
+        height: 60,
+        label: "",
+        labelFontSize: 24,
+        labelBold: true,
+        labelUnderline: true,
+      }),
+      "commit",
+    );
     const harness = createPixiTestHarness();
     renderMapNodes(harness.app.stage as never, harness.constructors as never, {
       commentNodeCounts: new Map(),
@@ -230,16 +258,121 @@ describe("renderMapNodes", () => {
       pinnedNodeIds: new Set<number>(),
     });
 
+    const expectedText = ellipsizeWrappedLabel({
+      text: "",
+      fontSize: 24,
+      contentWidth: emptyStyled.width - NODE_LABEL_HORIZONTAL_PADDING,
+      maxContentHeight: nodeLabelContentHeightBudget(emptyStyled),
+    }).text;
     expect(harness.Text).toHaveBeenCalledWith({
-      text: "新しいノード",
+      text: expectedText,
       style: expect.objectContaining({
         fontSize: 24,
         fontWeight: "bold",
+        wordWrap: false,
       }),
     });
     expect(harness.Graphics).toHaveBeenCalledTimes(2);
   });
 
+  it("上限超過ラベルは都度 ellipsize し、Node に表示文字列を保存せず矩形内に収める", () => {
+    const fitted = fitNodeHeightToLabel(
+      createTestNode({
+        id: 1,
+        x: 50,
+        y: 30,
+        width: 100,
+        height: RECT_HEIGHT,
+        label: OVERFLOW_LABEL,
+      }),
+      "commit",
+    );
+    expect(fitted.height).toBe(RECT_HEIGHT * 4);
+    expect(fitted.label).toBe(OVERFLOW_LABEL);
+
+    const harness = createPixiTestHarness();
+    renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+      commentNodeCounts: EMPTY_COMMENT_NODE_COUNTS,
+      nodes: [fitted],
+      learnDisplay: inactiveLearnDisplay,
+      taskProgress: emptyTaskProgress,
+      selectedNodeIds: [],
+      editingNodeId: null,
+      connectionTargetNodeId: null,
+      siblingReorderSourceNodeId: null,
+      onNodePointerDown: jest.fn(),
+      visibleKeys: new Set(["node:1"]),
+      highlightNodeIds: new Set<number>(),
+      pinnedNodeIds: new Set<number>(),
+    });
+
+    const contentWidth = fitted.width - NODE_LABEL_HORIZONTAL_PADDING;
+    const maxContentHeight =
+      fitted.height - NODE_LABEL_VERTICAL_PADDING;
+    const expectedDisplay = ellipsizeWrappedLabel({
+      text: OVERFLOW_LABEL,
+      fontSize: 14,
+      contentWidth,
+      maxContentHeight,
+    });
+    expect(expectedDisplay.truncated).toBe(true);
+    expect(expectedDisplay.text.endsWith("…")).toBe(true);
+    expect(expectedDisplay.text).not.toBe(OVERFLOW_LABEL);
+
+    const labelCall = (harness.Text.mock.calls as Array<[{ text: string }]>).find(
+      ([arg]) => typeof arg.text === "string" && arg.text.includes("…"),
+    );
+    expect(labelCall).toBeDefined();
+    expect(labelCall![0].text).toBe(expectedDisplay.text);
+    expect(labelCall![0]).toEqual(
+      expect.objectContaining({
+        style: expect.objectContaining({ wordWrap: false }),
+      }),
+    );
+    // 永続フィールドを読まない: Node.label は全文のまま
+    expect(fitted.label).toBe(OVERFLOW_LABEL);
+    expect(
+      (fitted as Node & { displayLabel?: string }).displayLabel,
+    ).toBeUndefined();
+
+    expect(
+      measureWrappedLabelBodyHeight({
+        text: labelCall![0].text,
+        fontSize: 14,
+        contentWidth,
+      }),
+    ).toBeLessThanOrEqual(maxContentHeight);
+  });
+
+  it("短いラベルも domain wrap 結果を描き常に wordWrap:false", () => {
+    const short = createTestNode({
+      id: 1,
+      x: 50,
+      y: 30,
+      width: 100,
+      height: RECT_HEIGHT,
+      label: "短い",
+    });
+    const harness = createPixiTestHarness();
+    renderMapNodes(harness.app.stage as never, harness.constructors as never, {
+      commentNodeCounts: EMPTY_COMMENT_NODE_COUNTS,
+      nodes: [short],
+      learnDisplay: inactiveLearnDisplay,
+      taskProgress: emptyTaskProgress,
+      selectedNodeIds: [],
+      editingNodeId: null,
+      connectionTargetNodeId: null,
+      siblingReorderSourceNodeId: null,
+      onNodePointerDown: jest.fn(),
+      visibleKeys: new Set(["node:1"]),
+      highlightNodeIds: new Set<number>(),
+      pinnedNodeIds: new Set<number>(),
+    });
+    expect(harness.Text).toHaveBeenCalledWith({
+      text: "短い",
+      style: expect.objectContaining({ wordWrap: false }),
+    });
+  });
 
   it("複数 ID を選択スタイルにし、非選択は通常スタイルのままにする", () => {
     const second = createTestNode({

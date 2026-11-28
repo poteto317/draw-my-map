@@ -23,6 +23,11 @@ import {
   NODE_ICON_DISPLAY_SIZE_PX,
 } from "@/domain/nodes/nodeIcon";
 import { getNodeIllustrationRect, getNodeLabelCenterOffset } from "@/domain/nodes/nodeIllustration";
+import {
+  NODE_LABEL_HORIZONTAL_PADDING,
+  ellipsizeWrappedLabel,
+  nodeLabelContentHeightBudget,
+} from "@/domain/nodes/nodeLabelLayout";
 import type { Node } from "@/types/node";
 import {
   NODE_KIND_BAR_FALLBACK_COLORS,
@@ -215,17 +220,33 @@ function createNodeLabelText(
 ): Text {
   const { text, realLabelForWidth } = resolveLearnLabelDisplay(node, learnDisplay);
   const presentation = resolveLabelTextPresentation(node);
+  const contentWidth = node.width - NODE_LABEL_HORIZONTAL_PADDING;
+  const maxContentHeight = nodeLabelContentHeightBudget(node);
+  const ellipsizeInput = {
+    fontSize: presentation.fontSize,
+    contentWidth,
+    maxContentHeight,
+  };
+  // 表示文字列は Node に保存せず都度導出。domain wrap を正本とし Pixi wordWrap は使わない
+  const { text: displayText } = ellipsizeWrappedLabel({ text, ...ellipsizeInput });
   const style = {
     fontSize: presentation.fontSize,
     fontWeight: presentation.fontWeight,
     fill: NODE_LABEL_FILL,
-    wordWrap: true,
-    wordWrapWidth: node.width - 16,
+    wordWrap: false,
+    wordWrapWidth: contentWidth,
     align: "center" as const,
   };
-  const labelText = new constructors.Text({ text, style });
+  const labelText = new constructors.Text({ text: displayText, style });
   if (text !== realLabelForWidth) {
-    const measureText = new constructors.Text({ text: realLabelForWidth, style });
+    const { text: measureDisplay } = ellipsizeWrappedLabel({
+      text: realLabelForWidth,
+      ...ellipsizeInput,
+    });
+    const measureText = new constructors.Text({
+      text: measureDisplay,
+      style,
+    });
     labelText.width = measureText.width;
   }
   labelText.anchor.set(0.5);
