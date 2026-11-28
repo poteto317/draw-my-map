@@ -1,30 +1,32 @@
+import {
+  isCollapseFocusDepthVisible,
+  type CollapseFocusDepthSets,
+} from "@/domain/nodes/mapDisplayVisibility";
 import type { ResolutionFilterMode } from "@/types/nodeResolution";
 
-export type StructuralVisibilitySets = {
-  collapseVisibleNodeIds?: ReadonlySet<number> | null;
-  focusVisibleNodeIds?: ReadonlySet<number> | null;
-  depthVisibleNodeIds: ReadonlySet<number>;
-};
+export type StructuralVisibilitySets = CollapseFocusDepthSets;
 
-/** collapse ∧ focus ∧ depth（解像度なし） */
+/** collapse ∧ focus ∧ depth（解像度なし）。判定は display 側の共通 predicate を共有。 */
 export function collectStructuralVisibleNodeIds(
   candidateIds: Iterable<number>,
-  {
-    collapseVisibleNodeIds,
-    focusVisibleNodeIds,
-    depthVisibleNodeIds,
-  }: StructuralVisibilitySets,
+  sets: StructuralVisibilitySets,
 ): Set<number> {
   const visible = new Set<number>();
   for (const id of candidateIds) {
-    if ((collapseVisibleNodeIds?.has(id) ?? true)
-      && (focusVisibleNodeIds?.has(id) ?? true)
-      && depthVisibleNodeIds.has(id)) {
+    if (isCollapseFocusDepthVisible(id, sets)) {
       visible.add(id);
     }
   }
   return visible;
 }
+
+/** MapStage へ渡す presence 専用入力（display 集合は visibleNodeIds 側）。 */
+export type PresenceVisibilityInput = {
+  resolutionMode?: ResolutionFilterMode | null;
+  collapseVisibleNodeIds?: ReadonlySet<number> | null;
+  focusVisibleNodeIds?: ReadonlySet<number> | null;
+  depthVisibleNodeIds?: ReadonlySet<number> | null;
+};
 
 /** collapse/focus/depth/display が揃い mode が解釈できるとき true。false ならマーカー層スキップ（空算出に倒さない） */
 export function arePresenceInputsComplete(input: {
