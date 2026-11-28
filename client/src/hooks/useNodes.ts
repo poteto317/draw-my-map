@@ -83,7 +83,9 @@ import {
 import { applyNodePositionUpdates } from "@/domain/nodes/selectionLayoutShared";
 import { applyManualPositionIfUnlocked } from "@/hooks/applyManualPositionIfUnlocked";
 import { deleteNodeOnly as computeNodeOnlyDeletion, type DeleteNodeOnlyResult } from "@/domain/nodes/nodeOnlyDeletion";
+import { layoutNodeForest } from "@/domain/nodes/nodeAutoLayout";
 import {
+  layoutContextFromState,
   resolveLayoutNodeForestOptions,
   resolveLayoutSpacing,
 } from "@/domain/nodes/nodeMapLayoutContext";
@@ -566,12 +568,23 @@ export function useNodes(): UseNodesReturn {
     return applyPinnedCoordinateMoveRaw(update);
   }, [applyPinnedCoordinateMoveRaw, isNodeOpBlocked]);
 
+  // hydrate/collab: growOnly のあと auto かつ高さ変化なら同じ適用内で layout。
+  // layout 失敗時は増高も破棄（編集系の label+height+layout 原子性と同じ）
   const replaceMap = useCallback((state: NodeMapState) => {
     nodeIdAllocator.reset();
-    replaceLayoutState({
-      ...state,
-      nodes: fitNodesHeightToLabels(state.nodes, "growOnly"),
-    });
+    const fittedNodes = fitNodesHeightToLabels(state.nodes, "growOnly");
+    let nodes = fittedNodes;
+    if (
+      state.layoutMode === "auto"
+      && anyNodeHeightsChanged(state.nodes, fittedNodes)
+    ) {
+      const laid = layoutNodeForest(
+        fittedNodes,
+        resolveLayoutNodeForestOptions(layoutContextFromState(state)),
+      );
+      nodes = laid ?? state.nodes;
+    }
+    replaceLayoutState({ ...state, nodes });
     markDocumentRestored();
   }, [nodeIdAllocator, replaceLayoutState, markDocumentRestored]);
 

@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { RECT_HEIGHT, RECT_WIDTH } from "@/config/shapes";
+import { RECT_HEIGHT, RECT_WIDTH, SIBLING_VERTICAL_GAP } from "@/config/shapes";
 import { fitNodeHeightToLabel } from "@/domain/nodes/nodeLabelLayout";
 import { layoutNodeForest } from "@/domain/nodes/nodeAutoLayout";
 import { useNodes } from "@/hooks/useNodes";
@@ -257,6 +257,91 @@ describe("useNodes ラベル高さ fit（Task1）", () => {
 
     expect(result.current.nodes[0]!.height).toBe(expectedCommitHeight(LONG_WRAPPING_LABEL));
     expect(result.current.nodes[1]!.height).toBe(180);
+    expect(result.current.canUndo).toBe(false);
+  });
+
+  it("7b. replaceMap（auto+兄弟）は growOnly 後に再配置し兄弟が重ならない", () => {
+    const { result } = renderHook(() => useNodes());
+    act(() => {
+      result.current.replaceMap({
+        layoutMode: "auto",
+        nodes: [
+          createTestNode({
+            id: 1,
+            label: "根",
+            width: RECT_WIDTH,
+            height: RECT_HEIGHT,
+            x: 40,
+            y: 40,
+          }),
+          createTestNode({
+            id: 2,
+            parentId: 1,
+            label: LONG_WRAPPING_LABEL,
+            width: RECT_WIDTH,
+            height: RECT_HEIGHT,
+            x: 260,
+            y: 40,
+          }),
+          createTestNode({
+            id: 3,
+            parentId: 1,
+            label: "下の兄弟",
+            width: RECT_WIDTH,
+            height: RECT_HEIGHT,
+            x: 260,
+            y: 40 + RECT_HEIGHT + SIBLING_VERTICAL_GAP,
+          }),
+        ],
+      });
+    });
+
+    const node2 = result.current.nodes.find((node) => node.id === 2)!;
+    const node3 = result.current.nodes.find((node) => node.id === 3)!;
+    expect(node2.height).toBe(expectedCommitHeight(LONG_WRAPPING_LABEL));
+    expect(node2.height).toBeGreaterThan(RECT_HEIGHT);
+    expect(node3.y).toBeGreaterThanOrEqual(node2.y + node2.height + SIBLING_VERTICAL_GAP);
+    expect(result.current.canUndo).toBe(false);
+  });
+
+  it("7c. replaceMap（auto）で layout 失敗なら増高も破棄する", () => {
+    const incoming = [
+      createTestNode({
+        id: 1,
+        label: "根",
+        width: RECT_WIDTH,
+        height: RECT_HEIGHT,
+        x: 40,
+        y: 40,
+      }),
+      createTestNode({
+        id: 2,
+        parentId: 1,
+        label: LONG_WRAPPING_LABEL,
+        width: RECT_WIDTH,
+        height: RECT_HEIGHT,
+        x: 260,
+        y: 40,
+      }),
+      createTestNode({
+        id: 3,
+        parentId: 1,
+        label: "下の兄弟",
+        width: RECT_WIDTH,
+        height: RECT_HEIGHT,
+        x: 260,
+        y: 140,
+      }),
+    ];
+    jest.mocked(layoutNodeForest).mockReturnValueOnce(null);
+
+    const { result } = renderHook(() => useNodes());
+    act(() => {
+      result.current.replaceMap({ layoutMode: "auto", nodes: incoming });
+    });
+
+    expect(result.current.nodes).toEqual(incoming);
+    expect(result.current.nodes.find((node) => node.id === 2)!.height).toBe(RECT_HEIGHT);
     expect(result.current.canUndo).toBe(false);
   });
 
