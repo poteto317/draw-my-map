@@ -16,6 +16,7 @@ import { INITIAL_VIEWPORT } from "@/components/map/mapViewport";
 import { MENU_ACTIVATION_DOUBLE_CLICK_WINDOW_MS } from "@/components/map/menuActivationDoubleClick";
 import {
   lastWorldContainer,
+  mockNodePointerHandlers,
   mockStage,
   mockStageBounds,
   mockStageHandlers,
@@ -202,7 +203,7 @@ function resolutionButton(label: "自動" | "すべて"): HTMLElement {
 }
 
 function fileInput(): HTMLInputElement {
-  return document.querySelector<HTMLInputElement>('input[type="file"]')!;
+  return document.querySelector<HTMLInputElement>('input[type="file"][accept="application/json,.json"]')!;
 }
 
 function jsonFile(text: Promise<string>): File {
@@ -637,11 +638,21 @@ describe("移行と保護モード", () => {
   });
 
   it("旧キーが容量の約半分を超えていても、旧キーを消してから移行し、通常のモードで開く", async () => {
+    // renderPage の ensure seed が容量を食わないよう、先に prefs を書いて予算に含める
+    const { seedUiPrefsDockAllVisible } = jest.requireActual<
+      typeof import("@/testing/seedUiPrefsDockSlots")
+    >("@/testing/seedUiPrefsDockSlots");
+    seedUiPrefsDockAllVisible();
     const largeLabel = "大".repeat(3000);
     const largeJson = v3Json([{ id: 1, label: largeLabel }]);
     window.localStorage.setItem(MAP_STORAGE_KEY, largeJson);
-    // 旧キーと本体の2つは入らないが、本体とインデックスは入る容量
-    limitStorageCapacity(MAP_STORAGE_KEY.length + largeJson.length + 1000);
+    let used = 0;
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const key = window.localStorage.key(i);
+      if (key !== null) used += key.length + (window.localStorage.getItem(key) ?? "").length;
+    }
+    // 旧キーと本体の2つは入らないが、本体とインデックスは入る容量（prefs 済みの used 基準）
+    limitStorageCapacity(used + 1000);
 
     await renderPage();
     advance(300);
@@ -710,7 +721,9 @@ describe("移行と保護モード", () => {
       addNodeAt(500, 400);
       advance(300);
 
-      expect(exportedLabels()).toHaveLength(1);
+      // localStorage 不能時は Dock seed もできない（既定 visible に exportJson 無し）。
+      // JSON書き出しボタンに依存せず、キャンバス上のノード追加で編集継続を確認する。
+      expect(mockNodePointerHandlers.length).toBeGreaterThanOrEqual(1);
       expect(screen.queryByText(AUTO_SAVE_FAILURE_MESSAGE)).not.toBeInTheDocument();
       expect(banner().getByRole("status", { name: "保存状態: ブラウザへ保存できません" })).toBeInTheDocument();
     } finally {
@@ -723,19 +736,20 @@ it("表示ブックマークの一覧を開いたマップだけに表示し、�
   seedTwoMaps();
   const user = setupUser();
   await renderPage();
-  const name = banner().getByRole("textbox", { name: "表示ブックマーク名" });
+  // 表示ブックマークは Dock へ移設済み（header/banner 外）
+  const name = screen.getByRole("textbox", { name: "表示ブックマーク名" });
   await user.type(name, "A の表示");
-  await user.click(banner().getByRole("button", { name: "現在の表示を保存" }));
-  expect(banner().getByRole("button", { name: "A の表示を適用" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "現在の表示を保存" }));
+  expect(screen.getByRole("button", { name: "A の表示を適用" })).toBeInTheDocument();
 
   await switchTo(user, "B");
-  expect(banner().queryByRole("button", { name: "A の表示を適用" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "A の表示を適用" })).not.toBeInTheDocument();
   await switchTo(user, "A");
-  expect(banner().getByRole("button", { name: "A の表示を適用" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "A の表示を適用" })).toBeInTheDocument();
 
   await user.click(headerButton("新しいマップ"));
   await user.type(dialog().getByRole("textbox"), "新しいマップ");
   await user.click(dialog().getByRole("button", { name: "作成" }));
   expect(currentMapName()).toHaveTextContent("新しいマップ");
-  expect(banner().queryByRole("button", { name: "A の表示を適用" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "A の表示を適用" })).not.toBeInTheDocument();
 });

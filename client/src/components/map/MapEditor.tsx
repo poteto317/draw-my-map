@@ -86,6 +86,10 @@ import { useNodePins } from "@/hooks/useNodePins";
 import { usePartsLibrary } from "@/hooks/usePartsLibrary";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { AppWorkspace } from "@/components/layout/AppWorkspace";
+import { EditorDock } from "@/components/layout/EditorDock";
+import { DockCustomizeDialog } from "@/components/layout/DockCustomizeDialog";
+import { buildEditorDockSlots } from "@/components/map/buildEditorDockSlots";
+import { useDockCustomizeSession } from "@/hooks/useDockCustomizeSession";
 import { NodeImportanceSelector } from "@/components/layout/NodeImportanceSelector";
 import { DepthLimitControl } from "@/components/layout/DepthLimitControl";
 import { DepthLimitEmptyHint } from "@/components/layout/DepthLimitEmptyHint";
@@ -226,7 +230,6 @@ import type { MapStorageSession } from "@/types/mapStorageSession";
 import type { OperationNotice } from "@/types/operationNotice";
 import type { PendingMapNodeNavigation } from "@/types/pendingMapNavigation";
 
-const CLIPBOARD_OPERATION_HINT = "枝をコピー: Ctrl/Cmd+C ／ 貼り付け: Ctrl/Cmd+V（新しいルートとして追加）";
 const LAYOUT_FAILED_NOTICE: OperationNotice = {
   kind: "status",
   message: "表示用の自動配置ができないため、元の位置で表示しています。",
@@ -421,7 +424,11 @@ export function MapEditor({
     resetRevision,
     resetScale: INITIAL_VIEWPORT.scale,
   });
-  const { prefs: uiPrefs, setWheelZoomSensitivity } = useUiPrefs();
+  const { prefs: uiPrefs, setWheelZoomSensitivity, setDockLayout } = useUiPrefs();
+  const dockCustomize = useDockCustomizeSession({
+    visibleSlotIds: uiPrefs.dockLayout.visibleSlotIds,
+    setDockLayout,
+  });
   const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? null;
   const selectedRelation = useMemo(() => {
     if (canvasSelection.type !== "relation") return null;
@@ -1912,6 +1919,382 @@ export function MapEditor({
     />
   );
 
+  const dockSlotNodes = {
+    undoRedo: (
+      <MapHistoryControls
+        canUndo={effectiveCanUndo && (editorShortcutsEnabled || listening) && !playingPresentation}
+        canRedo={effectiveCanRedo && (editorShortcutsEnabled || listening) && !playingPresentation}
+        onUndo={effectiveUndo}
+        onRedo={effectiveRedo}
+      />
+    ),
+    commandPalette: (
+      <CommandPaletteControl
+        expanded={commandPalette.screen === "open"}
+        onOpen={openCommandPalette}
+        buttonRef={commandPaletteButtonRef}
+      />
+    ),
+    wheelZoom: (
+      <WheelZoomSensitivityControl
+        value={uiPrefs.wheelZoomSensitivity}
+        onChange={setWheelZoomSensitivity}
+      />
+    ),
+    importance: (
+      <NodeImportanceSelector
+        importance={importanceSummary.kind === "uniform" ? importanceSummary.importance : null}
+        disabled={importanceSummary.kind === "none" || playingPresentation}
+        selectionCount={importanceSummary.kind === "none" ? 0 : importanceSummary.count}
+        mixed={importanceSummary.kind === "mixed"}
+        onChange={(importance) => {
+          updateNodesImportance(importanceTargetIds, importance);
+        }}
+      />
+    ),
+    collapse: (
+      <NodeCollapseControl
+        selectedNodeId={selectedNodeId}
+        canToggle={selectedNodeId !== null && branchCollapse.canToggle(selectedNodeId)}
+        collapsed={selectedNodeId !== null && branchCollapse.collapsedNodeIds.has(selectedNodeId)}
+        hiddenCount={selectedNodeId === null ? 0 : branchCollapse.hiddenCountById.get(selectedNodeId) ?? 0}
+        onToggle={branchCollapse.toggle}
+        disabled={playingPresentation}
+      />
+    ),
+    duplicateBranch: (
+      <NodeDuplicateControl
+        disabled={selectedNode === null || !editorShortcutsEnabled}
+        onDuplicate={duplication.duplicateSelected}
+      />
+    ),
+    moveBranch: (
+      <BranchMoveControl
+        expanded={branchMove.screen !== "closed"}
+        disabled={selectedNode === null || !editorShortcutsEnabled || collabBulkBlocked !== null}
+        onOpen={branchMove.open}
+        buttonRef={branchMoveButtonRef}
+      />
+    ),
+    reorderSiblings: (
+      <NodeSiblingOrderControl
+        canMoveUp={siblingReorder.canMoveUp && editorShortcutsEnabled}
+        canMoveDown={siblingReorder.canMoveDown && editorShortcutsEnabled}
+        onMoveUp={moveSelectedSiblingUp}
+        onMoveDown={moveSelectedSiblingDown}
+      />
+    ),
+    changeHierarchy: (
+      <NodeIndentControl
+        canOutdent={nodeIndent.canOutdent && editorShortcutsEnabled}
+        canIndent={nodeIndent.canIndent && editorShortcutsEnabled}
+        onOutdent={outdentSelected}
+        onIndent={indentSelected}
+      />
+    ),
+    insertParent: (
+      <NodeParentInsertControl
+        canInsert={nodeParentInsertion.canInsert && editorShortcutsEnabled}
+        onInsert={nodeParentInsertion.insertSelected}
+      />
+    ),
+    deleteNodeOnly: (
+      <NodeOnlyDeleteControl
+        canDelete={nodeOnlyDeletion.canDelete && editorShortcutsEnabled}
+        onDelete={nodeOnlyDeletion.deleteSelected}
+      />
+    ),
+    bulkReplace: (
+      <LabelReplaceControl
+        expanded={labelReplace.screen !== "closed"}
+        disabled={nodes.length === 0 || !editorShortcutsEnabled || collabBulkBlocked !== null}
+        onOpen={labelReplace.open}
+        buttonRef={labelReplaceButtonRef}
+      />
+    ),
+    splitMerge: (
+      <>
+        <NodeSplitControl
+          expanded={nodeSplit.screen !== "closed"}
+          disabled={!nodeSplit.canOpen || !editorShortcutsEnabled || collabBulkBlocked !== null}
+          disabledReason={collabBulkBlocked ?? nodeSplit.disabledReason}
+          onOpen={nodeSplit.open}
+          buttonRef={nodeSplitButtonRef}
+        />
+        <NodeMergeControl
+          expanded={nodeMerge.screen !== "closed"}
+          disabled={!nodeMerge.canOpen || !editorShortcutsEnabled || collabBulkBlocked !== null}
+          disabledReason={collabBulkBlocked ?? nodeMerge.disabledReason}
+          onOpen={nodeMerge.open}
+          buttonRef={nodeMergeButtonRef}
+        />
+      </>
+    ),
+    branchNav: (
+      <BranchNavigationControls
+        breadcrumb={breadcrumb}
+        focusing={focusRootId !== null}
+        canGoBack={editorShortcutsEnabled && viewNavigation.canGoBack}
+        canGoForward={editorShortcutsEnabled && viewNavigation.canGoForward}
+        onTravel={(direction) => {
+          if (!editorShortcutsEnabled) return;
+          if (viewNavigation.travel(direction)) canvasContainerRef.current?.focus();
+        }}
+        canFocus={editorShortcutsEnabled && selectedBranchIds !== null}
+        canExpand={editorShortcutsEnabled && canExpandSelectedBranch}
+        canCollapse={editorShortcutsEnabled && canCollapseSelectedBranch}
+        canFitAll={editorShortcutsEnabled && displayState.fitNodes.length > 0}
+        canFitSelection={editorShortcutsEnabled && selectedFitNodes.length > 0}
+        onFitAll={() => {
+          if (!editorShortcutsEnabled) return;
+          viewportHandleRef.current?.fitNodes(displayState.fitNodes, recordBeforeViewportChange);
+        }}
+        onFitSelection={() => {
+          if (!editorShortcutsEnabled) return;
+          viewportHandleRef.current?.fitNodes(selectedFitNodes, recordBeforeViewportChange);
+        }}
+        onToggleFocus={() => {
+          if (!editorShortcutsEnabled) return;
+          const nextFocusId = focusRootId === null ? selectedNodeId : null;
+          if (nextFocusId === focusRootId) return;
+          recordBeforeViewportChange();
+          setFocusRootId(nextFocusId);
+        }}
+        onSetSubtreeCollapsed={(collapsed) => {
+          if (!editorShortcutsEnabled) return;
+          if (selectedNodeId !== null) branchCollapse.setSubtreeCollapsed(selectedNodeId, collapsed);
+        }}
+        onNavigate={(id) => {
+          if (!editorShortcutsEnabled) return;
+          if (navigateToNode(id) !== "missing") canvasContainerRef.current?.focus();
+        }}
+      />
+    ),
+    viewBookmarks: (
+      <MapViewBookmarkControls
+        key={bookmarks.key ?? mapId}
+        unavailable={bookmarks.key === null}
+        disabled={!bookmarks.ready || !persistence.hydrated || !editorShortcutsEnabled}
+        bookmarks={bookmarks.bookmarks}
+        onSave={(name) => bookmarks.save(name, viewNavigation.captureView())}
+        onApply={(snapshot) => {
+          if (viewNavigation.applyView(snapshot, viewNavigation.recordNavigation)) {
+            canvasContainerRef.current?.focus();
+          }
+        }}
+        onDelete={bookmarks.remove}
+      />
+    ),
+    resolutionFilter: (
+      <ResolutionFilterSelector
+        mode={resolutionFilter.mode}
+        level={resolutionFilter.level}
+        onChange={resolutionFilter.setMode}
+      />
+    ),
+    depthLimit: (
+      <DepthLimitControl maxDepth={maxDepth} onChange={setMaxDepth} />
+    ),
+    highlightMode: (
+      <HighlightModeControl mode={highlightMode} onChange={setHighlightMode} />
+    ),
+    nodePins: (
+      <NodePinControls
+        pins={nodePins.pins}
+        nodes={nodes}
+        canRegister={nodePins.canRegister}
+        onRegister={() => {
+          nodePins.registerPin();
+        }}
+        onJump={(nodeId) => {
+          nodePins.jumpToPin(nodeId);
+        }}
+        onDelete={(nodeId) => {
+          nodePins.deletePin(nodeId);
+        }}
+      />
+    ),
+    tour: (
+      <TourEditorControl
+        expanded={tourEditor.screen === "open"}
+        disabled={tourHeaderDisabled}
+        onOpen={tourEditor.open}
+        buttonRef={tourEditorButtonRef}
+      />
+    ),
+    presentation: (
+      <PresentationStartControl
+        disabled={presentationStartControlDisabled}
+        onStart={handlePresentationStart}
+        buttonRef={presentationStartButtonRef}
+      />
+    ),
+    learnMode: (
+      <>
+        <LearnModeControl
+          learningActive={learningActive}
+          disabled={
+            playingPresentation
+            || hasMapConflict
+            || isMapExternallyDeleted
+            || collabLearnBlocked !== null
+            || (!learningActive && (learnStartBlockedReason !== null || listening))
+          }
+          onToggle={handleToggleLearnMode}
+          buttonRef={learnModeButtonRef}
+        />
+        {learningActive && (
+          <>
+            <button
+              type="button"
+              className="shrink-0 rounded-md bg-zinc-100 px-3 py-1 text-sm text-zinc-700 disabled:opacity-60 dark:bg-zinc-700 dark:text-zinc-200"
+              disabled={learnGenerateBlockedReason !== null}
+              onClick={() => handleGenerateLearnReviewCards()}
+            >
+              復習カードを生成
+            </button>
+            <button
+              type="button"
+              className="shrink-0 rounded-md bg-zinc-100 px-3 py-1 text-sm text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200"
+              onClick={() => handleOpenLearnReviewCards()}
+            >
+              復習カード
+            </button>
+            <button
+              type="button"
+              className="shrink-0 rounded-md bg-zinc-100 px-3 py-1 text-sm text-zinc-700 disabled:opacity-60 dark:bg-zinc-700 dark:text-zinc-200"
+              disabled={learnResetBlockedReason !== null}
+              onClick={() => learnMode.openResetDialog()}
+            >
+              進捗をリセット
+            </button>
+          </>
+        )}
+      </>
+    ),
+    voiceInput: voiceInputControl,
+    importBullets: (
+      <OutlineImportControl
+        expanded={outlineImport.screen !== "closed"}
+        disabled={!editorShortcutsEnabled || collabOutlineImportBlocked !== null}
+        onOpen={outlineImport.open}
+        buttonRef={outlineImportButtonRef}
+      />
+    ),
+    importOpmlCsv: (
+      <ExchangeImportControl
+        opmlExpanded={exchangeImport.screen !== "closed" && exchangeImport.entry === "opml"}
+        csvExpanded={exchangeImport.screen !== "closed" && exchangeImport.entry === "csv-tsv"}
+        disabled={!editorShortcutsEnabled || collabOutlineImportBlocked !== null}
+        onOpen={exchangeImport.open}
+        opmlButtonRef={exchangeOpmlButtonRef}
+        csvButtonRef={exchangeCsvButtonRef}
+      />
+    ),
+    exportTarget: (
+      <ExportScopeControl
+        scope={exportScope}
+        onChange={setExportScope}
+        selectionAvailable={selectionScopeAvailable}
+      />
+    ),
+    exportJson: (
+      <MapPersistenceControls
+        onExport={handleExportJson}
+        onImport={persistence.importJsonFile}
+        exportButtonRef={exportButtonRef}
+        jsonExportEnabled={effectiveExportFormatControls.json.enabled}
+        jsonExportDisabledReason={effectiveExportFormatControls.json.disabledReason}
+        jsonImportEnabled={editorShortcutsEnabled && collabJsonImportBlocked === null}
+      />
+    ),
+    exportPngSvg: (
+      <MapImageExportControls
+        onExportPng={imageExport.exportPng}
+        onExportSvg={imageExport.exportSvg}
+        isExportingPng={imageExport.isExportingPng}
+        pngEnabled={effectiveExportFormatControls.png.enabled}
+        svgEnabled={effectiveExportFormatControls.svg.enabled}
+        pngDisabledReason={effectiveExportFormatControls.png.disabledReason}
+        svgDisabledReason={effectiveExportFormatControls.svg.disabledReason}
+      />
+    ),
+    printPdf: (
+      <MapPrintControls
+        nodes={exportNodes}
+        {...effectiveExportFormatControls.print}
+        canOpen={editorShortcutsEnabled && effectiveExportFormatControls.print.enabled}
+        open={printSettingsOpen}
+        onOpen={() => setPrintSettingsOpen(true)}
+        onClose={() => setPrintSettingsOpen(false)}
+        print={print}
+        onMouseClick={() => {
+          dialogMouseClickedAtRef.current = Date.now();
+        }}
+      />
+    ),
+    exportMdBullets: (
+      <OutlineExportControls
+        onExportMarkdown={outlineExport.exportMarkdown}
+        onExportPlainText={outlineExport.exportPlainText}
+        markdownEnabled={effectiveExportFormatControls.markdown.enabled}
+        plainTextEnabled={effectiveExportFormatControls.bullets.enabled}
+        markdownDisabledReason={effectiveExportFormatControls.markdown.disabledReason}
+        plainTextDisabledReason={effectiveExportFormatControls.bullets.disabledReason}
+      />
+    ),
+    exportOpmlCsvTsv: (
+      <ExchangeExportControls
+        onExportOpml={exchangeExport.exportOpml}
+        onExportCsv={exchangeExport.exportCsv}
+        onExportTsv={exchangeExport.exportTsv}
+        opmlEnabled={effectiveExportFormatControls.opml.enabled}
+        csvEnabled={effectiveExportFormatControls.csv.enabled}
+        tsvEnabled={effectiveExportFormatControls.tsv.enabled}
+        opmlDisabledReason={effectiveExportFormatControls.opml.disabledReason}
+        csvDisabledReason={effectiveExportFormatControls.csv.disabledReason}
+        tsvDisabledReason={effectiveExportFormatControls.tsv.disabledReason}
+      />
+    ),
+    collab: (
+      <CollabControl
+        collabSession={collab.collabSession}
+        participants={collab.participants}
+        participantsState={collab.participantsState}
+        onStartCollab={collab.onStartCollab}
+        onLeaveCollab={collab.onLeaveCollab}
+        onEndCollab={collab.onEndCollab}
+        onRetryCollab={collab.onRetryCollab}
+        shareSession={shareSession}
+        startDisabledReason={collab.startDisabledReason}
+      />
+    ),
+    share: (
+      <ShareControl
+        expanded={shareDialogOpen}
+        disabled={shareOpenBlockedReason !== null}
+        disabledReason={shareOpenBlockedReason ?? undefined}
+        onOpen={handleShareControlOpen}
+        buttonRef={shareButtonRef}
+      />
+    ),
+    comments: (
+      <CommentsControl
+        expanded={commentsDialog.open}
+        disabled={commentsControlDisabledReason !== null}
+        disabledReason={commentsControlDisabledReason ?? undefined}
+        onOpen={() => openComments("all")}
+        buttonRef={commentsDialog.buttonRef}
+      />
+    ),
+  } as const;
+
+  const dockSlots = buildEditorDockSlots({
+    visibleSlotIds: uiPrefs.dockLayout.visibleSlotIds,
+    viewMode,
+    nodesById: dockSlotNodes,
+  });
+
   return (
     <>
       <div
@@ -1930,7 +2313,6 @@ export function MapEditor({
           saveStatus={persistence.saveStatus}
           isNarrowViewport={isNarrowViewport}
           userChoseMapOnNarrow={userChoseMapOnNarrow}
-          voiceControls={isNarrowViewport ? voiceInputControl : null}
           viewControls={(
             <EditorViewModeControl
               mode={viewMode}
@@ -1938,7 +2320,6 @@ export function MapEditor({
               disabled={playingPresentation || listening}
             />
           )}
-          showCanvasHints={viewMode === "map"}
           searchControls={(
             <div className="flex flex-wrap items-center gap-2">
               {viewMode === "map" && (
@@ -1969,322 +2350,6 @@ export function MapEditor({
                 全マップ検索
               </button>
             </div>
-          )}
-          importanceControls={(
-            <NodeImportanceSelector
-              importance={importanceSummary.kind === "uniform" ? importanceSummary.importance : null}
-              disabled={importanceSummary.kind === "none" || playingPresentation}
-              selectionCount={importanceSummary.kind === "none" ? 0 : importanceSummary.count}
-              mixed={importanceSummary.kind === "mixed"}
-              onChange={(importance) => {
-                updateNodesImportance(importanceTargetIds, importance);
-              }}
-            />
-          )}
-          resolutionControls={viewMode === "map" && (
-            <>
-              <ResolutionFilterSelector
-                mode={resolutionFilter.mode}
-                level={resolutionFilter.level}
-                onChange={resolutionFilter.setMode}
-              />
-              <DepthLimitControl maxDepth={maxDepth} onChange={setMaxDepth} />
-              <HighlightModeControl mode={highlightMode} onChange={setHighlightMode} />
-              <NodePinControls
-                pins={nodePins.pins}
-                nodes={nodes}
-                canRegister={nodePins.canRegister}
-                onRegister={() => {
-                  nodePins.registerPin();
-                }}
-                onJump={(nodeId) => {
-                  nodePins.jumpToPin(nodeId);
-                }}
-                onDelete={(nodeId) => {
-                  nodePins.deletePin(nodeId);
-                }}
-              />
-            </>
-          )}
-          operationControls={(
-            <>
-              {viewMode === "map" && (
-                <WheelZoomSensitivityControl
-                  value={uiPrefs.wheelZoomSensitivity}
-                  onChange={setWheelZoomSensitivity}
-                />
-              )}
-              <CommandPaletteControl
-                expanded={commandPalette.screen === "open"}
-                onOpen={openCommandPalette}
-                buttonRef={commandPaletteButtonRef}
-              />
-              <MapHistoryControls
-                canUndo={effectiveCanUndo && (editorShortcutsEnabled || listening) && !playingPresentation}
-                canRedo={effectiveCanRedo && (editorShortcutsEnabled || listening) && !playingPresentation}
-                onUndo={effectiveUndo}
-                onRedo={effectiveRedo}
-              />
-              <TourEditorControl
-                expanded={tourEditor.screen === "open"}
-                disabled={tourHeaderDisabled}
-                onOpen={tourEditor.open}
-                buttonRef={tourEditorButtonRef}
-              />
-              <PresentationStartControl
-                disabled={presentationStartControlDisabled}
-                onStart={handlePresentationStart}
-                buttonRef={presentationStartButtonRef}
-              />
-              <LearnModeControl
-                learningActive={learningActive}
-                disabled={
-                  playingPresentation
-                  || hasMapConflict
-                  || isMapExternallyDeleted
-                  || collabLearnBlocked !== null
-                  || (!learningActive && (learnStartBlockedReason !== null || listening))
-                }
-                onToggle={handleToggleLearnMode}
-                buttonRef={learnModeButtonRef}
-              />
-              {!isNarrowViewport && voiceInputControl}
-              {learningActive && (
-                <>
-                  <button
-                    type="button"
-                    className="shrink-0 rounded-md bg-zinc-100 px-3 py-1 text-sm text-zinc-700 disabled:opacity-60 dark:bg-zinc-700 dark:text-zinc-200"
-                    disabled={learnGenerateBlockedReason !== null}
-                    onClick={() => handleGenerateLearnReviewCards()}
-                  >
-                    復習カードを生成
-                  </button>
-                  <button
-                    type="button"
-                    className="shrink-0 rounded-md bg-zinc-100 px-3 py-1 text-sm text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200"
-                    onClick={() => handleOpenLearnReviewCards()}
-                  >
-                    復習カード
-                  </button>
-                  <button
-                    type="button"
-                    className="shrink-0 rounded-md bg-zinc-100 px-3 py-1 text-sm text-zinc-700 disabled:opacity-60 dark:bg-zinc-700 dark:text-zinc-200"
-                    disabled={learnResetBlockedReason !== null}
-                    onClick={() => learnMode.openResetDialog()}
-                  >
-                    進捗をリセット
-                  </button>
-                </>
-              )}
-              {viewMode === "map" && (
-                <>
-                  <BranchNavigationControls
-                    breadcrumb={breadcrumb}
-                    focusing={focusRootId !== null}
-                    canGoBack={editorShortcutsEnabled && viewNavigation.canGoBack}
-                    canGoForward={editorShortcutsEnabled && viewNavigation.canGoForward}
-                    onTravel={(direction) => {
-                      if (!editorShortcutsEnabled) return;
-                      if (viewNavigation.travel(direction)) canvasContainerRef.current?.focus();
-                    }}
-                    canFocus={editorShortcutsEnabled && selectedBranchIds !== null}
-                    canExpand={editorShortcutsEnabled && canExpandSelectedBranch}
-                    canCollapse={editorShortcutsEnabled && canCollapseSelectedBranch}
-                    canFitAll={editorShortcutsEnabled && displayState.fitNodes.length > 0}
-                    canFitSelection={editorShortcutsEnabled && selectedFitNodes.length > 0}
-                    onFitAll={() => {
-                      if (!editorShortcutsEnabled) return;
-                      viewportHandleRef.current?.fitNodes(displayState.fitNodes, recordBeforeViewportChange);
-                    }}
-                    onFitSelection={() => {
-                      if (!editorShortcutsEnabled) return;
-                      viewportHandleRef.current?.fitNodes(selectedFitNodes, recordBeforeViewportChange);
-                    }}
-                    onToggleFocus={() => {
-                      if (!editorShortcutsEnabled) return;
-                      const nextFocusId = focusRootId === null ? selectedNodeId : null;
-                      if (nextFocusId === focusRootId) return;
-                      recordBeforeViewportChange();
-                      setFocusRootId(nextFocusId);
-                    }}
-                    onSetSubtreeCollapsed={(collapsed) => {
-                      if (!editorShortcutsEnabled) return;
-                      if (selectedNodeId !== null) branchCollapse.setSubtreeCollapsed(selectedNodeId, collapsed);
-                    }}
-                    onNavigate={(id) => {
-                      if (!editorShortcutsEnabled) return;
-                      if (navigateToNode(id) !== "missing") canvasContainerRef.current?.focus();
-                    }}
-                  />
-                  <MapViewBookmarkControls
-                    key={bookmarks.key ?? mapId}
-                    unavailable={bookmarks.key === null}
-                    disabled={!bookmarks.ready || !persistence.hydrated || !editorShortcutsEnabled}
-                    bookmarks={bookmarks.bookmarks}
-                    onSave={(name) => bookmarks.save(name, viewNavigation.captureView())}
-                    onApply={(snapshot) => {
-                      if (viewNavigation.applyView(snapshot, viewNavigation.recordNavigation)) {
-                        canvasContainerRef.current?.focus();
-                      }
-                    }}
-                    onDelete={bookmarks.remove}
-                  />
-                  <NodeCollapseControl
-                    selectedNodeId={selectedNodeId}
-                    canToggle={selectedNodeId !== null && branchCollapse.canToggle(selectedNodeId)}
-                    collapsed={selectedNodeId !== null && branchCollapse.collapsedNodeIds.has(selectedNodeId)}
-                    hiddenCount={selectedNodeId === null ? 0 : branchCollapse.hiddenCountById.get(selectedNodeId) ?? 0}
-                    onToggle={branchCollapse.toggle}
-                    disabled={playingPresentation}
-                  />
-                  <NodeDuplicateControl
-                    disabled={selectedNode === null || !editorShortcutsEnabled}
-                    onDuplicate={duplication.duplicateSelected}
-                  />
-                  <BranchMoveControl
-                    expanded={branchMove.screen !== "closed"}
-                    disabled={selectedNode === null || !editorShortcutsEnabled || collabBulkBlocked !== null}
-                    onOpen={branchMove.open}
-                    buttonRef={branchMoveButtonRef}
-                  />
-                  <LabelReplaceControl
-                    expanded={labelReplace.screen !== "closed"}
-                    disabled={nodes.length === 0 || !editorShortcutsEnabled || collabBulkBlocked !== null}
-                    onOpen={labelReplace.open}
-                    buttonRef={labelReplaceButtonRef}
-                  />
-                  <NodeSplitControl
-                    expanded={nodeSplit.screen !== "closed"}
-                    disabled={!nodeSplit.canOpen || !editorShortcutsEnabled || collabBulkBlocked !== null}
-                    disabledReason={collabBulkBlocked ?? nodeSplit.disabledReason}
-                    onOpen={nodeSplit.open}
-                    buttonRef={nodeSplitButtonRef}
-                  />
-                  <NodeMergeControl
-                    expanded={nodeMerge.screen !== "closed"}
-                    disabled={!nodeMerge.canOpen || !editorShortcutsEnabled || collabBulkBlocked !== null}
-                    disabledReason={collabBulkBlocked ?? nodeMerge.disabledReason}
-                    onOpen={nodeMerge.open}
-                    buttonRef={nodeMergeButtonRef}
-                  />
-                  <NodeSiblingOrderControl
-                    canMoveUp={siblingReorder.canMoveUp && editorShortcutsEnabled}
-                    canMoveDown={siblingReorder.canMoveDown && editorShortcutsEnabled}
-                    onMoveUp={moveSelectedSiblingUp}
-                    onMoveDown={moveSelectedSiblingDown}
-                  />
-                  <NodeIndentControl
-                    canOutdent={nodeIndent.canOutdent && editorShortcutsEnabled}
-                    canIndent={nodeIndent.canIndent && editorShortcutsEnabled}
-                    onOutdent={outdentSelected}
-                    onIndent={indentSelected}
-                  />
-                  <NodeParentInsertControl
-                    canInsert={nodeParentInsertion.canInsert && editorShortcutsEnabled}
-                    onInsert={nodeParentInsertion.insertSelected}
-                  />
-                  <NodeOnlyDeleteControl
-                    canDelete={nodeOnlyDeletion.canDelete && editorShortcutsEnabled}
-                    onDelete={nodeOnlyDeletion.deleteSelected}
-                  />
-                  <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                    {CLIPBOARD_OPERATION_HINT}
-                  </span>
-                </>
-              )}
-              <OutlineImportControl
-                expanded={outlineImport.screen !== "closed"}
-                disabled={!editorShortcutsEnabled || collabOutlineImportBlocked !== null}
-                onOpen={outlineImport.open}
-                buttonRef={outlineImportButtonRef}
-              />
-              <ExchangeImportControl
-                opmlExpanded={exchangeImport.screen !== "closed" && exchangeImport.entry === "opml"}
-                csvExpanded={exchangeImport.screen !== "closed" && exchangeImport.entry === "csv-tsv"}
-                disabled={!editorShortcutsEnabled || collabOutlineImportBlocked !== null}
-                onOpen={exchangeImport.open}
-                opmlButtonRef={exchangeOpmlButtonRef}
-                csvButtonRef={exchangeCsvButtonRef}
-              />
-              <ExportScopeControl
-                scope={exportScope}
-                onChange={setExportScope}
-                selectionAvailable={selectionScopeAvailable}
-              />
-              <MapPersistenceControls
-                onExport={handleExportJson}
-                onImport={persistence.importJsonFile}
-                exportButtonRef={exportButtonRef}
-                jsonExportEnabled={effectiveExportFormatControls.json.enabled}
-                jsonExportDisabledReason={effectiveExportFormatControls.json.disabledReason}
-                jsonImportEnabled={editorShortcutsEnabled && collabJsonImportBlocked === null}
-              />
-              <CollabControl
-                collabSession={collab.collabSession}
-                participants={collab.participants}
-                participantsState={collab.participantsState}
-                onStartCollab={collab.onStartCollab}
-                onLeaveCollab={collab.onLeaveCollab}
-                onEndCollab={collab.onEndCollab}
-                onRetryCollab={collab.onRetryCollab}
-                shareSession={shareSession}
-                startDisabledReason={collab.startDisabledReason}
-              />
-              <ShareControl
-                expanded={shareDialogOpen}
-                disabled={shareOpenBlockedReason !== null}
-                disabledReason={shareOpenBlockedReason ?? undefined}
-                onOpen={handleShareControlOpen}
-                buttonRef={shareButtonRef}
-              />
-              <CommentsControl
-                expanded={commentsDialog.open}
-                disabled={commentsControlDisabledReason !== null}
-                disabledReason={commentsControlDisabledReason ?? undefined}
-                onOpen={() => openComments("all")}
-                buttonRef={commentsDialog.buttonRef}
-              />
-              <MapImageExportControls
-                onExportPng={imageExport.exportPng}
-                onExportSvg={imageExport.exportSvg}
-                isExportingPng={imageExport.isExportingPng}
-                pngEnabled={effectiveExportFormatControls.png.enabled}
-                svgEnabled={effectiveExportFormatControls.svg.enabled}
-                pngDisabledReason={effectiveExportFormatControls.png.disabledReason}
-                svgDisabledReason={effectiveExportFormatControls.svg.disabledReason}
-              />
-              <MapPrintControls
-                nodes={exportNodes}
-                {...effectiveExportFormatControls.print}
-                canOpen={editorShortcutsEnabled && effectiveExportFormatControls.print.enabled}
-                open={printSettingsOpen}
-                onOpen={() => setPrintSettingsOpen(true)}
-                onClose={() => setPrintSettingsOpen(false)}
-                print={print}
-                onMouseClick={() => {
-                  dialogMouseClickedAtRef.current = Date.now();
-                }}
-              />
-              <OutlineExportControls
-                onExportMarkdown={outlineExport.exportMarkdown}
-                onExportPlainText={outlineExport.exportPlainText}
-                markdownEnabled={effectiveExportFormatControls.markdown.enabled}
-                plainTextEnabled={effectiveExportFormatControls.bullets.enabled}
-                markdownDisabledReason={effectiveExportFormatControls.markdown.disabledReason}
-                plainTextDisabledReason={effectiveExportFormatControls.bullets.disabledReason}
-              />
-              <ExchangeExportControls
-                onExportOpml={exchangeExport.exportOpml}
-                onExportCsv={exchangeExport.exportCsv}
-                onExportTsv={exchangeExport.exportTsv}
-                opmlEnabled={effectiveExportFormatControls.opml.enabled}
-                csvEnabled={effectiveExportFormatControls.csv.enabled}
-                tsvEnabled={effectiveExportFormatControls.tsv.enabled}
-                opmlDisabledReason={effectiveExportFormatControls.opml.disabledReason}
-                csvDisabledReason={effectiveExportFormatControls.csv.disabledReason}
-                tsvDisabledReason={effectiveExportFormatControls.tsv.disabledReason}
-              />
-            </>
           )}
           operationNotices={hasOperationNotice(operationNotices)
             ? <MapOperationNoticeList notices={operationNotices} />
@@ -2521,7 +2586,23 @@ export function MapEditor({
           )}
         />
         </div>
+        <EditorDock
+          slots={dockSlots}
+          onCustomize={dockCustomize.openCustomize}
+          customizeButtonRef={dockCustomize.customizeButtonRef}
+          isNarrowViewport={isNarrowViewport}
+        />
       </div>
+      <DockCustomizeDialog
+        open={dockCustomize.open}
+        draftVisibleSlotIds={dockCustomize.draftVisibleSlotIds}
+        onDraftChange={dockCustomize.setDraftVisibleSlotIds}
+        onApply={async () => dockCustomize.applyCustomize()}
+        onCancel={dockCustomize.cancelCustomize}
+        onResetDefault={dockCustomize.resetDraftToDefault}
+        dialogMouseClickedAtRef={dialogMouseClickedAtRef}
+        initialFocusRef={dockCustomize.customizeButtonRef}
+      />
       {branchExtract.screen === "open" && (
         <BranchExtractDialog
           displayLabel={branchExtract.displayLabel}

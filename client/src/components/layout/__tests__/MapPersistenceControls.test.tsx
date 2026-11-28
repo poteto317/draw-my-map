@@ -44,7 +44,7 @@ describe("MapPersistenceControls", () => {
     const { container } = render(
       <MapPersistenceControls onExport={jest.fn()} onImport={jest.fn()} />,
     );
-    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const input = container.querySelector<HTMLInputElement>('input[type="file"][accept="application/json,.json"]')!;
     const click = jest.spyOn(input, "click");
 
     expect(input).toHaveAttribute("accept", "application/json,.json");
@@ -59,7 +59,7 @@ describe("MapPersistenceControls", () => {
     const { container } = render(
       <MapPersistenceControls onExport={jest.fn()} onImport={onImport} />,
     );
-    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const input = container.querySelector<HTMLInputElement>('input[type="file"][accept="application/json,.json"]')!;
     const file = new File(["{}"], "map.json", { type: "application/json" });
 
     await user.upload(input, file);
@@ -77,7 +77,7 @@ describe("MapPersistenceControls", () => {
     const { container } = render(
       <MapPersistenceControls onExport={jest.fn()} onImport={onImport} />,
     );
-    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const input = container.querySelector<HTMLInputElement>('input[type="file"][accept="application/json,.json"]')!;
     const file = new File(["{}"], "map.json", { type: "application/json" });
 
     await user.upload(input, file);
@@ -92,7 +92,7 @@ describe("MapPersistenceControls", () => {
     const { container } = render(
       <MapPersistenceControls onExport={jest.fn()} onImport={onImport} />,
     );
-    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const input = container.querySelector<HTMLInputElement>('input[type="file"][accept="application/json,.json"]')!;
 
     fireEvent.change(input, { target: { files: [] } });
 

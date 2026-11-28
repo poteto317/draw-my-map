@@ -198,7 +198,7 @@ describe("MapEditor narrow viewport", () => {
     expect(voiceHost).toHaveAttribute("data-user-chose-map-on-narrow", "false");
   });
 
-  it("狭幅ヘッダーは横スクロールし先頭付近に表示モード・音声・保存がある（M3）", async () => {
+  it("狭幅ヘッダーは横スクロールし先頭付近に表示モード・保存があり、音声は Dock（M3）", async () => {
     installNarrowViewportMatchMedia(true);
     await renderEditor();
     const primary = screen.getByTestId("header-primary");
@@ -208,9 +208,9 @@ describe("MapEditor narrow viewport", () => {
     const voiceButton = screen.getByRole("button", { name: "音声入力" });
     const saveStatus = screen.getByRole("status", { name: "保存状態: 保存済み" });
     expect(primary).toContainElement(viewControls);
-    expect(primary).toContainElement(voiceButton);
     expect(primary).toContainElement(saveStatus);
-    expect(viewControls.compareDocumentPosition(voiceButton)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(voiceButton.compareDocumentPosition(saveStatus)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(primary).not.toContainElement(voiceButton);
+    expect(screen.getByTestId("editor-dock")).toContainElement(voiceButton);
+    expect(viewControls.compareDocumentPosition(saveStatus)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 });

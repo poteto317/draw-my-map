@@ -164,6 +164,11 @@ function queryOperationNoticeWrapper(): HTMLElement | null {
 describe("Home", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    // render(<Home />) は renderPage を通らないため、Dock 全スロットを明示 seed する
+    const { seedUiPrefsDockAllVisible } = jest.requireActual<
+      typeof import("@/testing/seedUiPrefsDockSlots")
+    >("@/testing/seedUiPrefsDockSlots");
+    seedUiPrefsDockAllVisible();
     mockDownloadMapJson.mockClear();
     mockExportPng.mockClear();
     mockExportSvg.mockClear();
@@ -244,7 +249,7 @@ describe("Home", () => {
     it("検証済みファイルでノード・モードを置換してstageをリセットする", async () => {
       const user = userEvent.setup();
       const { container } = render(<Home />);
-      const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+      const input = container.querySelector<HTMLInputElement>('input[type="file"][accept="application/json,.json"]')!;
 
       await user.upload(input, jsonFile(validImportedJson));
 
@@ -269,7 +274,7 @@ describe("Home", () => {
     ] as const)("%s modeからの読み込みresetはMapStageの最終scale=1と同期して自動ですべてを表示する", async (_mode, modeButton) => {
       const user = userEvent.setup();
       const { container } = render(<Home />);
-      const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+      const input = container.querySelector<HTMLInputElement>('input[type="file"][accept="application/json,.json"]')!;
 
       await user.click(screen.getByRole("button", { name: "テスト用ズーム" }));
       if (modeButton !== null) {
@@ -293,7 +298,7 @@ describe("Home", () => {
     it("不正ファイルではマップとstage revisionを変更しない", async () => {
       const user = userEvent.setup();
       const { container } = render(<Home />);
-      const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+      const input = container.querySelector<HTMLInputElement>('input[type="file"][accept="application/json,.json"]')!;
       const before = screen.getByTestId("node-state").textContent;
 
       await user.upload(input, jsonFile("{broken"));
@@ -532,7 +537,7 @@ describe("Home", () => {
       const user = userEvent.setup();
       const { container } = render(<Home />);
       expect(mockUseIllustrationGeneration).toHaveBeenLastCalledWith(expect.anything(), 0);
-      const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+      const input = container.querySelector<HTMLInputElement>('input[type="file"][accept="application/json,.json"]')!;
 
       await user.upload(input, jsonFile(validImportedJson));
 

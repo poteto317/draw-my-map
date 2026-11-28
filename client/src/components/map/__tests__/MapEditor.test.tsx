@@ -607,14 +607,15 @@ describe("MapEditor", () => {
       return screen.getByRole("button", { name: "枝を下へ移動" });
     }
 
-    it("「兄弟の順序」を「枝を複製」の後、クリップボードの案内の前に置く", async () => {
+    it("「兄弟の順序」を Dock で「枝を複製」の後に置く", async () => {
       await renderEditor();
 
       const duplicateButton = screen.getByRole("button", { name: "枝を複製" });
       const group = screen.getByRole("group", { name: "兄弟の順序" });
-      const hint = screen.getByText((content) => content.startsWith("枝をコピー: Ctrl/Cmd+C"));
+      const dock = screen.getByTestId("editor-dock");
+      expect(dock).toContainElement(duplicateButton);
+      expect(dock).toContainElement(group);
       expect(duplicateButton.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(group.compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
     it("未選択なら「上へ」「下へ」をどちらも無効にする", async () => {
@@ -694,14 +695,15 @@ describe("MapEditor", () => {
       return screen.getByRole("button", { name: "枝の階層を下げる" });
     }
 
-    it("「階層」を「兄弟の順序」の後、クリップボードの案内の前に置く", async () => {
+    it("「階層」を Dock で「兄弟の順序」の後に置く", async () => {
       await renderEditor();
 
       const siblingGroup = screen.getByRole("group", { name: "兄弟の順序" });
       const group = screen.getByRole("group", { name: "階層" });
-      const hint = screen.getByText((content) => content.startsWith("枝をコピー: Ctrl/Cmd+C"));
+      const dock = screen.getByTestId("editor-dock");
+      expect(dock).toContainElement(siblingGroup);
+      expect(dock).toContainElement(group);
       expect(siblingGroup.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(group.compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
     it("未選択なら「上げる」「下げる」をどちらも無効にする", async () => {
@@ -771,13 +773,14 @@ describe("MapEditor", () => {
       return screen.getByRole("button", { name: "選択中のノードに親を挿入" });
     }
 
-    it("「親を挿入」を階層のグループの後、クリップボードの案内の前に置く", async () => {
+    it("「親を挿入」を Dock で階層のグループの後に置く", async () => {
       await renderEditor({ storage: createTestStorageSession({ initialJson: parentWithTwoChildrenJson }) });
 
       const group = screen.getByRole("group", { name: "階層" });
-      const hint = screen.getByText((content) => content.startsWith("枝をコピー: Ctrl/Cmd+C"));
+      const dock = screen.getByTestId("editor-dock");
+      expect(dock).toContainElement(group);
+      expect(dock).toContainElement(insertButton());
       expect(group.compareDocumentPosition(insertButton()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(insertButton().compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
     it("未選択では「親を挿入」が無効", async () => {
@@ -827,13 +830,14 @@ describe("MapEditor", () => {
   });
 
   describe("箇条書きから追加", () => {
-    it("「箇条書きから追加」をクリップボードの案内の後、「JSON書き出し」の前に置く", async () => {
+    it("「箇条書きから追加」を Dock で「JSON書き出し」の前に置く", async () => {
       await renderEditor();
 
-      const hint = screen.getByText((content) => content.startsWith("枝をコピー: Ctrl/Cmd+C"));
       const button = outlineImportButton();
       const exportButton = screen.getByRole("button", { name: "JSON書き出し" });
-      expect(hint.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      const dock = screen.getByTestId("editor-dock");
+      expect(dock).toContainElement(button);
+      expect(dock).toContainElement(exportButton);
       expect(button.compareDocumentPosition(exportButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
@@ -936,7 +940,7 @@ describe("MapEditor", () => {
           resolveText = resolve;
         }),
       });
-      const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+      const fileInput = document.querySelector<HTMLInputElement>('input[type="file"][accept="application/json,.json"]')!;
       fireEvent.change(fileInput, { target: { files: [file] } });
 
       openOutlinePreview("- A");
@@ -1392,7 +1396,7 @@ it("同一マップの本文をJSONで置き換えると閲覧履歴と保留検
   const changedJson = viewNavigationJson.replace("別のルート", "置き換え後のルート");
   const file = new File([changedJson], "map.json", { type: "application/json" });
   Object.defineProperty(file, "text", { value: async () => changedJson });
-  fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"]')!, { target: { files: [file] } });
+  fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"][accept="application/json,.json"]')!, { target: { files: [file] } });
   await waitFor(() => expect(back).toBeDisabled());
   act(() => renderer.resize(800, 600));
   expect(lastWorldContainer()?.position.set.mock.lastCall).toEqual([0, 0]);
@@ -1577,7 +1581,7 @@ it("同じマップに JSON を取り込んでもブックマークを保持し�
   const changedJson = viewNavigationJson.replace("集中する枝", "置き換えた枝");
   const file = new File([changedJson], "map.json", { type: "application/json" });
   Object.defineProperty(file, "text", { value: async () => changedJson });
-  fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"]')!, { target: { files: [file] } });
+  fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"][accept="application/json,.json"]')!, { target: { files: [file] } });
   await waitFor(() => expect(screen.getByRole("button", { name: "閲覧を戻る" })).toBeDisabled());
   expect(screen.queryByRole("button", { name: "集中表示を終了" })).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "集中を適用" }));

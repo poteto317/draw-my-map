@@ -68,7 +68,7 @@ function seed(nodes: readonly V3SeedNode[], layoutMode: V3LayoutMode = "manual")
 }
 
 function outlineButton(): HTMLElement {
-  return within(screen.getByRole("banner")).getByRole("button", { name: "箇条書きから追加" });
+  return screen.getByRole("button", { name: "箇条書きから追加" });
 }
 
 function textarea(): HTMLTextAreaElement {
@@ -325,7 +325,7 @@ describe("ページの箇条書きから追加", () => {
         resolveText = resolve;
       }),
     });
-    fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"]')!, { target: { files: [file] } });
+    fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"][accept="application/json,.json"]')!, { target: { files: [file] } });
     selectNode(0, 1);
     await openPreview(user, "- 京都");
     await user.click(dialog().getByRole("radio", { name: "選択中のノード「旅行」の子として追加" }));

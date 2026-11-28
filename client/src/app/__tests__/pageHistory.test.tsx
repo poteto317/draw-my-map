@@ -102,7 +102,7 @@ function failingFile(): File {
 }
 
 function fileInput(container: HTMLElement): HTMLInputElement {
-  return container.querySelector<HTMLInputElement>('input[type="file"]')!;
+  return container.querySelector<HTMLInputElement>('input[type="file"][accept="application/json,.json"]')!;
 }
 
 // 空き領域のダブルクリックで、その位置を中心にノードを追加する

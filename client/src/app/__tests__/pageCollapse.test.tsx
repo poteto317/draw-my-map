@@ -69,7 +69,7 @@ function exported() {
 async function importMap(text: string) {
   const file = new File([text], "map.json", { type: "application/json" });
   Object.defineProperty(file, "text", { value: () => Promise.resolve(text) });
-  await act(async () => fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files: [file] } }));
+  await act(async () => fireEvent.change(document.querySelector('input[type="file"][accept="application/json,.json"]')!, { target: { files: [file] } }));
 }
 async function start(layoutMode = "manual", nodes = tree) {
   seedMapLibrary(window.localStorage, [{ json: mapJson(layoutMode, nodes) }]);

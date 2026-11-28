@@ -213,7 +213,7 @@ it("実編集後の非表示検索通知をimportで消し、同じ検索語か�
     layoutMode: "manual",
     nodes: [{ id: 2, parentId: null, label: "import後の検索語", importance: "medium", x: 20, y: 30, width: 100, height: 60 }],
   });
-  fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"]')!, {
+  fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"][accept="application/json,.json"]')!, {
     target: { files: [jsonFile(importedJson)] },
   });
 
@@ -240,7 +240,7 @@ it("初期化前の検索移動要求を同じIDのJSON読み込み後に失効�
       { id: 2, parentId: null, label: "更新後の検索対象", importance: "medium", x: 20, y: 30, width: 100, height: 60 },
     ],
   });
-  const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+  const fileInput = document.querySelector<HTMLInputElement>('input[type="file"][accept="application/json,.json"]')!;
   fireEvent.change(fileInput, { target: { files: [jsonFile(importedJson)] } });
 
   await waitFor(() => {

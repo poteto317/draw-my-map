@@ -77,11 +77,11 @@ function storeHiddenSibling() {
 }
 
 function upButton() {
-  return within(screen.getByRole("banner")).getByRole("button", { name: "枝を上へ移動" });
+  return screen.getByRole("button", { name: "枝を上へ移動" });
 }
 
 function downButton() {
-  return within(screen.getByRole("banner")).getByRole("button", { name: "枝を下へ移動" });
+  return screen.getByRole("button", { name: "枝を下へ移動" });
 }
 
 function pressAlt(key: "ArrowUp" | "ArrowDown", target: Element = document.body, init: { shiftKey?: boolean } = {}) {
@@ -352,7 +352,7 @@ describe("ページの兄弟の並べ替え（ショートカット）", () => {
     storeThreeRoots();
     await renderPage();
     selectNode(1, 3);
-    await user.click(within(screen.getByRole("banner")).getByRole("button", { name: "箇条書きから追加" }));
+    await user.click(screen.getByRole("button", { name: "箇条書きから追加" }));
     expect(screen.getByRole("dialog")).toContainElement(document.activeElement as HTMLElement);
     (document.activeElement as HTMLElement).blur();
     expect(document.activeElement).toBe(document.body);

@@ -64,7 +64,7 @@ function seedParentAndChild() {
 }
 
 function outlineButton(): HTMLElement {
-  return within(screen.getByRole("banner")).getByRole("button", { name: "箇条書きから追加" });
+  return screen.getByRole("button", { name: "箇条書きから追加" });
 }
 
 function textarea(): HTMLTextAreaElement {

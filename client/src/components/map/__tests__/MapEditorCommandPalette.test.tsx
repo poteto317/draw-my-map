@@ -169,11 +169,15 @@ afterEach(() => {
 });
 
 describe("MapEditor コマンドパレット配線", () => {
-  it("operationControls 先頭の「コマンド」と Ctrl+K で開き、aria 属性を持つ", async () => {
+  it("Dock の「コマンド」と Ctrl+K で開き、aria 属性を持つ", async () => {
     await renderEditor();
     const cmd = commandButton();
     const undo = screen.getByRole("button", { name: "元に戻す" });
-    expect(cmd.compareDocumentPosition(undo)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    const dock = screen.getByTestId("editor-dock");
+    expect(dock).toContainElement(cmd);
+    expect(dock).toContainElement(undo);
+    // catalog 順: undoRedo → commandPalette
+    expect(undo.compareDocumentPosition(cmd)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(cmd).toHaveAttribute("aria-haspopup", "dialog");
     expect(cmd).toHaveAttribute("aria-expanded", "false");
     expect(cmd).toHaveAttribute("aria-keyshortcuts", "Control+K Meta+K");
