@@ -234,7 +234,6 @@ function createNodeLabelText(
     fontWeight: presentation.fontWeight,
     fill: NODE_LABEL_FILL,
     wordWrap: false,
-    wordWrapWidth: contentWidth,
     align: "center" as const,
   };
   const labelText = new constructors.Text({ text: displayText, style });
