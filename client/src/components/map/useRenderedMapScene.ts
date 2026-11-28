@@ -12,14 +12,28 @@ import {
   type RenderMapSceneOptions,
 } from "@/components/map/pixi/renderMapScene";
 import type { PixiRuntime } from "@/components/map/pixi/pixiTypes";
+import { useMapPresenceRenderOptions } from "@/components/map/useMapPresenceRenderOptions";
 import { useLatestRef } from "@/hooks/useLatestRef";
 import { useViewportCulledRenderNodes } from "@/hooks/useViewportCulledRenderNodes";
+import type { ResolutionFilterMode } from "@/types/nodeResolution";
 
-type UseRenderedMapSceneOptions = {
+export type UseRenderedMapSceneOptions = {
   runtime: PixiRuntime | null;
-  options: Omit<RenderMapSceneOptions, "viewport" | "onNodePointerDown"> & {
+  options: Omit<
+    RenderMapSceneOptions,
+    | "viewport"
+    | "onNodePointerDown"
+    | "presenceNodeIds"
+    | "presenceEdgeChildIds"
+    | "presenceNodes"
+  > & {
     createNodePointerDownHandler: () => RenderMapSceneOptions["onNodePointerDown"];
   };
+  /** presence 算出入力（RenderMapSceneOptions には混ぜない） */
+  resolutionMode?: ResolutionFilterMode | null;
+  collapseVisibleNodeIds?: ReadonlySet<number> | null;
+  focusVisibleNodeIds?: ReadonlySet<number> | null;
+  depthVisibleNodeIds?: ReadonlySet<number> | null;
   viewport: Viewport;
   viewportRef: RefObject<Viewport>;
   /** 未計測時は null。必須（L-060: 省略でカリング配線漏れを隠さない） */
@@ -29,6 +43,10 @@ type UseRenderedMapSceneOptions = {
 export function useRenderedMapScene({
   runtime,
   options,
+  resolutionMode,
+  collapseVisibleNodeIds,
+  focusVisibleNodeIds,
+  depthVisibleNodeIds,
   viewport,
   viewportRef,
   screenSize,
@@ -94,6 +112,17 @@ export function useRenderedMapScene({
     requiredCullNodeIds,
   );
 
+  const presenceOptions = useMapPresenceRenderOptions({
+    nodes,
+    resolutionMode,
+    collapseVisibleNodeIds,
+    focusVisibleNodeIds,
+    depthVisibleNodeIds,
+    displayVisibleNodeIds: visibleNodeIds,
+    viewport,
+    screenSize,
+  });
+
   useEffect(() => {
     if (!runtime) return;
 
@@ -125,6 +154,7 @@ export function useRenderedMapScene({
         : (groupId, event) => onGroupPointerDownRef.current?.(groupId, event),
       onNodePointerDown: createNodePointerDownHandler(),
       viewport: renderedViewport,
+      ...(presenceOptions ?? {}),
     });
     sceneRef.current = renderedScene;
     appliedViewportRef.current = renderedViewport;
@@ -140,6 +170,7 @@ export function useRenderedMapScene({
     runtime,
     learnDisplay,
     renderNodes,
+    nodes,
     taskProgress,
     commentNodeCounts,
     selectedNodeIds,
@@ -159,6 +190,7 @@ export function useRenderedMapScene({
     groups,
     selectedGroupId,
     onGroupPointerDownRef,
+    presenceOptions,
   ]);
 
   useEffect(() => {
